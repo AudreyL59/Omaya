@@ -1,6 +1,9 @@
 venv/
+venv314_backup/
 __pycache__/
 *.pyc
 .env
 *.db
 .DS_Store
+bridge/
+test_*.py
