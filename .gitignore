@@ -7,3 +7,5 @@ __pycache__/
 .DS_Store
 bridge/
 test_*.py
+node_modules/
+dist/
