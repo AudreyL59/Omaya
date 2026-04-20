@@ -15,6 +15,7 @@ class UserToken(BaseModel):
     prenom: str
     is_actif: bool
     is_pause: bool
+    is_resp: bool = False  # RespEquipe (manager)
     agenda_actif: bool
     active_log: bool
     gsm: str

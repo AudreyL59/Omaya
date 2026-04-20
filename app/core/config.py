@@ -41,9 +41,16 @@ MAIL_RESP_JURISTE = os.getenv("MAIL_RESP_JURISTE", "")
 MAIL_JURISTE_1 = os.getenv("MAIL_JURISTE_1", "")
 MAIL_JURISTE_2 = os.getenv("MAIL_JURISTE_2", "")
 
-# SMS API
+# SMS API (smsmode.com)
 SMS_API_KEY = os.getenv("SMS_API_KEY", "")
-SMS_API_URL = os.getenv("SMS_API_URL", "api-new.smsmode.com")
+SMS_API_URL = os.getenv("SMS_API_URL", "api-old.smsmode.com")
+
+# SMTP Gmail RH
+SMTP_RH_HOST = os.getenv("SMTP_RH_HOST", "smtp.gmail.com")
+SMTP_RH_PORT = int(os.getenv("SMTP_RH_PORT", "465"))
+SMTP_RH_USER = os.getenv("SMTP_RH_USER", "noreply.gestionrh@gmail.com")
+SMTP_RH_PASSWORD = os.getenv("SMTP_RH_PASSWORD", "")
+SMTP_RH_FROM = os.getenv("SMTP_RH_FROM", "gestion.dpae@omaya.fr")
 
 # Google Maps
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")

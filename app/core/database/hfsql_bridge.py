@@ -55,6 +55,12 @@ def execute_query(
     if not bridge.exists():
         raise HFSQLError(f"Bridge introuvable : {bridge}")
 
+    # Normalisation : le bridge détecte SELECT via "SELECT " (espace après).
+    # On remplace les whitespace initiaux par des espaces simples.
+    sql = sql.lstrip()
+    if sql[:6].upper() == "SELECT" and len(sql) > 6 and sql[6] in "\n\r\t":
+        sql = "SELECT " + sql[6:].lstrip()
+
     # Fichier temporaire pour le résultat JSON
     temp_dir = Path(tempfile.gettempdir())
     result_file = temp_dir / f"hfsql_{uuid.uuid4().hex}.json"

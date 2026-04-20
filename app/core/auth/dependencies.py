@@ -51,6 +51,7 @@ async def get_current_user(
         prenom=payload["prenom"],
         is_actif=payload["is_actif"],
         is_pause=payload["is_pause"],
+        is_resp=payload.get("is_resp", False),
         agenda_actif=payload["agenda_actif"],
         active_log=payload["active_log"],
         gsm=payload["gsm"],

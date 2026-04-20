@@ -38,6 +38,7 @@ def authenticate_user(email: str, password: str) -> LoginResponse | None:
             salarie_embauche.IdSte,
             salarie_embauche.IdTypePoste,
             salarie_embauche.EnPause,
+            salarie_embauche.RespEquipe,
             salarie_coordonnées.TélMob
         FROM salarie_embauche
         INNER JOIN (
@@ -82,6 +83,7 @@ def authenticate_user(email: str, password: str) -> LoginResponse | None:
         prenom=(row.get("PRENOM") or "").capitalize(),
         is_actif=bool(row.get("EnActivité")),
         is_pause=bool(row.get("EnPause")),
+        is_resp=bool(row.get("RespEquipe")),
         agenda_actif=bool(row.get("AgendaActif")),
         active_log=bool(row.get("ActiveLog")),
         gsm=row.get("TélMob") or "",
@@ -98,6 +100,7 @@ def authenticate_user(email: str, password: str) -> LoginResponse | None:
         "prenom": user.prenom,
         "is_actif": user.is_actif,
         "is_pause": user.is_pause,
+        "is_resp": user.is_resp,
         "agenda_actif": user.agenda_actif,
         "active_log": user.active_log,
         "gsm": user.gsm,

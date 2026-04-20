@@ -56,12 +56,26 @@ pour toute chaîne sFichier de sListeFichiers séparée par RC
 	fin
 fin
 
+// Détecter le type de requête (SELECT vs INSERT/UPDATE/DELETE)
+// Normaliser : remplacer tous les whitespace (RC, TAB) par espace pour détection fiable
+sSQLMaj est une chaîne = Majuscule(SansEspace(sSQL))
+sSQLMaj = Remplace(sSQLMaj, RC, " ")
+sSQLMaj = Remplace(sSQLMaj, TAB, " ")
+bEstSelect est un booléen = (Gauche(sSQLMaj, 7) = "SELECT " ou Gauche(sSQLMaj, 5) = "WITH ")
+
 // Exécuter la requête
 MaRequête est une Source de Données
 si pas HExécuteRequêteSQL(MaRequête, sNomConnexion, hRequêteSansCorrection, sSQL) alors
 	sErr2 est une chaîne = Remplace(HErreurInfo(), """", "\""")
 	sErr2 = Remplace(sErr2, RC, " ")
 	fSauveTexte(sFichierSortie, "{""ok"":false,""error"":""" + sErr2 + """}")
+	HFermeConnexion(sNomConnexion)
+	FinProgramme()
+fin
+
+// Pour INSERT/UPDATE/DELETE : pas de résultat à lire, on retourne succès
+si pas bEstSelect alors
+	fSauveTexte(sFichierSortie, "{""ok"":true,""rows"":[],""count"":0}")
 	HFermeConnexion(sNomConnexion)
 	FinProgramme()
 fin
@@ -86,8 +100,9 @@ fin
 tabBinaires est un tableau de chaînes
 pour toute chaîne sNomRub de sListeRubSimple séparée par RC
 	si sNomRub = "" alors continuer
-	// Types binaires : 16, 18 (mémo binaire/image), 19, 23 (chaîne binaire)
-	si tabTypes[sNomRub] = "16" ou tabTypes[sNomRub] = "18" ou tabTypes[sNomRub] = "19" ou tabTypes[sNomRub] = "23" alors
+	// Types binaires : 16, 18 (mémo binaire/image), 23 (chaîne binaire)
+	// Note : type 19 = Entier sur 8 octets (NON binaire), ne pas inclure
+	si tabTypes[sNomRub] = "16" ou tabTypes[sNomRub] = "18" ou tabTypes[sNomRub] = "23" alors
 		tabBinaires.Ajoute(sNomRub)
 	fin
 fin
