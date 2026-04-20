@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   User, Users, CalendarDays, CalendarCheck, FileText,
@@ -34,6 +34,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const { items, menuVisible } = useMenu()
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
   // Auto-collapse sur mobile
   useEffect(() => {
@@ -52,7 +53,10 @@ export default function Sidebar() {
       className="h-screen bg-gray-950 text-white flex flex-col shrink-0 overflow-hidden"
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
+      <div
+        onClick={() => navigate('/vendeur')}
+        className="flex items-center gap-3 px-4 py-5 border-b border-white/10 cursor-pointer hover:bg-white/5 transition-colors duration-200"
+      >
         <img src={logoOmaya} alt="Omaya" className="w-10 h-10 shrink-0" />
         <AnimatePresence>
           {!collapsed && (

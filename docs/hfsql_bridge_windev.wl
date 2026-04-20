@@ -67,8 +67,9 @@ si pas HExécuteRequêteSQL(MaRequête, sNomConnexion, hRequêteSansCorrection, 
 fin
 
 // Récupérer les rubriques : noms simples + détail pour les types
-sListeRubSimple est une chaîne = HListeRubrique(MaRequête)
-sListeRubDetail est une chaîne = HListeRubrique(MaRequête, hLstDétail)
+sListeRubSimple est une chaîne = HListeRubrique(MaRequête, hLstTout)
+sListeRubDetail est une chaîne = HListeRubrique(MaRequête, hLstDétail + hLstTout)
+fSauveTexte("D:\debug_rub.txt", "SIMPLE:" + RC + sListeRubSimple + RC + RC + "DETAIL:" + RC + sListeRubDetail)
 
 // Construire un tableau associatif nom -> type
 tabTypes est un tableau associatif de chaînes
@@ -85,7 +86,8 @@ fin
 tabBinaires est un tableau de chaînes
 pour toute chaîne sNomRub de sListeRubSimple séparée par RC
 	si sNomRub = "" alors continuer
-	si tabTypes[sNomRub] = "16" ou tabTypes[sNomRub] = "19" ou tabTypes[sNomRub] = "23" alors
+	// Types binaires : 16, 18 (mémo binaire/image), 19, 23 (chaîne binaire)
+	si tabTypes[sNomRub] = "16" ou tabTypes[sNomRub] = "18" ou tabTypes[sNomRub] = "19" ou tabTypes[sNomRub] = "23" alors
 		tabBinaires.Ajoute(sNomRub)
 	fin
 fin
@@ -108,7 +110,7 @@ tantque pas HEnDehors(MaRequête)
 		QUAND EXCEPTION DANS
 			bufVal est un Buffer = {MaRequête, sChampBin}
 			si bufVal <> "" alors
-				sB64 est une chaîne = Encode(bufVal, encodeBASE64)
+				sB64 est une chaîne = Encode(bufVal, encodeBASE64SansRC)
 				// Trouver la position du dernier } pour injecter avant
 				nPos est un entier = Taille(sRowJSON)
 				// Remonter pour trouver le } du sous-objet
