@@ -24,7 +24,7 @@ export default function LoginPage() {
       })
       setToken(result.access_token)
       setStoredUser(result.user)
-      window.location.href = '/vendeur'
+      window.location.href = import.meta.env.BASE_URL
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion')
     } finally {

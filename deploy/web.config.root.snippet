@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SNIPPET À FUSIONNER dans le web.config de la RACINE du site IIS :
+    D:\Sites\groupeOmaya\www\web.config
+
+  Rôle : transmet les requêtes /api/* à uvicorn (reverse proxy).
+
+  Pré-requis :
+    - Modules IIS installés : URL Rewrite + Application Request Routing (ARR)
+    - ARR Proxy ACTIVÉ : IIS Manager > nœud serveur > ARR Cache > Server Proxy Settings > Enable proxy
+
+  Instructions de fusion :
+    1. Si D:\Sites\groupeOmaya\www\web.config n'existe pas : copier ce fichier tel quel, renommer en web.config.
+    2. Sinon, recopier UNIQUEMENT la <rule name="OmayaAPI"> et les <customHeaders> dans les sections
+       correspondantes du web.config existant. Les placer AVANT les autres règles de rewrite.
+-->
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <!-- Reverse proxy /api/* → uvicorn. Le backend n'a pas de préfixe /api, on le retire. -->
+        <rule name="OmayaAPI" stopProcessing="true">
+          <match url="^api/(.*)" />
+          <action type="Rewrite" url="http://127.0.0.1:8000/{R:1}" />
+          <serverVariables>
+            <set name="HTTP_X_FORWARDED_PROTO" value="https" />
+            <set name="HTTP_X_FORWARDED_HOST" value="{HTTP_HOST}" />
+          </serverVariables>
+        </rule>
+      </rules>
+    </rewrite>
+
+    <security>
+      <requestFiltering>
+        <requestLimits maxAllowedContentLength="52428800" />
+      </requestFiltering>
+    </security>
+
+    <httpProtocol>
+      <customHeaders>
+        <!-- Ne pas écraser des en-têtes qui existent déjà dans le web.config racine actuel -->
+        <add name="X-Content-Type-Options" value="nosniff" />
+        <add name="Referrer-Policy" value="strict-origin-when-cross-origin" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>

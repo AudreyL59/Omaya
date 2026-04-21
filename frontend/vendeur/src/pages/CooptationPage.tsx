@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserPlus, Loader2, X, Search, Check } from 'lucide-react'
 import { getToken, getStoredUser } from '@/api'

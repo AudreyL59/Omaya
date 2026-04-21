@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -13,35 +13,22 @@ from app.intranets.vendeur.services.ftp_documents import lister_fiches_salaire
 
 router = APIRouter(prefix="/mon-compte", tags=["vendeur-mon-compte"])
 
-SITUATION_FAM_LABELS = {
-    0: "",
-    1: "Célibataire",
-    2: "Marié(e)",
-    3: "Pacsé(e)",
-    4: "Divorcé(e)",
-    5: "Veuf(ve)",
-    6: "Concubinage",
-}
 
-
-@router.get("", response_model=MonCompteResponse)
-def get_mon_compte(user: UserToken = Depends(get_current_user)):
-    """Retourne les infos identité + coordonnées du salarié connecté."""
+def _charger_fiche(id_salarie: int) -> MonCompteResponse:
     db = get_connection("rh")
 
-    # Identité
     row_sal = db.query_one(
         """SELECT IDSalarie, Civilité, Nom, Nom_Marital, Prenom, Sexe, Nationalité,
             Date_Naiss, Lieu_Naiss, Dep_Naiss, Num_SS, CPAM, NumCIN,
             SituationFam, AvecEnfant, NbEnfants, TravailleurHandi, Photo
         FROM salarie WHERE IDSalarie = ?""",
-        (user.id_salarie,),
+        (id_salarie,),
     )
 
-    identite = IdentiteResponse(id_salarie=user.id_salarie)
+    identite = IdentiteResponse(id_salarie=id_salarie)
     if row_sal:
         identite = IdentiteResponse(
-            id_salarie=user.id_salarie,
+            id_salarie=id_salarie,
             civilite=int(row_sal.get("Civilité") or 0),
             nom=row_sal.get("Nom") or "",
             nom_marital=row_sal.get("Nom_Marital") or "",
@@ -61,12 +48,11 @@ def get_mon_compte(user: UserToken = Depends(get_current_user)):
             photo=row_sal.get("Photo") or "",
         )
 
-    # Coordonnées
     row_coord = db.query_one(
         """SELECT Adresse1, Adresse2, CP, Ville, TélFixe, TélMob, Mail, Mail2,
             UrgNom, UrgLien, UrgTél, IBAN, BIC
         FROM salarie_coordonnées WHERE IDSalarie = ?""",
-        (user.id_salarie,),
+        (id_salarie,),
     )
 
     coordonnees = CoordonneesResponse()
@@ -89,8 +75,46 @@ def get_mon_compte(user: UserToken = Depends(get_current_user)):
 
     return MonCompteResponse(identite=identite, coordonnees=coordonnees)
 
+SITUATION_FAM_LABELS = {
+    0: "",
+    1: "Célibataire",
+    2: "Marié(e)",
+    3: "Pacsé(e)",
+    4: "Divorcé(e)",
+    5: "Veuf(ve)",
+    6: "Concubinage",
+}
+
+
+@router.get("", response_model=MonCompteResponse)
+def get_mon_compte(user: UserToken = Depends(get_current_user)):
+    """Retourne les infos identité + coordonnées du salarié connecté."""
+    return _charger_fiche(user.id_salarie)
+
 
 @router.get("/documents", response_model=list[DocumentItem])
 def get_documents(user: UserToken = Depends(get_current_user)):
     """Liste les fiches de salaire du salarié depuis le FTP."""
     return lister_fiches_salaire(user.id_salarie)
+
+
+@router.get("/fiche/{id_salarie}", response_model=MonCompteResponse)
+def get_fiche_salarie(
+    id_salarie: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Consulter la fiche d'un autre salarié (droit FicheVend requis)."""
+    if "FicheVend" not in user.droits and id_salarie != user.id_salarie:
+        raise HTTPException(status_code=403, detail="Droit FicheVend requis")
+    return _charger_fiche(id_salarie)
+
+
+@router.get("/fiche/{id_salarie}/documents", response_model=list[DocumentItem])
+def get_fiche_documents(
+    id_salarie: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste les fiches de salaire d'un autre salarié (droit FicheVend requis)."""
+    if "FicheVend" not in user.droits and id_salarie != user.id_salarie:
+        raise HTTPException(status_code=403, detail="Droit FicheVend requis")
+    return lister_fiches_salaire(id_salarie)

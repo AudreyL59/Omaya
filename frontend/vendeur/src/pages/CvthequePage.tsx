@@ -1740,19 +1740,6 @@ function Field({
   )
 }
 
-function BoolPill({ label, on }: { label: string; on: boolean }) {
-  return (
-    <div
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-        on ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-      }`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${on ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-      {label}
-    </div>
-  )
-}
-
 // --- Prise de RDV modal --------------------------------------------------
 
 interface SessionItem {
@@ -2450,15 +2437,6 @@ function AgendaPreview({
   )
 }
 
-function formatShortDate(raw: string): string {
-  if (!raw) return ''
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
-  if (raw.length >= 8 && /^\d+$/.test(raw.slice(0, 8))) {
-    return `${raw.slice(6, 8)}/${raw.slice(4, 6)}/${raw.slice(0, 4)}`
-  }
-  return raw
-}
 
 function posteLabel(id: number): string {
   // Mapping connu : 1 = VRP Energie, 10/13 = Fibre, etc.

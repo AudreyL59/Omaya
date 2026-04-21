@@ -108,6 +108,7 @@ export default function MonComptePage() {
   const [data, setData] = useState<MonCompteData | null>(null)
   const [documents, setDocuments] = useState<DocumentItem[]>([])
   const [docsLoading, setDocsLoading] = useState(false)
+  const [docsFetched, setDocsFetched] = useState(false)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'identite' | 'coordonnees' | 'documents'>('identite')
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null)
@@ -123,17 +124,19 @@ export default function MonComptePage() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === 'documents' && documents.length === 0 && !docsLoading) {
-      setDocsLoading(true)
-      fetch('/api/vendeur/mon-compte/documents', {
-        headers: { Authorization: `Bearer ${getToken()}` },
+    if (activeTab !== 'documents' || docsFetched || docsLoading) return
+    setDocsLoading(true)
+    fetch('/api/vendeur/mon-compte/documents', {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((res) => res.json())
+      .then((docs: DocumentItem[]) => setDocuments(Array.isArray(docs) ? docs : []))
+      .catch(() => {})
+      .finally(() => {
+        setDocsLoading(false)
+        setDocsFetched(true)
       })
-        .then((res) => res.json())
-        .then(setDocuments)
-        .catch(() => {})
-        .finally(() => setDocsLoading(false))
-    }
-  }, [activeTab, documents.length, docsLoading])
+  }, [activeTab, docsFetched, docsLoading])
 
   if (loading) {
     return (

@@ -9,11 +9,19 @@ APP_NAME = os.getenv("APP_NAME", "ERP Omaya")
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1")
 
-# CORS
+# CORS — liste séparée par virgules dans l'env, fallback = valeurs historiques
+_default_cors = ",".join(
+    [
+        "https://sos.adm.omaya.fr",
+        "https://newadm.omaya.fr",
+        "https://sos.groupe-exo.omaya.fr",
+        "http://localhost:5173",
+    ]
+)
 CORS_ORIGINS = [
-    "https://sos.adm.omaya.fr",
-    "https://newadm.omaya.fr",
-    "http://localhost:5173",
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", _default_cors).split(",")
+    if o.strip()
 ]
 
 # Chemins fichiers (serveur Windows)

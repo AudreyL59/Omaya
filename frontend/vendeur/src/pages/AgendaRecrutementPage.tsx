@@ -5,7 +5,6 @@ import {
   ChevronRight,
   ChevronDown,
   Calendar as CalendarIcon,
-  Clock,
   MapPin,
   Phone,
   Mail,

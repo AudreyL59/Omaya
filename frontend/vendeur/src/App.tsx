@@ -11,15 +11,18 @@ import PlaceholderPage from '@/pages/PlaceholderPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
+// Basename = base Vite sans slash final. En dev + prod : '/vendeur'
+const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={BASENAME}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Routes protégées avec sidebar */}
+        {/* Routes protégées avec sidebar (servies sous BASENAME) */}
         <Route
-          path="/vendeur"
+          path="/"
           element={
             <ProtectedRoute>
               <Layout />

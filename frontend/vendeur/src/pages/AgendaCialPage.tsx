@@ -136,6 +136,37 @@ function getWeekDates(today: Date): Date[] {
   return out
 }
 
+function getMonthGrid(ref: Date): Date[] {
+  // Grille 6 semaines × 7 jours commençant au lundi avant le 1er du mois
+  const first = new Date(ref.getFullYear(), ref.getMonth(), 1)
+  const offset = (first.getDay() + 6) % 7 // jours à reculer pour tomber un lundi
+  const start = new Date(first)
+  start.setDate(first.getDate() - offset)
+  const out: Date[] = []
+  for (let i = 0; i < 42; i++) {
+    const x = new Date(start)
+    x.setDate(start.getDate() + i)
+    out.push(x)
+  }
+  return out
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+function sameMonday(a: Date, b: Date): boolean {
+  const ma = new Date(a)
+  ma.setDate(a.getDate() - ((a.getDay() + 6) % 7))
+  const mb = new Date(b)
+  mb.setDate(b.getDate() - ((b.getDay() + 6) % 7))
+  return sameDay(ma, mb)
+}
+
 function typeDemandeLabel(t: number): string {
   if (t === 20) return 'Fibre'
   if (t === 22) return 'Énergie'
@@ -241,6 +272,7 @@ export default function AgendaCialPage() {
                 onPickCommercial={() => setShowPicker(true)}
                 onShiftWeek={shiftWeek}
                 onSelectDay={goToDay}
+                onPickDate={(d) => setWeekRef(d)}
               />
             </motion.div>
           ) : (
@@ -297,6 +329,7 @@ function WeekView({
   onPickCommercial,
   onShiftWeek,
   onSelectDay,
+  onPickDate,
 }: {
   weekDates: Date[]
   rdvsByDay: Record<string, AgendaCialRDV[]>
@@ -305,11 +338,13 @@ function WeekView({
   onPickCommercial: () => void
   onShiftWeek: (n: number) => void
   onSelectDay: (d: Date) => void
+  onPickDate: (d: Date) => void
 }) {
   const allRdvs = Object.values(rdvsByDay).flat()
   const weekNum = getISOWeek(weekDates[0])
   const from = weekDates[0]
   const to = weekDates[weekDates.length - 1]
+  const [showCal, setShowCal] = useState(false)
 
   return (
     <div className="max-w-7xl">
@@ -319,11 +354,27 @@ function WeekView({
           <button onClick={() => onShiftWeek(-1)} className="p-1.5 rounded-lg hover:bg-gray-100">
             <ChevronLeft className="w-4 h-4 text-gray-600" />
           </button>
-          <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-            <CalendarIcon className="w-4 h-4 text-gray-400" />
-            <span className="font-medium">
-              Semaine {weekNum} · {from.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} → {to.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-            </span>
+          <div className="relative">
+            <button
+              onClick={() => setShowCal((v) => !v)}
+              className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+            >
+              <CalendarIcon className="w-4 h-4 text-gray-400" />
+              <span className="font-medium">
+                Semaine {weekNum} · {from.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} → {to.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+            </button>
+            {showCal && (
+              <MonthCalendar
+                currentWeekStart={from}
+                onSelect={(d) => {
+                  onPickDate(d)
+                  setShowCal(false)
+                }}
+                onClose={() => setShowCal(false)}
+              />
+            )}
           </div>
           <button onClick={() => onShiftWeek(1)} className="p-1.5 rounded-lg hover:bg-gray-100">
             <ChevronRight className="w-4 h-4 text-gray-600" />
@@ -892,6 +943,119 @@ function MapReal({
         </div>
       )}
     </div>
+  )
+}
+
+// --- Month calendar popover ----------------------------------------------
+
+function MonthCalendar({
+  currentWeekStart,
+  onSelect,
+  onClose,
+}: {
+  currentWeekStart: Date
+  onSelect: (d: Date) => void
+  onClose: () => void
+}) {
+  const [monthRef, setMonthRef] = useState(
+    new Date(currentWeekStart.getFullYear(), currentWeekStart.getMonth(), 1)
+  )
+  const days = useMemo(() => getMonthGrid(monthRef), [monthRef])
+  const today = new Date()
+  const weekdayLabels = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+
+  const shiftMonth = (n: number) => {
+    const d = new Date(monthRef)
+    d.setMonth(d.getMonth() + n)
+    setMonthRef(d)
+  }
+
+  return (
+    <>
+      {/* overlay de fermeture */}
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.15 }}
+        className="absolute top-full left-0 mt-2 z-50 bg-white rounded-xl shadow-xl border border-gray-200 p-3 w-[280px]"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={() => shiftMonth(-1)}
+            className="p-1 rounded hover:bg-gray-100"
+            aria-label="Mois précédent"
+          >
+            <ChevronLeft className="w-4 h-4 text-gray-600" />
+          </button>
+          <div className="text-sm font-semibold text-gray-900 capitalize">
+            {monthRef.toLocaleDateString('fr-FR', {
+              month: 'long',
+              year: 'numeric',
+            })}
+          </div>
+          <button
+            onClick={() => shiftMonth(1)}
+            className="p-1 rounded hover:bg-gray-100"
+            aria-label="Mois suivant"
+          >
+            <ChevronRight className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-0.5 mb-1">
+          {weekdayLabels.map((l, i) => (
+            <div
+              key={i}
+              className="text-[10px] uppercase text-gray-400 font-medium text-center py-1"
+            >
+              {l}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-0.5">
+          {days.map((d, i) => {
+            const inMonth = d.getMonth() === monthRef.getMonth()
+            const isToday = sameDay(d, today)
+            const inCurrentWeek = sameMonday(d, currentWeekStart)
+            const isWeekend = d.getDay() === 0 || d.getDay() === 6
+            return (
+              <button
+                key={i}
+                onClick={() => onSelect(d)}
+                className={`relative h-8 text-xs rounded transition-colors ${
+                  inCurrentWeek
+                    ? 'bg-gray-900 text-white font-semibold'
+                    : isToday
+                      ? 'bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100'
+                      : inMonth
+                        ? isWeekend
+                          ? 'text-gray-300 hover:bg-gray-100'
+                          : 'text-gray-700 hover:bg-gray-100'
+                        : 'text-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {d.getDate()}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
+          <button
+            onClick={() => onSelect(new Date())}
+            className="text-xs font-medium text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-50"
+          >
+            Aujourd'hui
+          </button>
+          <span className="text-[10px] text-gray-400">
+            Clique un jour pour s'y positionner
+          </span>
+        </div>
+      </motion.div>
+    </>
   )
 }
 
