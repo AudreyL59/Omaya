@@ -15,7 +15,9 @@ import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
 import OrgaPicker, { type OrgaItem } from '@/components/OrgaPicker'
 import ExportButton from '@/components/ExportButton'
+import StatDetailModal from '@/components/StatDetailModal'
 import { exportToCSV, csvDate } from '@/utils/csvExport'
+import { Eye } from 'lucide-react'
 
 type TabKey = 'resume' | 'dpae' | 'sorties'
 type TypeRecherche = 'reseau' | 'orga'
@@ -109,6 +111,7 @@ export default function StatRHEntreeSortiePage() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<StatEntreeSortieResponse | null>(null)
   const [error, setError] = useState<string>('')
+  const [detail, setDetail] = useState<{ title: string; orgaIds: string[] } | null>(null)
 
   const labelOrga =
     selectedOrgas.length === 0
@@ -253,7 +256,28 @@ export default function StatRHEntreeSortiePage() {
         <AnimatePresence mode="wait">
           {tab === 'resume' && (
             <motion.div key="resume" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}>
-              <ResumeTable rows={data?.resume || []} loading={loading} />
+              <ResumeTable
+                rows={data?.resume || []}
+                loading={loading}
+                onDetailEquipe={(r) =>
+                  setDetail({
+                    title: r.lib_orga,
+                    orgaIds: [r.id_orga],
+                  })
+                }
+                onDetailAgence={(agence, equipes) =>
+                  setDetail({
+                    title: `${agence}`,
+                    orgaIds: equipes.map((e) => e.id_orga),
+                  })
+                }
+                onDetailTotal={() =>
+                  setDetail({
+                    title: 'Total',
+                    orgaIds: (data?.resume || []).map((r) => r.id_orga),
+                  })
+                }
+              />
             </motion.div>
           )}
           {tab === 'dpae' && (
@@ -279,6 +303,15 @@ export default function StatRHEntreeSortiePage() {
               setTypeRecherche(orgas.length > 0 ? 'orga' : 'reseau')
               setShowPicker(false)
             }}
+          />
+        )}
+        {detail && data && (
+          <StatDetailModal
+            title={detail.title}
+            orgaIds={detail.orgaIds}
+            dpaeRows={data.dpae}
+            sortieRows={data.sorties}
+            onClose={() => setDetail(null)}
           />
         )}
       </AnimatePresence>
@@ -333,6 +366,24 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
   )
 }
 
+function DetailIconButton({
+  title,
+  onClick,
+}: {
+  title: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200 transition-colors"
+    >
+      <Eye className="w-3.5 h-3.5" />
+    </button>
+  )
+}
+
 function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
     <button
@@ -346,7 +397,19 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
   )
 }
 
-function ResumeTable({ rows, loading }: { rows: OrgaResumeRow[]; loading: boolean }) {
+function ResumeTable({
+  rows,
+  loading,
+  onDetailEquipe,
+  onDetailAgence,
+  onDetailTotal,
+}: {
+  rows: OrgaResumeRow[]
+  loading: boolean
+  onDetailEquipe: (r: OrgaResumeRow) => void
+  onDetailAgence: (agence: string, equipes: OrgaResumeRow[]) => void
+  onDetailTotal: () => void
+}) {
   if (loading) return <TableLoader />
   if (rows.length === 0) return <EmptyState label="Pas de donnees. Demarre le calcul." />
 
@@ -443,6 +506,7 @@ function ResumeTable({ rows, loading }: { rows: OrgaResumeRow[]; loading: boolea
               <th colSpan={2} className={`text-center py-2 px-3 text-xs font-semibold text-emerald-700 uppercase ${grpProd} ${grpProdLast.replace('bg-emerald-50/60 border-l border-emerald-200', 'border-r border-emerald-200')}`}>
                 Sortants Prod
               </th>
+              <th rowSpan={2} className="py-2 px-2 text-xs font-medium text-gray-500 uppercase align-bottom w-12 text-center">Detail</th>
             </tr>
             {/* Rangee 2 : sous-colonnes */}
             <tr>
@@ -472,6 +536,12 @@ function ResumeTable({ rows, loading }: { rows: OrgaResumeRow[]; loading: boolea
                     <td colSpan={6} className="py-1.5 px-3 text-xs font-semibold text-gray-700 uppercase tracking-wide">
                       {agence}
                     </td>
+                    <td className="py-1 px-2 text-center">
+                      <DetailIconButton
+                        title={`Detail ${agence}`}
+                        onClick={() => onDetailAgence(agence, equipes)}
+                      />
+                    </td>
                   </tr>
                   {equipes.map((r) => (
                     <tr key={r.id_orga} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
@@ -481,6 +551,12 @@ function ResumeTable({ rows, loading }: { rows: OrgaResumeRow[]; loading: boolea
                       <td className={`py-2 px-3 text-right tabular-nums text-gray-500 ${grpNonProdLast}`}>{moy(r.nb_jour_non_prod, r.nb_sortants_non_prod)}</td>
                       <td className={`py-2 px-3 text-right tabular-nums ${grpProd}`}>{r.nb_sortants_prod}</td>
                       <td className={`py-2 px-3 text-right tabular-nums text-gray-500 ${grpProdLast}`}>{moy(r.nb_jour_prod, r.nb_sortants_prod)}</td>
+                      <td className="py-1 px-2 text-center">
+                        <DetailIconButton
+                          title={`Detail ${r.lib_orga}`}
+                          onClick={() => onDetailEquipe(r)}
+                        />
+                      </td>
                     </tr>
                   ))}
                   {/* Sous-total du bloc */}
@@ -493,6 +569,7 @@ function ResumeTable({ rows, loading }: { rows: OrgaResumeRow[]; loading: boolea
                     <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpNonProdLast}`}>{moy(sub.jourNonProd, sub.nonProd)}</td>
                     <td className={`py-2 px-3 text-right tabular-nums text-gray-900 ${grpProd}`}>{sub.prod}</td>
                     <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpProdLast}`}>{moy(sub.jourProd, sub.prod)}</td>
+                    <td />
                   </tr>
                 </>
               )
@@ -504,6 +581,9 @@ function ResumeTable({ rows, loading }: { rows: OrgaResumeRow[]; loading: boolea
               <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpNonProdLast}`}>{moy(total.jourNonProd, total.nonProd)}</td>
               <td className={`py-2 px-3 text-right tabular-nums ${grpProd}`}>{total.prod}</td>
               <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpProdLast}`}>{moy(total.jourProd, total.prod)}</td>
+              <td className="py-1 px-2 text-center">
+                <DetailIconButton title="Detail Total" onClick={onDetailTotal} />
+              </td>
             </tr>
           </tbody>
         </table>

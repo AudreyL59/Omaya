@@ -239,6 +239,23 @@ def calculer_stats_entree_sortie(
     except Exception:
         pass
 
+    # --- Lookup origine DPAE via cvtheque.IDcvsource ----------------------
+    # IDcvsource = 1 : cooptation (salarie) ; 2+ : CVtheque / annonceur / autre
+    db_rec = get_connection("recrutement")
+    cvtheque_source: dict[int, int] = {}
+    cvtheque_ids_dpae = {
+        _to_int(r.get("IDcvtheque"))
+        for r in dpae_rows
+        if _to_int(r.get("IDcvtheque")) > 0
+    }
+    if cvtheque_ids_dpae:
+        cv_sql = ",".join(str(i) for i in cvtheque_ids_dpae)
+        cv_rows = db_rec.query(
+            f"SELECT IDcvtheque, IDcvsource FROM cvtheque WHERE IDcvtheque IN ({cv_sql})"
+        )
+        for c in cv_rows:
+            cvtheque_source[_to_int(c.get("IDcvtheque"))] = _to_int(c.get("IDcvsource"))
+
     # --- Lookup des sorties pour les DPAE inactifs ------------------------
     # Pour un DPAE dont EnActivité = 0, on veut date_sortie + fin_demandee
     sortie_by_sal: dict[int, dict] = {}
@@ -270,6 +287,11 @@ def calculer_stats_entree_sortie(
         sid = _to_int(r.get("IDSalarie"))
         id_orga_sal = salarie_to_orga.get(sid, 0)
         sortie = sortie_by_sal.get(sid, {})
+        id_cvtheque = _to_int(r.get("IDcvtheque"))
+        id_source = cvtheque_source.get(id_cvtheque, 0)
+        # Coopte (WinDev) = IDcvsource = 1 (salarié), CVtheque = 2+ (annonceur / autre)
+        # Si pas de cvtheque rattachée, on considère "Cooptation" par defaut (comme WinDev).
+        origine = "Cooptation" if id_source <= 1 or id_cvtheque == 0 else "CVtheque"
         dpae_list.append({
             "id_salarie": str(sid),
             "id_ste": _to_int(r.get("IdSte")),
@@ -282,7 +304,7 @@ def calculer_stats_entree_sortie(
             "en_activite": bool(r.get("EnActivité")),
             "date_sortie": sortie.get("date_sortie", ""),
             "fin_demandee": sortie.get("fin_demandee", ""),
-            "origine": "",
+            "origine": origine,
             "detail_origine": "",
             "id_orga": str(id_orga_sal),
             "prod": sid in productifs,
