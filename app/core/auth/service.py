@@ -10,13 +10,17 @@ from app.core.database import get_connection
 from app.shared.procedures.droits import charger_droits
 
 
-def authenticate_user(email: str, password: str) -> LoginResponse | None:
+def authenticate_user(
+    email: str,
+    password: str,
+    intranet: str = "vendeur",
+) -> LoginResponse | None:
     """
     Authentifie un utilisateur par email + mot de passe.
 
     1. Requête sur salarie + salarie_embauche + salarie_coordonnées (Bdd_Omaya_RH)
     2. Déchiffrement AES128 du mot de passe
-    3. Chargement des droits via InitDroit()
+    3. Chargement des droits via InitDroit() — filtre selon l'intranet cible
     4. Génération du JWT
 
     Retourne None si échec d'authentification.
@@ -71,9 +75,9 @@ def authenticate_user(email: str, password: str) -> LoginResponse | None:
         if type_poste_row:
             prof_poste = type_poste_row.get("Catégorie", "")
 
-    # Charger les droits d'accès
+    # Charger les droits d'accès (filtre selon l'intranet)
     id_salarie = int(row["IDSalarie"])
-    droits = charger_droits(db, id_salarie)
+    droits = charger_droits(db, id_salarie, intranet)
 
     # Construire le user
     user = UserToken(

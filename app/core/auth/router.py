@@ -16,7 +16,7 @@ def login(request: LoginRequest):
     (utile pour le log de connexion, pas pour la vérification d'accès qui se
     fait côté router de chaque intranet).
     """
-    result = authenticate_user(request.email, request.password)
+    result = authenticate_user(request.email, request.password, request.intranet)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
