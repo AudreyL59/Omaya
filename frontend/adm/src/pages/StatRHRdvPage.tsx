@@ -14,7 +14,9 @@ import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
 import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
 import ExportButton from '@/components/ExportButton'
+import StatRdvDetailModal from '@/components/StatRdvDetailModal'
 import { exportToCSV, csvDate } from '@/utils/csvExport'
+import { Eye } from 'lucide-react'
 
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
@@ -32,12 +34,17 @@ interface RdvRow {
   date_crea: string
   date_debut: string
   lib_categorie: string
+  recruteur_id: string
   recruteur_nom: string
+  op_crea_id: string
   op_crea_nom: string
   statut_lib: string
-  presente: boolean
-  retenu: boolean
-  venu_jo: boolean
+  id_source: number
+  lib_source: string
+  annonceur_coopteur: string
+  est_present: boolean
+  est_retenu: boolean
+  est_jo: boolean
 }
 
 interface AggRow {
@@ -76,9 +83,7 @@ export default function StatRHRdvPage() {
   const hasDroitGr = (user?.droits || []).includes('StatsRHGr')
 
   const today = toYmd(new Date())
-  const [typeRecherche, setTypeRecherche] = useState<TypeRecherche>(
-    hasDroitGr ? 'service' : 'personne'
-  )
+  const [typeRecherche, setTypeRecherche] = useState<TypeRecherche>('service')
   const [typeDate, setTypeDate] = useState<TypeDate>('planif')
   const [dateDu, setDateDu] = useState<string>(today)
   const [dateAu, setDateAu] = useState<string>(today)
@@ -89,6 +94,11 @@ export default function StatRHRdvPage() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<StatRdvResponse | null>(null)
   const [error, setError] = useState<string>('')
+  const [detail, setDetail] = useState<{
+    title: string
+    mode: 'operateur' | 'recruteur' | 'total'
+    id: string | null
+  } | null>(null)
 
   // Libelle du bouton "Une personne" : si quelqu'un est selectionne, on affiche son prenom
   const labelPersonne = selectedPersonne
@@ -235,11 +245,23 @@ export default function StatRHRdvPage() {
                 title="Par operateur (qui a pris le RDV)"
                 rows={data?.operateurs || []}
                 loading={loading}
+                onDetail={(r) =>
+                  setDetail({ title: r.nom, mode: 'operateur', id: r.id })
+                }
+                onDetailTotal={() =>
+                  setDetail({ title: 'Total (operateurs)', mode: 'total', id: null })
+                }
               />
               <ResumeTable
                 title="Par recruteur (qui mene l'entretien)"
                 rows={data?.recruteurs || []}
                 loading={loading}
+                onDetail={(r) =>
+                  setDetail({ title: r.nom, mode: 'recruteur', id: r.id })
+                }
+                onDetailTotal={() =>
+                  setDetail({ title: 'Total (recruteurs)', mode: 'total', id: null })
+                }
               />
             </motion.div>
           )}
@@ -257,6 +279,15 @@ export default function StatRHRdvPage() {
       </div>
 
       <AnimatePresence>
+        {detail && data && (
+          <StatRdvDetailModal
+            title={detail.title}
+            mode={detail.mode}
+            id={detail.id}
+            rdv={data.rdv}
+            onClose={() => setDetail(null)}
+          />
+        )}
         {showPicker && (
           <PersonnePicker
             title="Choisir un operateur"
@@ -360,10 +391,14 @@ function ResumeTable({
   title,
   rows,
   loading,
+  onDetail,
+  onDetailTotal,
 }: {
   title: string
   rows: AggRow[]
   loading: boolean
+  onDetail: (r: AggRow) => void
+  onDetailTotal: () => void
 }) {
   if (loading) return <TableLoader />
 
@@ -439,6 +474,7 @@ function ResumeTable({
                 <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">Presents</th>
                 <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">Retenus</th>
                 <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">Venu en JO</th>
+                <th className="w-12 py-2 px-2 text-xs font-medium text-gray-500 uppercase text-center">Detail</th>
               </tr>
             </thead>
             <tbody>
@@ -458,9 +494,18 @@ function ResumeTable({
                     {r.venus_jo}
                     <span className="text-gray-400 ml-1 text-xs">({pctJO(r)} %)</span>
                   </td>
+                  <td className="py-1 px-2 text-center">
+                    <button
+                      onClick={() => onDetail(r)}
+                      title={`Detail ${r.nom || r.id}`}
+                      className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
                 </tr>
               ))}
-              <tr className="bg-gray-50 font-semibold">
+              <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
                 <td className="py-2 px-3 text-gray-900">TOTAL</td>
                 <td className="py-2 px-3 text-right tabular-nums">{total.rdv}</td>
                 <td className="py-2 px-3 text-right tabular-nums">
@@ -474,6 +519,15 @@ function ResumeTable({
                 <td className="py-2 px-3 text-right tabular-nums">
                   {total.venus_jo}
                   <span className="text-gray-400 ml-1 text-xs">({pctJO(total)} %)</span>
+                </td>
+                <td className="py-1 px-2 text-center">
+                  <button
+                    onClick={onDetailTotal}
+                    title="Detail Total"
+                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
                 </td>
               </tr>
             </tbody>

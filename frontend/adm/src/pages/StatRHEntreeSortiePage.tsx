@@ -99,9 +99,7 @@ export default function StatRHEntreeSortiePage() {
   const hasDroitGr = (user?.droits || []).includes('StatsRHGr')
 
   const today = toYmd(new Date())
-  const [typeRecherche, setTypeRecherche] = useState<TypeRecherche>(
-    hasDroitGr ? 'reseau' : 'orga'
-  )
+  const [typeRecherche, setTypeRecherche] = useState<TypeRecherche>('reseau')
   const [dateDu, setDateDu] = useState<string>(today)
   const [dateAu, setDateAu] = useState<string>(today)
   const [tab, setTab] = useState<TabKey>('resume')

@@ -10,8 +10,16 @@ class RdvRow(BaseModel):
     date_debut: str       # AgendaEvénement.DateDébut (date du RDV)
     lib_categorie: str
     statut_lib: str
-    recruteur_nom: str
-    op_crea_nom: str
+    recruteur_id: str = "0"
+    recruteur_nom: str = ""
+    op_crea_id: str = "0"
+    op_crea_nom: str = ""
+    id_source: int = 0
+    lib_source: str = ""
+    annonceur_coopteur: str = ""
+    est_present: bool = False
+    est_retenu: bool = False
+    est_jo: bool = False
 
 
 class AggRow(BaseModel):

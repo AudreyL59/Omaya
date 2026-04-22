@@ -80,9 +80,7 @@ export default function StatRHSaisieCvPage() {
   const hasDroitGr = (user?.droits || []).includes('StatsRHGr')
 
   const today = toYmd(new Date())
-  const [typeRecherche, setTypeRecherche] = useState<TypeRecherche>(
-    hasDroitGr ? 'service' : 'personne'
-  )
+  const [typeRecherche, setTypeRecherche] = useState<TypeRecherche>('service')
   const [dateDu, setDateDu] = useState<string>(today)
   const [dateAu, setDateAu] = useState<string>(today)
   const [tab, setTab] = useState<TabKey>('resume')

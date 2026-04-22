@@ -1,5 +1,7 @@
+import { useRef } from 'react'
 import { motion } from 'framer-motion'
 import { X, FileText, UserCheck, LogOut, Timer, TrendingUp, TrendingDown } from 'lucide-react'
+import PdfExportButton from '@/components/PdfExportButton'
 
 // Types minimal reutilises depuis StatRHEntreeSortiePage
 interface DpaeRow {
@@ -97,6 +99,8 @@ export default function StatDetailModal({
     }))
     .sort((a, b) => b.nb - a.nb)
 
+  const contentRef = useRef<HTMLDivElement>(null)
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -118,15 +122,22 @@ export default function StatDetailModal({
             <h2 className="text-lg font-bold text-gray-900">{title}</h2>
             <p className="text-xs text-gray-500 mt-0.5">Detail Entrees / Sorties</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <PdfExportButton
+              targetRef={contentRef}
+              filename={`detail-entree-sortie-${title.toLowerCase().replace(/\s+/g, '-')}`}
+              title={`${title} - Detail Entrees / Sorties`}
+            />
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div ref={contentRef} className="p-6 space-y-6">
           {/* KPI cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <KpiCard

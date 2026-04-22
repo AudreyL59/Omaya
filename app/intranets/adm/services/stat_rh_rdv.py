@@ -89,7 +89,8 @@ def calculer_stats_rdv(
         AgendaEvénement.IDSalarie AS Recruteur,
         {op_crea_field} AS OPCrea,
         AgendaCatégorie.Lib_Catégorie AS Lib_Categorie,
-        AgendaCatégorie.IdCvStatut AS IdCvStatutAg
+        AgendaCatégorie.IdCvStatut AS IdCvStatutAg,
+        CvSource.Lib_Source AS Lib_Source
     FROM AgendaCatégorie
     INNER JOIN AgendaEvénement
         ON AgendaCatégorie.IDAgendaCatégorie = AgendaEvénement.IDCatégorie
@@ -97,6 +98,8 @@ def calculer_stats_rdv(
         ON AgendaEvénement.IDCvSuivi = CvSuivi.IDCvSuivi
     INNER JOIN cvtheque
         ON CvSuivi.IDcvtheque = cvtheque.IDcvtheque
+    LEFT JOIN CvSource
+        ON CvSource.IDcvsource = cvtheque.IDcvsource
     WHERE AgendaEvénement.ModifElem <> 'suppr'
       AND CvSuivi.TypeElem = 'RDV'
       AND CvSuivi.Observation LIKE 'RDV pris%'
@@ -106,17 +109,36 @@ def calculer_stats_rdv(
 
     rows = db_rec.query(sql, tuple(params))
 
+    # Sanity : filtrer les rows avec des ids corrompus (2^64-1 = NULL HFSQL)
+    def _valid(n: int) -> bool:
+        return 0 <= n < 9_000_000_000_000_000_000
+
+    rows = [
+        r for r in rows
+        if _valid(_to_int(r.get("OPCrea")))
+        and _valid(_to_int(r.get("Recruteur")))
+        and _valid(_to_int(r.get("IdElemSource")))
+    ]
+
     # Collecte des IDs pour lookups batch
     op_ids: set[int] = set()
     rec_ids: set[int] = set()
     cvtheque_ids: set[int] = set()
+    coopteur_ids: set[int] = set()  # IdElemSource pour IDcvsource = 1 (salarie)
+    annonceur_ids: set[int] = set()  # IdElemSource pour IDcvsource = 2 (annonceur)
     for r in rows:
         op_ids.add(_to_int(r.get("OPCrea")))
         rec_ids.add(_to_int(r.get("Recruteur")))
         cvtheque_ids.add(_to_int(r.get("IDcvtheque")))
+        id_src = _to_int(r.get("IDcvsource"))
+        id_elem = _to_int(r.get("IdElemSource"))
+        if id_src == 1 and id_elem > 0:
+            coopteur_ids.add(id_elem)
+        elif id_src == 2 and id_elem > 0:
+            annonceur_ids.add(id_elem)
 
-    # Noms des salaries (operateurs + recruteurs)
-    all_salarie_ids = (op_ids | rec_ids) - {0}
+    # Noms des salaries (operateurs + recruteurs + coopteurs)
+    all_salarie_ids = (op_ids | rec_ids | coopteur_ids) - {0}
     salarie_names: dict[int, str] = {}
     if all_salarie_ids:
         ids_sql = ",".join(str(i) for i in all_salarie_ids)
@@ -128,6 +150,19 @@ def calculer_stats_rdv(
             nom = (s.get("Nom") or "").strip()
             prenom = _capitalize(s.get("Prenom") or "")
             salarie_names[sid] = f"{nom} {prenom}".strip()
+
+    # Libelles annonceurs
+    annonceur_lib_map: dict[int, str] = {}
+    if annonceur_ids:
+        ids_sql = ",".join(str(i) for i in annonceur_ids)
+        try:
+            a_rows = db_rec.query(
+                f"SELECT IDCvAnnonceur, Lib_Annonceur FROM CvAnnonceur WHERE IDCvAnnonceur IN ({ids_sql})"
+            )
+            for a in a_rows:
+                annonceur_lib_map[_to_int(a.get("IDCvAnnonceur"))] = a.get("Lib_Annonceur") or ""
+        except Exception:
+            pass
 
     # Embauches effectives : IDcvtheque presents dans salarie_embauche (pour JO)
     embauche_cvtheque: set[int] = set()
@@ -177,6 +212,14 @@ def calculer_stats_rdv(
             op_agg[op_id]["venus_jo"] += 1
             rec_agg[rec_id]["venus_jo"] += 1
 
+        id_src = _to_int(r.get("IDcvsource"))
+        id_elem = _to_int(r.get("IdElemSource"))
+        annonceur_coopteur = ""
+        if id_src == 1 and id_elem > 0:
+            annonceur_coopteur = salarie_names.get(id_elem, "")
+        elif id_src == 2 and id_elem > 0:
+            annonceur_coopteur = annonceur_lib_map.get(id_elem, "")
+
         rdv_list.append({
             "id_cvtheque": str(cv_id),
             "nom": (r.get("Nom") or "").strip(),
@@ -186,8 +229,16 @@ def calculer_stats_rdv(
             "date_debut": r.get("DateDebut") or "",
             "lib_categorie": r.get("Lib_Categorie") or "",
             "statut_lib": r.get("Lib_Categorie") or "",
+            "recruteur_id": str(rec_id),
             "recruteur_nom": salarie_names.get(rec_id, ""),
+            "op_crea_id": str(op_id),
             "op_crea_nom": salarie_names.get(op_id, ""),
+            "id_source": id_src,
+            "lib_source": r.get("Lib_Source") or "",
+            "annonceur_coopteur": annonceur_coopteur,
+            "est_present": est_present,
+            "est_retenu": est_retenu,
+            "est_jo": est_jo,
         })
 
     operateurs = [
