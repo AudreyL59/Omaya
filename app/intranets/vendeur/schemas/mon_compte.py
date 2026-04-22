@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class IdentiteResponse(BaseModel):
-    id_salarie: int
+    id_salarie: str
     civilite: int = 0
     nom: str = ""
     nom_marital: str = ""

@@ -25,10 +25,10 @@ def _charger_fiche(id_salarie: int) -> MonCompteResponse:
         (id_salarie,),
     )
 
-    identite = IdentiteResponse(id_salarie=id_salarie)
+    identite = IdentiteResponse(id_salarie=str(id_salarie))
     if row_sal:
         identite = IdentiteResponse(
-            id_salarie=id_salarie,
+            id_salarie=str(id_salarie),
             civilite=int(row_sal.get("Civilité") or 0),
             nom=row_sal.get("Nom") or "",
             nom_marital=row_sal.get("Nom_Marital") or "",

@@ -14,6 +14,7 @@ def get_stats_rdv(
     date_au: str = Query(..., description="YYYYMMDD"),
     type_date: str = Query("planif", description="planif ou rdv"),
     type_recherche: str = Query("service", description="service ou personne"),
+    id_salarie: int | None = Query(None, description="ID operateur a filtrer (mode personne)"),
     user: UserToken = Depends(get_current_user),
 ):
     """
@@ -22,13 +23,25 @@ def get_stats_rdv(
     - type_date = 'planif' : filtre sur CvSuivi.Datecrea (date de planification)
     - type_date = 'rdv'    : filtre sur AgendaEvenement.DateDebut (date effective du RDV)
     - type_recherche = 'service' : tous les operateurs (requiert droit StatsRHGr)
-    - type_recherche = 'personne' : uniquement les RDV de l'utilisateur connecte
+    - type_recherche = 'personne' : filtre sur un operateur precis (id_salarie),
+      ou l'utilisateur connecte si id_salarie non fourni.
+
+    Un id_salarie different du user connecte necessite le droit StatsRHGr.
     """
     # Controle de droit : service complet requis StatsRHGr ; sinon fallback sur 'personne'
     if type_recherche == "service" and "StatsRHGr" not in user.droits:
         type_recherche = "personne"
 
-    op_filter = user.id_salarie if type_recherche == "personne" else None
+    op_filter: int | None = None
+    if type_recherche == "personne":
+        if id_salarie is not None and id_salarie > 0:
+            # Si l'utilisateur demande un autre operateur, requiert StatsRHGr
+            if id_salarie != user.id_salarie and "StatsRHGr" not in user.droits:
+                op_filter = user.id_salarie
+            else:
+                op_filter = id_salarie
+        else:
+            op_filter = user.id_salarie
 
     return calculer_stats_rdv(
         date_debut=date_du,

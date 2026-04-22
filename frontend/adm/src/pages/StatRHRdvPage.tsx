@@ -12,6 +12,13 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
+import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
+import ExportButton from '@/components/ExportButton'
+import { exportToCSV, csvDate } from '@/utils/csvExport'
+
+function capitalize(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
+}
 
 type TabKey = 'resume' | 'listes'
 type TypeRecherche = 'service' | 'personne'
@@ -76,10 +83,32 @@ export default function StatRHRdvPage() {
   const [dateDu, setDateDu] = useState<string>(today)
   const [dateAu, setDateAu] = useState<string>(today)
   const [tab, setTab] = useState<TabKey>('resume')
+  const [selectedPersonne, setSelectedPersonne] = useState<SalarieItem | null>(null)
+  const [showPicker, setShowPicker] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<StatRdvResponse | null>(null)
   const [error, setError] = useState<string>('')
+
+  // Libelle du bouton "Une personne" : si quelqu'un est selectionne, on affiche son prenom
+  const labelPersonne = selectedPersonne
+    ? capitalize(selectedPersonne.prenom)
+    : 'Une personne ...'
+
+  const onToggleType = (v: TypeRecherche) => {
+    if (v === 'service') {
+      setTypeRecherche('service')
+      setSelectedPersonne(null)
+    } else {
+      // "Une personne" : ouvre le picker seulement si droit StatsRHGr
+      if (hasDroitGr) {
+        setShowPicker(true)
+      } else {
+        setTypeRecherche('personne')
+        setSelectedPersonne(null)
+      }
+    }
+  }
 
   const runCalcul = () => {
     setError('')
@@ -90,6 +119,10 @@ export default function StatRHRdvPage() {
       type_date: typeDate,
       type_recherche: typeRecherche,
     })
+    // Si une personne specifique est selectionnee, on la transmet au backend
+    if (typeRecherche === 'personne' && selectedPersonne) {
+      params.set('id_salarie', selectedPersonne.id_salarie)
+    }
     fetch(`/api/adm/stat-rh/rdv?${params.toString()}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
@@ -125,9 +158,9 @@ export default function StatRHRdvPage() {
             value={typeRecherche}
             options={[
               { v: 'service', label: 'Service complet', icon: <Users className="w-3.5 h-3.5" /> },
-              { v: 'personne', label: 'Une personne', icon: <User className="w-3.5 h-3.5" /> },
+              { v: 'personne', label: labelPersonne, icon: <User className="w-3.5 h-3.5" /> },
             ]}
-            onChange={(v) => setTypeRecherche(v as TypeRecherche)}
+            onChange={(v) => onToggleType(v as TypeRecherche)}
           />
         )}
 
@@ -222,6 +255,20 @@ export default function StatRHRdvPage() {
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showPicker && (
+          <PersonnePicker
+            title="Choisir un operateur"
+            onClose={() => setShowPicker(false)}
+            onSelect={(s) => {
+              setSelectedPersonne(s)
+              setTypeRecherche('personne')
+              setShowPicker(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -341,10 +388,42 @@ function ResumeTable({
   const pctJO = (r: { venus_jo: number; retenus: number }) =>
     r.retenus > 0 ? ((r.venus_jo / r.retenus) * 100).toFixed(1) : '0.0'
 
+  const handleExport = () => {
+    exportToCSV(
+      `stats-rdv-${title.toLowerCase().replace(/\s+/g, '-')}`,
+      ['Nom', 'RDV', 'Presents', '% Pres', 'Retenus', '% Ret', 'Venus JO', '% JO'],
+      [
+        ...rows.map((r) => [
+          r.nom || r.id,
+          r.rdv,
+          r.presents,
+          pctPres(r),
+          r.retenus,
+          pctRet(r),
+          r.venus_jo,
+          pctJO(r),
+        ]),
+        [
+          'TOTAL',
+          total.rdv,
+          total.presents,
+          pctPres(total),
+          total.retenus,
+          pctRet(total),
+          total.venus_jo,
+          pctJO(total),
+        ],
+      ],
+    )
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
-        {title}
+      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          {title}
+        </span>
+        {rows.length > 0 && <ExportButton onClick={handleExport} />}
       </div>
       {rows.length === 0 ? (
         <div className="text-center py-12 text-gray-400 text-sm italic">
@@ -415,8 +494,28 @@ function ListeTable({
   if (loading) return <TableLoader />
   if (rows.length === 0) return <EmptyState label="Pas de RDV sur cette periode." />
 
+  const handleExport = () => {
+    exportToCSV(
+      'stats-rdv-listes',
+      ['Nom', 'Prenom', 'Tel', 'Statut entretien', 'Date de debut', 'Recruteur', 'Planifie le', 'Ope_Planif'],
+      rows.map((r) => [
+        r.nom,
+        r.prenom,
+        r.gsm,
+        r.statut_lib,
+        csvDate(r.date_debut),
+        r.recruteur_nom,
+        csvDate(r.date_crea),
+        r.op_crea_nom,
+      ]),
+    )
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+        <ExportButton onClick={handleExport} />
+      </div>
       <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
