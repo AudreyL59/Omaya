@@ -7,6 +7,7 @@ import AgendaRecrutementPage from '@/pages/AgendaRecrutementPage'
 import AgendaCialPage from '@/pages/AgendaCialPage'
 import CvthequePage from '@/pages/CvthequePage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
+import ClustersPage from '@/pages/ClustersPage'
 import PlaceholderPage from '@/pages/PlaceholderPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -39,7 +40,7 @@ function App() {
           <Route path="gestion-ohm" element={<PlaceholderPage />} />
           <Route path="scool" element={<PlaceholderPage />} />
           <Route path="production" element={<PlaceholderPage />} />
-          <Route path="clusters" element={<PlaceholderPage />} />
+          <Route path="clusters" element={<ClustersPage />} />
           <Route path="tickets" element={<PlaceholderPage />} />
           <Route path="process" element={<PlaceholderPage />} />
           <Route path="tickets-call" element={<PlaceholderPage />} />
