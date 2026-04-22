@@ -9,6 +9,7 @@ from app.intranets.adm.routers.stat_rh_annonceurs import router as stat_rh_annon
 from app.intranets.adm.routers.salaries import router as salaries_router
 from app.intranets.adm.routers.organigrammes import router as organigrammes_router
 from app.intranets.adm.routers.annonceurs import router as annonceurs_router
+from app.intranets.adm.routers.agenda_recrutement import router as agenda_recrutement_router
 
 router = APIRouter(
     prefix="/adm",
@@ -24,6 +25,7 @@ router.include_router(stat_rh_annonceurs_router)
 router.include_router(salaries_router)
 router.include_router(organigrammes_router)
 router.include_router(annonceurs_router)
+router.include_router(agenda_recrutement_router)
 
 
 @router.get("/ping")

@@ -7,6 +7,7 @@ import StatRHRdvPage from '@/pages/StatRHRdvPage'
 import StatRHEntreeSortiePage from '@/pages/StatRHEntreeSortiePage'
 import StatRHSaisieCvPage from '@/pages/StatRHSaisieCvPage'
 import StatRHAnnonceursPage from '@/pages/StatRHAnnonceursPage'
+import AgendaRecrutementPage from '@/pages/AgendaRecrutementPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
@@ -27,6 +28,7 @@ function App() {
           }
         >
           <Route index element={<DashboardPage />} />
+          <Route path="agenda-recrutement" element={<AgendaRecrutementPage />} />
           <Route path="envois-sms" element={<PlaceholderPage />} />
           <Route path="factures" element={<PlaceholderPage />} />
           <Route path="recherche-rh" element={<PlaceholderPage />} />

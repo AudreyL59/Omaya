@@ -31,6 +31,12 @@ def get_menu(user: UserToken = Depends(get_current_user)):
     # TODO : brancher les codes de droit WinDev corrects pour chaque page
     items: list[dict] = [
         {
+            "key": "agenda_recrutement",
+            "label": "Agenda Recrutement",
+            "route": "/agenda-recrutement",
+            "visible": True,  # TODO : _verif_droit(user, "?")
+        },
+        {
             "key": "envois_sms",
             "label": "Envois de SMS",
             "route": "/envois-sms",
