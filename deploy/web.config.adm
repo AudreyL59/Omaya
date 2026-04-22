@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  web.config du SOUS-DOSSIER /adm.
+  Destination : D:\Sites\groupeOmaya\www\adm\web.config
+  Role : SPA fallback pour React Router.
+  Pre-requis : module IIS "URL Rewrite" installe.
+
+  Note : la regle de reverse proxy /api -> uvicorn est dans le web.config de la RACINE.
+-->
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <!-- SPA fallback : toute URL sous /adm/ qui ne correspond pas a un fichier reel -> index.html -->
+        <rule name="SPAFallback" stopProcessing="true">
+          <match url=".*" />
+          <conditions logicalGrouping="MatchAll">
+            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
+            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
+          </conditions>
+          <action type="Rewrite" url="/adm/index.html" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>
