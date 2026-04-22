@@ -5,6 +5,7 @@ import PlaceholderPage from '@/pages/PlaceholderPage'
 import StatRHPage from '@/pages/StatRHPage'
 import StatRHRdvPage from '@/pages/StatRHRdvPage'
 import StatRHEntreeSortiePage from '@/pages/StatRHEntreeSortiePage'
+import StatRHSaisieCvPage from '@/pages/StatRHSaisieCvPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
@@ -29,7 +30,7 @@ function App() {
           <Route path="factures" element={<PlaceholderPage />} />
           <Route path="recherche-rh" element={<PlaceholderPage />} />
           <Route path="stat-rh" element={<StatRHPage />} />
-          <Route path="stat-rh/saisie-cv" element={<PlaceholderPage />} />
+          <Route path="stat-rh/saisie-cv" element={<StatRHSaisieCvPage />} />
           <Route path="stat-rh/rdv" element={<StatRHRdvPage />} />
           <Route path="stat-rh/dpae-sortie" element={<StatRHEntreeSortiePage />} />
           <Route path="stat-rh/annonceurs" element={<PlaceholderPage />} />

@@ -4,6 +4,7 @@ from app.core.auth.dependencies import require_intranet
 from app.intranets.adm.menu import router as menu_router
 from app.intranets.adm.routers.stat_rh_rdv import router as stat_rh_rdv_router
 from app.intranets.adm.routers.stat_rh_entree_sortie import router as stat_rh_es_router
+from app.intranets.adm.routers.stat_rh_saisie_cv import router as stat_rh_saisie_cv_router
 from app.intranets.adm.routers.salaries import router as salaries_router
 from app.intranets.adm.routers.organigrammes import router as organigrammes_router
 
@@ -16,6 +17,7 @@ router = APIRouter(
 router.include_router(menu_router)
 router.include_router(stat_rh_rdv_router)
 router.include_router(stat_rh_es_router)
+router.include_router(stat_rh_saisie_cv_router)
 router.include_router(salaries_router)
 router.include_router(organigrammes_router)
 

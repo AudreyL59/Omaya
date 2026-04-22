@@ -136,7 +136,7 @@ export default function StatRHRdvPage() {
   }
 
   return (
-    <div className="p-8 max-w-7xl">
+    <div className="p-8">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <button
           onClick={() => navigate('/stat-rh')}
@@ -516,7 +516,7 @@ function ListeTable({
       <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
-      <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+      <div className="overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
             <tr>
