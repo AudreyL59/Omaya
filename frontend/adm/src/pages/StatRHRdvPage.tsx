@@ -478,8 +478,8 @@ function ResumeTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+              {rows.map((r, idx) => (
+                <tr key={`${r.id ?? '0'}-${idx}`} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                   <td className="py-2 px-3 font-medium text-gray-900">{r.nom || r.id}</td>
                   <td className="py-2 px-3 text-right tabular-nums">{r.rdv}</td>
                   <td className="py-2 px-3 text-right tabular-nums">
@@ -584,8 +584,8 @@ function ListeTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.id_cvtheque + r.date_debut} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+            {rows.map((r, idx) => (
+              <tr key={`${r.id_cvtheque ?? '0'}-${r.date_debut ?? ''}-${idx}`} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                 <td className="py-2 px-3 font-medium text-gray-900">
                   {r.nom} <span className="font-normal text-gray-700">{r.prenom}</span>
                 </td>
