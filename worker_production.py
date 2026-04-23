@@ -61,9 +61,11 @@ def _pop_next_pending_job() -> dict | None:
     """
     db = get_connection("divers")
 
-    # 1. Trouver l'id du plus ancien pending
+    # 1. Trouver l'id + infos simples du plus ancien pending
+    # IMPORTANT : ne PAS inclure le mémo ParamsJSON dans ce SELECT ;
+    # le bridge WinDev tronque les mémos dans les SELECT multi-colonnes.
     rows = db.query(
-        """SELECT TOP 1 IDProductionExtractionJob, IDSalarieUser, ParamsJSON, Titre
+        """SELECT TOP 1 IDProductionExtractionJob, IDSalarieUser, Titre
         FROM ProductionExtractionJob
         WHERE Statut = 'pending'
           AND ModifELEM <> 'suppr'
@@ -74,11 +76,19 @@ def _pop_next_pending_job() -> dict | None:
 
     job = rows[0]
     id_job = _to_int(job.get("IDProductionExtractionJob"))
+    id_user = _to_int(job.get("IDSalarieUser"))
+    titre = job.get("Titre") or ""
     now = _now_windev()
 
-    # 2. Tenter de le passer en 'running' (UPDATE conditionné sur le statut)
-    # Note : HFSQL ne garantit pas l'atomicité cross-transactions mais
-    # comme on a 1 seul worker, c'est suffisant.
+    # 2. Fetch séparé du mémo ParamsJSON (SELECT 1 seule colonne = mémo préservé)
+    params_rows = db.query(
+        """SELECT ParamsJSON FROM ProductionExtractionJob
+        WHERE IDProductionExtractionJob = ?""",
+        (id_job,),
+    )
+    params_json = (params_rows[0].get("ParamsJSON") if params_rows else "") or ""
+
+    # 3. Tenter de le passer en 'running' (UPDATE conditionné sur le statut)
     db.query(
         """UPDATE ProductionExtractionJob
         SET Statut = 'running',
@@ -94,9 +104,9 @@ def _pop_next_pending_job() -> dict | None:
 
     return {
         "id_job": id_job,
-        "id_salarie_user": _to_int(job.get("IDSalarieUser")),
-        "params_json": job.get("ParamsJSON") or "{}",
-        "titre": job.get("Titre") or "",
+        "id_salarie_user": id_user,
+        "params_json": params_json,
+        "titre": titre,
     }
 
 
@@ -140,17 +150,41 @@ def _complete_job(
 
 
 def _fail_job(id_job: int, message: str) -> None:
+    """
+    Marque un job en erreur. On splitte en 2 UPDATEs pour que le mémo
+    MessageErreur (qui contient souvent un traceback avec des " et { )
+    ne casse pas l'UPDATE principal — le mémo est encodé en base64.
+    """
+    import base64
     db = get_connection("divers")
     now = _now_windev()
-    db.query(
-        """UPDATE ProductionExtractionJob
-        SET Statut = 'error',
-            DateFinTrait = ?,
-            MessageErreur = ?,
-            ModifDate = ?
-        WHERE IDProductionExtractionJob = ?""",
-        (now, message[:65000], now, id_job),
-    )
+
+    # 1. UPDATE des champs simples (pas de mémo ici)
+    try:
+        db.query(
+            """UPDATE ProductionExtractionJob
+            SET Statut = 'error',
+                DateFinTrait = ?,
+                ModifDate = ?
+            WHERE IDProductionExtractionJob = ?""",
+            (now, now, id_job),
+        )
+    except Exception as e:
+        log.error("impossible de marquer le job %s en error : %s", id_job, e)
+        return
+
+    # 2. UPDATE du mémo MessageErreur (base64 pour éviter les " et { )
+    try:
+        msg = (message or "")[:65000]
+        msg_b64 = base64.b64encode(msg.encode("utf-8")).decode("ascii")
+        db.query(
+            """UPDATE ProductionExtractionJob
+            SET MessageErreur = ?
+            WHERE IDProductionExtractionJob = ?""",
+            (msg_b64, id_job),
+        )
+    except Exception as e:
+        log.warning("update MessageErreur du job %s a echoue : %s", id_job, e)
 
 
 # ============================================================
@@ -226,16 +260,21 @@ def main() -> None:
             import json
             raw = (job["params_json"] or "").strip()
             params = {}
-            if raw:
-                # Compat : d'abord base64 (format utilisé par l'API), sinon JSON brut
-                try:
-                    decoded = base64.b64decode(raw).decode("utf-8")
-                    params = json.loads(decoded)
-                except Exception:
-                    params = json.loads(raw)
+            if not raw:
+                raise ValueError("ParamsJSON vide (memo non stocke ou tronque)")
+            # Compat : d'abord base64 (format utilisé par l'API), sinon JSON brut
+            try:
+                decoded = base64.b64decode(raw).decode("utf-8")
+                params = json.loads(decoded)
+            except Exception:
+                params = json.loads(raw)
+            if not params.get("date_du") or not params.get("date_au"):
+                raise ValueError(
+                    f"ParamsJSON sans date_du/date_au : {list(params.keys())}"
+                )
         except Exception as e:
-            _fail_job(id_job, f"ParamsJSON invalide : {e}")
-            log.error("x job %s : ParamsJSON invalide", id_job)
+            _fail_job(id_job, f"ParamsJSON invalide : {e} | raw len={len(job.get('params_json') or '')}")
+            log.error("x job %s : ParamsJSON invalide : %s", id_job, e)
             continue
 
         try:

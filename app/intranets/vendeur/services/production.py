@@ -196,6 +196,15 @@ def _row_to_dict(r: dict) -> dict:
             except Exception:
                 params = None
 
+    # MessageErreur peut être en base64 (stocké par le worker) ou en clair
+    msg_err_raw = (r.get("MessageErreur") or "").strip()
+    msg_err = msg_err_raw
+    if msg_err_raw:
+        try:
+            msg_err = base64.b64decode(msg_err_raw).decode("utf-8")
+        except Exception:
+            msg_err = msg_err_raw
+
     return {
         "id_job": str(_clean_id(_to_int(r.get("IDProductionExtractionJob")))),
         "id_salarie_user": str(_clean_id(_to_int(r.get("IDSalarieUser")))),
@@ -208,7 +217,7 @@ def _row_to_dict(r: dict) -> dict:
         "nb_lignes": _to_int(r.get("NbLignes")),
         "duree_s": _to_int(r.get("DureeS")),
         "path_resultat": r.get("PathResultat") or "",
-        "message_erreur": r.get("MessageErreur") or "",
+        "message_erreur": msg_err,
         "titre": r.get("Titre") or "",
         "params": params,
     }
