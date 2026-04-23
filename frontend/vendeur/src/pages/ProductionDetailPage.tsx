@@ -162,9 +162,46 @@ interface JobStats {
   total_points: number
   repart_partenaires: RepartPartenaireRow[]
   vendeurs: VendeurStatRow[]
-  dashboard_sfr: Record<string, number>
-  dashboard_oen: Record<string, number>
-  dashboard_eni: Record<string, number>
+  // Dashboard par partenaire : dict libre (+ clé spéciale tx_racc_vendeur)
+  dashboard_sfr: any
+  dashboard_oen: any
+  dashboard_eni: any
+}
+
+interface TxRaccVendeurRow {
+  id_salarie: string
+  nom: string
+  prenom: string
+  agence: string
+  equipe: string
+  en_activite: boolean
+  nb_thd: number
+  nb_cq: number
+  nb_ra: number
+  nb_port: number
+  nb_fibre: number
+  nb_box5g: number
+  nb_mob: number
+  nb_consent: number
+  nb_client: number
+  nb_prise: number
+  nb_prise_existante: number
+  nb_ctt_note: number
+  nb_ctt_non_note: number
+  nb_note_tot: number
+  nb_depot_gar: number
+  nb_fibre_hors_a: number
+  nb_jour_pres: number
+  productivite: number
+  tx_racc: number
+  tx_portab: number
+  tx_churn_mob: number
+  tx_churn_fixe: number
+  tx_consent: number
+  tx_prise: number
+  tx_mobile: number
+  tx_ctt_note: number
+  note_moy: number
 }
 
 type TabKey = 'contrats' | 'analyse' | 'repart' | 'vendeurs'
@@ -1133,8 +1170,9 @@ function AnalyseDashboard({
   )
 }
 
-function DashboardSFR({ d }: { d: Record<string, number> }) {
+function DashboardSFR({ d }: { d: any }) {
   const n = (k: string) => Number((d ?? {})[k] ?? 0)
+  const vendeurs: TxRaccVendeurRow[] = (d && d.tx_racc_vendeur) || []
   return (
     <div className="space-y-6">
       {/* Entête global */}
@@ -1215,7 +1253,168 @@ function DashboardSFR({ d }: { d: Record<string, number> }) {
           </div>
         </DashboardSection>
       )}
+
+      {/* --- Tableau Tx de Racc / vendeur --- */}
+      {vendeurs.length > 0 && (
+        <DashboardSection title={`Tx de Racc / vendeur (${vendeurs.length})`}>
+          <VendeurSFRTable rows={vendeurs} />
+        </DashboardSection>
+      )}
     </div>
+  )
+}
+
+function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
+  const [filter, setFilter] = useState('')
+  const [hideInactive, setHideInactive] = useState(false)
+  const [sortKey, setSortKey] = useState<keyof TxRaccVendeurRow>('nom')
+  const [sortDesc, setSortDesc] = useState(false)
+
+  const filtered = useMemo(() => {
+    let r = rows
+    if (filter) {
+      const q = filter.toLowerCase()
+      r = r.filter((v) =>
+        v.nom.toLowerCase().includes(q) ||
+        v.prenom.toLowerCase().includes(q) ||
+        v.agence.toLowerCase().includes(q) ||
+        v.equipe.toLowerCase().includes(q),
+      )
+    }
+    if (hideInactive) r = r.filter((v) => v.en_activite)
+    const dir = sortDesc ? -1 : 1
+    return [...r].sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+      return String(av ?? '').localeCompare(String(bv ?? ''), 'fr') * dir
+    })
+  }, [rows, filter, hideInactive, sortKey, sortDesc])
+
+  const toggleSort = (k: keyof TxRaccVendeurRow) => {
+    if (sortKey === k) setSortDesc(!sortDesc)
+    else { setSortKey(k); setSortDesc(false) }
+  }
+
+  const pct = (v: number) => `${v.toFixed(1)} %`
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="relative">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            placeholder="Vendeur / agence / équipe…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-72"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={hideInactive}
+            onChange={(e) => setHideInactive(e.target.checked)}
+            className="w-4 h-4"
+          />
+          Masquer inactifs
+        </label>
+        <span className="text-xs text-gray-500 ml-auto">{filtered.length} lignes</span>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="overflow-auto max-h-[calc(100vh-340px)]">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_rgb(229_231_235)]">
+              <tr>
+                {([
+                  ['nom', 'Vendeur', 'left'],
+                  ['nb_ra', 'nb Ra', 'right'],
+                  ['nb_thd', 'nb THD hors Att.', 'right'],
+                  ['tx_racc', 'Tx de Racc', 'right'],
+                  ['tx_churn_mob', 'Tx Churn Mob', 'right'],
+                  ['tx_churn_fixe', 'Tx Churn Fixe', 'right'],
+                  ['tx_consent', 'Tx Consent', 'right'],
+                  ['tx_portab', 'Tx Portabilité', 'right'],
+                  ['tx_mobile', 'Tx Mobile', 'right'],
+                  ['tx_prise', 'Tx Prise', 'right'],
+                  ['tx_ctt_note', 'Tx Ctt Notés', 'right'],
+                  ['note_moy', 'Note moy.', 'right'],
+                  ['productivite', 'Productivité', 'right'],
+                  ['nb_jour_pres', 'Nb Jours Prés.', 'right'],
+                  ['agence', 'Agence', 'left'],
+                  ['equipe', 'Équipe', 'left'],
+                  ['en_activite', 'Actif', 'center'],
+                ] as const).map(([k, label, align]) => (
+                  <th
+                    key={k}
+                    onClick={() => toggleSort(k as keyof TxRaccVendeurRow)}
+                    className={`${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-gray-100 bg-gray-50`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {sortKey === k && (sortDesc ? (
+                        <ChevronDown className="w-3 h-3" />
+                      ) : (
+                        <ChevronUp className="w-3 h-3" />
+                      ))}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.map((v) => (
+                <tr key={v.id_salarie} className={`hover:bg-gray-50 ${!v.en_activite ? 'bg-gray-50/50 text-gray-500' : ''}`}>
+                  <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">
+                    {v.nom} {capitalize(v.prenom)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{v.nb_ra}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{v.nb_thd}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_racc, 'racc')}`}>
+                    {pct(v.tx_racc)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_churn_mob, 'resil')}`}>
+                    {pct(v.tx_churn_mob)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_churn_fixe, 'resil')}`}>
+                    {pct(v.tx_churn_fixe)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_consent, 'consent')}`}>
+                    {pct(v.tx_consent)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_portab, 'portab')}`}>
+                    {pct(v.tx_portab)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_mobile, 'mob')}`}>
+                    {pct(v.tx_mobile)}
+                  </td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_prise, 'prise')}`}>
+                    {pct(v.tx_prise)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{pct(v.tx_ctt_note)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.note_moy, 'note')}`}>
+                    {v.note_moy.toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium">
+                    {v.productivite.toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{v.nb_jour_pres}</td>
+                  <td className="px-3 py-2 text-gray-600">{v.agence}</td>
+                  <td className="px-3 py-2 text-gray-600">{v.equipe}</td>
+                  <td className="px-3 py-2 text-center">
+                    {v.en_activite ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 inline-block" />
+                    ) : (
+                      <Minus className="w-3.5 h-3.5 text-gray-300 inline-block" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   )
 }
 

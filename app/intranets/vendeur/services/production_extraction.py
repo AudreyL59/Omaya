@@ -396,6 +396,66 @@ def _load_orgas_info(db_rh, ids_orgas: set[int]) -> dict[int, dict]:
     return out
 
 
+def _load_nb_jour_pres(
+    db_rh,
+    ids_salaries: set[int],
+    date_debut_ymd: str,
+    date_fin_ymd: str,
+    weekends_ymd_by_salarie: dict[int, set[str]],
+) -> dict[int, int]:
+    """
+    Charge le nombre de jours de présence par salarié sur la période.
+
+    Règle WinDev (reqDecl + reqVeriDecl) :
+    - Lundi-vendredi : toutes les dates avec Presence=1 sont comptées
+    - Samedi-dimanche : comptés uniquement si le salarié a signé
+      un contrat ce jour-là (cf. ListeDateWE dans WinDev)
+    """
+    if not ids_salaries:
+        return {}
+
+    all_ids = [i for i in ids_salaries if i]
+    if not all_ids:
+        return {}
+
+    out: dict[int, int] = {i: 0 for i in all_ids}
+
+    # 1. Jours de semaine (lundi-vendredi) : requête groupée par salarié
+    for chunk in _chunked(all_ids, _IN_CHUNK):
+        ids_sql = ",".join(str(i) for i in chunk)
+        rows = db_rh.query(
+            f"""SELECT IDSalarie, COUNT(*) AS NbPres
+            FROM salarie_decl_presence
+            WHERE IDSalarie IN ({ids_sql})
+              AND DATE BETWEEN ? AND ?
+              AND ModifELEM <> 'suppr'
+              AND Presence = 1
+              AND DAYOFWEEK(DATE) BETWEEN 2 AND 6
+            GROUP BY IDSalarie""",
+            (date_debut_ymd, date_fin_ymd),
+        )
+        for r in rows:
+            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            out[sid] = out.get(sid, 0) + _to_int(r.get("NbPres"))
+
+    # 2. Week-ends : pour chaque salarié × chaque WE où il a signé,
+    # vérifier s'il a Presence=1 ce jour-là.
+    for id_sal, weekends in weekends_ymd_by_salarie.items():
+        if id_sal not in out:
+            continue
+        for d in weekends:
+            row = db_rh.query_one(
+                """SELECT COUNT(*) AS NbPres FROM salarie_decl_presence
+                WHERE IDSalarie = ? AND DATE = ?
+                  AND ModifELEM <> 'suppr' AND Presence = 1""",
+                (id_sal, d),
+            )
+            if row and _to_int(row.get("NbPres")) > 0:
+                out[id_sal] = out.get(id_sal, 0) + 1
+
+    return out
+
+
 def _load_etat_operateur(
     db_adv, prefix: str, id_etat_col: str, ids_etats: set[int],
 ) -> dict[int, dict]:
@@ -1112,9 +1172,39 @@ def extract_job_to_parquet(
     df.to_parquet(out_path, compression="snappy", index=False)
 
     # Étape 7 : calcul des stats (onglets dashboard) et écriture meta.json
+    progress_cb(96, "Chargement des jours de présence")
+    # Nb Jours Présence pour les vendeurs SFR (actifs) — utilisé par le dashboard SFR
+    sfr_vendeur_ids: set[int] = set()
+    weekends_by_sal: dict[int, set[str]] = {}
+    for r in rows_out:
+        if r.get("partenaire") != "SFR":
+            continue
+        if not r.get("en_activite", True):
+            continue
+        try:
+            sid = int(r.get("id_salarie") or 0)
+        except (TypeError, ValueError):
+            sid = 0
+        if not sid:
+            continue
+        sfr_vendeur_ids.add(sid)
+        ds = r.get("date_signature") or ""
+        if len(ds) >= 10:
+            try:
+                dt = date(int(ds[:4]), int(ds[5:7]), int(ds[8:10]))
+                # weekday : 5 = samedi, 6 = dimanche
+                if dt.weekday() >= 5:
+                    weekends_by_sal.setdefault(sid, set()).add(ds.replace("-", ""))
+            except Exception:
+                pass
+
+    nb_jour_pres = _load_nb_jour_pres(
+        db_rh, sfr_vendeur_ids, prod_deb, prod_fin, weekends_by_sal,
+    )
+
     progress_cb(97, "Calcul des stats")
     partenaires_couleurs = _load_partenaires_couleurs(db_adv)
-    stats = _compute_stats(rows_out, partenaires_couleurs)
+    stats = _compute_stats(rows_out, partenaires_couleurs, nb_jour_pres)
     meta_path = _meta_path(id_salarie_user, id_job)
     meta_path.write_text(
         json.dumps(stats, ensure_ascii=False),
@@ -1150,7 +1240,11 @@ def _load_partenaires_couleurs(db_adv) -> dict[str, str]:
     return out
 
 
-def _compute_stats(rows: list[dict], partenaires_couleurs: dict[str, str]) -> dict:
+def _compute_stats(
+    rows: list[dict],
+    partenaires_couleurs: dict[str, str],
+    nb_jour_pres_par_salarie: dict[int, int] | None = None,
+) -> dict:
     """
     Agrège les stats universelles à partir des rows extraites :
       - répartition par partenaire (Brut/Temporaire/Envoyé/Rejet/Résil/Payé/...)
@@ -1239,7 +1333,7 @@ def _compute_stats(rows: list[dict], partenaires_couleurs: dict[str, str]) -> di
     total_points = sum(int(r.get("nb_points", 0) or 0) for r in rows)
 
     # Dashboards par partenaire (onglet Analyse)
-    dashboard_sfr = _compute_dashboard_sfr(rows)
+    dashboard_sfr = _compute_dashboard_sfr(rows, nb_jour_pres_par_salarie or {})
     dashboard_oen = _compute_dashboard_oen(rows)
     dashboard_eni = _compute_dashboard_eni(rows)
 
@@ -1261,7 +1355,10 @@ def _pct(num: float, den: float, decimals: int = 2) -> float:
     return round((num / den) * 100, decimals)
 
 
-def _compute_dashboard_sfr(rows: list[dict]) -> dict:
+def _compute_dashboard_sfr(
+    rows: list[dict],
+    nb_jour_pres_par_salarie: dict[int, int] | None = None,
+) -> dict:
     """
     Dashboard SFR — transposition fidèle de StatsSFR() + AfficheResultatSFR() WinDev.
 
@@ -1294,6 +1391,58 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
     # HORS TK — WinDev n'appelle StatsSFR que si NumBS ne commence pas par "TK".
     sfr = [r for r in sfr_all if not _is_tk(r)]
 
+    # TableListe4P WinDev : par client_mail, compteurs MobCQ/VLA + FixCQ/VLA.
+    t_4p: dict[str, dict] = {}
+
+    def _t4p(email: str) -> dict:
+        d = t_4p.get(email)
+        if d is None:
+            d = {"mob_cq": 0, "mob_vla": 0, "fix_cq": 0, "fix_vla": 0}
+            t_4p[email] = d
+        return d
+
+    # TableTxRaccVendeur WinDev : 1 ligne par vendeur (id_salarie).
+    # Les compteurs ne sont alimentés que pour les vendeurs en activité.
+    v_rows: dict[str, dict] = {}
+
+    def _vrow(r: dict) -> dict | None:
+        """Retourne la ligne vendeur ou None si inactif (indF = 0 WinDev)."""
+        id_s = r.get("id_salarie") or "0"
+        if id_s == "0":
+            return None
+        v = v_rows.get(id_s)
+        if v is None:
+            v = {
+                "id_salarie": id_s,
+                "nom": r.get("vendeur_nom", ""),
+                "prenom": r.get("vendeur_prenom", ""),
+                "agence": r.get("agence", ""),
+                "equipe": r.get("equipe", ""),
+                "en_activite": bool(r.get("en_activite", True)),
+                "nb_thd": 0,
+                "nb_cq": 0,
+                "nb_ra": 0,
+                "nb_port": 0,
+                "nb_cq_ra_fixe": 0,
+                "nb_res30j_fixe": 0,
+                "nb_cq_ra_mob": 0,
+                "nb_res30j_mob": 0,
+                "nb_consent": 0,
+                "nb_client": 0,
+                "nb_prise": 0,
+                "nb_prise_existante": 0,
+                "nb_fibre": 0,
+                "nb_box5g": 0,
+                "nb_mob": 0,
+                "nb_ctt_note": 0,
+                "nb_ctt_non_note": 0,
+                "nb_note_tot": 0.0,
+                "nb_depot_gar": 0,
+                "nb_fibre_hors_a": 0,
+            }
+            v_rows[id_s] = v
+        return v if v["en_activite"] else None
+
     # --- Compteurs généraux (note + consentement par client unique)
     noted = [r for r in sfr if (r.get("notation") or 0) > 0]
     nb_note_sfr = len(noted)
@@ -1307,8 +1456,27 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
         if cid != "0" and cid not in id_clients_seen:
             id_clients_seen.add(cid)
             nb_clients += 1
-            if r.get("client_rap_part"):
+            is_consent = bool(r.get("client_rap_part"))
+            if is_consent:
                 nb_consent += 1
+            # Compteur par vendeur : 1 fois par client unique
+            v = _vrow(r)
+            if v is not None:
+                v["nb_client"] += 1
+                if is_consent:
+                    v["nb_consent"] += 1
+
+    # Notation par vendeur (idem WinDev : sommée pour tous ses contrats notés)
+    for r in sfr:
+        v = _vrow(r)
+        if v is None:
+            continue
+        note = r.get("notation") or 0
+        if note > 0:
+            v["nb_ctt_note"] += 1
+            v["nb_note_tot"] += float(note)
+        else:
+            v["nb_ctt_non_note"] += 1
 
     # --- Sous-familles Premium/Power/Starter
     nb_prem_ssfam = sum(1 for r in sfr if "PREMIUM" in _ss(r))
@@ -1356,16 +1524,6 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
     nb_cq_ra_b5g = 0
     nb_res30j_b5g = 0
 
-    # TableListe4P WinDev : par client_mail, compteurs MobCQ/VLA + FixCQ/VLA.
-    # Sert à calculer nb_sfr_4p pour le ratio % Parcours Chaînés.
-    t_4p: dict[str, dict] = {}
-
-    def _t4p(email: str) -> dict:
-        d = t_4p.get(email)
-        if d is None:
-            d = {"mob_cq": 0, "mob_vla": 0, "fix_cq": 0, "fix_vla": 0}
-            t_4p[email] = d
-        return d
 
     def _churn_jours(r: dict) -> int | None:
         """Nb jours entre DateRaccActiv et DateRésil (ou None si dates invalides)."""
@@ -1399,6 +1557,9 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
 
         if tp == "MOBILE":
             nb_sfr_mobile += 1
+            v = _vrow(r)
+            if v is not None:
+                v["nb_mob"] += 1
             # Forfait > 200Go : 1er nombre suivi de "G" dans le libellé
             import re
             lp = (r.get("lib_produit", "") or "").upper()
@@ -1419,12 +1580,16 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
             if is_cq:
                 if activ_control == "ACTIVE_BIOS" and processing_state in ("COMPLETED", "CANCELLED"):
                     nb_cq_ra_mob += 1
+                    if v is not None:
+                        v["nb_cq_ra_mob"] += 1
                 if (activ_control in ("ACTIVE_BIOS", "CANCELLED")
                         and processing_state in ("COMPLETED", "CANCELLED")):
                     churn = _churn_jours(r)
                     if churn is not None and churn <= 30:
                         nb_res30j_mob += 1
                         test_resil_churn = True
+                        if v is not None:
+                            v["nb_res30j_mob"] += 1
 
             if te_ope in (5, 8):
                 nb_sfr_activ += 1
@@ -1441,6 +1606,9 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
         # Fibre / Box5G : on entre dans la branche "testFibre"
         if "BOX5G" in ss:
             nb_sfr_box5g += 1
+            v = _vrow(r)
+            if v is not None:
+                v["nb_box5g"] += 1
             if ss == "BOX5GTV":
                 nb_sfr_box5g_tv += 1
             if te == 4:
@@ -1449,6 +1617,9 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
                 nb_sfr_cq_box5g += 1
                 if activ_control == "ACTIVE_BIOS" and processing_state in ("COMPLETED", "CANCELLED"):
                     nb_cq_ra_b5g += 1
+                    # WinDev remplit nb_CQ_RA_Mob pour les B5G (cf. StatsSFR Box5G branche)
+                    if v is not None:
+                        v["nb_cq_ra_mob"] += 1
                 test_resil_churn = False
                 if (activ_control in ("ACTIVE_BIOS", "CANCELLED")
                         and processing_state in ("COMPLETED", "CANCELLED")):
@@ -1456,6 +1627,8 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
                     if churn is not None and churn <= 30:
                         nb_res30j_b5g += 1
                         test_resil_churn = True
+                        if v is not None:
+                            v["nb_res30j_mob"] += 1
             else:
                 test_resil_churn = False
 
@@ -1470,6 +1643,9 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
         else:
             # Fibre pure
             nb_sfr_fibre += 1
+            v = _vrow(r)
+            if v is not None:
+                v["nb_fibre"] += 1
 
             if "PREMIUM" in (r.get("lib_produit", "") or "").upper():
                 nb_sfr_prem_lib += 1
@@ -1477,12 +1653,20 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
                 nb_cts_resil_fibre += 1
             if id_etat == 73:
                 nb_sfr_depot_gar += 1
+                if v is not None:
+                    v["nb_depot_gar"] += 1
             if te != 3:  # hors anomalie
                 nb_sfr_fibre_hors_a += 1
+                if v is not None:
+                    v["nb_fibre_hors_a"] += 1
             if r.get("sfr_prise_existante"):
                 nb_sfr_prise_existante += 1
+                if v is not None:
+                    v["nb_prise_existante"] += 1
             if r.get("sfr_prise_saisie"):
                 nb_sfr_prise_saisie += 1
+                if v is not None:
+                    v["nb_prise"] += 1
 
             # Portabilité compte uniquement sur CQ
             if r.get("sfr_portabilite") and is_cq:
@@ -1492,6 +1676,10 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
             test_resil_churn = False
             if is_cq:
                 nb_sfr_cq += 1
+                if v is not None:
+                    v["nb_cq"] += 1
+                    if r.get("sfr_portabilite"):
+                        v["nb_port"] += 1
                 if r.get("sfr_parcours_chaine"):
                     nb_sfr_pc += 1
                 email = r.get("client_mail") or ""
@@ -1503,13 +1691,19 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
                         t["fix_vla"] += 1
                 if processing_state == "RACCORDEE RAS":
                     nb_cq_ra_fixe += 1
+                    if v is not None:
+                        v["nb_cq_ra_fixe"] += 1
                     churn = _churn_jours(r)
                     if churn is not None and churn <= 30:
                         nb_res30j_fixe += 1
                         test_resil_churn = True
+                        if v is not None:
+                            v["nb_res30j_fixe"] += 1
 
             if te > 2:
                 nb_cts_hors_att += 1
+                if v is not None:
+                    v["nb_thd"] += 1
                 if r.get("sfr_portabilite") and is_cq:
                     nb_cts_hors_att_av_port += 1
             if te_ope > 2:
@@ -1518,6 +1712,8 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
                     nb_cts_hors_att_sfr_av_port += 1
             if te in (5, 8):
                 nb_cts_ra += 1
+                if v is not None:
+                    v["nb_ra"] += 1
             if te_ope in (5, 8) or test_resil_churn:
                 nb_cts_ra_sfr += 1
 
@@ -1538,6 +1734,41 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
     tx_pc = _pct(nb_sfr_pc, nb_sfr_4p)
     if tx_pc > 100:
         tx_pc = 100.0
+
+    # Finalisation du tableau vendeur : calculs des taux + Nb_JourPres + Productivité
+    jp = nb_jour_pres_par_salarie or {}
+    tx_racc_vendeur: list[dict] = []
+    for v in v_rows.values():
+        nb_jour_pres = int(jp.get(int(v["id_salarie"]), 0))
+        nb_thd = v["nb_thd"]
+        nb_cq = v["nb_cq"]
+        # Productivité = (Fibre hors anomalie + DG) / Nb jours présence
+        productivite = 0.0
+        if nb_jour_pres > 0:
+            productivite = round(
+                (v["nb_fibre_hors_a"] + v["nb_depot_gar"]) / nb_jour_pres, 2
+            )
+        tx_racc_vendeur.append({
+            **v,
+            "nb_jour_pres": nb_jour_pres,
+            "productivite": productivite,
+            "tx_racc": _pct(v["nb_ra"], nb_thd),
+            "tx_portab": _pct(v["nb_port"], nb_cq),
+            "tx_churn_mob": _pct(v["nb_res30j_mob"], v["nb_cq_ra_mob"]),
+            "tx_churn_fixe": _pct(v["nb_res30j_fixe"], v["nb_cq_ra_fixe"]),
+            "tx_consent": _pct(v["nb_consent"], v["nb_client"]),
+            "tx_prise": _pct(v["nb_prise"], v["nb_prise_existante"]),
+            "tx_mobile": _pct(v["nb_mob"], v["nb_fibre"]),
+            "tx_ctt_note": _pct(
+                v["nb_ctt_note"], v["nb_ctt_note"] + v["nb_ctt_non_note"],
+            ),
+            "note_moy": (
+                round(v["nb_note_tot"] / v["nb_ctt_note"], 2)
+                if v["nb_ctt_note"] > 0 else 0.0
+            ),
+        })
+    # Tri : par ordre alphabétique sur nom
+    tx_racc_vendeur.sort(key=lambda x: (x["nom"].lower(), x["prenom"].lower()))
 
     return {
         # SFR global
@@ -1608,6 +1839,9 @@ def _compute_dashboard_sfr(rows: list[dict]) -> dict:
         "tx_box5g_resil": _pct(nb_sfr_box5g_resil, nb_sfr_box5g),
         "tx_box5g_tv": _pct(nb_sfr_box5g_tv, nb_sfr_box5g),
         "tx_churn_b5g": _pct(nb_res30j_b5g, nb_cq_ra_b5g),
+
+        # Tableau par vendeur (TableTxRaccVendeur WinDev)
+        "tx_racc_vendeur": tx_racc_vendeur,
     }
 
 
