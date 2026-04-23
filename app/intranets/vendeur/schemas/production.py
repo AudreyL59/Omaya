@@ -69,6 +69,7 @@ class ContratRow(BaseModel):
     """
     Ligne d'un contrat extrait.
     Colonnes communes à tous partenaires + colonnes spécifiques en optionnel.
+    Reproduit l'Excel WinDev "Extraction" (55 colonnes).
     """
     # Identité
     id_contrat: str
@@ -79,7 +80,7 @@ class ContratRow(BaseModel):
     date_signature: str = ""       # YYYY-MM-DD
     date_saisie: str = ""
     mois_p: str = ""
-    heure_sign: str = ""           # si dispo
+    heure_sign: str = ""           # HH:MM
 
     # Produit / état
     lib_produit: str = ""
@@ -90,14 +91,20 @@ class ContratRow(BaseModel):
     lib_etat: str = ""             # {PREFIX}_etatContrat.Lib_Etat (interne)
     lib_etat_vend: str = ""        # {PREFIX}_etatContrat.Lib_EtatVend
 
+    # Etat opérateur (SFR/OEN uniquement, droit ProdRezo)
+    id_type_etat_ope: int = 0
+    lib_type_etat_ope: str = ""
+    lib_etat_ope: str = ""
+
     # Vendeur + affectation historique
     id_salarie: str = "0"
     vendeur_nom: str = ""
     vendeur_prenom: str = ""
-    agence: str = ""               # orga parent (affectation à la date signature)
-    equipe: str = ""               # orga
+    agence: str = ""
+    equipe: str = ""
     poste: str = ""
     en_activite: bool = True
+    date_embauche: str = ""
     date_sortie: str = ""
 
     # Client
@@ -111,6 +118,7 @@ class ContratRow(BaseModel):
     client_mail: str = ""
     client_mobile: str = ""
     client_age: int = 0
+    client_rap_part: bool = False  # Opt_Partenaire = "Recueil consentement"
 
     # Valeurs
     nb_points: int = 0
@@ -122,7 +130,46 @@ class ContratRow(BaseModel):
     info_partagee: str = ""
     code_enr: str = ""             # pas pour SFR
 
-    # Flags comptables
+    # SFR spécifique
+    sfr_type_vente: int = 0
+    sfr_technologie: int = 0
+    sfr_box8: bool = False
+    sfr_box8_verif: bool = False
+    sfr_hors_cible: bool = False
+    sfr_date_rdv_tech: str = ""
+    sfr_date_racc_activ: str = ""  # Date Racc/Activation (SFR = DateRaccActiv, OEN = DateActivation)
+    sfr_date_validation: str = ""  # SFR + PRO
+    sfr_date_resil: str = ""       # SFR + PRO
+    sfr_portabilite: bool = False
+    sfr_date_portab: str = ""
+    sfr_cluster_code: str = ""     # depuis SFR_Cluster.CodeVAD
+    sfr_cluster_nom: str = ""      # depuis SFR_Cluster.NomCluster
+    sfr_mois_p_distrib: str = ""   # MoisP_RaDistri (droit InfoPaieDistrib)
+    sfr_internet_garanti: bool = False
+    sfr_offre_speciale: bool = False
+    sfr_parcours_chaine: bool = False
+    sfr_prise_existante: bool = False
+    sfr_prise_saisie: bool = False
+    sfr_num_prise_sfr: str = ""    # droit InfoClientCoord
+    sfr_num_prise_vend: str = ""   # droit InfoClientCoord
+
+    # ENI/OEN conso
+    car: int = 0                   # consommation gaz
+    puissance: int = 0             # puissance elec
+    gaz_actif: bool = False        # ENI uniquement
+    elec_actif: bool = False       # ENI uniquement
+
+    # ENI/OEN options (depuis {prefix}_contrat_Option)
+    opt_demat: bool = False
+    opt_maintenance: bool = False
+    opt_energie_verte_gaz: bool = False
+    opt_reforestation: bool = False
+    opt_protection: bool = False
+
+    # STR/VAL option numérique
+    opt_num: str = ""
+
+    # Flags comptables (calculés)
     nb_ctt_brut: int = 0
     nb_ctt_hors_rejet: int = 0
     nb_ctt_paye: int = 0

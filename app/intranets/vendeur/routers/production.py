@@ -151,7 +151,10 @@ def get_contrats(
     }
     # Nettoyer les filtres vides
     filters = {k: v for k, v in filters.items() if v}
-    return read_contrats_page(path, page=page, page_size=page_size, sort=sort, filters=filters)
+    return read_contrats_page(
+        path, page=page, page_size=page_size, sort=sort, filters=filters,
+        droits=user.droits,
+    )
 
 
 @router.get("/jobs/{id_job}/stats", response_model=JobStats)
@@ -186,8 +189,10 @@ def get_export_csv(
     if not path:
         raise HTTPException(status_code=404, detail="Fichier résultat introuvable")
 
-    # On lit tout le Parquet (sans pagination)
-    data = read_contrats_page(path, page=1, page_size=1_000_000)
+    # On lit tout le Parquet (sans pagination) avec censure selon droits user
+    data = read_contrats_page(
+        path, page=1, page_size=1_000_000, droits=user.droits,
+    )
     rows = data["rows"]
 
     def gen():
