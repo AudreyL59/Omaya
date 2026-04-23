@@ -80,19 +80,42 @@ def execute_query(
 
         proc = subprocess.Popen(
             args,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             creationflags=CREATE_NO_WINDOW,
         )
         try:
-            proc.wait(timeout=30)
+            stdout_b, stderr_b = proc.communicate(timeout=30)
         except subprocess.TimeoutExpired:
             proc.kill()
             raise HFSQLError("Bridge timeout (30s)")
 
         if not result_file.exists():
-            raise HFSQLError(f"Bridge n'a pas créé le fichier résultat. Exit code: {proc.returncode}")
+            # Décode stdout/stderr pour donner un maximum d'infos
+            def _dec(b: bytes) -> str:
+                if not b:
+                    return ""
+                for enc in ("utf-8", "cp1252", "latin-1"):
+                    try:
+                        return b.decode(enc)
+                    except UnicodeDecodeError:
+                        continue
+                return b.decode("latin-1", errors="replace")
+            so = _dec(stdout_b).strip()
+            se = _dec(stderr_b).strip()
+            detail = []
+            if so:
+                detail.append(f"stdout: {so}")
+            if se:
+                detail.append(f"stderr: {se}")
+            extra = " | ".join(detail) if detail else "(aucune sortie)"
+            # On ajoute le début du SQL pour diagnostic (les INSERT/UPDATE sont souvent
+            # ignorés silencieusement par les bridges qui ne gèrent que SELECT)
+            sql_preview = (sql[:500] + ("…" if len(sql) > 500 else "")).replace("\n", " ")
+            raise HFSQLError(
+                f"Bridge n'a pas créé le fichier résultat. Exit code: {proc.returncode} | {extra} | SQL: {sql_preview}"
+            )
 
         # HFSQL écrit en latin-1 par défaut
         for enc in ["utf-8", "latin-1", "cp1252"]:
