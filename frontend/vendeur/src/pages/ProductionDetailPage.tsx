@@ -510,21 +510,30 @@ function ContratsTable({
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(100)
+  const [showAll, setShowAll] = useState(false)
   const [sort, setSort] = useState<string>('-date_signature')
   const [partenaireFilter, setPartenaireFilter] = useState('')
   const [vendeurFilter, setVendeurFilter] = useState('')
   const [clientFilter, setClientFilter] = useState('')
+  const [numBsFilter, setNumBsFilter] = useState('')
+  const [typeProdFilter, setTypeProdFilter] = useState('')
+
+  // En mode "Totalité", on demande toutes les lignes d'un coup (capé à 1M)
+  const effectivePageSize = showAll ? 1_000_000 : pageSize
+  const effectivePage = showAll ? 1 : page
 
   useEffect(() => {
     setLoading(true)
     const params = new URLSearchParams({
-      page: String(page),
-      page_size: String(pageSize),
+      page: String(effectivePage),
+      page_size: String(effectivePageSize),
       sort,
     })
     if (partenaireFilter) params.set('partenaire', partenaireFilter)
     if (vendeurFilter) params.set('vendeur', vendeurFilter)
     if (clientFilter) params.set('client', clientFilter)
+    if (numBsFilter) params.set('num_bs', numBsFilter)
+    if (typeProdFilter) params.set('type_prod', typeProdFilter)
     fetch(`/api/vendeur/production/jobs/${idJob}/contrats?${params}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
@@ -532,12 +541,12 @@ function ContratsTable({
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [idJob, page, pageSize, sort, partenaireFilter, vendeurFilter, clientFilter])
+  }, [idJob, effectivePage, effectivePageSize, sort, partenaireFilter, vendeurFilter, clientFilter, numBsFilter, typeProdFilter])
 
   const totalPages = useMemo(() => {
-    if (!data) return 1
+    if (!data || showAll) return 1
     return Math.max(1, Math.ceil(data.total / pageSize))
-  }, [data, pageSize])
+  }, [data, pageSize, showAll])
 
   const partenairesUniques = useMemo(
     () => Array.from(partenairesPresents).sort(),
@@ -595,7 +604,25 @@ function ContratsTable({
             placeholder="Client…"
             value={clientFilter}
             onChange={(e) => { setClientFilter(e.target.value); setPage(1) }}
-            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-48"
+            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-40"
+          />
+        </div>
+        <div className="relative">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            placeholder="Num BS…"
+            value={numBsFilter}
+            onChange={(e) => { setNumBsFilter(e.target.value); setPage(1) }}
+            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-36 font-mono"
+          />
+        </div>
+        <div className="relative">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            placeholder="Type Prod…"
+            value={typeProdFilter}
+            onChange={(e) => { setTypeProdFilter(e.target.value); setPage(1) }}
+            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-36"
           />
         </div>
         <div className="text-xs text-gray-500 ml-auto">
@@ -604,15 +631,15 @@ function ContratsTable({
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-320px)]">
           <table className="text-sm" style={{ minWidth: '100%' }}>
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_rgb(229_231_235)]">
               <tr>
                 {visibleColumns.map((c) => (
                   <th
                     key={c.key}
                     onClick={() => toggleSort(c.key)}
-                    className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-gray-100`}
+                    className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-gray-100 bg-gray-50`}
                   >
                     <span className="inline-flex items-center gap-1">
                       {c.label}
@@ -663,34 +690,54 @@ function ContratsTable({
         {data && data.total > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm">
             <div className="text-gray-500">
-              {(page - 1) * pageSize + 1} – {Math.min(page * pageSize, data.total)} sur{' '}
-              {data.total.toLocaleString('fr-FR')}
+              {showAll ? (
+                <>Tous les {data.total.toLocaleString('fr-FR')} contrats</>
+              ) : (
+                <>
+                  {(page - 1) * pageSize + 1} – {Math.min(page * pageSize, data.total)} sur{' '}
+                  {data.total.toLocaleString('fr-FR')}
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1) }}
+                value={showAll ? 'all' : String(pageSize)}
+                onChange={(e) => {
+                  if (e.target.value === 'all') {
+                    setShowAll(true)
+                    setPage(1)
+                  } else {
+                    setShowAll(false)
+                    setPageSize(parseInt(e.target.value))
+                    setPage(1)
+                  }
+                }}
                 className="px-2 py-1 border border-gray-300 rounded text-sm"
               >
                 {[50, 100, 200, 500].map((s) => (
                   <option key={s} value={s}>{s}/page</option>
                 ))}
+                <option value="all">Totalité</option>
               </select>
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-2.5 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-white"
-              >
-                Précédent
-              </button>
-              <span className="tabular-nums text-gray-700">{page} / {totalPages}</span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-2.5 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-white"
-              >
-                Suivant
-              </button>
+              {!showAll && (
+                <>
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-2.5 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-white"
+                  >
+                    Précédent
+                  </button>
+                  <span className="tabular-nums text-gray-700">{page} / {totalPages}</span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="px-2.5 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-white"
+                  >
+                    Suivant
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}

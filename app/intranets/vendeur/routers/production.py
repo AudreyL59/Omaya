@@ -123,11 +123,13 @@ def delete_single_job(id_job: int, user: UserToken = Depends(get_current_user)):
 def get_contrats(
     id_job: int,
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=500),
+    page_size: int = Query(50, ge=1, le=1_000_000),
     sort: str = Query("", description="Nom de colonne, préfixer par '-' pour desc"),
     partenaire: str = Query(""),
     vendeur: str = Query(""),
     client: str = Query(""),
+    num_bs: str = Query(""),
+    type_prod: str = Query(""),
     user: UserToken = Depends(get_current_user),
 ):
     """Lecture paginée du tableau contrats (depuis le Parquet)."""
@@ -148,6 +150,8 @@ def get_contrats(
         # Pour vendeur/client on filtre sur le nom uniquement (recherche "contient")
         "vendeur_nom": vendeur,
         "client_nom": client,
+        "num_bs": num_bs,
+        "type_prod": type_prod,
     }
     # Nettoyer les filtres vides
     filters = {k: v for k, v in filters.items() if v}
