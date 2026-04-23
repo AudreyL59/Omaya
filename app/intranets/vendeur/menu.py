@@ -113,7 +113,7 @@ def get_menu(user: UserToken = Depends(get_current_user)):
             "key": "production",
             "label": "Production",
             "route": "/production",
-            "visible": is_vendeur_distrib and not user.is_pause and not is_callrh,
+            "visible": True,
         },
         {
             "key": "clusters",

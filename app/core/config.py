@@ -31,6 +31,15 @@ REP_BO = DOCS_BASE_PATH / "BO"
 REP_RH = DOCS_BASE_PATH / "RH"
 REP_DPAE = DOCS_BASE_PATH / "DPAE"
 
+# Extractions de production (fichiers Parquet générés par le worker)
+PRODUCTION_EXTRACTS_DIR = Path(
+    os.getenv("PRODUCTION_EXTRACTS_DIR", r"D:\Sites\groupeOmaya\production-extracts")
+)
+# Rétention en jours (purge par le worker au démarrage)
+PRODUCTION_EXTRACTS_RETENTION_DAYS = int(
+    os.getenv("PRODUCTION_EXTRACTS_RETENTION_DAYS", "90")
+)
+
 # FTP
 FTP_HOST = os.getenv("FTP_HOST", "192.168.1.202")
 FTP_USER = os.getenv("FTP_USER", "OMAYA")
