@@ -1134,7 +1134,7 @@ function AnalyseDashboard({
 }
 
 function DashboardSFR({ d }: { d: Record<string, number> }) {
-  const n = (k: string) => Number(d[k] ?? 0)
+  const n = (k: string) => Number((d ?? {})[k] ?? 0)
   return (
     <div className="space-y-6">
       {/* Entête global */}
@@ -1220,7 +1220,7 @@ function DashboardSFR({ d }: { d: Record<string, number> }) {
 }
 
 function DashboardOEN({ d }: { d: Record<string, number> }) {
-  const n = (k: string) => Number(d[k] ?? 0)
+  const n = (k: string) => Number((d ?? {})[k] ?? 0)
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1261,7 +1261,7 @@ function DashboardOEN({ d }: { d: Record<string, number> }) {
 }
 
 function DashboardENI({ d }: { d: Record<string, number> }) {
-  const n = (k: string) => Number(d[k] ?? 0)
+  const n = (k: string) => Number((d ?? {})[k] ?? 0)
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
