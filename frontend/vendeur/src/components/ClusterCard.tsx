@@ -41,29 +41,42 @@ export default function ClusterCard({ cluster, onTeamClick }: ClusterCardProps) 
     couleur_racc,
   } = cluster
 
+  const clickable = !!onTeamClick
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
+      whileHover={clickable ? { y: -2 } : undefined}
       transition={{ duration: 0.25 }}
-      className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow"
+      onClick={clickable ? () => onTeamClick!(cluster) : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onTeamClick!(cluster)
+              }
+            }
+          : undefined
+      }
+      className={`bg-white rounded-xl border border-gray-200 p-5 transition-shadow ${
+        clickable
+          ? 'hover:shadow-md hover:border-gray-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900'
+          : ''
+      }`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-gray-900 truncate" title={nom}>
             {nom}
           </h3>
-          <button
-            onClick={() => onTeamClick?.(cluster)}
-            disabled={!onTeamClick}
-            className="mt-2 flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 disabled:hover:text-gray-600 disabled:cursor-default transition-colors group"
-          >
-            <Users className="w-4 h-4 text-gray-400 group-hover:text-gray-700" />
-            <span className={onTeamClick ? 'underline decoration-dotted underline-offset-4' : ''}>
-              {exp_lib}
-            </span>
-          </button>
+          <div className="mt-2 flex items-center gap-1.5 text-sm text-gray-600">
+            <Users className="w-4 h-4 text-gray-400" />
+            <span>{exp_lib}</span>
+          </div>
         </div>
 
         <ClusterDonut
