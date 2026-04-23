@@ -780,7 +780,7 @@ def extract_job_to_parquet(
         })
 
     # Étape 6 : écriture Parquet
-    progress_cb(95, f"Écriture Parquet ({len(rows_out)} lignes)")
+    progress_cb(93, f"Écriture Parquet ({len(rows_out)} lignes)")
     out_path = _parquet_path(id_salarie_user, id_job)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -794,6 +794,16 @@ def extract_job_to_parquet(
         ])
     df.to_parquet(out_path, compression="snappy", index=False)
 
+    # Étape 7 : calcul des stats (onglets dashboard) et écriture meta.json
+    progress_cb(97, "Calcul des stats")
+    partenaires_couleurs = _load_partenaires_couleurs(db_adv)
+    stats = _compute_stats(rows_out, partenaires_couleurs)
+    meta_path = _meta_path(id_salarie_user, id_job)
+    meta_path.write_text(
+        json.dumps(stats, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
     duree_s = int(time.time() - t0)
     progress_cb(100, "Terminé")
     return {
@@ -802,6 +812,143 @@ def extract_job_to_parquet(
         "duree_s": duree_s,
         "message_erreur": "",
     }
+
+
+def _load_partenaires_couleurs(db_adv) -> dict[str, str]:
+    """Retourne un mapping PréfixeBDD -> couleur hex (depuis la table Partenaire)."""
+    rows = db_adv.query(
+        """SELECT PréfixeBDD, Couleur_R, Couleur_V, Couleur_B
+        FROM Partenaire
+        WHERE ModifELEM <> 'suppr' AND PréfixeBDD <> ''"""
+    )
+    out: dict[str, str] = {}
+    for r in rows:
+        prefix = (r.get("PréfixeBDD") or "").strip()
+        if prefix:
+            out[prefix] = _winrgb_to_hex(
+                _to_int(r.get("Couleur_R")),
+                _to_int(r.get("Couleur_V")),
+                _to_int(r.get("Couleur_B")),
+            )
+    return out
+
+
+def _compute_stats(rows: list[dict], partenaires_couleurs: dict[str, str]) -> dict:
+    """
+    Agrège les stats universelles à partir des rows extraites :
+      - répartition par partenaire (Brut/Temporaire/Envoyé/Rejet/Résil/Payé/...)
+      - liste des vendeurs avec nb contrats, nb payé, nb_points, et répartition
+        par partenaire
+
+    Équivalent WinDev : TableRepartContrats + TableVendeur de Fen_suiviProdAsynchrone.
+    """
+    # Répartition par partenaire : un dict par prefix
+    repart: dict[str, dict] = {}
+    for r in rows:
+        prefix = r.get("partenaire", "")
+        if not prefix:
+            continue
+        if prefix not in repart:
+            repart[prefix] = {
+                "partenaire": prefix,
+                "couleur_hex": partenaires_couleurs.get(prefix, ""),
+                "brut": 0, "temporaire": 0, "envoye": 0, "rejet": 0,
+                "resil": 0, "payé": 0, "decomm": 0,
+                "racc_activ_ko": 0, "racc_active": 0,
+            }
+        entry = repart[prefix]
+        entry["brut"] += 1  # chaque ligne compte pour le brut
+
+        # Mapping IDTypeEtat -> colonne (identique à WinDev)
+        id_te = int(r.get("id_type_etat", 0) or 0)
+        if id_te == 2:
+            entry["envoye"] += 1
+        elif id_te == 3:
+            entry["rejet"] += 1
+        elif id_te == 4:
+            entry["resil"] += 1
+        elif id_te == 5:
+            entry["payé"] += 1
+        elif id_te == 6:
+            entry["decomm"] += 1
+        elif id_te == 7:
+            entry["racc_activ_ko"] += 1
+        elif id_te == 8:
+            entry["racc_active"] += 1
+        else:
+            # cas "Temporaire" = tout le reste (1, 9, 10...)
+            entry["temporaire"] += 1
+
+    repart_rows = sorted(repart.values(), key=lambda x: x["partenaire"])
+
+    # Par vendeur : groupement id_salarie
+    vendeurs: dict[str, dict] = {}
+    for r in rows:
+        id_sal = r.get("id_salarie") or "0"
+        if id_sal == "0":
+            continue
+        if id_sal not in vendeurs:
+            vendeurs[id_sal] = {
+                "id_salarie": id_sal,
+                "nom": r.get("vendeur_nom", ""),
+                "prenom": r.get("vendeur_prenom", ""),
+                "agence": r.get("agence", ""),
+                "equipe": r.get("equipe", ""),
+                "poste": r.get("poste", ""),
+                "en_activite": bool(r.get("en_activite", True)),
+                "date_sortie": r.get("date_sortie", ""),
+                "nb_contrats": 0,
+                "nb_paye": 0,
+                "nb_hors_rejet": 0,
+                "nb_points": 0,
+                "par_partenaire": {},
+            }
+        v = vendeurs[id_sal]
+        v["nb_contrats"] += 1
+        v["nb_paye"] += int(r.get("nb_ctt_paye", 0) or 0)
+        v["nb_hors_rejet"] += int(r.get("nb_ctt_hors_rejet", 0) or 0)
+        v["nb_points"] += int(r.get("nb_points", 0) or 0)
+        prefix = r.get("partenaire", "")
+        if prefix:
+            v["par_partenaire"][prefix] = v["par_partenaire"].get(prefix, 0) + 1
+
+    vendeur_rows = sorted(
+        vendeurs.values(),
+        key=lambda x: (-x["nb_contrats"], x["nom"].lower()),
+    )
+
+    total_contrats = len(rows)
+    total_paye = sum(int(r.get("nb_ctt_paye", 0) or 0) for r in rows)
+    total_points = sum(int(r.get("nb_points", 0) or 0) for r in rows)
+
+    return {
+        "total_contrats": total_contrats,
+        "total_paye": total_paye,
+        "total_points": total_points,
+        "repart_partenaires": repart_rows,
+        "vendeurs": vendeur_rows,
+    }
+
+
+def _meta_path(id_user: int, id_job: int) -> Path:
+    return PRODUCTION_EXTRACTS_DIR / str(id_user) / f"{id_job}.meta.json"
+
+
+def read_job_stats(id_user: int, id_job: int) -> dict:
+    """Lit le meta.json des stats précalculées d'un job."""
+    p = _meta_path(id_user, id_job)
+    if not p.exists():
+        return {
+            "total_contrats": 0, "total_paye": 0, "total_points": 0,
+            "repart_partenaires": [], "vendeurs": [],
+        }
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {
+            "total_contrats": 0, "total_paye": 0, "total_points": 0,
+            "repart_partenaires": [], "vendeurs": [],
+        }
 
 
 def _parquet_path(id_user: int, id_job: int) -> Path:

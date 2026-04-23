@@ -21,6 +21,7 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.vendeur.schemas.production import (
     ContratPage,
+    JobStats,
     PartenaireItem,
     ProductionJob,
     ProductionJobCreate,
@@ -35,7 +36,10 @@ from app.intranets.vendeur.services.production import (
     list_types_etat,
     search_organigrammes,
 )
-from app.intranets.vendeur.services.production_extraction import read_contrats_page
+from app.intranets.vendeur.services.production_extraction import (
+    read_contrats_page,
+    read_job_stats,
+)
 
 router = APIRouter(prefix="/production", tags=["vendeur-production"])
 
@@ -148,6 +152,23 @@ def get_contrats(
     # Nettoyer les filtres vides
     filters = {k: v for k, v in filters.items() if v}
     return read_contrats_page(path, page=page, page_size=page_size, sort=sort, filters=filters)
+
+
+@router.get("/jobs/{id_job}/stats", response_model=JobStats)
+def get_job_stats(
+    id_job: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Stats précalculées du job (onglets dashboard)."""
+    job = get_job(id_job, user.id_salarie)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job introuvable")
+    if job["statut"] != "done":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Job en statut '{job['statut']}' — stats non disponibles",
+        )
+    return read_job_stats(user.id_salarie, id_job)
 
 
 @router.get("/jobs/{id_job}/export.csv")

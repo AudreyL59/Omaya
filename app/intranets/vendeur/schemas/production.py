@@ -149,3 +149,47 @@ class TypeEtatItem(BaseModel):
     id: int                        # IDTypeEtat
     lib: str                       # LibType
     couleur_hex: str = ""
+
+
+# --- Stats (onglets dashboard) -------------------------------------
+
+class RepartPartenaireRow(BaseModel):
+    """Une ligne dans l'onglet Tab Stat : répartition par partenaire."""
+    partenaire: str
+    couleur_hex: str = ""
+    brut: int = 0
+    temporaire: int = 0
+    envoye: int = 0
+    rejet: int = 0
+    resil: int = 0
+    payé: int = 0
+    decomm: int = 0
+    racc_activ_ko: int = 0
+    racc_active: int = 0
+
+
+class VendeurStatRow(BaseModel):
+    """Une ligne dans l'onglet Vendeurs : 1 par vendeur."""
+    id_salarie: str
+    nom: str
+    prenom: str
+    agence: str = ""
+    equipe: str = ""
+    poste: str = ""
+    en_activite: bool = True
+    date_sortie: str = ""
+    nb_contrats: int = 0
+    nb_paye: int = 0
+    nb_hors_rejet: int = 0
+    nb_points: int = 0
+    # Répartition par partenaire (clé = prefix, valeur = nb contrats)
+    par_partenaire: dict[str, int] = {}
+
+
+class JobStats(BaseModel):
+    """Stats précalculées d'un job (stockées dans meta.json)."""
+    total_contrats: int = 0
+    total_paye: int = 0
+    total_points: int = 0
+    repart_partenaires: list[RepartPartenaireRow] = []
+    vendeurs: list[VendeurStatRow] = []
