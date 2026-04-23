@@ -11,8 +11,10 @@ import {
   BarChart3,
   Users as UsersIcon,
   Table as TableIcon,
+  Check,
+  Minus,
 } from 'lucide-react'
-import { getToken } from '@/api'
+import { getToken, getStoredUser } from '@/api'
 
 // --- Types -------------------------------------------------------
 
@@ -20,16 +22,26 @@ interface ContratRow {
   id_contrat: string
   partenaire: string
   num_bs: string
+
+  // dates / produit
   date_signature: string
   date_saisie: string
   mois_p: string
+  heure_sign: string
   lib_produit: string
   type_prod: string
+
+  // état
   id_type_etat: number
   lib_type_etat: string
   couleur_etat: string
   lib_etat: string
   lib_etat_vend: string
+  id_type_etat_ope: number
+  lib_type_etat_ope: string
+  lib_etat_ope: string
+
+  // vendeur
   id_salarie: string
   vendeur_nom: string
   vendeur_prenom: string
@@ -37,21 +49,66 @@ interface ContratRow {
   equipe: string
   poste: string
   en_activite: boolean
+  date_embauche: string
   date_sortie: string
+
+  // client
   id_client: string
   client_nom: string
   client_prenom: string
   client_adresse1: string
+  client_adresse2: string
   client_cp: string
   client_ville: string
   client_mail: string
   client_mobile: string
   client_age: number
+  client_rap_part: boolean
+
+  // valeurs / infos
   nb_points: number
   notation: number
   notation_info: string
   info_interne: string
   info_partagee: string
+  code_enr: string
+
+  // SFR
+  sfr_type_vente: number
+  sfr_technologie: number
+  sfr_box8: boolean
+  sfr_box8_verif: boolean
+  sfr_hors_cible: boolean
+  sfr_date_rdv_tech: string
+  sfr_date_racc_activ: string
+  sfr_date_validation: string
+  sfr_date_resil: string
+  sfr_portabilite: boolean
+  sfr_date_portab: string
+  sfr_cluster_code: string
+  sfr_cluster_nom: string
+  sfr_mois_p_distrib: string
+  sfr_internet_garanti: boolean
+  sfr_offre_speciale: boolean
+  sfr_parcours_chaine: boolean
+  sfr_prise_existante: boolean
+  sfr_prise_saisie: boolean
+  sfr_num_prise_sfr: string
+  sfr_num_prise_vend: string
+
+  // ENI/OEN
+  car: number
+  puissance: number
+  gaz_actif: boolean
+  elec_actif: boolean
+  opt_demat: boolean
+  opt_maintenance: boolean
+  opt_energie_verte_gaz: boolean
+  opt_reforestation: boolean
+  opt_protection: boolean
+
+  // STR/VAL
+  opt_num: string
 }
 
 interface ContratPage {
@@ -109,9 +166,210 @@ interface JobStats {
 
 type TabKey = 'contrats' | 'repart' | 'vendeurs'
 
+// --- Helpers -----------------------------------------------------
+
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
 }
+
+// Date affichée dd/mm/yyyy (input ISO YYYY-MM-DD ou WinDev YYYYMMDD)
+function shortDate(raw: string | undefined | null): string {
+  if (!raw) return ''
+  const iso = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
+  const wd = String(raw).slice(0, 8)
+  if (/^\d{8}$/.test(wd)) return `${wd.slice(6, 8)}/${wd.slice(4, 6)}/${wd.slice(0, 4)}`
+  return String(raw)
+}
+
+// Mois YYYY-MM → MM/YYYY
+function shortMonth(raw: string | undefined | null): string {
+  if (!raw) return ''
+  const iso = String(raw).match(/^(\d{4})-(\d{2})/)
+  if (iso) return `${iso[2]}/${iso[1]}`
+  const wd = String(raw).slice(0, 8)
+  if (/^\d{8}$/.test(wd)) return `${wd.slice(4, 6)}/${wd.slice(0, 4)}`
+  return String(raw)
+}
+
+// ConsoGaz calculée depuis Car (cf. WinDev StatsENI / StatsOEN)
+function consoGaz(car: number): string {
+  if (!car) return ''
+  if (car <= 1000) return 'Base'
+  if (car <= 6000) return 'B0'
+  if (car <= 30000) return 'B1'
+  return 'B2i'
+}
+
+function BoolBadge({ v }: { v: boolean }) {
+  return v ? (
+    <Check className="w-3.5 h-3.5 text-emerald-600 inline-block" />
+  ) : (
+    <Minus className="w-3.5 h-3.5 text-gray-300 inline-block" />
+  )
+}
+
+// --- Column definitions (ordre exact Excel WinDev) ---------------
+
+interface ColDef {
+  key: string                              // clé de tri + identifiant unique
+  label: string
+  align?: 'left' | 'right' | 'center'
+  // Visibilité conditionnelle : si renseignée, doit retourner true pour afficher
+  onlyIfPartenaire?: string[]              // ex ['SFR'] : visible seulement si ≥1 contrat SFR
+  onlyIfDroit?: string                     // ex 'InfoClientCoord'
+  render: (r: ContratRow) => React.ReactNode
+}
+
+const COLUMNS: ColDef[] = [
+  { key: 'vendeur_nom', label: 'Vendeur', render: (r) => (
+    <span>
+      <span className="font-medium text-gray-900">{r.vendeur_nom}</span>{' '}
+      <span className="text-gray-600">{capitalize(r.vendeur_prenom)}</span>
+      {!r.en_activite && <span className="ml-1 text-xs text-red-500">(inactif)</span>}
+    </span>
+  )},
+  { key: 'num_bs', label: 'Num BS', render: (r) => (
+    <span className="font-mono text-xs">{r.num_bs}</span>
+  )},
+  { key: 'partenaire', label: 'Part.', render: (r) => (
+    <span className="font-semibold text-gray-900">{r.partenaire}</span>
+  )},
+  { key: 'lib_produit', label: 'Produit', render: (r) => r.lib_produit },
+  { key: 'type_prod', label: 'Type Prod', render: (r) => r.type_prod },
+  { key: 'sfr_type_vente', label: 'Type vente', onlyIfPartenaire: ['SFR'],
+    render: (r) => r.partenaire === 'SFR' ? String(r.sfr_type_vente || '') : '' },
+  { key: 'date_signature', label: 'Date Signature', align: 'left',
+    render: (r) => <span className="tabular-nums">{shortDate(r.date_signature)}</span> },
+  { key: 'sfr_date_rdv_tech', label: 'Date RDV Tech', onlyIfPartenaire: ['SFR'],
+    render: (r) => <span className="tabular-nums">{shortDate(r.sfr_date_rdv_tech)}</span> },
+  { key: 'sfr_date_racc_activ', label: 'Date Racc / Activation',
+    onlyIfPartenaire: ['SFR', 'OEN'],
+    render: (r) => <span className="tabular-nums">{shortDate(r.sfr_date_racc_activ)}</span> },
+  { key: 'lib_type_etat', label: 'Type Etat', render: (r) => r.lib_type_etat },
+  { key: 'lib_etat_vend', label: 'Etat contrat', render: (r) => (
+    r.lib_etat_vend ? (
+      <span
+        className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+        style={{
+          color: r.couleur_etat || '#6b7280',
+          backgroundColor: `${r.couleur_etat}15`,
+          border: `1px solid ${r.couleur_etat}40`,
+        }}
+      >{r.lib_etat_vend}</span>
+    ) : ''
+  )},
+  { key: 'lib_type_etat_ope', label: 'Type Etat Opérateur',
+    onlyIfPartenaire: ['SFR', 'OEN'], onlyIfDroit: 'ProdRezo',
+    render: (r) => r.lib_type_etat_ope },
+  { key: 'lib_etat_ope', label: 'Etat Opérateur',
+    onlyIfPartenaire: ['SFR', 'OEN'], onlyIfDroit: 'ProdRezo',
+    render: (r) => r.lib_etat_ope },
+  { key: 'sfr_cluster_nom', label: 'Cluster Nom', onlyIfPartenaire: ['SFR'],
+    render: (r) => r.sfr_cluster_nom },
+  { key: 'poste', label: 'Poste', render: (r) => (
+    <span className="text-xs text-gray-500">{r.poste}</span>
+  )},
+  { key: 'date_embauche', label: 'Date Embauche',
+    render: (r) => <span className="tabular-nums">{shortDate(r.date_embauche)}</span> },
+  { key: 'en_activite', label: 'En activité', align: 'center',
+    render: (r) => <BoolBadge v={r.en_activite} /> },
+  { key: 'date_sortie', label: 'Date Sortie',
+    render: (r) => <span className="tabular-nums">{shortDate(r.date_sortie)}</span> },
+  { key: 'agence', label: 'Agence', render: (r) => r.agence },
+  { key: 'equipe', label: 'Equipe', render: (r) => r.equipe },
+  { key: 'client_nom', label: 'Client Nom', render: (r) => (
+    <span>{r.client_nom} {capitalize(r.client_prenom)}</span>
+  )},
+  { key: 'client_adresse1', label: 'Client Adr', onlyIfDroit: 'InfoClientCoord',
+    render: (r) => r.client_adresse1 },
+  { key: 'client_adresse2', label: 'Client Cplt Adr', onlyIfDroit: 'InfoClientCoord',
+    render: (r) => r.client_adresse2 },
+  { key: 'client_cp', label: 'CP', render: (r) => r.client_cp },
+  { key: 'client_ville', label: 'Ville', render: (r) => r.client_ville },
+  { key: 'client_mail', label: 'Mail', onlyIfDroit: 'InfoClientCoord',
+    render: (r) => (
+      <span className="text-xs text-gray-600">{r.client_mail}</span>
+    )},
+  { key: 'client_mobile', label: 'Mobile', onlyIfDroit: 'InfoClientCoord',
+    render: (r) => <span className="tabular-nums">{r.client_mobile}</span> },
+  { key: 'client_rap_part', label: 'Recueil consentement', align: 'center',
+    render: (r) => <BoolBadge v={r.client_rap_part} /> },
+  { key: 'opt_num', label: 'Opt Numérique', onlyIfPartenaire: ['STR', 'VAL'],
+    render: (r) => r.opt_num },
+  { key: 'mois_p', label: 'Mois Paiement',
+    render: (r) => <span className="tabular-nums">{shortMonth(r.mois_p)}</span> },
+  { key: 'sfr_mois_p_distrib', label: 'Mois Paiement Distrib',
+    onlyIfPartenaire: ['SFR'], onlyIfDroit: 'InfoPaieDistrib',
+    render: (r) => <span className="tabular-nums">{shortMonth(r.sfr_mois_p_distrib)}</span> },
+  { key: 'nb_points', label: 'NB Points', align: 'right',
+    render: (r) => <span className="tabular-nums">{r.nb_points}</span> },
+  { key: 'info_partagee', label: 'Infos Contrats',
+    render: (r) => (
+      <span className="text-xs text-gray-600 line-clamp-2">{r.info_partagee}</span>
+    )},
+  { key: 'gaz_actif', label: 'Gaz Actif', align: 'center',
+    onlyIfPartenaire: ['ENI'],
+    render: (r) => <BoolBadge v={r.gaz_actif} /> },
+  { key: 'elec_actif', label: 'Elec Actif', align: 'center',
+    onlyIfPartenaire: ['ENI'],
+    render: (r) => <BoolBadge v={r.elec_actif} /> },
+  { key: 'conso_gaz', label: 'ConsoGaz', onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => consoGaz(r.car) },
+  { key: 'car', label: 'Car', align: 'right', onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => <span className="tabular-nums">{r.car || ''}</span> },
+  { key: 'puissance', label: 'Puissance', align: 'right',
+    onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => <span className="tabular-nums">{r.puissance || ''}</span> },
+  { key: 'opt_demat', label: 'OPT Démat', align: 'center',
+    onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => <BoolBadge v={r.opt_demat} /> },
+  { key: 'opt_maintenance', label: 'OPT Maintenance', align: 'center',
+    onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => <BoolBadge v={r.opt_maintenance} /> },
+  { key: 'opt_energie_verte_gaz', label: 'OPT Energie Verte Gaz', align: 'center',
+    onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => <BoolBadge v={r.opt_energie_verte_gaz} /> },
+  { key: 'opt_reforestation', label: 'OPT Reforestation', align: 'center',
+    onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => <BoolBadge v={r.opt_reforestation} /> },
+  { key: 'opt_protection', label: 'OPT Protection', align: 'center',
+    onlyIfPartenaire: ['ENI', 'OEN'],
+    render: (r) => <BoolBadge v={r.opt_protection} /> },
+  { key: 'sfr_portabilite', label: 'Portabilité', align: 'center',
+    onlyIfPartenaire: ['SFR'],
+    render: (r) => <BoolBadge v={r.sfr_portabilite} /> },
+  { key: 'sfr_date_portab', label: 'Date Portabilité', onlyIfPartenaire: ['SFR'],
+    render: (r) => <span className="tabular-nums">{shortDate(r.sfr_date_portab)}</span> },
+  { key: 'sfr_date_resil', label: 'Date Résil', onlyIfPartenaire: ['SFR', 'PRO'],
+    render: (r) => <span className="tabular-nums">{shortDate(r.sfr_date_resil)}</span> },
+  { key: 'sfr_internet_garanti', label: 'Internet Garanti', align: 'center',
+    onlyIfPartenaire: ['SFR'],
+    render: (r) => <BoolBadge v={r.sfr_internet_garanti} /> },
+  { key: 'sfr_offre_speciale', label: 'Offre Spéciale', align: 'center',
+    onlyIfPartenaire: ['SFR'],
+    render: (r) => <BoolBadge v={r.sfr_offre_speciale} /> },
+  { key: 'sfr_parcours_chaine', label: 'Parcours Chainés', align: 'center',
+    onlyIfPartenaire: ['SFR'],
+    render: (r) => <BoolBadge v={r.sfr_parcours_chaine} /> },
+  { key: 'sfr_prise_existante', label: 'Prise Existante', align: 'center',
+    onlyIfPartenaire: ['SFR'],
+    render: (r) => <BoolBadge v={r.sfr_prise_existante} /> },
+  { key: 'sfr_num_prise_sfr', label: 'Num prise SFR',
+    onlyIfPartenaire: ['SFR'], onlyIfDroit: 'InfoClientCoord',
+    render: (r) => <span className="font-mono text-xs">{r.sfr_num_prise_sfr}</span> },
+  { key: 'sfr_num_prise_vend', label: 'Num prise vendeur',
+    onlyIfPartenaire: ['SFR'], onlyIfDroit: 'InfoClientCoord',
+    render: (r) => <span className="font-mono text-xs">{r.sfr_num_prise_vend}</span> },
+  { key: 'heure_sign', label: 'Heure Signature', align: 'center',
+    render: (r) => <span className="tabular-nums text-xs">{r.heure_sign}</span> },
+  { key: 'notation', label: 'Note / 5', align: 'right', onlyIfDroit: 'InfoNotation',
+    render: (r) => r.notation > 0 ? (
+      <span className="tabular-nums font-medium">{r.notation.toFixed(1)}</span>
+    ) : '' },
+  { key: 'notation_info', label: 'Notation Info', onlyIfDroit: 'InfoNotation',
+    render: (r) => <span className="text-xs text-gray-600">{r.notation_info}</span> },
+]
 
 // --- Page --------------------------------------------------------
 
@@ -121,7 +379,6 @@ export default function ProductionDetailPage() {
   const [stats, setStats] = useState<JobStats | null>(null)
   const [tab, setTab] = useState<TabKey>('contrats')
 
-  // Chargement job + stats (une seule fois)
   useEffect(() => {
     if (!idJob) return
     const headers = { Authorization: `Bearer ${getToken()}` }
@@ -147,6 +404,11 @@ export default function ProductionDetailPage() {
     a.click()
     URL.revokeObjectURL(url)
   }
+
+  const partenairesPresents = useMemo(() => {
+    if (!stats) return new Set<string>()
+    return new Set(stats.repart_partenaires.map((r) => r.partenaire))
+  }, [stats])
 
   return (
     <div className="p-6">
@@ -183,7 +445,6 @@ export default function ProductionDetailPage() {
         </button>
       </motion.div>
 
-      {/* Onglets */}
       <div className="mt-5 border-b border-gray-200 flex items-center gap-1">
         <TabButton
           icon={<TableIcon className="w-4 h-4" />}
@@ -206,7 +467,9 @@ export default function ProductionDetailPage() {
       </div>
 
       <div className="mt-5">
-        {tab === 'contrats' && <ContratsTable idJob={idJob!} />}
+        {tab === 'contrats' && (
+          <ContratsTable idJob={idJob!} partenairesPresents={partenairesPresents} />
+        )}
         {tab === 'repart' && <RepartTable stats={stats} />}
         {tab === 'vendeurs' && <VendeursTable stats={stats} />}
       </div>
@@ -215,16 +478,8 @@ export default function ProductionDetailPage() {
 }
 
 function TabButton({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode
-  label: string
-  active: boolean
-  onClick: () => void
-}) {
+  icon, label, active, onClick,
+}: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -242,24 +497,15 @@ function TabButton({
 
 // --- Onglet Contrats ---------------------------------------------
 
-const COLUMNS = [
-  { key: 'partenaire', label: 'Part.' },
-  { key: 'date_signature', label: 'Signature' },
-  { key: 'num_bs', label: 'Num BS' },
-  { key: 'lib_produit', label: 'Produit' },
-  { key: 'type_prod', label: 'Type' },
-  { key: 'vendeur', label: 'Vendeur' },
-  { key: 'agence', label: 'Agence' },
-  { key: 'equipe', label: 'Équipe' },
-  { key: 'lib_type_etat', label: 'État' },
-  { key: 'mois_p', label: 'Mois P' },
-  { key: 'nb_points', label: 'Pts', num: true },
-  { key: 'client_nom', label: 'Client' },
-  { key: 'client_cp', label: 'CP' },
-  { key: 'client_ville', label: 'Ville' },
-] as const
-
-function ContratsTable({ idJob }: { idJob: string }) {
+function ContratsTable({
+  idJob,
+  partenairesPresents,
+}: {
+  idJob: string
+  partenairesPresents: Set<string>
+}) {
+  const user = getStoredUser()
+  const droits = new Set(user?.droits || [])
   const [data, setData] = useState<ContratPage | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -293,14 +539,25 @@ function ContratsTable({ idJob }: { idJob: string }) {
     return Math.max(1, Math.ceil(data.total / pageSize))
   }, [data, pageSize])
 
-  const partenairesUniques = useMemo(() => {
-    if (!data) return []
-    const s = new Set(data.rows.map((r) => r.partenaire))
-    return Array.from(s).sort()
-  }, [data])
+  const partenairesUniques = useMemo(
+    () => Array.from(partenairesPresents).sort(),
+    [partenairesPresents],
+  )
+
+  // Colonnes visibles : selon partenaires présents + droits user
+  const visibleColumns = useMemo(
+    () => COLUMNS.filter((c) => {
+      if (c.onlyIfPartenaire && c.onlyIfPartenaire.length > 0) {
+        const match = c.onlyIfPartenaire.some((p) => partenairesPresents.has(p))
+        if (!match) return false
+      }
+      if (c.onlyIfDroit && !droits.has(c.onlyIfDroit)) return false
+      return true
+    }),
+    [partenairesPresents, droits],
+  )
 
   const toggleSort = (col: string) => {
-    if (col === 'vendeur') col = 'vendeur_nom'
     if (sort === col) setSort(`-${col}`)
     else if (sort === `-${col}`) setSort(col)
     else setSort(col)
@@ -312,23 +569,15 @@ function ContratsTable({ idJob }: { idJob: string }) {
 
   return (
     <>
-      {/* Filtres */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         {partenairesUniques.length > 1 && (
           <select
             value={partenaireFilter}
-            onChange={(e) => {
-              setPartenaireFilter(e.target.value)
-              setPage(1)
-            }}
+            onChange={(e) => { setPartenaireFilter(e.target.value); setPage(1) }}
             className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
           >
             <option value="">Tous partenaires</option>
-            {partenairesUniques.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
+            {partenairesUniques.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         )}
         <div className="relative">
@@ -336,10 +585,7 @@ function ContratsTable({ idJob }: { idJob: string }) {
           <input
             placeholder="Vendeur…"
             value={vendeurFilter}
-            onChange={(e) => {
-              setVendeurFilter(e.target.value)
-              setPage(1)
-            }}
+            onChange={(e) => { setVendeurFilter(e.target.value); setPage(1) }}
             className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-48"
           />
         </div>
@@ -348,34 +594,33 @@ function ContratsTable({ idJob }: { idJob: string }) {
           <input
             placeholder="Client…"
             value={clientFilter}
-            onChange={(e) => {
-              setClientFilter(e.target.value)
-              setPage(1)
-            }}
+            onChange={(e) => { setClientFilter(e.target.value); setPage(1) }}
             className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-48"
           />
+        </div>
+        <div className="text-xs text-gray-500 ml-auto">
+          {visibleColumns.length} colonnes
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm" style={{ minWidth: '100%' }}>
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
-                {COLUMNS.map((c) => (
+                {visibleColumns.map((c) => (
                   <th
                     key={c.key}
                     onClick={() => toggleSort(c.key)}
-                    className={`${(c as any).num ? 'text-right' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-gray-100`}
+                    className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-gray-100`}
                   >
                     <span className="inline-flex items-center gap-1">
                       {c.label}
-                      {sortKey === (c.key === 'vendeur' ? 'vendeur_nom' : c.key) &&
-                        (sortDesc ? (
-                          <ChevronDown className="w-3 h-3" />
-                        ) : (
-                          <ChevronUp className="w-3 h-3" />
-                        ))}
+                      {sortKey === c.key && (sortDesc ? (
+                        <ChevronDown className="w-3 h-3" />
+                      ) : (
+                        <ChevronUp className="w-3 h-3" />
+                      ))}
                     </span>
                   </th>
                 ))}
@@ -384,13 +629,13 @@ function ContratsTable({ idJob }: { idJob: string }) {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="text-center py-12">
+                  <td colSpan={visibleColumns.length} className="text-center py-12">
                     <Loader2 className="w-5 h-5 text-gray-300 animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : !data || data.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="text-center py-12 text-gray-400">
+                  <td colSpan={visibleColumns.length} className="text-center py-12 text-gray-400">
                     Aucun contrat
                   </td>
                 </tr>
@@ -400,35 +645,14 @@ function ContratsTable({ idJob }: { idJob: string }) {
                     key={`${r.partenaire}-${r.id_contrat}-${idx}`}
                     className="hover:bg-gray-50"
                   >
-                    <td className="px-3 py-2 font-medium text-gray-900">{r.partenaire}</td>
-                    <td className="px-3 py-2 text-gray-700 tabular-nums">{r.date_signature}</td>
-                    <td className="px-3 py-2 text-gray-700 font-mono text-xs">{r.num_bs}</td>
-                    <td className="px-3 py-2 text-gray-900">{r.lib_produit}</td>
-                    <td className="px-3 py-2 text-gray-600">{r.type_prod}</td>
-                    <td className="px-3 py-2 text-gray-900">
-                      {r.vendeur_nom} {capitalize(r.vendeur_prenom)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">{r.agence}</td>
-                    <td className="px-3 py-2 text-gray-600">{r.equipe}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
-                        style={{
-                          color: r.couleur_etat || '#6b7280',
-                          backgroundColor: `${r.couleur_etat}15`,
-                          border: `1px solid ${r.couleur_etat}40`,
-                        }}
+                    {visibleColumns.map((c) => (
+                      <td
+                        key={c.key}
+                        className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2 text-gray-700 whitespace-nowrap`}
                       >
-                        {r.lib_etat_vend || r.lib_etat}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-gray-600 tabular-nums">{r.mois_p}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.nb_points}</td>
-                    <td className="px-3 py-2 text-gray-900">
-                      {r.client_nom} {capitalize(r.client_prenom)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-600">{r.client_cp}</td>
-                    <td className="px-3 py-2 text-gray-600">{r.client_ville}</td>
+                        {c.render(r)}
+                      </td>
+                    ))}
                   </tr>
                 ))
               )}
@@ -445,16 +669,11 @@ function ContratsTable({ idJob }: { idJob: string }) {
             <div className="flex items-center gap-2">
               <select
                 value={pageSize}
-                onChange={(e) => {
-                  setPageSize(parseInt(e.target.value))
-                  setPage(1)
-                }}
+                onChange={(e) => { setPageSize(parseInt(e.target.value)); setPage(1) }}
                 className="px-2 py-1 border border-gray-300 rounded text-sm"
               >
                 {[50, 100, 200, 500].map((s) => (
-                  <option key={s} value={s}>
-                    {s}/page
-                  </option>
+                  <option key={s} value={s}>{s}/page</option>
                 ))}
               </select>
               <button
@@ -464,9 +683,7 @@ function ContratsTable({ idJob }: { idJob: string }) {
               >
                 Précédent
               </button>
-              <span className="tabular-nums text-gray-700">
-                {page} / {totalPages}
-              </span>
+              <span className="tabular-nums text-gray-700">{page} / {totalPages}</span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
@@ -502,24 +719,19 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
     )
   }
 
-  // Total par colonne
   const totals = rows.reduce(
-    (acc, r) => {
-      acc.brut += r.brut
-      acc.temporaire += r.temporaire
-      acc.envoye += r.envoye
-      acc.rejet += r.rejet
-      acc.resil += r.resil
-      acc.payé += r.payé
-      acc.decomm += r.decomm
-      acc.racc_activ_ko += r.racc_activ_ko
-      acc.racc_active += r.racc_active
-      return acc
-    },
-    {
-      brut: 0, temporaire: 0, envoye: 0, rejet: 0, resil: 0,
-      payé: 0, decomm: 0, racc_activ_ko: 0, racc_active: 0,
-    },
+    (acc, r) => ({
+      brut: acc.brut + r.brut,
+      temporaire: acc.temporaire + r.temporaire,
+      envoye: acc.envoye + r.envoye,
+      rejet: acc.rejet + r.rejet,
+      resil: acc.resil + r.resil,
+      payé: acc.payé + r.payé,
+      decomm: acc.decomm + r.decomm,
+      racc_activ_ko: acc.racc_activ_ko + r.racc_activ_ko,
+      racc_active: acc.racc_active + r.racc_active,
+    }),
+    { brut: 0, temporaire: 0, envoye: 0, rejet: 0, resil: 0, payé: 0, decomm: 0, racc_activ_ko: 0, racc_active: 0 },
   )
 
   const num = (n: number) => n.toLocaleString('fr-FR')
@@ -546,27 +758,19 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
             {rows.map((r) => (
               <tr key={r.partenaire} className="hover:bg-gray-50">
                 <td className="px-4 py-2 font-medium text-gray-900 flex items-center gap-2">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: r.couleur_hex || '#9ca3af' }}
-                  />
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: r.couleur_hex || '#9ca3af' }} />
                   {r.partenaire}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">
-                  {num(r.brut)}
-                </td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">{num(r.brut)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-600">{num(r.temporaire)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-600">{num(r.envoye)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-red-600">{num(r.rejet)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-orange-600">{num(r.resil)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-emerald-700 font-medium">
-                  {num(r.payé)}
-                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-emerald-700 font-medium">{num(r.payé)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-500">{num(r.decomm)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-red-500">{num(r.racc_activ_ko)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-emerald-600">
-                  {num(r.racc_active)}
-                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{num(r.racc_active)}</td>
               </tr>
             ))}
             <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
@@ -592,6 +796,13 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
 
 function VendeursTable({ stats }: { stats: JobStats | null }) {
   const [filter, setFilter] = useState('')
+
+  const partenaires = useMemo(() => {
+    if (!stats) return [] as string[]
+    const s = new Set<string>()
+    for (const v of stats.vendeurs) Object.keys(v.par_partenaire).forEach((p) => s.add(p))
+    return Array.from(s).sort()
+  }, [stats])
 
   if (!stats) {
     return (
@@ -619,16 +830,6 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
       </div>
     )
   }
-
-  // Liste des partenaires uniques présents dans les stats vendeurs (pour les colonnes dynamiques)
-  const partenaires = useMemo(() => {
-    const s = new Set<string>()
-    for (const v of stats.vendeurs) {
-      Object.keys(v.par_partenaire).forEach((p) => s.add(p))
-    }
-    return Array.from(s).sort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats.vendeurs])
 
   return (
     <>
@@ -661,19 +862,14 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
                 <th className="text-right px-3 py-2.5 font-medium">Payés</th>
                 <th className="text-right px-3 py-2.5 font-medium">Points</th>
                 {partenaires.map((p) => (
-                  <th key={p} className="text-right px-3 py-2.5 font-medium">
-                    {p}
-                  </th>
+                  <th key={p} className="text-right px-3 py-2.5 font-medium">{p}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={8 + partenaires.length}
-                    className="text-center py-12 text-gray-400"
-                  >
+                  <td colSpan={8 + partenaires.length} className="text-center py-12 text-gray-400">
                     Aucun résultat
                   </td>
                 </tr>
@@ -702,10 +898,7 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
                       {v.nb_points.toLocaleString('fr-FR')}
                     </td>
                     {partenaires.map((p) => (
-                      <td
-                        key={p}
-                        className="px-3 py-2 text-right tabular-nums text-gray-500"
-                      >
+                      <td key={p} className="px-3 py-2 text-right tabular-nums text-gray-500">
                         {v.par_partenaire[p] ? v.par_partenaire[p] : '—'}
                       </td>
                     ))}
