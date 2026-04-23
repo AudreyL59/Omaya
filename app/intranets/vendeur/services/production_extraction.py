@@ -631,6 +631,7 @@ def _build_partenaire_sql(
             "pc.NumPrise_SFR", "pc.NumPrise_Vend",
             "pc.MobPropoVend", "pc.InterventionVend",
             "pc.IssuTkDiff", "pc.RepAppSFR", "pc.Remise", "pc.SelfInstall",
+            "pc.ActivControl", "pc.ProcessingState",
             "pc.InfoVenteSFR AS InfoPartagee",
         ]
     else:
@@ -995,6 +996,8 @@ def extract_job_to_parquet(
             "heure_sign": heure_sign,
             "lib_produit": r.get("Lib_produit") or "",
             "type_prod": type_prod,
+            "sous_fam": sous_fam,
+            "id_etat_contrat": _to_int(r.get("IDetatContrat")),
             "id_type_etat": id_te,
             "lib_type_etat": te.get("lib", ""),
             "couleur_etat": te.get("couleur", ""),
@@ -1028,12 +1031,19 @@ def extract_job_to_parquet(
             "client_rap_part": cinfo.get("opt_partenaire", False),
             # Valeurs + notation
             "nb_points": _to_int(r.get("nbPoints")),
-            "notation": float(r.get("Notation") or 0),
+            # SFR stocke la notation /5 en BDD, on l'expose /10 (cf. WinDev StatsSFR : Notation*2)
+            "notation": (
+                float(r.get("Notation") or 0) * 2
+                if prefix == "SFR"
+                else float(r.get("Notation") or 0)
+            ),
             "notation_info": r.get("NotationInfo") or "",
             "info_interne": r.get("InfoInterne") or "",
             "info_partagee": r.get("InfoPartagee") or "",
             "code_enr": r.get("CodeENR") or "",
             # SFR specifique
+            "activ_control": r.get("ActivControl") or "" if prefix == "SFR" else "",
+            "processing_state": r.get("ProcessingState") or "" if prefix == "SFR" else "",
             "sfr_type_vente": _to_int(r.get("TypeVente")) if prefix == "SFR" else 0,
             "sfr_technologie": _to_int(r.get("Technologie")) if prefix == "SFR" else 0,
             "sfr_box8": bool(r.get("Box8")) if prefix == "SFR" else False,
@@ -1228,12 +1238,553 @@ def _compute_stats(rows: list[dict], partenaires_couleurs: dict[str, str]) -> di
     total_paye = sum(int(r.get("nb_ctt_paye", 0) or 0) for r in rows)
     total_points = sum(int(r.get("nb_points", 0) or 0) for r in rows)
 
+    # Dashboards par partenaire (onglet Analyse)
+    dashboard_sfr = _compute_dashboard_sfr(rows)
+    dashboard_oen = _compute_dashboard_oen(rows)
+    dashboard_eni = _compute_dashboard_eni(rows)
+
     return {
         "total_contrats": total_contrats,
         "total_paye": total_paye,
         "total_points": total_points,
         "repart_partenaires": repart_rows,
         "vendeurs": vendeur_rows,
+        "dashboard_sfr": dashboard_sfr,
+        "dashboard_oen": dashboard_oen,
+        "dashboard_eni": dashboard_eni,
+    }
+
+
+def _pct(num: float, den: float, decimals: int = 2) -> float:
+    if not den:
+        return 0.0
+    return round((num / den) * 100, decimals)
+
+
+def _compute_dashboard_sfr(rows: list[dict]) -> dict:
+    """
+    Dashboard SFR — transposition fidèle de StatsSFR() + AfficheResultatSFR() WinDev.
+
+    Règles clés :
+    - Catégorisation par SousFAM et Lib_Produit :
+      * Mobile         : type_prod = "MOBILE" (Famille)
+      * Secu           : type_prod = "SECU"
+      * Box 5G         : SousFAM contient "Box5G"
+      * Fibre          : autre cas (hors Mobile / Secu / Box5G), hors BS en TK
+    - Hors attente    : id_type_etat > 2 (1=attente saisie, 2=en attente opérateur)
+    - Raccordé/Payé  : id_type_etat ∈ {5, 8}
+    - Raccordé SFR   : id_type_etat_ope ∈ {5, 8}
+    - CQ (Conquête) : sfr_type_vente ≤ 2 ET pas un TK
+    - Dépôt garantie : id_etat_contrat = 73
+    """
+    sfr_all = [r for r in rows if r.get("partenaire") == "SFR"]
+    if not sfr_all:
+        return {}
+
+    def _is_tk(r: dict) -> bool:
+        return str(r.get("num_bs", "") or "")[:2].upper() == "TK"
+
+    def _ss(r: dict) -> str:
+        return (r.get("sous_fam", "") or "").upper()
+
+    def _tp(r: dict) -> str:
+        return (r.get("type_prod", "") or "").upper()
+
+    # Tous les KPIs (clients, consentement, note, sous-familles) sont calculés
+    # HORS TK — WinDev n'appelle StatsSFR que si NumBS ne commence pas par "TK".
+    sfr = [r for r in sfr_all if not _is_tk(r)]
+
+    # --- Compteurs généraux (note + consentement par client unique)
+    noted = [r for r in sfr if (r.get("notation") or 0) > 0]
+    nb_note_sfr = len(noted)
+    tot_note_sfr = sum(r.get("notation", 0) for r in noted)
+
+    id_clients_seen: set = set()
+    nb_clients = 0
+    nb_consent = 0
+    for r in sfr:
+        cid = r.get("id_client") or "0"
+        if cid != "0" and cid not in id_clients_seen:
+            id_clients_seen.add(cid)
+            nb_clients += 1
+            if r.get("client_rap_part"):
+                nb_consent += 1
+
+    # --- Sous-familles Premium/Power/Starter
+    nb_prem_ssfam = sum(1 for r in sfr if "PREMIUM" in _ss(r))
+    nb_power_ssfam = sum(1 for r in sfr if "POWER" in _ss(r))
+    nb_starter_ssfam = sum(1 for r in sfr if "STARTER" in _ss(r))
+
+    # --- Parcours Mobile / Fibre / Box5G (excluant les BS en TK)
+    nb_sfr_mobile = 0
+    nb_sfr_f200 = 0
+    nb_sfr_mob_hors_att = 0
+    nb_sfr_activ = 0          # Mobile : IdTypeEtatOpé ∈ {5,8}
+    nb_sfr_activ_sfr = 0      # Mobile : IdTypeEtatOpé ∈ {5,8} OU testResilChurn
+    nb_cq_ra_mob = 0
+    nb_res30j_mob = 0
+
+    nb_sfr_secu = 0
+
+    nb_sfr_fibre = 0
+    nb_sfr_prem_lib = 0        # Lib_Produit contient "premium"
+    nb_sfr_cq = 0              # Type_vente ≤ 2 sur Fibre
+    nb_sfr_pc = 0              # Parcours chaînés sur CQ fibre
+    nb_sfr_depot_gar = 0
+    nb_sfr_fibre_hors_a = 0    # hors anomalie
+    nb_cts_resil_fibre = 0
+    nb_cts_hors_att = 0        # id_type_etat > 2 sur fibre
+    nb_cts_hors_att_av_port = 0
+    nb_cts_hors_att_sfr = 0    # id_type_etat_ope > 2 sur fibre
+    nb_cts_hors_att_sfr_av_port = 0
+    nb_cts_ra = 0              # id_type_etat ∈ {5,8}
+    nb_cts_ra_sfr = 0          # id_type_etat_ope ∈ {5,8} OU testResilChurn
+    nb_cts_portab = 0          # Portabilité ET CQ (type_vente ≤ 2)
+    nb_cq_ra_fixe = 0
+    nb_res30j_fixe = 0
+    nb_sfr_prise_existante = 0
+    nb_sfr_prise_saisie = 0
+
+    nb_sfr_box5g = 0
+    nb_sfr_box5g_tv = 0
+    nb_sfr_box5g_resil = 0
+    nb_sfr_cq_box5g = 0
+    nb_cts_hors_att_b5g = 0
+    nb_cts_hors_att_sfr_b5g = 0
+    nb_cts_b5g_ra = 0
+    nb_cts_b5g_ra_sfr = 0
+    nb_cq_ra_b5g = 0
+    nb_res30j_b5g = 0
+
+    # TableListe4P WinDev : par client_mail, compteurs MobCQ/VLA + FixCQ/VLA.
+    # Sert à calculer nb_sfr_4p pour le ratio % Parcours Chaînés.
+    t_4p: dict[str, dict] = {}
+
+    def _t4p(email: str) -> dict:
+        d = t_4p.get(email)
+        if d is None:
+            d = {"mob_cq": 0, "mob_vla": 0, "fix_cq": 0, "fix_vla": 0}
+            t_4p[email] = d
+        return d
+
+    def _churn_jours(r: dict) -> int | None:
+        """Nb jours entre DateRaccActiv et DateRésil (ou None si dates invalides)."""
+        try:
+            d_racc = r.get("sfr_date_racc_activ") or ""
+            d_resil = r.get("sfr_date_resil") or ""
+            if len(d_racc) < 10 or len(d_resil) < 10:
+                return None
+            d1 = date(int(d_racc[:4]), int(d_racc[5:7]), int(d_racc[8:10]))
+            d2 = date(int(d_resil[:4]), int(d_resil[5:7]), int(d_resil[8:10]))
+            return (d2 - d1).days
+        except Exception:
+            return None
+
+    for r in sfr:
+        te = r.get("id_type_etat") or 0
+        te_ope = r.get("id_type_etat_ope") or 0
+        id_etat = r.get("id_etat_contrat") or 0
+        type_vente = r.get("sfr_type_vente") or 0
+        is_cq = type_vente <= 2
+        activ_control = (r.get("activ_control") or "").upper()
+        processing_state = (r.get("processing_state") or "").upper()
+        ss = _ss(r)
+        tp = _tp(r)
+        is_tk = _is_tk(r)
+
+        # Mobile / Secu se calculent même si TK=False (ils ne nourrissent Fibre/Box5G que si non-TK)
+        if is_tk:
+            # TK → exclus des stats Fibre/Box5G (le WinDev ne compte rien)
+            continue
+
+        if tp == "MOBILE":
+            nb_sfr_mobile += 1
+            # Forfait > 200Go : 1er nombre suivi de "G" dans le libellé
+            import re
+            lp = (r.get("lib_produit", "") or "").upper()
+            m = re.search(r"(\d+)\s*G", lp)
+            if m and int(m.group(1)) >= 200:
+                nb_sfr_f200 += 1
+
+            # TableListe4P : incrémenter mob_cq/mob_vla selon Type_vente
+            email = r.get("client_mail") or ""
+            if is_cq and email:
+                t = _t4p(email)
+                if type_vente == 1:
+                    t["mob_cq"] += 1
+                elif type_vente == 2:
+                    t["mob_vla"] += 1
+
+            test_resil_churn = False
+            if is_cq:
+                if activ_control == "ACTIVE_BIOS" and processing_state in ("COMPLETED", "CANCELLED"):
+                    nb_cq_ra_mob += 1
+                if (activ_control in ("ACTIVE_BIOS", "CANCELLED")
+                        and processing_state in ("COMPLETED", "CANCELLED")):
+                    churn = _churn_jours(r)
+                    if churn is not None and churn <= 30:
+                        nb_res30j_mob += 1
+                        test_resil_churn = True
+
+            if te_ope in (5, 8):
+                nb_sfr_activ += 1
+            if te_ope in (5, 8) or test_resil_churn:
+                nb_sfr_activ_sfr += 1
+            if te_ope > 2:
+                nb_sfr_mob_hors_att += 1
+            continue
+
+        if tp == "SECU":
+            nb_sfr_secu += 1
+            continue
+
+        # Fibre / Box5G : on entre dans la branche "testFibre"
+        if "BOX5G" in ss:
+            nb_sfr_box5g += 1
+            if ss == "BOX5GTV":
+                nb_sfr_box5g_tv += 1
+            if te == 4:
+                nb_sfr_box5g_resil += 1
+            if is_cq:
+                nb_sfr_cq_box5g += 1
+                if activ_control == "ACTIVE_BIOS" and processing_state in ("COMPLETED", "CANCELLED"):
+                    nb_cq_ra_b5g += 1
+                test_resil_churn = False
+                if (activ_control in ("ACTIVE_BIOS", "CANCELLED")
+                        and processing_state in ("COMPLETED", "CANCELLED")):
+                    churn = _churn_jours(r)
+                    if churn is not None and churn <= 30:
+                        nb_res30j_b5g += 1
+                        test_resil_churn = True
+            else:
+                test_resil_churn = False
+
+            if te > 2:
+                nb_cts_hors_att_b5g += 1
+            if te_ope > 2:
+                nb_cts_hors_att_sfr_b5g += 1
+            if te in (5, 8):
+                nb_cts_b5g_ra += 1
+            if te_ope in (5, 8) or test_resil_churn:
+                nb_cts_b5g_ra_sfr += 1
+        else:
+            # Fibre pure
+            nb_sfr_fibre += 1
+
+            if "PREMIUM" in (r.get("lib_produit", "") or "").upper():
+                nb_sfr_prem_lib += 1
+            if te == 4:
+                nb_cts_resil_fibre += 1
+            if id_etat == 73:
+                nb_sfr_depot_gar += 1
+            if te != 3:  # hors anomalie
+                nb_sfr_fibre_hors_a += 1
+            if r.get("sfr_prise_existante"):
+                nb_sfr_prise_existante += 1
+            if r.get("sfr_prise_saisie"):
+                nb_sfr_prise_saisie += 1
+
+            # Portabilité compte uniquement sur CQ
+            if r.get("sfr_portabilite") and is_cq:
+                nb_cts_portab += 1
+
+            # CQ counters + TableListe4P pour Fixe
+            test_resil_churn = False
+            if is_cq:
+                nb_sfr_cq += 1
+                if r.get("sfr_parcours_chaine"):
+                    nb_sfr_pc += 1
+                email = r.get("client_mail") or ""
+                if email:
+                    t = _t4p(email)
+                    if type_vente == 1:
+                        t["fix_cq"] += 1
+                    elif type_vente == 2:
+                        t["fix_vla"] += 1
+                if processing_state == "RACCORDEE RAS":
+                    nb_cq_ra_fixe += 1
+                    churn = _churn_jours(r)
+                    if churn is not None and churn <= 30:
+                        nb_res30j_fixe += 1
+                        test_resil_churn = True
+
+            if te > 2:
+                nb_cts_hors_att += 1
+                if r.get("sfr_portabilite") and is_cq:
+                    nb_cts_hors_att_av_port += 1
+            if te_ope > 2:
+                nb_cts_hors_att_sfr += 1
+                if r.get("sfr_portabilite") and is_cq:
+                    nb_cts_hors_att_sfr_av_port += 1
+            if te in (5, 8):
+                nb_cts_ra += 1
+            if te_ope in (5, 8) or test_resil_churn:
+                nb_cts_ra_sfr += 1
+
+    # Note moyenne sur l'ensemble SFR (la notation est déjà /10 en rows_out)
+    note_moy = round(tot_note_sfr / nb_note_sfr, 2) if nb_note_sfr else 0.0
+    pct_notes = _pct(nb_note_sfr, nb_sfr_fibre) if nb_sfr_fibre else 0.0
+
+    # Calcul nb_sfr_4p (clients "4 Play" : mobile + fixe chez le même client).
+    # Règle WinDev : (nbMobVLA>0 ET nbFixCQ>0) OU (nbMobCQ>0 ET (nbFixCQ + nbFixVLA) > 0)
+    nb_sfr_4p = 0
+    for c in t_4p.values():
+        if (c["mob_vla"] > 0 and c["fix_cq"] > 0) or (
+            c["mob_cq"] > 0 and (c["fix_cq"] + c["fix_vla"]) > 0
+        ):
+            nb_sfr_4p += 1
+
+    # % Parcours Chaînés : capé à 100% (cf. AfficheResultatSFR WinDev)
+    tx_pc = _pct(nb_sfr_pc, nb_sfr_4p)
+    if tx_pc > 100:
+        tx_pc = 100.0
+
+    return {
+        # SFR global
+        "note_moy": note_moy,
+        "pct_notes": pct_notes,
+        "nb_consent": nb_consent,
+        "nb_clients": nb_clients,
+        "tx_consent": _pct(nb_consent, nb_clients),
+
+        # Fibre
+        "nb_fibre": nb_sfr_fibre,
+        "nb_fibre_hors_att": nb_cts_hors_att,
+        "nb_fibre_ra": nb_cts_ra,
+        "nb_fibre_ra_sfr": nb_cts_ra_sfr,
+        "nb_fibre_resil": nb_cts_resil_fibre,
+        "nb_fibre_cq": nb_sfr_cq,
+        "nb_fibre_porta": nb_cts_portab,
+        "nb_fibre_prise_existante": nb_sfr_prise_existante,
+        "nb_fibre_prise_saisie": nb_sfr_prise_saisie,
+        "nb_fibre_depot_gar": nb_sfr_depot_gar,
+        "nb_fibre_pc": nb_sfr_pc,
+        "nb_fibre_premium_lib": nb_sfr_prem_lib,  # Lib_Produit contient "premium"
+        "nb_prem_ssfam": nb_prem_ssfam,
+        "nb_power_ssfam": nb_power_ssfam,
+        "nb_starter_ssfam": nb_starter_ssfam,
+        "tx_racc": _pct(nb_cts_ra, nb_cts_hors_att),
+        "tx_racc_sfr": _pct(nb_cts_ra_sfr, nb_cts_hors_att_sfr),
+        "tx_resil": _pct(nb_cts_resil_fibre, nb_sfr_fibre),
+        "tx_cq": _pct(nb_sfr_cq, nb_sfr_fibre),
+        "tx_premium": _pct(nb_sfr_prem_lib, nb_sfr_fibre),
+        "tx_portab": _pct(nb_cts_portab, nb_sfr_cq),
+        "tx_prise_saisie": _pct(nb_sfr_prise_saisie, nb_sfr_prise_existante),
+        "tx_mobile": _pct(nb_sfr_mobile, nb_sfr_fibre),
+        "tx_dg": _pct(nb_sfr_depot_gar, nb_sfr_fibre),
+        "nb_sfr_4p": nb_sfr_4p,
+        "tx_pc": tx_pc,
+
+        # Mobile
+        "nb_mobile": nb_sfr_mobile,
+        "nb_mobile_hors_att": nb_sfr_mob_hors_att,
+        "nb_mobile_activ": nb_sfr_activ,
+        "nb_mobile_activ_sfr": nb_sfr_activ_sfr,
+        "nb_mobile_200go": nb_sfr_f200,
+        "nb_cq_ra_mob": nb_cq_ra_mob,
+        "nb_res30j_mob": nb_res30j_mob,
+        "tx_mobile_activ": _pct(nb_sfr_activ, nb_sfr_mob_hors_att),
+        "tx_mobile_activ_sfr": _pct(nb_sfr_activ_sfr, nb_sfr_mob_hors_att),
+        "tx_forfait_200go": _pct(nb_sfr_f200, nb_sfr_mobile),
+        "tx_churn_mob": _pct(nb_res30j_mob, nb_cq_ra_mob),
+
+        # Secu
+        "nb_secu": nb_sfr_secu,
+
+        # Box 5G
+        "nb_box5g": nb_sfr_box5g,
+        "nb_box5g_hors_att": nb_cts_hors_att_b5g,
+        "nb_box5g_hors_att_sfr": nb_cts_hors_att_sfr_b5g,
+        "nb_box5g_activ": nb_cts_b5g_ra,
+        "nb_box5g_activ_sfr": nb_cts_b5g_ra_sfr,
+        "nb_box5g_resil": nb_sfr_box5g_resil,
+        "nb_box5g_cq": nb_sfr_cq_box5g,
+        "nb_box5g_tv": nb_sfr_box5g_tv,
+        "nb_cq_ra_b5g": nb_cq_ra_b5g,
+        "nb_res30j_b5g": nb_res30j_b5g,
+        "tx_box5g_racc": _pct(nb_cts_b5g_ra, nb_cts_hors_att_b5g),
+        "tx_box5g_racc_sfr": _pct(nb_cts_b5g_ra_sfr, nb_cts_hors_att_sfr_b5g),
+        "tx_box5g_cq": _pct(nb_sfr_cq_box5g, nb_sfr_box5g),
+        "tx_box5g_resil": _pct(nb_sfr_box5g_resil, nb_sfr_box5g),
+        "tx_box5g_tv": _pct(nb_sfr_box5g_tv, nb_sfr_box5g),
+        "tx_churn_b5g": _pct(nb_res30j_b5g, nb_cq_ra_b5g),
+    }
+
+
+def _compute_dashboard_oen(rows: list[dict]) -> dict:
+    """
+    Dashboard OEN — équivalent AfficheResultatOEN() WinDev.
+
+    Règles :
+    - Nb PDL = total des lignes brutes (1 par ligne, dual = 2 PDL)
+    - Nb Ctt Hors Anomalie = mono + dual/2 (un dual = 1 contrat pour 2 PDL)
+    """
+    oen = [r for r in rows if r.get("partenaire") == "OEN"]
+    if not oen:
+        return {}
+
+    nb_pdl_brut = len(oen)
+
+    # Segmentation par TypeProd
+    def _type(r): return (r.get("type_prod", "") or "").upper()
+    oen_gaz = [r for r in oen if _type(r) == "GAZ"]
+    oen_elec = [r for r in oen if _type(r) == "ELEC"]
+    oen_dual = [r for r in oen if _type(r) not in ("GAZ", "ELEC")]
+
+    # Coefficient par PDL : mono = 1, dual = 0.5 (un dual = 1 contrat pour 2 PDL)
+    # On reproduit la logique WinDev StatsOEN où tous les compteurs incluent ce coeff.
+    def _coeff(r) -> float:
+        return 0.5 if _type(r) not in ("GAZ", "ELEC") else 1.0
+
+    # Nb Ctt = somme des coeffs (dual compte pour 0.5)
+    nb_ctt = sum(_coeff(r) for r in oen)
+    nb_ctt_mono_gaz = len(oen_gaz)
+    nb_ctt_mono_elec = len(oen_elec)
+    nb_ctt_dual = len(oen_dual) * 0.5
+
+    # Compteurs d'états appliquant le même coefficient
+    nb_anomalie = sum(_coeff(r) for r in oen if r.get("id_type_etat") == 3)
+    nb_valide = sum(_coeff(r) for r in oen if r.get("id_type_etat") in (5, 8))
+    nb_valide_ope = sum(_coeff(r) for r in oen if r.get("id_type_etat_ope") in (5, 8))
+    nb_resil = sum(_coeff(r) for r in oen if r.get("id_type_etat") == 4)
+    nb_attente = sum(_coeff(r) for r in oen if r.get("id_type_etat") == 2)
+    nb_stand_by = sum(_coeff(r) for r in oen if r.get("id_type_etat") in (1, 9))
+    nb_hors_anomalie = nb_ctt - nb_anomalie
+
+    # Base = ctt avec car ≤ 1000 (mono gaz + dual), compté en PDL (coeff 1 pour les deux)
+    nb_base = sum(
+        1 for r in (oen_gaz + oen_dual)
+        if 0 < (r.get("car") or 0) <= 1000
+    )
+
+    # 6kva+ = ctt avec puissance ≥ 6 (mono elec + dual), compté en PDL
+    nb_6kva = sum(
+        1 for r in (oen_elec + oen_dual)
+        if (r.get("puissance") or 0) >= 6
+    )
+
+    # Consentement : unique par client
+    id_clients = {r.get("id_client") for r in oen if r.get("id_client") and r.get("id_client") != "0"}
+    nb_clients = len(id_clients)
+    clients_consent = {r.get("id_client") for r in oen if r.get("client_rap_part") and r.get("id_client") and r.get("id_client") != "0"}
+    nb_consent = len(clients_consent)
+
+    # Note moyenne
+    noted = [r for r in oen if (r.get("notation") or 0) > 0]
+    note_moy = (sum(r.get("notation", 0) for r in noted) / len(noted)) if noted else 0.0
+    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1)
+
+    # Car moyenne sur le gaz (mono + dual)
+    car_vals = [(r.get("car") or 0) for r in (oen_gaz + oen_dual) if (r.get("car") or 0) > 0]
+    car_moy = int(sum(car_vals) / len(car_vals)) if car_vals else 0
+
+    return {
+        "nb_pdl_brut": nb_pdl_brut,
+        "nb_ctt": round(nb_ctt, 1),
+        "nb_ctt_mono_gaz": nb_ctt_mono_gaz,
+        "nb_ctt_mono_elec": nb_ctt_mono_elec,
+        "nb_ctt_dual": round(nb_ctt_dual, 1),  # déjà divisé par 2
+        "nb_hors_anomalie": round(nb_hors_anomalie, 1),
+        "nb_anomalie": round(nb_anomalie, 1),
+        "nb_valide": round(nb_valide, 1),
+        "nb_valide_ope": round(nb_valide_ope, 1),
+        "nb_resil": round(nb_resil, 1),
+        "nb_attente": round(nb_attente, 1),
+        "nb_stand_by": round(nb_stand_by, 1),
+        "nb_base": nb_base,
+        "nb_6kva": nb_6kva,
+        "tx_anomalie": _pct(nb_anomalie, nb_ctt),
+        "tx_resil": _pct(nb_resil, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
+        "tx_valide": _pct(nb_valide, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
+        "tx_valide_ope": _pct(nb_valide_ope, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
+        "tx_attente": _pct(nb_attente, nb_ctt),
+        "tx_dual": _pct(nb_ctt_dual, nb_ctt),
+        "tx_base": _pct(nb_base, nb_ctt_mono_gaz + nb_ctt_dual * 2),
+        "tx_6kva": _pct(nb_6kva, nb_ctt_mono_elec + nb_ctt_dual * 2),
+        "nb_consent": nb_consent,
+        "nb_clients": nb_clients,
+        "tx_consent": _pct(nb_consent, nb_clients),
+        "note_moy": round(note_moy, 2),
+        "pct_notes": pct_notes,
+        "car_moy": car_moy,
+    }
+
+
+def _compute_dashboard_eni(rows: list[dict]) -> dict:
+    """
+    Dashboard ENI — KPIs répartition, résiliation et options.
+    """
+    eni = [r for r in rows if r.get("partenaire") == "ENI"]
+    if not eni:
+        return {}
+
+    def _type(r): return (r.get("type_prod", "") or "").upper()
+    eni_gaz = [r for r in eni if _type(r) == "GAZ"]
+    eni_elec = [r for r in eni if _type(r) == "ELEC"]
+    eni_dual = [r for r in eni if _type(r) not in ("GAZ", "ELEC")]
+
+    nb_brut = len(eni)
+    nb_mono_gaz = len(eni_gaz)
+    nb_mono_elec = len(eni_elec)
+    nb_dual = len(eni_dual)
+    nb_tot = nb_mono_gaz + nb_mono_elec + nb_dual
+
+    # États
+    nb_anomalie = sum(1 for r in eni if r.get("id_type_etat") == 3)
+    nb_resil = sum(1 for r in eni if r.get("id_type_etat") == 4)
+    nb_stand_by = sum(1 for r in eni if r.get("id_type_etat") in (1, 9))
+    nb_hors_anomalie = nb_brut - nb_anomalie
+
+    # Type B1+ = contrats gaz avec car > 6000
+    ctt_gaz = eni_gaz + eni_dual
+    nb_b1_plus = sum(1 for r in ctt_gaz if (r.get("car") or 0) > 6000)
+
+    # Options
+    nb_demat = sum(1 for r in eni if r.get("opt_demat"))
+    nb_maintenance = sum(1 for r in eni if r.get("opt_maintenance"))
+    nb_energie_verte = sum(1 for r in eni if r.get("opt_energie_verte_gaz"))
+    nb_reforestation = sum(1 for r in eni if r.get("opt_reforestation"))
+    nb_protection = sum(1 for r in eni if r.get("opt_protection"))
+
+    # Note
+    noted = [r for r in eni if (r.get("notation") or 0) > 0]
+    note_moy = (sum(r.get("notation", 0) for r in noted) / len(noted)) if noted else 0.0
+    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1)
+
+    # Car moyenne gaz
+    car_vals = [(r.get("car") or 0) for r in ctt_gaz if (r.get("car") or 0) > 0]
+    car_moy = int(sum(car_vals) / len(car_vals)) if car_vals else 0
+
+    return {
+        "nb_brut": nb_brut,
+        "nb_hors_anomalie": nb_hors_anomalie,
+        "nb_mono_gaz": nb_mono_gaz,
+        "nb_mono_elec": nb_mono_elec,
+        "nb_dual": nb_dual,
+        "nb_b1_plus": nb_b1_plus,
+        "nb_anomalie": nb_anomalie,
+        "nb_resil": nb_resil,
+        "nb_stand_by": nb_stand_by,
+        "tx_mono_gaz": _pct(nb_mono_gaz, nb_tot),
+        "tx_mono_elec": _pct(nb_mono_elec, nb_tot),
+        "tx_dual": _pct(nb_dual, nb_tot),
+        "tx_b1_plus": _pct(nb_b1_plus, len(ctt_gaz)),
+        "tx_anomalie": _pct(nb_anomalie, nb_brut),
+        "tx_resil": _pct(nb_resil, nb_brut),
+        "tx_stand_by": _pct(nb_stand_by, nb_brut),
+        "nb_demat": nb_demat,
+        "nb_maintenance": nb_maintenance,
+        "nb_energie_verte": nb_energie_verte,
+        "nb_reforestation": nb_reforestation,
+        "nb_protection": nb_protection,
+        "tx_demat": _pct(nb_demat, nb_brut),
+        "tx_maintenance": _pct(nb_maintenance, nb_brut),
+        "tx_energie_verte": _pct(nb_energie_verte, nb_brut),
+        "tx_reforestation": _pct(nb_reforestation, nb_brut),
+        "tx_protection": _pct(nb_protection, nb_brut),
+        "note_moy": round(note_moy, 2),
+        "pct_notes": pct_notes,
+        "car_moy": car_moy,
     }
 
 
@@ -1243,19 +1794,22 @@ def _meta_path(id_user: int, id_job: int) -> Path:
 
 def read_job_stats(id_user: int, id_job: int) -> dict:
     """Lit le meta.json des stats précalculées d'un job."""
+    _empty = {
+        "total_contrats": 0, "total_paye": 0, "total_points": 0,
+        "repart_partenaires": [], "vendeurs": [],
+        "dashboard_sfr": {}, "dashboard_oen": {}, "dashboard_eni": {},
+    }
     p = _meta_path(id_user, id_job)
     if not p.exists():
-        return {
-            "total_contrats": 0, "total_paye": 0, "total_points": 0,
-            "repart_partenaires": [], "vendeurs": [],
-        }
+        return _empty
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        data = json.loads(p.read_text(encoding="utf-8"))
+        # Backfill des champs nouveaux pour les jobs anciens
+        for k, v in _empty.items():
+            data.setdefault(k, v)
+        return data
     except Exception:
-        return {
-            "total_contrats": 0, "total_paye": 0, "total_points": 0,
-            "repart_partenaires": [], "vendeurs": [],
-        }
+        return _empty
 
 
 def _parquet_path(id_user: int, id_job: int) -> Path:

@@ -162,9 +162,12 @@ interface JobStats {
   total_points: number
   repart_partenaires: RepartPartenaireRow[]
   vendeurs: VendeurStatRow[]
+  dashboard_sfr: Record<string, number>
+  dashboard_oen: Record<string, number>
+  dashboard_eni: Record<string, number>
 }
 
-type TabKey = 'contrats' | 'repart' | 'vendeurs'
+type TabKey = 'contrats' | 'analyse' | 'repart' | 'vendeurs'
 
 // --- Helpers -----------------------------------------------------
 
@@ -206,6 +209,100 @@ function BoolBadge({ v }: { v: boolean }) {
     <Check className="w-3.5 h-3.5 text-emerald-600 inline-block" />
   ) : (
     <Minus className="w-3.5 h-3.5 text-gray-300 inline-block" />
+  )
+}
+
+// Couleur selon seuils — reproduit fidèlement les fonctions CoulSFR_Tx* WinDev.
+type ColorKind =
+  | 'racc'      // CoulSFR_TxRacc : ≥70 vert / 60-70 orange / <60 rouge
+  | 'resil'     // CoulSFR_TxResil : ≤15 vert / >15 rouge
+  | 'consent'   // CoulSFR_TxConsent : ≥80 vert / <80 rouge
+  | 'prise'     // CoulSFR_TxPrise : ≤69 rouge / 70-79 orange / ≥80 vert
+  | 'dual'      // OEN : <80 rouge / 80-90 orange / >90 vert
+  | 'premium'   // CoulSFR_TxPrem : <80 rouge / 80-90 orange / ≥90 vert
+  | 'cq'        // CoulSFR_TxConquete : <80 rouge / 80-90 orange / ≥90 vert
+  | 'portab'    // CoulSFR_TxPort : <70 rouge / 70-79 orange / ≥80 vert
+  | 'mob'       // CoulSFR_TxMob : <30 rouge / 30-49 orange / ≥49 vert
+  | 'f200'      // CoulSFR_TxForfaitMini : <20 rouge / 20-29 orange / ≥29 vert
+  | 'dg'        // CoulSFR_TxDG : ≤15 vert / >15 rouge
+  | 'pc'        // CoulSFR_TxParcChaines : ≤69 rouge / 70-79 orange / ≥80 vert
+  | 'note'      // CoulSFR_NoteMoy : ≤8.59 rouge / 8.6-8.99 orange / ≥9 vert (sur /10)
+  | 'none'
+
+function colorClass(value: number, kind: ColorKind = 'none'): string {
+  if (kind === 'none') return 'text-gray-900'
+  switch (kind) {
+    case 'racc':
+      return value >= 70 ? 'text-emerald-600'
+        : value >= 60 ? 'text-amber-600' : 'text-red-600'
+    case 'resil':
+      return value <= 15 ? 'text-emerald-600' : 'text-red-600'
+    case 'consent':
+      return value >= 80 ? 'text-emerald-600' : 'text-red-600'
+    case 'prise':
+    case 'pc':
+      return value >= 80 ? 'text-emerald-600'
+        : value >= 70 ? 'text-amber-600' : 'text-red-600'
+    case 'dual':
+      return value > 90 ? 'text-emerald-600'
+        : value >= 80 ? 'text-amber-600' : 'text-red-600'
+    case 'premium':
+    case 'cq':
+      return value >= 90 ? 'text-emerald-600'
+        : value >= 80 ? 'text-amber-600' : 'text-red-600'
+    case 'portab':
+      return value >= 80 ? 'text-emerald-600'
+        : value >= 70 ? 'text-amber-600' : 'text-red-600'
+    case 'mob':
+      return value >= 49 ? 'text-emerald-600'
+        : value >= 30 ? 'text-amber-600' : 'text-red-600'
+    case 'f200':
+      return value >= 29 ? 'text-emerald-600'
+        : value >= 20 ? 'text-amber-600' : 'text-red-600'
+    case 'dg':
+      return value <= 15 ? 'text-emerald-600' : 'text-red-600'
+    case 'note':
+      return value >= 9 ? 'text-emerald-600'
+        : value >= 8.6 ? 'text-amber-600' : 'text-red-600'
+  }
+}
+
+function Kpi({
+  label, value, suffix = '', sub, tint = 'none', small = false,
+}: {
+  label: string
+  value: number | string
+  suffix?: string
+  sub?: string
+  tint?: ColorKind
+  small?: boolean
+}) {
+  const numVal = typeof value === 'number' ? value : parseFloat(String(value))
+  const colored = typeof value === 'number' || !isNaN(numVal)
+  return (
+    <div className={`bg-white rounded-xl border border-gray-200 px-4 ${small ? 'py-2.5' : 'py-3'}`}>
+      <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">
+        {label}
+      </div>
+      <div className={`${small ? 'text-xl' : 'text-2xl'} font-bold tabular-nums mt-0.5 ${
+        colored ? colorClass(numVal, tint) : 'text-gray-900'
+      }`}>
+        {typeof value === 'number'
+          ? (Number.isInteger(value) ? value.toLocaleString('fr-FR') : value.toFixed(1))
+          : value}
+        {suffix && <span className="text-sm font-medium text-gray-500 ml-1">{suffix}</span>}
+      </div>
+      {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
+    </div>
+  )
+}
+
+function DashboardSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">{title}</h3>
+      {children}
+    </div>
   )
 }
 
@@ -454,6 +551,12 @@ export default function ProductionDetailPage() {
         />
         <TabButton
           icon={<BarChart3 className="w-4 h-4" />}
+          label="Analyse"
+          active={tab === 'analyse'}
+          onClick={() => setTab('analyse')}
+        />
+        <TabButton
+          icon={<BarChart3 className="w-4 h-4" />}
           label="Répartition"
           active={tab === 'repart'}
           onClick={() => setTab('repart')}
@@ -470,6 +573,7 @@ export default function ProductionDetailPage() {
         {tab === 'contrats' && (
           <ContratsTable idJob={idJob!} partenairesPresents={partenairesPresents} />
         )}
+        {tab === 'analyse' && <AnalyseDashboard stats={stats} partenairesPresents={partenairesPresents} />}
         {tab === 'repart' && <RepartTable stats={stats} />}
         {tab === 'vendeurs' && <VendeursTable stats={stats} />}
       </div>
@@ -957,5 +1061,256 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
         </div>
       </div>
     </>
+  )
+}
+
+// --- Onglet Analyse (dashboards SFR / OEN / ENI) -----------------
+
+function AnalyseDashboard({
+  stats, partenairesPresents,
+}: {
+  stats: JobStats | null
+  partenairesPresents: Set<string>
+}) {
+  // Détermine les sous-onglets disponibles selon les partenaires présents
+  const hasSFR = partenairesPresents.has('SFR')
+  const hasOEN = partenairesPresents.has('OEN')
+  const hasENI = partenairesPresents.has('ENI')
+  const defaultSub = hasSFR ? 'sfr' : hasOEN ? 'oen' : hasENI ? 'eni' : 'sfr'
+  const [sub, setSub] = useState<'sfr' | 'oen' | 'eni'>(defaultSub)
+
+  useEffect(() => { setSub(defaultSub) }, [defaultSub])
+
+  if (!stats) {
+    return (
+      <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-gray-200">
+        <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!hasSFR && !hasOEN && !hasENI) {
+    return (
+      <div className="text-center py-16 text-gray-400 text-sm border border-dashed border-gray-300 rounded-xl">
+        Aucune donnée d'analyse. Les dashboards sont disponibles pour SFR, OEN et ENI.
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-1 mb-4 bg-gray-100 rounded-lg p-0.5 w-fit">
+        {hasSFR && (
+          <button
+            onClick={() => setSub('sfr')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              sub === 'sfr' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+            }`}
+          >Analyse SFR</button>
+        )}
+        {hasOEN && (
+          <button
+            onClick={() => setSub('oen')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              sub === 'oen' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+            }`}
+          >Analyse Ohm Energie</button>
+        )}
+        {hasENI && (
+          <button
+            onClick={() => setSub('eni')}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              sub === 'eni' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+            }`}
+          >Analyse ENI</button>
+        )}
+      </div>
+
+      {sub === 'sfr' && hasSFR && <DashboardSFR d={stats.dashboard_sfr} />}
+      {sub === 'oen' && hasOEN && <DashboardOEN d={stats.dashboard_oen} />}
+      {sub === 'eni' && hasENI && <DashboardENI d={stats.dashboard_eni} />}
+    </>
+  )
+}
+
+function DashboardSFR({ d }: { d: Record<string, number> }) {
+  const n = (k: string) => Number(d[k] ?? 0)
+  return (
+    <div className="space-y-6">
+      {/* Entête global */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi label="Note moyenne" value={n('note_moy')} suffix="/ 10" tint="note"
+          sub={`${n('pct_notes').toFixed(1)} % de contrats notés`} />
+        <Kpi label="% Consentement" value={n('tx_consent')} suffix="%"
+          sub={`${n('nb_consent')} / ${n('nb_clients')}`} tint="consent" />
+        <Kpi label="% Prise Saisie" value={n('tx_prise_saisie')} suffix="%"
+          sub={`${n('nb_fibre_prise_saisie')} / ${n('nb_fibre_prise_existante')}`} tint="prise" />
+        <Kpi label="% Portabilité" value={n('tx_portab')} suffix="%"
+          sub={`${n('nb_fibre_porta')} CQ avec Porta / ${n('nb_fibre_cq')} CQ`} tint="portab" />
+      </div>
+
+      {/* --- Fibre --- */}
+      <DashboardSection title={`Fibre — ${n('nb_fibre')} contrats Brut (hors TK)`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <Kpi label="% Conquête" value={n('tx_cq')} suffix="%" tint="cq"
+            sub={`${n('nb_fibre_cq')} CQ / ${n('nb_fibre')} Fibre`} />
+          <Kpi label="% Premium" value={n('tx_premium')} suffix="%" tint="premium"
+            sub={`${n('nb_fibre_premium_lib')} Premium / ${n('nb_fibre')}`} />
+          <Kpi label="% Racc" value={n('tx_racc')} suffix="%" tint="racc"
+            sub={`${n('nb_fibre_ra')} Racc / ${n('nb_fibre_hors_att')} hors att.`} />
+          <Kpi label="% Racc SFR" value={n('tx_racc_sfr')} suffix="%" tint="racc"
+            sub={`${n('nb_fibre_ra_sfr')} Racc SFR`} />
+          <Kpi label="% Résil" value={n('tx_resil')} suffix="%" tint="resil"
+            sub={`${n('nb_fibre_resil')} Résil / ${n('nb_fibre')}`} />
+          <Kpi label="% Mobile" value={n('tx_mobile')} suffix="%" tint="mob"
+            sub={`${n('nb_mobile')} MOB / ${n('nb_fibre')} Fibre`} />
+          <Kpi label="% Parcours Chaînés" value={n('tx_pc')} suffix="%" tint="pc"
+            sub={`${n('nb_fibre_pc')} PC / ${n('nb_sfr_4p')} Clients 4P`} />
+          <Kpi label="% DG (Dépôt Garantie)" value={n('tx_dg')} suffix="%" tint="dg"
+            sub={`${n('nb_fibre_depot_gar')} DG / ${n('nb_fibre')}`} />
+        </div>
+      </DashboardSection>
+
+      {/* --- Mobile --- */}
+      {n('nb_mobile') > 0 && (
+        <DashboardSection title={`Mobile — ${n('nb_mobile')} contrats Brut (hors TK)`}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Kpi label="% forfait > 200Go" value={n('tx_forfait_200go')} suffix="%" tint="f200"
+              sub={`${n('nb_mobile_200go')} / ${n('nb_mobile')}`} />
+            <Kpi label="% Activation" value={n('tx_mobile_activ')} suffix="%" tint="racc"
+              sub={`${n('nb_mobile_activ')} activé / ${n('nb_mobile_hors_att')} hors att.`} />
+            <Kpi label="% Activation SFR" value={n('tx_mobile_activ_sfr')} suffix="%" tint="racc"
+              sub={`${n('nb_mobile_activ_sfr')} activé SFR`} />
+            <Kpi label="% Churn Mobile" value={n('tx_churn_mob')} suffix="%" tint="resil"
+              sub={`${n('nb_res30j_mob')} résil ≤30j / ${n('nb_cq_ra_mob')} CQ finalisées`} />
+          </div>
+        </DashboardSection>
+      )}
+
+      {/* --- Box 5G --- */}
+      {n('nb_box5g') > 0 && (
+        <DashboardSection title={`Box 5G — ${n('nb_box5g')} contrats Brut (hors TK)`}>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <Kpi label="% Conquête" value={n('tx_box5g_cq')} suffix="%" tint="cq"
+              sub={`${n('nb_box5g_cq')} CQ / ${n('nb_box5g')}`} />
+            <Kpi label="% Résil" value={n('tx_box5g_resil')} suffix="%" tint="resil"
+              sub={`${n('nb_box5g_resil')} Résil / ${n('nb_box5g')}`} />
+            <Kpi label="% Activ" value={n('tx_box5g_racc')} suffix="%" tint="racc"
+              sub={`${n('nb_box5g_activ')} activé / ${n('nb_box5g_hors_att')} hors att.`} />
+            <Kpi label="% Activ SFR" value={n('tx_box5g_racc_sfr')} suffix="%" tint="racc"
+              sub={`${n('nb_box5g_activ_sfr')} activé SFR`} />
+            <Kpi label="% B5G TV" value={n('tx_box5g_tv')} suffix="%"
+              sub={`${n('nb_box5g_tv')} TV / ${n('nb_box5g')}`} />
+            <Kpi label="% Churn B5G" value={n('tx_churn_b5g')} suffix="%" tint="resil"
+              sub={`${n('nb_res30j_b5g')} résil ≤30j / ${n('nb_cq_ra_b5g')} CQ finalisées`} />
+          </div>
+        </DashboardSection>
+      )}
+
+      {/* --- Secu (optionnel) --- */}
+      {n('nb_secu') > 0 && (
+        <DashboardSection title="Maison Sécu">
+          <div className="grid grid-cols-4 gap-3">
+            <Kpi label="Nb Maison Sécu" value={n('nb_secu')} />
+          </div>
+        </DashboardSection>
+      )}
+    </div>
+  )
+}
+
+function DashboardOEN({ d }: { d: Record<string, number> }) {
+  const n = (k: string) => Number(d[k] ?? 0)
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi label="Nb Ctt Brut" value={n('nb_ctt')}
+          sub="Mono + Dual/2" />
+        <Kpi label="Nb PDL Hors anomalie" value={n('nb_pdl_brut')} />
+        <Kpi label="Nb Ctt Hors anomalie" value={n('nb_hors_anomalie')} />
+        <Kpi label="Note moyenne" value={n('note_moy')} suffix="/ 10"
+          sub={`${n('pct_notes').toFixed(1)} % de ctt notés`} />
+      </div>
+
+      <DashboardSection title="Ratios clés">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <Kpi label="% Valide" value={n('tx_valide')} suffix="%" tint="dual"
+            sub={`${n('nb_valide')} / ${n('nb_hors_anomalie')}`} />
+          <Kpi label="% Valide Opé" value={n('tx_valide_ope')} suffix="%" tint="dual"
+            sub={`${n('nb_valide_ope')} / ${n('nb_hors_anomalie')}`} />
+          <Kpi label="% Anomalie" value={n('tx_anomalie')} suffix="%" tint="resil"
+            sub={`${n('nb_anomalie')} / ${n('nb_ctt')}`} />
+          <Kpi label="% Résil" value={n('tx_resil')} suffix="%" tint="resil"
+            sub={`${n('nb_resil')} / ${n('nb_hors_anomalie')}`} />
+          <Kpi label="% Attente" value={n('tx_attente')} suffix="%"
+            sub={`${n('nb_attente')} / ${n('nb_ctt')}`} />
+          <Kpi label="% Dual" value={n('tx_dual')} suffix="%" tint="dual"
+            sub={`${n('nb_ctt_dual')} / ${n('nb_ctt')}`} />
+          <Kpi label="% Base" value={n('tx_base')} suffix="%"
+            sub={`${n('nb_base')} ≤ 1000 KWh`} />
+          <Kpi label="% 6kva et +" value={n('tx_6kva')} suffix="%" tint="dual"
+            sub={`${n('nb_6kva')} Elec ≥ 6 kVA`} />
+          <Kpi label="% Consentement" value={n('tx_consent')} suffix="%" tint="consent"
+            sub={`${n('nb_consent')} / ${n('nb_clients')}`} />
+          <Kpi label="Car moy" value={n('car_moy')} suffix="KWh"
+            sub="Consommation gaz moyenne" />
+        </div>
+      </DashboardSection>
+    </div>
+  )
+}
+
+function DashboardENI({ d }: { d: Record<string, number> }) {
+  const n = (k: string) => Number(d[k] ?? 0)
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi label="Nb Brut" value={n('nb_brut')} />
+        <Kpi label="Nb Hors anomalie" value={n('nb_hors_anomalie')} />
+        <Kpi label="Note moyenne" value={n('note_moy')} suffix="/ 10"
+          sub={`${n('pct_notes').toFixed(1)} % de ctt notés`} />
+        <Kpi label="Car moy" value={n('car_moy')} suffix="KWh"
+          sub="Conso gaz moyenne" />
+      </div>
+
+      <DashboardSection title="Répartition">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Kpi label="% Mono Gaz" value={n('tx_mono_gaz')} suffix="%"
+            sub={`${n('nb_mono_gaz')} contrats`} />
+          <Kpi label="% Mono Elec" value={n('tx_mono_elec')} suffix="%"
+            sub={`${n('nb_mono_elec')} contrats`} />
+          <Kpi label="% Dual" value={n('tx_dual')} suffix="%" tint="dual"
+            sub={`${n('nb_dual')} contrats`} />
+          <Kpi label="% Type B1+" value={n('tx_b1_plus')} suffix="%"
+            sub={`${n('nb_b1_plus')} ctts > 6000 KWh`} />
+        </div>
+      </DashboardSection>
+
+      <DashboardSection title="États">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <Kpi label="% Anomalie" value={n('tx_anomalie')} suffix="%" tint="resil"
+            sub={`${n('nb_anomalie')} / ${n('nb_brut')}`} />
+          <Kpi label="% Résil" value={n('tx_resil')} suffix="%" tint="resil"
+            sub={`${n('nb_resil')} / ${n('nb_brut')}`} />
+          <Kpi label="% Stand-By" value={n('tx_stand_by')} suffix="%"
+            sub={`${n('nb_stand_by')} / ${n('nb_brut')}`} />
+        </div>
+      </DashboardSection>
+
+      <DashboardSection title="Options (objectif 90 %)">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Kpi label="Démat" value={n('tx_demat')} suffix="%" tint="dual"
+            sub={`${n('nb_demat')}`} small />
+          <Kpi label="Maintenance" value={n('tx_maintenance')} suffix="%" tint="dual"
+            sub={`${n('nb_maintenance')}`} small />
+          <Kpi label="Énergie Verte Gaz" value={n('tx_energie_verte')} suffix="%" tint="dual"
+            sub={`${n('nb_energie_verte')}`} small />
+          <Kpi label="Reforestation" value={n('tx_reforestation')} suffix="%" tint="dual"
+            sub={`${n('nb_reforestation')}`} small />
+          <Kpi label="Protection" value={n('tx_protection')} suffix="%" tint="dual"
+            sub={`${n('nb_protection')}`} small />
+        </div>
+      </DashboardSection>
+    </div>
   )
 }

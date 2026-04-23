@@ -240,3 +240,7 @@ class JobStats(BaseModel):
     total_points: int = 0
     repart_partenaires: list[RepartPartenaireRow] = []
     vendeurs: list[VendeurStatRow] = []
+    # Dashboards par partenaire (dicts libres, tous les KPIs calculés côté worker)
+    dashboard_sfr: dict = {}
+    dashboard_oen: dict = {}
+    dashboard_eni: dict = {}
