@@ -1170,9 +1170,16 @@ function AnalyseDashboard({
   )
 }
 
+interface HoraireSignRow {
+  h: string
+  ventes: number
+  tickets: number
+}
+
 function DashboardSFR({ d }: { d: any }) {
   const n = (k: string) => Number((d ?? {})[k] ?? 0)
   const vendeurs: TxRaccVendeurRow[] = (d && d.tx_racc_vendeur) || []
+  const horaires: HoraireSignRow[] = (d && d.horaires_sign) || []
   return (
     <div className="space-y-6">
       {/* Entête global */}
@@ -1254,12 +1261,172 @@ function DashboardSFR({ d }: { d: any }) {
         </DashboardSection>
       )}
 
+      {/* --- Horaires de signatures --- */}
+      {horaires.length > 0 && (
+        <DashboardSection title="Horaires de signatures">
+          <HorairesSignChart data={horaires} />
+        </DashboardSection>
+      )}
+
       {/* --- Tableau Tx de Racc / vendeur --- */}
       {vendeurs.length > 0 && (
         <DashboardSection title={`Tx de Racc / vendeur (${vendeurs.length})`}>
           <VendeurSFRTable rows={vendeurs} />
         </DashboardSection>
       )}
+    </div>
+  )
+}
+
+function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
+  // On remplit toutes les heures entre le min et le max présents, pour garder
+  // une ligne régulière (pas de trous visuels).
+  const filled = useMemo(() => {
+    if (!data.length) return [] as HoraireSignRow[]
+    const byH: Record<string, HoraireSignRow> = {}
+    data.forEach((r) => { byH[r.h] = r })
+    const hours = data.map((r) => Number(r.h)).filter((n) => !Number.isNaN(n))
+    const hMin = Math.min(...hours)
+    const hMax = Math.max(...hours)
+    const out: HoraireSignRow[] = []
+    for (let h = hMin; h <= hMax; h++) {
+      const key = String(h).padStart(2, '0')
+      out.push(byH[key] ?? { h: key, ventes: 0, tickets: 0 })
+    }
+    return out
+  }, [data])
+
+  const [hover, setHover] = useState<number | null>(null)
+
+  if (!filled.length) return null
+
+  const totalVentes = filled.reduce((s, r) => s + r.ventes, 0)
+  const totalTickets = filled.reduce((s, r) => s + r.tickets, 0)
+  const maxY = Math.max(1, ...filled.map((r) => Math.max(r.ventes, r.tickets)))
+
+  // Dimensions SVG (viewBox fixe, CSS responsive)
+  const W = 900
+  const H = 280
+  const padL = 40, padR = 20, padT = 20, padB = 40
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+
+  const x = (i: number) =>
+    filled.length === 1 ? padL + innerW / 2 : padL + (i * innerW) / (filled.length - 1)
+  const y = (v: number) => padT + innerH - (v / maxY) * innerH
+
+  // Pas d'axe Y (4 grids)
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => ({
+    v: Math.round(maxY * t),
+    y: padT + innerH - t * innerH,
+  }))
+
+  const path = (key: 'ventes' | 'tickets') =>
+    filled
+      .map((r, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(r[key]).toFixed(1)}`)
+      .join(' ')
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      {/* Légende + totaux */}
+      <div className="flex items-center gap-6 mb-3 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-full bg-sky-500"></span>
+          <span className="text-gray-700">Ventes finalisées</span>
+          <span className="text-gray-400 tabular-nums">({totalVentes})</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-3 h-3 rounded-full bg-amber-500"></span>
+          <span className="text-gray-700">Tickets générés</span>
+          <span className="text-gray-400 tabular-nums">({totalTickets})</span>
+        </div>
+      </div>
+
+      <div className="relative">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto select-none">
+          {/* Grid */}
+          {ticks.map((t, i) => (
+            <g key={i}>
+              <line
+                x1={padL} x2={W - padR} y1={t.y} y2={t.y}
+                stroke="#e5e7eb" strokeDasharray="3 3"
+              />
+              <text
+                x={padL - 6} y={t.y + 4}
+                textAnchor="end" fontSize="10" fill="#9ca3af"
+              >{t.v}</text>
+            </g>
+          ))}
+
+          {/* Axe X (heures) */}
+          {filled.map((r, i) => (
+            <text
+              key={r.h}
+              x={x(i)} y={H - padB + 16}
+              textAnchor="middle" fontSize="10" fill="#6b7280"
+            >{`${r.h}h`}</text>
+          ))}
+
+          {/* Courbes */}
+          <path d={path('ventes')} fill="none" stroke="#0ea5e9" strokeWidth="2" />
+          <path d={path('tickets')} fill="none" stroke="#f59e0b" strokeWidth="2" />
+
+          {/* Points */}
+          {filled.map((r, i) => (
+            <g key={`p-${r.h}`}>
+              <circle cx={x(i)} cy={y(r.ventes)} r={hover === i ? 5 : 3} fill="#0ea5e9" />
+              <circle cx={x(i)} cy={y(r.tickets)} r={hover === i ? 5 : 3} fill="#f59e0b" />
+            </g>
+          ))}
+
+          {/* Zone de détection hover (colonnes invisibles) */}
+          {filled.map((_, i) => {
+            const colW = innerW / Math.max(1, filled.length - 1)
+            return (
+              <rect
+                key={`h-${i}`}
+                x={x(i) - colW / 2} y={padT}
+                width={colW} height={innerH}
+                fill="transparent"
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+              />
+            )
+          })}
+
+          {/* Ligne de hover */}
+          {hover !== null && (
+            <line
+              x1={x(hover)} x2={x(hover)} y1={padT} y2={padT + innerH}
+              stroke="#d1d5db" strokeDasharray="2 2"
+            />
+          )}
+        </svg>
+
+        {/* Tooltip */}
+        {hover !== null && (
+          <div
+            className="absolute bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs pointer-events-none"
+            style={{
+              left: `${(x(hover) / W) * 100}%`,
+              top: 4,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            <div className="font-semibold text-gray-900 mb-1">{filled[hover].h}h</div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-sky-500"></span>
+              <span className="text-gray-500">Ventes :</span>
+              <span className="tabular-nums text-gray-900">{filled[hover].ventes}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
+              <span className="text-gray-500">Tickets :</span>
+              <span className="tabular-nums text-gray-900">{filled[hover].tickets}</span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -988,16 +988,22 @@ def extract_job_to_parquet(
 
         lib_etat_vend = r.get("Lib_EtatVend") or r.get("Lib_Etat") or ""
 
-        # Heure signature : partie heure du DateSAISIE (simplifié vs WinDev
-        # qui va chercher dans TK_Liste.DATECREA)
+        # Heure signature :
+        # - Pour les contrats issus d'un ticket (NumBS = "TKAAAAMMJJHHMMSSmmm"),
+        #   l'heure est intégrée au NumBS (équivalent de TK_Liste.DATECREA WinDev).
+        # - Sinon on prend l'heure de DateSAISIE (format ISO "YYYY-MM-DDTHH:MM:SS").
         heure_sign = ""
-        ds = r.get("DateSAISIE") or ""
-        if ds:
-            s = str(ds)
-            iso_h = s[11:16] if len(s) >= 16 and s[10] in "T " else ""
-            wd_h = s[8:12] if len(s) >= 12 and s[:8].isdigit() else ""
-            h = iso_h or (f"{wd_h[:2]}:{wd_h[2:4]}" if wd_h else "")
-            heure_sign = h
+        if len(num_bs) >= 16 and num_bs[:2].upper() == "TK" and num_bs[2:16].isdigit():
+            hm = num_bs[10:14]  # HHMM après TK + AAAAMMJJ
+            heure_sign = f"{hm[:2]}:{hm[2:4]}"
+        else:
+            ds = r.get("DateSAISIE") or ""
+            if ds:
+                s = str(ds)
+                iso_h = s[11:16] if len(s) >= 16 and s[10] in "T " else ""
+                wd_h = s[8:12] if len(s) >= 12 and s[:8].isdigit() else ""
+                h = iso_h or (f"{wd_h[:2]}:{wd_h[2:4]}" if wd_h else "")
+                heure_sign = h
 
         # Etat opérateur (SFR/OEN) via jointure _etatContrat
         etat_ope_lib = ""
@@ -1770,6 +1776,20 @@ def _compute_dashboard_sfr(
     # Tri : par ordre alphabétique sur nom
     tx_racc_vendeur.sort(key=lambda x: (x["nom"].lower(), x["prenom"].lower()))
 
+    # --- Horaires de signatures (graphique WinDev : ventes finalisées + tickets)
+    horaires: dict[str, dict] = {}
+    for r in sfr_all:
+        hs = str(r.get("heure_sign") or "")
+        if len(hs) < 2 or not hs[:2].isdigit():
+            continue
+        h = hs[:2]
+        b = horaires.setdefault(h, {"h": h, "ventes": 0, "tickets": 0})
+        if _is_tk(r):
+            b["tickets"] += 1
+        else:
+            b["ventes"] += 1
+    horaires_sign = sorted(horaires.values(), key=lambda x: x["h"])
+
     return {
         # SFR global
         "note_moy": note_moy,
@@ -1842,6 +1862,9 @@ def _compute_dashboard_sfr(
 
         # Tableau par vendeur (TableTxRaccVendeur WinDev)
         "tx_racc_vendeur": tx_racc_vendeur,
+
+        # Graphique horaires de signatures (Graph WinDev)
+        "horaires_sign": horaires_sign,
     }
 
 
