@@ -66,6 +66,12 @@ def get_menu(user: UserToken = Depends(get_current_user)):
             "route": "/stat-adv",
             "visible": True,  # TODO : _verif_droit(user, "?")
         },
+        {
+            "key": "organigramme",
+            "label": "Organigramme",
+            "route": "/organigramme",
+            "visible": True,
+        },
     ]
 
     return {

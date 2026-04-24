@@ -8,6 +8,7 @@ import StatRHEntreeSortiePage from '@/pages/StatRHEntreeSortiePage'
 import StatRHSaisieCvPage from '@/pages/StatRHSaisieCvPage'
 import StatRHAnnonceursPage from '@/pages/StatRHAnnonceursPage'
 import AgendaRecrutementPage from '@/pages/AgendaRecrutementPage'
+import OrganigrammePage from '@/pages/OrganigrammePage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
@@ -38,6 +39,7 @@ function App() {
           <Route path="stat-rh/dpae-sortie" element={<StatRHEntreeSortiePage />} />
           <Route path="stat-rh/annonceurs" element={<StatRHAnnonceursPage />} />
           <Route path="stat-adv" element={<PlaceholderPage />} />
+          <Route path="organigramme" element={<OrganigrammePage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

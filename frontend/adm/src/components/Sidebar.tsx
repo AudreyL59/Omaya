@@ -3,18 +3,20 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   MessageSquare, Receipt, Search, BarChart3, TrendingUp, FileText,
-  ChevronLeft, ChevronRight, LogOut,
+  ChevronLeft, ChevronRight, LogOut, Network, CalendarCheck,
 } from 'lucide-react'
 import { useMenu, type MenuItem } from '@/hooks/useMenu'
 import { useAuth } from '@/hooks/useAuth'
 import logoOmaya from '@/assets/logo-omaya.png'
 
 const MENU_ICONS: Record<string, React.ReactNode> = {
+  agenda_recrutement: <CalendarCheck className="w-5 h-5" />,
   envois_sms: <MessageSquare className="w-5 h-5" />,
   factures: <Receipt className="w-5 h-5" />,
   recherche_rh: <Search className="w-5 h-5" />,
   stat_rh: <BarChart3 className="w-5 h-5" />,
   stat_adv: <TrendingUp className="w-5 h-5" />,
+  organigramme: <Network className="w-5 h-5" />,
 }
 
 export default function Sidebar() {
