@@ -75,10 +75,17 @@ def _make_titre(params: dict, user_nom: str, user_prenom: str) -> str:
         return ymd
 
     periode = f"{fmt(du)}-{fmt(au)}"
+
+    # Liste des partenaires sélectionnés (ex: "SFR+OEN+ENI"). Si tous sont
+    # cochés on affiche "Tous", si aucun (cas dégénéré) on n'affiche rien.
+    parts = [str(p).strip() for p in (params.get("partenaires") or []) if p]
+    parts_str = "+".join(parts) if parts else ""
+    suffix = f" [{parts_str}]" if parts_str else ""
+
     if params.get("scope") == 1 and user_nom:
         prefix = "Prod Groupe" if params.get("prod_groupe") else "Prod Perso"
-        return f"{prefix} {user_nom} {user_prenom} / {periode}"
-    return f"{mode} / {periode}"
+        return f"{prefix} {user_nom} {user_prenom}{suffix} / {periode}"
+    return f"{mode}{suffix} / {periode}"
 
 
 # -- CRUD jobs ---------------------------------------------------------
