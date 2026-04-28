@@ -96,6 +96,30 @@ def _iso(v) -> str:
     return ""
 
 
+# Préfixes NumBS dont la date+heure de signature est embarquée :
+# <PREFIX><AAAAMMJJ><HHMMSS><CCC?>
+_NUMBS_TIME_PREFIXES = ("TK", "THD", "CBL")
+
+
+def _heure_from_numbs(num_bs: str) -> str:
+    """Extrait HH:MM depuis un NumBS du type TK/THD/CBL + AAAAMMJJ + HHMMSS + …
+    Retourne '' si le NumBS ne suit pas ce format."""
+    if not num_bs:
+        return ""
+    nb_up = num_bs.upper()
+    for px in _NUMBS_TIME_PREFIXES:
+        n = len(px)
+        if (
+            len(num_bs) >= n + 14
+            and nb_up.startswith(px)
+            and num_bs[n:n + 14].isdigit()
+        ):
+            hh = num_bs[n + 8:n + 10]
+            mm = num_bs[n + 10:n + 12]
+            return f"{hh}:{mm}"
+    return ""
+
+
 def _first_day_of_month(ymd: str) -> str:
     return ymd[:6] + "01" if len(ymd) >= 6 else ymd
 
@@ -543,6 +567,76 @@ def _load_contrat_options(
     return out
 
 
+def _load_heure_from_tk(num_bs_list: list[str]) -> dict[str, str]:
+    """
+    Pour une liste de NumBS, retourne dict NumBS → 'HH:MM' depuis TK_Liste.DATECREA.
+    Joint via :
+      - TK_CallSFR_Panier.NUM (= NumBS) pour les contrats SFR
+      - TK_Call_Panier.NumBS  pour les contrats des autres partenaires (OEN/ENI/…)
+    Tables paniers en `ticket_bo`, TK_Liste en `ticket`.
+    Reproduit le pattern WinDev (TK_Liste.DATECREA = date+heure réelle de signature).
+    """
+    nums = [str(n) for n in num_bs_list if n]
+    if not nums:
+        return {}
+
+    db_bo = get_connection("ticket_bo")
+    db_tk = get_connection("ticket")
+    import logging
+    logger = logging.getLogger(__name__)
+
+    num_to_idtk: dict[str, int] = {}
+
+    def _query_panier(table: str, num_col: str) -> None:
+        for chunk in _chunked(nums, _IN_CHUNK):
+            nums_sql = ",".join("'" + n.replace("'", "''") + "'" for n in chunk)
+            try:
+                rows = db_bo.query(
+                    f"SELECT {num_col}, IDTK_Liste FROM {table} WHERE {num_col} IN ({nums_sql})"
+                )
+            except Exception as e:
+                logger.warning(f"[heure_tk] {table} failed: {e}")
+                continue
+            for r in rows:
+                num = str(r.get(num_col) or "")
+                idtk = _to_int(r.get("IDTK_Liste"))
+                # Premier hit gagne (SFR prioritaire si la même réf est dans les 2)
+                if num and idtk and num not in num_to_idtk:
+                    num_to_idtk[num] = idtk
+
+    # 1) Lookup dans les 2 paniers
+    _query_panier("TK_CallSFR_Panier", "NUM")
+    _query_panier("TK_Call_Panier", "NumBS")
+
+    if not num_to_idtk:
+        return {}
+
+    # 2) IDTK_Liste → DATECREA via TK_Liste
+    idtk_to_datecrea: dict[int, str] = {}
+    for chunk in _chunked(list(set(num_to_idtk.values())), _IN_CHUNK):
+        ids_sql = ",".join(str(i) for i in chunk)
+        try:
+            rows = db_tk.query(
+                f"SELECT IDTK_Liste, DATECREA FROM TK_Liste WHERE IDTK_Liste IN ({ids_sql})"
+            )
+        except Exception as e:
+            logger.warning(f"[heure_tk] TK_Liste failed: {e}")
+            continue
+        for r in rows:
+            idtk = _to_int(r.get("IDTK_Liste"))
+            dc = str(r.get("DATECREA") or "")
+            if idtk and dc:
+                idtk_to_datecrea[idtk] = dc
+
+    # 3) NumBS → HH:MM (depuis ISO 'YYYY-MM-DDTHH:MM:SS.sss')
+    out: dict[str, str] = {}
+    for num, idtk in num_to_idtk.items():
+        dc = idtk_to_datecrea.get(idtk, "")
+        if len(dc) >= 16 and dc[10] in ("T", " "):
+            out[num] = dc[11:16]
+    return out
+
+
 def _load_clients_info(db_adv, ids_clients: set[int]) -> dict[int, dict]:
     """Charge les infos client en batch (table client dans ADV)."""
     all_ids = [i for i in ids_clients if i]
@@ -878,6 +972,23 @@ def extract_job_to_parquet(
         {_clean_id(_to_int(r.get("IDcontrat"))) for r in oen_rows},
     )
 
+    # Heure de signature via TK_Liste.DATECREA (cf. WinDev) pour :
+    # - SFR MOBILE / Box 5G : NumBS n'embarque pas l'heure de signature
+    # - Tout partenaire non-SFR (OEN/ENI/...) : DateSAISIE n'est pas fiable
+    nums_for_tk: list[str] = []
+    for r in all_rows:
+        nb = r.get("NumBS")
+        if not nb:
+            continue
+        if r["_prefix"] == "SFR":
+            famille = (r.get("Famille") or "").upper()
+            sous_fam = (r.get("SousFAM") or "").upper()
+            if famille == "MOBILE" or "BOX5G" in sous_fam:
+                nums_for_tk.append(str(nb))
+        else:
+            nums_for_tk.append(str(nb))
+    heure_tk: dict[str, str] = _load_heure_from_tk(nums_for_tk)
+
     # Calcul affectation vendeur à la date signature (requête par salarié+date)
     # On cache les résultats pour (id_salarie, date_ymd).
     affect_cache: dict[tuple[int, str], dict] = {}
@@ -989,14 +1100,21 @@ def extract_job_to_parquet(
         lib_etat_vend = r.get("Lib_EtatVend") or r.get("Lib_Etat") or ""
 
         # Heure signature :
-        # - Pour les contrats issus d'un ticket (NumBS = "TKAAAAMMJJHHMMSSmmm"),
-        #   l'heure est intégrée au NumBS (équivalent de TK_Liste.DATECREA WinDev).
-        # - Sinon on prend l'heure de DateSAISIE (format ISO "YYYY-MM-DDTHH:MM:SS").
+        # - SFR Fibre (Famille != MOBILE et SousFAM ne contient pas BOX5G) :
+        #   NumBS embarque la date+heure (TK/THD/CBL + 14 digits) → on extrait.
+        # - SFR MOBILE / Box 5G + tous les autres partenaires (OEN/ENI/…) :
+        #   on lookup TK_Liste.DATECREA via heure_tk (panier SFR ou Call).
+        # - Fallback final : heure de DateSAISIE.
+        ss_up = (sous_fam or "").upper()
+        is_sfr_mob_b5g = prefix == "SFR" and (
+            (famille or "").upper() == "MOBILE" or "BOX5G" in ss_up
+        )
         heure_sign = ""
-        if len(num_bs) >= 16 and num_bs[:2].upper() == "TK" and num_bs[2:16].isdigit():
-            hm = num_bs[10:14]  # HHMM après TK + AAAAMMJJ
-            heure_sign = f"{hm[:2]}:{hm[2:4]}"
+        if prefix == "SFR" and not is_sfr_mob_b5g:
+            heure_sign = _heure_from_numbs(num_bs)
         else:
+            heure_sign = heure_tk.get(num_bs, "")
+        if not heure_sign:
             ds = r.get("DateSAISIE") or ""
             if ds:
                 s = str(ds)
@@ -1776,18 +1894,15 @@ def _compute_dashboard_sfr(
     # Tri : par ordre alphabétique sur nom
     tx_racc_vendeur.sort(key=lambda x: (x["nom"].lower(), x["prenom"].lower()))
 
-    # --- Horaires de signatures (graphique WinDev : ventes finalisées + tickets)
+    # --- Horaires de signatures (ventes finalisées hors TK)
     horaires: dict[str, dict] = {}
-    for r in sfr_all:
+    for r in sfr:  # sfr = sfr_all hors TK
         hs = str(r.get("heure_sign") or "")
         if len(hs) < 2 or not hs[:2].isdigit():
             continue
         h = hs[:2]
-        b = horaires.setdefault(h, {"h": h, "ventes": 0, "tickets": 0})
-        if _is_tk(r):
-            b["tickets"] += 1
-        else:
-            b["ventes"] += 1
+        b = horaires.setdefault(h, {"h": h, "ventes": 0})
+        b["ventes"] += 1
     horaires_sign = sorted(horaires.values(), key=lambda x: x["h"])
 
     return {
@@ -2076,6 +2191,143 @@ def _parquet_path(id_user: int, id_job: int) -> Path:
 # ================================================================
 # Lecture paginée du résultat (pour l'API)
 # ================================================================
+
+# Ordre + libellés français pour l'export CSV (mirroir du tableau frontend
+# = Excel WinDev "Extraction"). La clé "conso_gaz" est virtuelle, calculée à la volée.
+EXPORT_COLUMNS: list[tuple[str, str]] = [
+    ("vendeur_nom",          "Vendeur Nom"),
+    ("vendeur_prenom",       "Vendeur Prénom"),
+    ("num_bs",               "Num BS"),
+    ("partenaire",           "Partenaire"),
+    ("lib_produit",          "Produit"),
+    ("type_prod",            "Type Prod"),
+    ("sfr_type_vente",       "Type vente"),
+    ("date_signature",       "Date Signature"),
+    ("sfr_date_rdv_tech",    "Date RDV Tech"),
+    ("sfr_date_racc_activ",  "Date Racc / Activation"),
+    ("lib_type_etat",        "Type Etat"),
+    ("lib_etat_vend",        "Etat contrat"),
+    ("lib_type_etat_ope",    "Type Etat Opérateur"),
+    ("lib_etat_ope",         "Etat Opérateur"),
+    ("sfr_cluster_nom",      "Cluster Nom"),
+    ("poste",                "Poste"),
+    ("date_embauche",        "Date Embauche"),
+    ("en_activite",          "En activité"),
+    ("date_sortie",          "Date Sortie"),
+    ("agence",               "Agence"),
+    ("equipe",               "Equipe"),
+    ("client_nom",           "Client Nom"),
+    ("client_prenom",        "Client Prénom"),
+    ("client_adresse1",      "Client Adr"),
+    ("client_adresse2",      "Client Cplt Adr"),
+    ("client_cp",            "CP"),
+    ("client_ville",         "Ville"),
+    ("client_mail",          "Mail"),
+    ("client_mobile",        "Mobile"),
+    ("client_rap_part",      "Recueil consentement"),
+    ("opt_num",              "Opt Numérique"),
+    ("mois_p",               "Mois Paiement"),
+    ("sfr_mois_p_distrib",   "Mois Paiement Distrib"),
+    ("nb_points",            "NB Points"),
+    ("info_partagee",        "Infos Contrats"),
+    ("gaz_actif",            "Gaz Actif"),
+    ("elec_actif",           "Elec Actif"),
+    ("conso_gaz",            "ConsoGaz"),
+    ("car",                  "Car (KWh)"),
+    ("puissance",            "Puissance"),
+    ("opt_demat",            "OPT Démat"),
+    ("opt_maintenance",      "OPT Maintenance"),
+    ("opt_energie_verte_gaz","OPT Energie Verte Gaz"),
+    ("opt_reforestation",    "OPT Reforestation"),
+    ("opt_protection",       "OPT Protection"),
+    ("sfr_portabilite",      "Portabilité"),
+    ("sfr_date_portab",      "Date Portabilité"),
+    ("sfr_date_resil",       "Date Résil"),
+    ("sfr_internet_garanti", "Internet Garanti"),
+    ("sfr_offre_speciale",   "Offre Spéciale"),
+    ("sfr_parcours_chaine",  "Parcours Chainés"),
+    ("sfr_prise_existante",  "Prise Existante"),
+    ("sfr_num_prise_sfr",    "Num prise SFR"),
+    ("sfr_num_prise_vend",   "Num prise vendeur"),
+    ("heure_sign",           "Heure Signature"),
+    ("notation",             "Note / 5"),
+    ("notation_info",        "Notation Info"),
+]
+
+
+def _conso_gaz(car) -> str:
+    """ConsoGaz calculée depuis Car (cf. consoGaz frontend / WinDev StatsENI)."""
+    try:
+        c = int(car or 0)
+    except (TypeError, ValueError):
+        return ""
+    if c <= 0:
+        return ""
+    if c <= 1000:
+        return "Base"
+    if c <= 6000:
+        return "B0"
+    if c <= 30000:
+        return "B1"
+    return "B2i"
+
+
+def _date_fr(iso: str) -> str:
+    """ISO YYYY-MM-DD → dd/mm/yyyy (vide si invalide)."""
+    s = str(iso or "")
+    if len(s) < 10 or s[4] != "-" or s[7] != "-":
+        return ""
+    return f"{s[8:10]}/{s[5:7]}/{s[0:4]}"
+
+
+def _mois_fr(iso: str) -> str:
+    """ISO YYYY-MM-DD → mm/yyyy (vide si invalide)."""
+    s = str(iso or "")
+    if len(s) < 7 or s[4] != "-":
+        return ""
+    return f"{s[5:7]}/{s[0:4]}"
+
+
+# Colonnes à reformater pour Excel FR
+_DATE_COLS = {
+    "date_signature", "date_embauche", "date_sortie",
+    "sfr_date_rdv_tech", "sfr_date_racc_activ", "sfr_date_portab",
+    "sfr_date_resil",
+}
+_MOIS_COLS = {"mois_p", "sfr_mois_p_distrib"}
+
+
+# Libellés des codes SFR_contrat.TypeVente (cf. WinDev)
+SFR_TYPE_VENTE_LABELS = {
+    1: "Conquête",
+    2: "Conquête VLA",
+    3: "Migration",
+    4: "Migration FTTB -> FTTH",
+}
+
+
+def csv_value(row: dict, key: str):
+    """Formate une valeur pour le CSV : dates fr, booléens 0/1, ConsoGaz calculée."""
+    if key == "conso_gaz":
+        return _conso_gaz(row.get("car", 0))
+    v = row.get(key, "")
+    if v is None or (isinstance(v, float) and v != v):  # NaN
+        return ""
+    if key == "sfr_type_vente":
+        if row.get("partenaire") != "SFR":
+            return ""
+        try:
+            return SFR_TYPE_VENTE_LABELS.get(int(v), "")
+        except (TypeError, ValueError):
+            return ""
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if key in _DATE_COLS:
+        return _date_fr(v)
+    if key in _MOIS_COLS:
+        return _mois_fr(v)
+    return v
+
 
 # Matrice de censure : droit requis -> colonnes à masquer si droit absent.
 # Cf. Fen_suiviProdAsynchrone WinDev (visibilité des colonnes TableContrat).

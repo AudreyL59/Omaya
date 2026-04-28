@@ -12,6 +12,7 @@ from app.intranets.adm.routers.organigramme import router as organigramme_router
 from app.intranets.adm.routers.annonceurs import router as annonceurs_router
 from app.intranets.adm.routers.agenda_recrutement import router as agenda_recrutement_router
 from app.intranets.adm.routers.mon_compte import router as mon_compte_router
+from app.shared.production.router import router as production_router
 
 router = APIRouter(
     prefix="/adm",
@@ -30,6 +31,7 @@ router.include_router(organigramme_router)
 router.include_router(annonceurs_router)
 router.include_router(agenda_recrutement_router)
 router.include_router(mon_compte_router)
+router.include_router(production_router)
 
 
 @router.get("/ping")

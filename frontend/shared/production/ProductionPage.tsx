@@ -13,7 +13,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { getToken } from '@/api'
-import NouvelleExtractionModal from '@/components/NouvelleExtractionModal'
+import NouvelleExtractionModal from '@shared/production/NouvelleExtractionModal'
 
 interface ProductionJob {
   id_job: string
@@ -93,13 +93,18 @@ function StatusBadge({ job }: { job: ProductionJob }) {
   }
 }
 
-export default function ProductionPage() {
+interface ProductionPageProps {
+  apiBase: string  // ex: '/api/vendeur' ou '/api/adm'
+  detailBase?: string  // ex: '/production' (relatif au basename de l'intranet)
+}
+
+export default function ProductionPage({ apiBase, detailBase = '/production' }: ProductionPageProps) {
   const [jobs, setJobs] = useState<ProductionJob[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
 
   const loadJobs = () => {
-    fetch('/api/vendeur/production/jobs', {
+    fetch(`${apiBase}/production/jobs`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.json())
@@ -125,7 +130,7 @@ export default function ProductionPage() {
 
   const handleDelete = async (idJob: string) => {
     if (!window.confirm('Supprimer cette extraction ?')) return
-    await fetch(`/api/vendeur/production/jobs/${idJob}`, {
+    await fetch(`${apiBase}/production/jobs/${idJob}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${getToken()}` },
     })
@@ -225,20 +230,20 @@ export default function ProductionPage() {
                       {job.statut === 'done' && (
                         <>
                           <Link
-                            to={`/production/jobs/${job.id_job}`}
+                            to={`${detailBase}/jobs/${job.id_job}`}
                             className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
                             title="Ouvrir"
                           >
                             <FileText className="w-4 h-4" />
                           </Link>
                           <a
-                            href={`/api/vendeur/production/jobs/${job.id_job}/export.csv`}
+                            href={`${apiBase}/production/jobs/${job.id_job}/export.csv`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={async (e) => {
                               e.preventDefault()
                               const r = await fetch(
-                                `/api/vendeur/production/jobs/${job.id_job}/export.csv`,
+                                `${apiBase}/production/jobs/${job.id_job}/export.csv`,
                                 { headers: { Authorization: `Bearer ${getToken()}` } },
                               )
                               const blob = await r.blob()
@@ -273,6 +278,7 @@ export default function ProductionPage() {
       </div>
 
       <NouvelleExtractionModal
+        apiBase={apiBase}
         open={showModal}
         onClose={() => setShowModal(false)}
         onCreated={() => {

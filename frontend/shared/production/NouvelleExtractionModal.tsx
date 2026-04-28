@@ -50,12 +50,13 @@ function toYMD(iso: string): string {
 }
 
 interface Props {
+  apiBase: string  // ex: '/api/vendeur' ou '/api/adm'
   open: boolean
   onClose: () => void
   onCreated: (idJob: string) => void
 }
 
-export default function NouvelleExtractionModal({ open, onClose, onCreated }: Props) {
+export default function NouvelleExtractionModal({ apiBase, open, onClose, onCreated }: Props) {
   const stored = getStoredUser()
   const today = new Date().toISOString().slice(0, 10)
 
@@ -92,7 +93,7 @@ export default function NouvelleExtractionModal({ open, onClose, onCreated }: Pr
   useEffect(() => {
     if (!open) return
     const h = { Authorization: `Bearer ${getToken()}` }
-    fetch('/api/vendeur/production/partenaires', { headers: h })
+    fetch(`${apiBase}/production/partenaires`, { headers: h })
       .then((r) => r.json())
       .then((d) => {
         setPartenaires(Array.isArray(d) ? d : [])
@@ -104,7 +105,7 @@ export default function NouvelleExtractionModal({ open, onClose, onCreated }: Pr
         )
         setSelectedParts(active)
       })
-    fetch('/api/vendeur/production/etats', { headers: h })
+    fetch(`${apiBase}/production/etats`, { headers: h })
       .then((r) => r.json())
       .then((d) => setTypesEtat(Array.isArray(d) ? d : []))
   }, [open])
@@ -143,7 +144,7 @@ export default function NouvelleExtractionModal({ open, onClose, onCreated }: Pr
         prod_groupe: scope === 1 ? prodGroupe : false,
         id_organigramme: scope === 2 ? orga!.id_organigramme : '0',
       }
-      const res = await fetch('/api/vendeur/production/jobs', {
+      const res = await fetch(`${apiBase}/production/jobs`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -416,6 +417,7 @@ export default function NouvelleExtractionModal({ open, onClose, onCreated }: Pr
 
       {showVendeurPicker && (
         <VendeurPicker
+          apiBase={apiBase}
           onClose={() => setShowVendeurPicker(false)}
           onSelect={(v) => {
             setVendeur(v)
@@ -425,6 +427,7 @@ export default function NouvelleExtractionModal({ open, onClose, onCreated }: Pr
       )}
       {showOrgaPicker && (
         <OrgaPicker
+          apiBase={apiBase}
           onClose={() => setShowOrgaPicker(false)}
           onSelect={(o) => {
             setOrga(o)
@@ -439,9 +442,11 @@ export default function NouvelleExtractionModal({ open, onClose, onCreated }: Pr
 // ---- Sub-components ----
 
 function VendeurPicker({
+  apiBase,
   onClose,
   onSelect,
 }: {
+  apiBase: string
   onClose: () => void
   onSelect: (v: SalarieItem) => void
 }) {
@@ -452,7 +457,7 @@ function VendeurPicker({
   const doSearch = () => {
     if (!q.trim()) return
     setLoading(true)
-    fetch(`/api/vendeur/cooptation/vendeurs?q=${encodeURIComponent(q.trim())}`, {
+    fetch(`${apiBase}/production/vendeurs?q=${encodeURIComponent(q.trim())}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.json())
@@ -524,9 +529,11 @@ function VendeurPicker({
 }
 
 function OrgaPicker({
+  apiBase,
   onClose,
   onSelect,
 }: {
+  apiBase: string
   onClose: () => void
   onSelect: (o: OrgaItem) => void
 }) {
@@ -537,7 +544,7 @@ function OrgaPicker({
   const doSearch = () => {
     if (q.trim().length < 2) return
     setLoading(true)
-    fetch(`/api/vendeur/production/organigrammes?q=${encodeURIComponent(q.trim())}`, {
+    fetch(`${apiBase}/production/organigrammes?q=${encodeURIComponent(q.trim())}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.json())

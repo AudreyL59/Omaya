@@ -8,8 +8,10 @@ import AgendaCialPage from '@/pages/AgendaCialPage'
 import CvthequePage from '@/pages/CvthequePage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
 import ClustersPage from '@/pages/ClustersPage'
-import ProductionPage from '@/pages/ProductionPage'
-import ProductionDetailPage from '@/pages/ProductionDetailPage'
+import ProductionPage from '@shared/production/ProductionPage'
+import ProductionDetailPage from '@shared/production/ProductionDetailPage'
+
+const PRODUCTION_API = '/api/vendeur'
 import PlaceholderPage from '@/pages/PlaceholderPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -41,8 +43,8 @@ function App() {
           <Route path="organigramme" element={<OrganigrammePage />} />
           <Route path="gestion-ohm" element={<PlaceholderPage />} />
           <Route path="scool" element={<PlaceholderPage />} />
-          <Route path="production" element={<ProductionPage />} />
-          <Route path="production/jobs/:id" element={<ProductionDetailPage />} />
+          <Route path="production" element={<ProductionPage apiBase={PRODUCTION_API} />} />
+          <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={PRODUCTION_API} />} />
           <Route path="clusters" element={<ClustersPage />} />
           <Route path="tickets" element={<PlaceholderPage />} />
           <Route path="process" element={<PlaceholderPage />} />

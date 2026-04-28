@@ -29,8 +29,8 @@ from app.core.config import (
     PRODUCTION_EXTRACTS_RETENTION_DAYS,
 )
 from app.core.database import get_connection
-from app.intranets.vendeur.services.production import _new_id, _now_windev
-from app.intranets.vendeur.services.production_extraction import (
+from app.shared.production.service import _new_id, _now_windev
+from app.shared.production.extraction import (
     extract_job_to_parquet,
 )
 

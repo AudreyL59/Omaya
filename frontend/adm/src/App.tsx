@@ -9,10 +9,13 @@ import StatRHSaisieCvPage from '@/pages/StatRHSaisieCvPage'
 import StatRHAnnonceursPage from '@/pages/StatRHAnnonceursPage'
 import AgendaRecrutementPage from '@/pages/AgendaRecrutementPage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
+import ProductionPage from '@shared/production/ProductionPage'
+import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
 const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
+const PRODUCTION_API = '/api/adm'
 
 function App() {
   return (
@@ -40,6 +43,10 @@ function App() {
           <Route path="stat-rh/annonceurs" element={<StatRHAnnonceursPage />} />
           <Route path="stat-adv" element={<PlaceholderPage />} />
           <Route path="organigramme" element={<OrganigrammePage />} />
+          <Route path="production" element={<ProductionPage apiBase={PRODUCTION_API} />} />
+          <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={PRODUCTION_API} />} />
+          {/* Fallback : toute route inconnue dans le shell auth → Placeholder */}
+          <Route path="*" element={<PlaceholderPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

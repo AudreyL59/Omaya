@@ -11,7 +11,7 @@ from app.intranets.vendeur.routers.cvtheque import router as cvtheque_router
 from app.intranets.vendeur.routers.organigramme import router as organigramme_router
 from app.intranets.vendeur.routers.gestion_ohm import router as gestion_ohm_router
 from app.intranets.vendeur.routers.scool import router as scool_router
-from app.intranets.vendeur.routers.production import router as production_router
+from app.shared.production.router import router as production_router
 from app.intranets.vendeur.routers.clusters import router as clusters_router
 from app.intranets.vendeur.routers.tickets import router as tickets_router
 from app.intranets.vendeur.routers.process import router as process_router

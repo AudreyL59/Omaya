@@ -232,6 +232,18 @@ function shortMonth(raw: string | undefined | null): string {
   return String(raw)
 }
 
+// Libellés SFR_contrat.TypeVente
+const TYPE_VENTE_LABELS: Record<number, string> = {
+  1: 'Conquête',
+  2: 'Conquête VLA',
+  3: 'Migration',
+  4: 'Migration FTTB -> FTTH',
+}
+function typeVenteLabel(v: number | undefined | null): string {
+  if (!v) return ''
+  return TYPE_VENTE_LABELS[v] || String(v)
+}
+
 // ConsoGaz calculée depuis Car (cf. WinDev StatsENI / StatsOEN)
 function consoGaz(car: number): string {
   if (!car) return ''
@@ -372,7 +384,7 @@ const COLUMNS: ColDef[] = [
   { key: 'lib_produit', label: 'Produit', render: (r) => r.lib_produit },
   { key: 'type_prod', label: 'Type Prod', render: (r) => r.type_prod },
   { key: 'sfr_type_vente', label: 'Type vente', onlyIfPartenaire: ['SFR'],
-    render: (r) => r.partenaire === 'SFR' ? String(r.sfr_type_vente || '') : '' },
+    render: (r) => r.partenaire === 'SFR' ? typeVenteLabel(r.sfr_type_vente) : '' },
   { key: 'date_signature', label: 'Date Signature', align: 'left',
     render: (r) => <span className="tabular-nums">{shortDate(r.date_signature)}</span> },
   { key: 'sfr_date_rdv_tech', label: 'Date RDV Tech', onlyIfPartenaire: ['SFR'],
@@ -507,7 +519,12 @@ const COLUMNS: ColDef[] = [
 
 // --- Page --------------------------------------------------------
 
-export default function ProductionDetailPage() {
+interface ProductionDetailPageProps {
+  apiBase: string  // ex: '/api/vendeur' ou '/api/adm'
+  listBase?: string  // route de la liste, ex: '/production'
+}
+
+export default function ProductionDetailPage({ apiBase, listBase = '/production' }: ProductionDetailPageProps) {
   const { id: idJob } = useParams<{ id: string }>()
   const [job, setJob] = useState<ProductionJob | null>(null)
   const [stats, setStats] = useState<JobStats | null>(null)
@@ -516,18 +533,18 @@ export default function ProductionDetailPage() {
   useEffect(() => {
     if (!idJob) return
     const headers = { Authorization: `Bearer ${getToken()}` }
-    fetch(`/api/vendeur/production/jobs/${idJob}`, { headers })
+    fetch(`${apiBase}/production/jobs/${idJob}`, { headers })
       .then((r) => r.json())
       .then(setJob)
       .catch(() => {})
-    fetch(`/api/vendeur/production/jobs/${idJob}/stats`, { headers })
+    fetch(`${apiBase}/production/jobs/${idJob}/stats`, { headers })
       .then((r) => r.json())
       .then(setStats)
       .catch(() => {})
   }, [idJob])
 
   const downloadCsv = async () => {
-    const r = await fetch(`/api/vendeur/production/jobs/${idJob}/export.csv`, {
+    const r = await fetch(`${apiBase}/production/jobs/${idJob}/export.csv`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
     const blob = await r.blob()
@@ -553,7 +570,7 @@ export default function ProductionDetailPage() {
       >
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            to="/production"
+            to={listBase}
             className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -608,7 +625,7 @@ export default function ProductionDetailPage() {
 
       <div className="mt-5">
         {tab === 'contrats' && (
-          <ContratsTable idJob={idJob!} partenairesPresents={partenairesPresents} />
+          <ContratsTable apiBase={apiBase} idJob={idJob!} partenairesPresents={partenairesPresents} />
         )}
         {tab === 'analyse' && <AnalyseDashboard stats={stats} partenairesPresents={partenairesPresents} />}
         {tab === 'repart' && <RepartTable stats={stats} />}
@@ -639,9 +656,11 @@ function TabButton({
 // --- Onglet Contrats ---------------------------------------------
 
 function ContratsTable({
+  apiBase,
   idJob,
   partenairesPresents,
 }: {
+  apiBase: string
   idJob: string
   partenairesPresents: Set<string>
 }) {
@@ -675,7 +694,7 @@ function ContratsTable({
     if (clientFilter) params.set('client', clientFilter)
     if (numBsFilter) params.set('num_bs', numBsFilter)
     if (typeProdFilter) params.set('type_prod', typeProdFilter)
-    fetch(`/api/vendeur/production/jobs/${idJob}/contrats?${params}`, {
+    fetch(`${apiBase}/production/jobs/${idJob}/contrats?${params}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.json())
@@ -1173,7 +1192,6 @@ function AnalyseDashboard({
 interface HoraireSignRow {
   h: string
   ventes: number
-  tickets: number
 }
 
 function DashboardSFR({ d }: { d: any }) {
@@ -1291,7 +1309,7 @@ function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
     const out: HoraireSignRow[] = []
     for (let h = hMin; h <= hMax; h++) {
       const key = String(h).padStart(2, '0')
-      out.push(byH[key] ?? { h: key, ventes: 0, tickets: 0 })
+      out.push(byH[key] ?? { h: key, ventes: 0 })
     }
     return out
   }, [data])
@@ -1301,8 +1319,7 @@ function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
   if (!filled.length) return null
 
   const totalVentes = filled.reduce((s, r) => s + r.ventes, 0)
-  const totalTickets = filled.reduce((s, r) => s + r.tickets, 0)
-  const maxY = Math.max(1, ...filled.map((r) => Math.max(r.ventes, r.tickets)))
+  const maxY = Math.max(1, ...filled.map((r) => r.ventes))
 
   // Dimensions SVG (viewBox fixe, CSS responsive)
   const W = 900
@@ -1321,24 +1338,18 @@ function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
     y: padT + innerH - t * innerH,
   }))
 
-  const path = (key: 'ventes' | 'tickets') =>
-    filled
-      .map((r, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(r[key]).toFixed(1)}`)
-      .join(' ')
+  const ventesPath = filled
+    .map((r, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(r.ventes).toFixed(1)}`)
+    .join(' ')
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
-      {/* Légende + totaux */}
+      {/* Légende + total */}
       <div className="flex items-center gap-6 mb-3 text-xs">
         <div className="flex items-center gap-2">
           <span className="inline-block w-3 h-3 rounded-full bg-sky-500"></span>
           <span className="text-gray-700">Ventes finalisées</span>
           <span className="text-gray-400 tabular-nums">({totalVentes})</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-3 h-3 rounded-full bg-amber-500"></span>
-          <span className="text-gray-700">Tickets générés</span>
-          <span className="text-gray-400 tabular-nums">({totalTickets})</span>
         </div>
       </div>
 
@@ -1367,16 +1378,17 @@ function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
             >{`${r.h}h`}</text>
           ))}
 
-          {/* Courbes */}
-          <path d={path('ventes')} fill="none" stroke="#0ea5e9" strokeWidth="2" />
-          <path d={path('tickets')} fill="none" stroke="#f59e0b" strokeWidth="2" />
+          {/* Courbe ventes */}
+          <path d={ventesPath} fill="none" stroke="#0ea5e9" strokeWidth="2" />
 
           {/* Points */}
           {filled.map((r, i) => (
-            <g key={`p-${r.h}`}>
-              <circle cx={x(i)} cy={y(r.ventes)} r={hover === i ? 5 : 3} fill="#0ea5e9" />
-              <circle cx={x(i)} cy={y(r.tickets)} r={hover === i ? 5 : 3} fill="#f59e0b" />
-            </g>
+            <circle
+              key={`p-${r.h}`}
+              cx={x(i)} cy={y(r.ventes)}
+              r={hover === i ? 5 : 3}
+              fill="#0ea5e9"
+            />
           ))}
 
           {/* Zone de détection hover (colonnes invisibles) */}
@@ -1418,11 +1430,6 @@ function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
               <span className="inline-block w-2 h-2 rounded-full bg-sky-500"></span>
               <span className="text-gray-500">Ventes :</span>
               <span className="tabular-nums text-gray-900">{filled[hover].ventes}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
-              <span className="text-gray-500">Tickets :</span>
-              <span className="tabular-nums text-gray-900">{filled[hover].tickets}</span>
             </div>
           </div>
         )}

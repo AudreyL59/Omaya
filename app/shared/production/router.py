@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
-from app.intranets.vendeur.schemas.production import (
+from app.shared.production.schemas import (
     ContratPage,
     JobStats,
     PartenaireItem,
@@ -27,7 +27,7 @@ from app.intranets.vendeur.schemas.production import (
     ProductionJobCreate,
     TypeEtatItem,
 )
-from app.intranets.vendeur.services.production import (
+from app.shared.production.service import (
     create_job,
     delete_job,
     get_job,
@@ -36,12 +36,14 @@ from app.intranets.vendeur.services.production import (
     list_types_etat,
     search_organigrammes,
 )
-from app.intranets.vendeur.services.production_extraction import (
+from app.shared.production.extraction import (
+    EXPORT_COLUMNS,
+    csv_value,
     read_contrats_page,
     read_job_stats,
 )
 
-router = APIRouter(prefix="/production", tags=["vendeur-production"])
+router = APIRouter(prefix="/production", tags=["production"])
 
 
 # ---------------------------------------------------------------
@@ -64,6 +66,18 @@ def get_etats(user: UserToken = Depends(get_current_user)):
 def get_organigrammes(q: str = "", user: UserToken = Depends(get_current_user)):
     """Recherche d'orgas par libellé (picker Équipe)."""
     return search_organigrammes(q)
+
+
+@router.get("/vendeurs")
+def get_vendeurs(q: str = "", user: UserToken = Depends(get_current_user)):
+    """Recherche de salariés vendeurs (picker Vendeur). Mêmes règles d'accès
+    que la cooptation (acces_global via ProdRezo, scope équipe via is_resp)."""
+    from app.intranets.vendeur.services.cooptation import rechercher_vendeurs
+    acces_global = "ProdRezo" in user.droits
+    is_resp = user.is_resp or "ProdGR" in user.droits
+    return rechercher_vendeurs(
+        user.id_salarie, q, acces_global=acces_global, is_resp=is_resp,
+    )
 
 
 # ---------------------------------------------------------------
@@ -202,11 +216,10 @@ def get_export_csv(
     def gen():
         buf = io.StringIO()
         buf.write("﻿")  # BOM UTF-8 pour Excel FR
-        if rows:
-            writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()), delimiter=";")
-            writer.writeheader()
-            for r in rows:
-                writer.writerow(r)
+        writer = csv.writer(buf, delimiter=";")
+        writer.writerow([lbl for _, lbl in EXPORT_COLUMNS])
+        for r in rows:
+            writer.writerow([csv_value(r, k) for k, _ in EXPORT_COLUMNS])
         yield buf.getvalue().encode("utf-8")
 
     filename = f"production-job-{id_job}.csv"
