@@ -5,16 +5,36 @@ export interface MenuItem {
   key: string
   label: string
   route: string
+  icon: string
   visible: boolean
+  coded?: boolean   // page cible implémentée côté frontend (Route explicite)
+}
+
+export interface MenuSection {
+  key: string
+  label: string
+  items: MenuItem[]
+}
+
+export interface HeaderAction {
+  key: string
+  label: string
+  route: string
+  icon: string
+  visible: boolean
+  coded?: boolean
+  badge?: number
 }
 
 interface MenuResponse {
   menu_visible: boolean
-  items: MenuItem[]
+  header_actions: HeaderAction[]
+  sections: MenuSection[]
 }
 
 export function useMenu() {
-  const [items, setItems] = useState<MenuItem[]>([])
+  const [headerActions, setHeaderActions] = useState<HeaderAction[]>([])
+  const [sections, setSections] = useState<MenuSection[]>([])
   const [menuVisible, setMenuVisible] = useState(true)
   const [loading, setLoading] = useState(true)
 
@@ -31,11 +51,16 @@ export function useMenu() {
       .then((res) => res.json())
       .then((data: MenuResponse) => {
         setMenuVisible(data.menu_visible)
-        setItems(data.items.filter((item) => item.visible))
+        setHeaderActions((data.header_actions || []).filter((a) => a.visible))
+        setSections(
+          (data.sections || [])
+            .map((s) => ({ ...s, items: s.items.filter((i) => i.visible) }))
+            .filter((s) => s.items.length > 0),
+        )
       })
-      .catch(() => setItems([]))
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  return { items, menuVisible, loading }
+  return { headerActions, sections, menuVisible, loading }
 }

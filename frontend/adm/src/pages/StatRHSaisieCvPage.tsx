@@ -138,21 +138,21 @@ export default function StatRHSaisieCvPage() {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <button
           onClick={() => navigate('/stat-rh')}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-3"
+          className="flex items-center gap-1.5 text-sm text-[#A68D8A] hover:text-[#4E1D17] mb-3"
         >
           <ChevronLeft className="w-4 h-4" />
           Retour Stats RH
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-[#4E1D17]">
           Saisie &amp; traitement des CV
         </h1>
-        <p className="text-gray-500 mt-1">
+        <p className="text-[#A68D8A] mt-1">
           Volumetrie des CV saisis et traites sur la periode.
         </p>
       </motion.div>
 
       {/* Filtres */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mt-6 flex flex-wrap items-center gap-3">
+      <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-4 mt-6 flex flex-wrap items-center gap-3">
         {hasDroitGr && (
           <Toggle
             value={typeRecherche}
@@ -172,7 +172,7 @@ export default function StatRHSaisieCvPage() {
           />
         )}
 
-        <div className="h-6 w-px bg-gray-200" />
+        <div className="h-6 w-px bg-[#E5DDDC]" />
 
         <DateField label="Du" value={dateDu} onChange={setDateDu} />
         <DateField label="Au" value={dateAu} onChange={setDateAu} />
@@ -182,7 +182,7 @@ export default function StatRHSaisieCvPage() {
         <button
           onClick={runCalcul}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90 disabled:opacity-50 shadow-sm"
         >
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -195,14 +195,14 @@ export default function StatRHSaisieCvPage() {
 
       {/* Erreur */}
       {error && (
-        <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm">
+        <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-[#993636] px-4 py-2.5 rounded-lg text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
 
       {/* Onglets */}
-      <div className="mt-4 border-b border-gray-200 flex gap-1">
+      <div className="mt-4 border-b border-[#E5DDDC] flex gap-1">
         <TabButton
           active={tab === 'resume'}
           onClick={() => setTab('resume')}
@@ -303,15 +303,15 @@ function Toggle<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
+    <div className="inline-flex bg-[#EFE9E7] rounded-lg p-0.5">
       {options.map((o) => (
         <button
           key={o.v}
           onClick={() => onChange(o.v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
             value === o.v
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-white text-[#17494E] shadow-sm'
+              : 'text-[#A68D8A] hover:text-[#4E1D17]'
           }`}
         >
           {o.icon}
@@ -336,14 +336,14 @@ function DateField({
       ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
       : value
   return (
-    <label className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-      <CalendarIcon className="w-4 h-4 text-gray-400" />
-      <span className="text-gray-500">{label}</span>
+    <label className="flex items-center gap-2 px-3 py-1.5 border border-[#E5DDDC] rounded-lg text-sm">
+      <CalendarIcon className="w-4 h-4 text-[#A68D8A]/80" />
+      <span className="text-[#A68D8A]">{label}</span>
       <input
         type="date"
         value={inputValue}
         onChange={(e) => onChange(e.target.value.replace(/-/g, ''))}
-        className="outline-none bg-transparent font-medium text-gray-900 w-32"
+        className="outline-none bg-transparent font-medium text-[#4E1D17] w-32"
       />
     </label>
   )
@@ -363,8 +363,8 @@ function TabButton({
       onClick={onClick}
       className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
         active
-          ? 'border-gray-900 text-gray-900'
-          : 'border-transparent text-gray-500 hover:text-gray-700'
+          ? 'border-[#17494E] text-[#4E1D17]'
+          : 'border-transparent text-[#A68D8A] hover:text-[#4E1D17]'
       }`}
     >
       {label}
@@ -407,23 +407,23 @@ function ResumeTable({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <table className="w-full text-sm">
-        <thead className="bg-white border-b border-gray-200">
+        <thead className="bg-white border-b border-[#E5DDDC]">
           <tr>
-            <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+            <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
               Operateur
             </th>
             <th className="text-right py-2 px-3 text-xs font-medium text-blue-600 uppercase">
               CV Saisis
             </th>
-            <th className="text-right py-2 px-3 text-xs font-medium text-emerald-600 uppercase">
+            <th className="text-right py-2 px-3 text-xs font-medium text-[#17494E] uppercase">
               CV Traites
             </th>
-            <th className="w-12 py-2 px-2 text-xs font-medium text-gray-500 uppercase text-center">
+            <th className="w-12 py-2 px-2 text-xs font-medium text-[#A68D8A] uppercase text-center">
               Detail
             </th>
           </tr>
@@ -432,35 +432,35 @@ function ResumeTable({
           {rows.map((r) => (
             <tr
               key={r.id_ope}
-              className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
+              className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]"
             >
-              <td className="py-2 px-3 font-medium text-gray-900">{r.nom}</td>
+              <td className="py-2 px-3 font-medium text-[#4E1D17]">{r.nom}</td>
               <td className="py-2 px-3 text-right tabular-nums text-blue-700">
                 {r.nb_cv_saisis}
               </td>
-              <td className="py-2 px-3 text-right tabular-nums text-emerald-700">
+              <td className="py-2 px-3 text-right tabular-nums text-[#17494E]">
                 {r.nb_cv_traites}
               </td>
               <td className="py-1 px-2 text-center">
                 <button
                   onClick={() => onDetail(r)}
                   title={`Detail ${r.nom}`}
-                  className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200 transition-colors"
+                  className="p-1.5 rounded-md text-[#A68D8A]/80 hover:text-[#4E1D17] hover:bg-white border border-transparent hover:border-[#E5DDDC] transition-colors"
                 >
                   <Eye className="w-3.5 h-3.5" />
                 </button>
               </td>
             </tr>
           ))}
-          <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
-            <td className="py-2 px-3 text-gray-900">TOTAL</td>
+          <tr className="bg-white font-semibold border-t-2 border-[#E5DDDC]">
+            <td className="py-2 px-3 text-[#4E1D17]">TOTAL</td>
             <td className="py-2 px-3 text-right tabular-nums">{total.saisis}</td>
             <td className="py-2 px-3 text-right tabular-nums">{total.traites}</td>
             <td className="py-1 px-2 text-center">
               <button
                 onClick={onDetailTotal}
                 title="Detail Total"
-                className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200 transition-colors"
+                className="p-1.5 rounded-md text-[#A68D8A]/80 hover:text-[#4E1D17] hover:bg-white border border-transparent hover:border-[#E5DDDC] transition-colors"
               >
                 <Eye className="w-3.5 h-3.5" />
               </button>
@@ -512,36 +512,36 @@ function SaisisTable({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <div className="overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+          <thead className="bg-white border-b border-[#E5DDDC] sticky top-0">
             <tr>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap min-w-[160px]">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase whitespace-nowrap min-w-[160px]">
                 Ope saisie
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase whitespace-nowrap">
                 Date saisie
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Candidat
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Commune
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Tel
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Statut actuel
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Source
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Annonceur/Coopteur
               </th>
             </tr>
@@ -550,10 +550,10 @@ function SaisisTable({
             {rows.map((r, i) => (
               <tr
                 key={`${r.id_cvtheque}-${i}`}
-                className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
+                className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]"
               >
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{r.ope_nom}</td>
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">{r.ope_nom}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">
                   {csvDate(r.date_traitement)}
                   {r.est_reactivation && (
                     <RotateCw
@@ -562,14 +562,14 @@ function SaisisTable({
                     />
                   )}
                 </td>
-                <td className="py-2 px-3 font-medium text-gray-900 truncate max-w-xs">
+                <td className="py-2 px-3 font-medium text-[#4E1D17] truncate max-w-xs">
                   {r.nom_prenom}
                 </td>
-                <td className="py-2 px-3 text-gray-600 truncate max-w-xs">{r.commune}</td>
-                <td className="py-2 px-3 text-gray-600">{r.tel}</td>
-                <td className="py-2 px-3 text-gray-600">{r.statut_actuel || '—'}</td>
-                <td className="py-2 px-3 text-gray-600">{r.lib_source}</td>
-                <td className="py-2 px-3 text-gray-600 truncate max-w-xs">
+                <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">{r.commune}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.tel}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.statut_actuel || '—'}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.lib_source}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">
                   {r.annonceur_coopteur || '—'}
                 </td>
               </tr>
@@ -617,33 +617,33 @@ function TraitesTable({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <div className="overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+          <thead className="bg-white border-b border-[#E5DDDC] sticky top-0">
             <tr>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap min-w-[160px]">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase whitespace-nowrap min-w-[160px]">
                 Ope traitement
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase whitespace-nowrap">
                 Date traitement
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Candidat
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Commune
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Tel
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Statut actuel
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                 Date saisie
               </th>
             </tr>
@@ -652,19 +652,19 @@ function TraitesTable({
             {rows.map((r, i) => (
               <tr
                 key={`${r.id_cvtheque}-${i}`}
-                className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
+                className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]"
               >
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{r.ope_nom}</td>
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">{r.ope_nom}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">
                   {csvDate(r.date_traitement)}
                 </td>
-                <td className="py-2 px-3 font-medium text-gray-900 truncate max-w-xs">
+                <td className="py-2 px-3 font-medium text-[#4E1D17] truncate max-w-xs">
                   {r.nom_prenom}
                 </td>
-                <td className="py-2 px-3 text-gray-600 truncate max-w-xs">{r.commune}</td>
-                <td className="py-2 px-3 text-gray-600">{r.tel}</td>
-                <td className="py-2 px-3 text-gray-600">{r.statut_actuel || '—'}</td>
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">
+                <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">{r.commune}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.tel}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.statut_actuel || '—'}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">
                   {csvDate(r.date_saisie)}
                 </td>
               </tr>
@@ -678,15 +678,15 @@ function TraitesTable({
 
 function TableLoader() {
   return (
-    <div className="flex items-center justify-center py-20 bg-white rounded-xl border border-gray-200">
-      <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+    <div className="flex items-center justify-center py-20 bg-white rounded-[10px] border border-[#E5DDDC]">
+      <Loader2 className="w-6 h-6 text-[#E5DDDC] animate-spin" />
     </div>
   )
 }
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="text-center py-20 text-gray-400 text-sm italic bg-white rounded-xl border border-gray-200">
+    <div className="text-center py-20 text-[#A68D8A]/80 text-sm italic bg-white rounded-[10px] border border-[#E5DDDC]">
       {label}
     </div>
   )

@@ -276,8 +276,8 @@ export default function OrganigrammePage() {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Organigramme</h1>
-            <p className="text-gray-500 mt-1">
+            <h1 className="text-2xl font-bold text-[#4E1D17]">Organigramme</h1>
+            <p className="text-[#A68D8A] mt-1">
               {stats.total} salariés · {stats.orgas} organisations
             </p>
           </div>
@@ -285,47 +285,47 @@ export default function OrganigrammePage() {
       </motion.div>
 
       {/* Toolbar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-3 mt-6 flex items-center gap-3 flex-wrap">
+      <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-3 mt-6 flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-64 max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#A68D8A]/80 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Rechercher un salarié ou une orga..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300"
+            className="w-full pl-9 pr-3 py-2 border border-[#E5DDDC] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#E5DDDC]"
           />
         </div>
 
-        <div className="h-6 w-px bg-gray-200" />
-        <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-1">
+        <div className="h-6 w-px bg-[#E5DDDC]" />
+        <div className="flex items-center gap-1 bg-white rounded-lg p-1">
           <button
             onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}
-            className="p-1.5 rounded-md hover:bg-white text-gray-600"
+            className="p-1.5 rounded-md hover:bg-white text-[#4E1D17]/80"
             title="Zoom out"
           >
             <ZoomOut className="w-4 h-4" />
           </button>
-          <div className="text-xs font-medium text-gray-600 w-12 text-center tabular-nums">
+          <div className="text-xs font-medium text-[#4E1D17]/80 w-12 text-center tabular-nums">
             {Math.round(zoom * 100)}%
           </div>
           <button
             onClick={() => setZoom((z) => Math.min(1.5, z + 0.1))}
-            className="p-1.5 rounded-md hover:bg-white text-gray-600"
+            className="p-1.5 rounded-md hover:bg-white text-[#4E1D17]/80"
             title="Zoom in"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
           <button
             onClick={() => setZoom(1)}
-            className="p-1.5 rounded-md hover:bg-white text-gray-600"
+            className="p-1.5 rounded-md hover:bg-white text-[#4E1D17]/80"
             title="Reset"
           >
             <Maximize2 className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-gray-500 ml-auto">
+        <div className="flex items-center gap-3 text-xs text-[#A68D8A] ml-auto">
           <LegendItem color="bg-gradient-to-r from-gray-900 to-gray-700" label="Société" />
           <LegendItem color="bg-gradient-to-r from-indigo-600 to-blue-600" label="Région" />
           <LegendItem color="bg-gradient-to-r from-emerald-500 to-teal-500" label="Agence" />
@@ -336,7 +336,7 @@ export default function OrganigrammePage() {
       {/* Sélecteur de racine (si plus d'une racine) */}
       {roots.length > 1 && (
         <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">
+          <span className="text-xs text-[#A68D8A] uppercase tracking-wide font-medium">
             Racine :
           </span>
           {roots.map((r) => (
@@ -345,8 +345,8 @@ export default function OrganigrammePage() {
               onClick={() => setSelectedRootId(r.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                 selectedRootId === r.id
-                  ? 'bg-gray-900 text-white shadow-sm'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  ? 'bg-[#17494E] text-white shadow-sm'
+                  : 'bg-white text-[#4E1D17]/80 border border-[#E5DDDC] hover:bg-[#EFE9E7]'
               }`}
             >
               {r.lib}
@@ -358,7 +358,7 @@ export default function OrganigrammePage() {
       {/* Dashboard stats */}
       {selectedRoot && (
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          <StatCard label="Effectif" value={stats.total} accent="text-gray-900" />
+          <StatCard label="Effectif" value={stats.total} accent="text-[#4E1D17]" />
           <StatCard
             label="Dir Agence"
             value={stats.dir_agence}
@@ -377,21 +377,21 @@ export default function OrganigrammePage() {
                 key={cat}
                 label={cat}
                 value={n}
-                accent="text-emerald-600"
+                accent="text-[#17494E]"
               />
             ))}
         </div>
       )}
 
       {/* Canvas */}
-      <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-slate-50 rounded-xl border border-gray-200 mt-4 overflow-hidden relative">
+      <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-slate-50 rounded-[10px] border border-[#E5DDDC] mt-4 overflow-hidden relative">
         <div className="h-full overflow-auto relative">
           {loading ? (
             <div className="flex items-center justify-center py-24">
-              <Loader2 className="w-8 h-8 text-gray-300 animate-spin" />
+              <Loader2 className="w-8 h-8 text-[#E5DDDC] animate-spin" />
             </div>
           ) : roots.length === 0 ? (
-            <div className="text-center py-24 text-gray-400 text-sm italic">
+            <div className="text-center py-24 text-[#A68D8A]/80 text-sm italic">
               Aucune organisation accessible
             </div>
           ) : selectedRoot ? (
@@ -436,9 +436,9 @@ function StatCard({
   accent: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-4 py-2.5">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] px-4 py-2.5">
       <div className={`text-xl font-bold tabular-nums ${accent}`}>{value}</div>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5 truncate">
+      <div className="text-[10px] text-[#A68D8A] uppercase tracking-wide mt-0.5 truncate">
         {label}
       </div>
     </div>
@@ -495,17 +495,17 @@ function OrgaTree({
 
       {hasChildren && !isCollapsed && (
         <>
-          <div className="w-px h-6 bg-gray-300" />
+          <div className="w-px h-6 bg-[#E5DDDC]" />
           <div className="relative flex items-start gap-6">
             {node.children.length > 1 && (
               <div
-                className="absolute top-0 h-px bg-gray-300"
+                className="absolute top-0 h-px bg-[#E5DDDC]"
                 style={{ left: '10%', right: '10%' }}
               />
             )}
             {node.children.map((child) => (
               <div key={child.id} className="flex flex-col items-center">
-                <div className="w-px h-6 bg-gray-300" />
+                <div className="w-px h-6 bg-[#E5DDDC]" />
                 <OrgaTree
                   node={child}
                   depth={depth + 1}
@@ -604,10 +604,10 @@ function OrgaCard({
         {/* Compteur + avatar stack */}
         {(others.length > 0 || nbTotal > node.salaries.length) && (
           <div className="flex items-center justify-between">
-            <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">
+            <div className="text-[10px] font-medium text-[#A68D8A] uppercase tracking-wide">
               {node.salaries.length} direct
               {nbTotal > node.salaries.length && (
-                <span className="text-gray-400"> · {nbTotal} total</span>
+                <span className="text-[#A68D8A]/80"> · {nbTotal} total</span>
               )}
             </div>
             <AvatarStack people={others} max={4} />
@@ -616,7 +616,7 @@ function OrgaCard({
 
         {/* Liste des salariés (hors manager) */}
         {others.length > 0 && (
-          <div className="space-y-1 border-t border-gray-100 pt-2">
+          <div className="space-y-1 border-t border-[#E5DDDC] pt-2">
             {visible.map((s) => (
               <SalarieRow
                 key={s.id_salarie}
@@ -631,7 +631,7 @@ function OrgaCard({
                   e.stopPropagation()
                   setShowAll((v) => !v)
                 }}
-                className="w-full text-center text-[10px] font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-50 rounded py-1 mt-1 transition-colors"
+                className="w-full text-center text-[10px] font-medium text-[#A68D8A] hover:text-[#4E1D17] hover:bg-[#EFE9E7] rounded py-1 mt-1 transition-colors"
               >
                 {showAll
                   ? '− Réduire'
@@ -671,7 +671,7 @@ function SalarieRow({
           ? 'bg-yellow-50 ring-1 ring-yellow-300'
           : featured
             ? 'bg-gradient-to-r from-gray-50 to-transparent hover:from-gray-100'
-            : 'hover:bg-gray-50'
+            : 'hover:bg-[#EFE9E7]'
       }`}
     >
       <div
@@ -683,13 +683,13 @@ function SalarieRow({
         <div className="flex items-center gap-1 flex-wrap">
           <span
             className={`${featured ? 'text-sm' : 'text-xs'} font-semibold truncate ${
-              nonProd ? 'text-red-600' : 'text-gray-900'
+              nonProd ? 'text-[#993636]' : 'text-[#4E1D17]'
             }`}
             title={nonProd ? 'Vendeur non productif' : undefined}
           >
             {s.nom}{' '}
             <span
-              className={`font-normal ${nonProd ? 'text-red-500' : 'text-gray-700'}`}
+              className={`font-normal ${nonProd ? 'text-red-500' : 'text-[#4E1D17]'}`}
             >
               {s.prenom.charAt(0).toUpperCase() + s.prenom.slice(1).toLowerCase()}
             </span>
@@ -709,11 +709,11 @@ function SalarieRow({
             </span>
           )}
         </div>
-        <div className={`${featured ? 'text-xs' : 'text-[10px]'} text-gray-500 truncate`}>
+        <div className={`${featured ? 'text-xs' : 'text-[10px]'} text-[#A68D8A] truncate`}>
           {s.poste || '—'}
         </div>
         {/* Ancienneté / productivité */}
-        <div className="text-[10px] text-gray-400 truncate">
+        <div className="text-[10px] text-[#A68D8A]/80 truncate">
           {s.date_dernier_ctt ? (
             <span>Dernier ctt : {formatShortDate(s.date_dernier_ctt)}</span>
           ) : s.anciennete_jours !== undefined && s.anciennete_jours > 0 ? (
@@ -734,7 +734,7 @@ function SalarieRow({
               <MiniBadge
                 icon={<UserX className="w-3 h-3" />}
                 title={s.absence_lib || 'Absent'}
-                color="bg-red-100 text-red-700 border-red-200"
+                color="bg-red-100 text-[#993636] border-red-200"
               />
             )}
             {s.en_pause && (
@@ -762,7 +762,7 @@ function SalarieRow({
               <MiniBadge
                 icon={<Scale className="w-3 h-3" />}
                 title="Casier judiciaire envoyé"
-                color="bg-emerald-100 text-emerald-700 border-emerald-200"
+                color="bg-emerald-100 text-[#17494E] border-[#17494E]/25"
               />
             )}
             {s.mutuelle_adhesion && (
@@ -813,7 +813,7 @@ function AvatarStack({ people, max }: { people: Salarie[]; max: number }) {
         </div>
       ))}
       {extra > 0 && (
-        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-gray-600 bg-gray-100 border-2 border-white shadow-sm">
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-[#4E1D17]/80 bg-[#EFE9E7] border-2 border-white shadow-sm">
           +{extra}
         </div>
       )}
@@ -842,38 +842,38 @@ function SalariePopup({
   }[] = [
     {
       label: 'Fiche Salarié',
-      icon: <IdCard className="w-4 h-4 text-gray-500" />,
+      icon: <IdCard className="w-4 h-4 text-[#A68D8A]" />,
       visible: has('FicheVend'),
       onClick: () => setShowFiche(true),
     },
     {
       label: 'Déclaratif de présence',
-      icon: <CalendarCheck className="w-4 h-4 text-gray-500" />,
+      icon: <CalendarCheck className="w-4 h-4 text-[#A68D8A]" />,
       visible: has('TkSortieRH'),
     },
     {
       label: 'Déclaratif de prod',
-      icon: <TrendingUp className="w-4 h-4 text-gray-500" />,
+      icon: <TrendingUp className="w-4 h-4 text-[#A68D8A]" />,
       visible: true,
     },
     {
       label: "Bilan d'évolution",
-      icon: <LineChart className="w-4 h-4 text-gray-500" />,
+      icon: <LineChart className="w-4 h-4 text-[#A68D8A]" />,
       visible: has('ProgEvo'),
     },
     {
       label: 'ADF',
-      icon: <FileText className="w-4 h-4 text-gray-500" />,
+      icon: <FileText className="w-4 h-4 text-[#A68D8A]" />,
       visible: has('ProgEvo'),
     },
     {
       label: 'Feuille de pointe',
-      icon: <ClipboardList className="w-4 h-4 text-gray-500" />,
+      icon: <ClipboardList className="w-4 h-4 text-[#A68D8A]" />,
       visible: true,
     },
     {
       label: 'Demander un Ctt W',
-      icon: <FileSignature className="w-4 h-4 text-gray-500" />,
+      icon: <FileSignature className="w-4 h-4 text-[#A68D8A]" />,
       visible: has('Tk_DemCttW'),
     },
   ]
@@ -896,7 +896,7 @@ function SalariePopup({
         <div className="flex items-center justify-end px-4 pt-3">
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+            className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -908,41 +908,41 @@ function SalariePopup({
             {initials(salarie.nom, salarie.prenom)}
           </div>
           <div className="mt-3 flex items-center justify-center gap-1.5">
-            <h2 className="text-lg font-bold text-gray-900">
+            <h2 className="text-lg font-bold text-[#4E1D17]">
               {salarie.nom} {salarie.prenom}
             </h2>
             {salarie.is_resp && <Crown className="w-4 h-4 text-amber-500" />}
           </div>
-          <p className="text-sm text-gray-500 mt-0.5">{salarie.poste}</p>
+          <p className="text-sm text-[#A68D8A] mt-0.5">{salarie.poste}</p>
 
           <div className="mt-5 space-y-2 text-left">
             {salarie.gsm && (
               <a
                 href={`tel:${salarie.gsm}`}
-                className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-gray-700"
+                className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-[#EFE9E7] rounded-lg text-sm text-[#4E1D17]"
               >
-                <Phone className="w-4 h-4 text-gray-400" />
+                <Phone className="w-4 h-4 text-[#A68D8A]/80" />
                 {salarie.gsm}
               </a>
             )}
             {salarie.mail && (
               <a
                 href={`mailto:${salarie.mail}`}
-                className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm text-gray-700"
+                className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-[#EFE9E7] rounded-lg text-sm text-[#4E1D17]"
               >
-                <Mail className="w-4 h-4 text-gray-400" />
+                <Mail className="w-4 h-4 text-[#A68D8A]/80" />
                 {salarie.mail}
               </a>
             )}
           </div>
 
           {visibleActions.length > 0 && (
-            <div className="mt-5 pt-4 border-t border-gray-100 grid grid-cols-2 gap-2">
+            <div className="mt-5 pt-4 border-t border-[#E5DDDC] grid grid-cols-2 gap-2">
               {visibleActions.map((a) => (
                 <button
                   key={a.label}
                   onClick={a.onClick}
-                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-xs text-gray-700 text-left transition-colors"
+                  className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-[#EFE9E7] rounded-lg text-xs text-[#4E1D17] text-left transition-colors"
                 >
                   {a.icon}
                   <span className="truncate">{a.label}</span>

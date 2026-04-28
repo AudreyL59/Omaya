@@ -125,31 +125,31 @@ export default function StatRHAnnonceursPage() {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <button
           onClick={() => navigate('/stat-rh')}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-3"
+          className="flex items-center gap-1.5 text-sm text-[#A68D8A] hover:text-[#4E1D17] mb-3"
         >
           <ChevronLeft className="w-4 h-4" />
           Retour Stats RH
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Stats RH Annonceurs</h1>
-        <p className="text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-[#4E1D17]">Stats RH Annonceurs</h1>
+        <p className="text-[#A68D8A] mt-1">
           Performance des annonceurs : CV saisis, RDV, presents, retenus, JO.
         </p>
       </motion.div>
 
       {/* Filtres */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mt-6 flex flex-wrap items-center gap-3">
+      <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-4 mt-6 flex flex-wrap items-center gap-3">
         <DateField label="Du" value={dateDu} onChange={setDateDu} />
         <DateField label="Au" value={dateAu} onChange={setDateAu} />
 
-        <div className="h-6 w-px bg-gray-200" />
+        <div className="h-6 w-px bg-[#E5DDDC]" />
 
-        <label className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-          <Megaphone className="w-4 h-4 text-gray-400" />
-          <span className="text-gray-500">Annonceur</span>
+        <label className="flex items-center gap-2 px-3 py-1.5 border border-[#E5DDDC] rounded-lg text-sm">
+          <Megaphone className="w-4 h-4 text-[#A68D8A]/80" />
+          <span className="text-[#A68D8A]">Annonceur</span>
           <select
             value={idAnnonceur}
             onChange={(e) => setIdAnnonceur(e.target.value)}
-            className="outline-none bg-transparent font-medium text-gray-900 max-w-[200px]"
+            className="outline-none bg-transparent font-medium text-[#4E1D17] max-w-[200px]"
           >
             <option value="">--- Tous ---</option>
             {annonceurs.map((a) => (
@@ -165,7 +165,7 @@ export default function StatRHAnnonceursPage() {
         <button
           onClick={runCalcul}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90 disabled:opacity-50 shadow-sm"
         >
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -177,14 +177,14 @@ export default function StatRHAnnonceursPage() {
       </div>
 
       {error && (
-        <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm">
+        <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-[#993636] px-4 py-2.5 rounded-lg text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
 
       {/* Onglets */}
-      <div className="mt-4 border-b border-gray-200 flex gap-1">
+      <div className="mt-4 border-b border-[#E5DDDC] flex gap-1">
         <TabButton active={tab === 'resume'} onClick={() => setTab('resume')} label="Resume" />
         <TabButton
           active={tab === 'saisis'}
@@ -245,14 +245,14 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
       ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
       : value
   return (
-    <label className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-      <CalendarIcon className="w-4 h-4 text-gray-400" />
-      <span className="text-gray-500">{label}</span>
+    <label className="flex items-center gap-2 px-3 py-1.5 border border-[#E5DDDC] rounded-lg text-sm">
+      <CalendarIcon className="w-4 h-4 text-[#A68D8A]/80" />
+      <span className="text-[#A68D8A]">{label}</span>
       <input
         type="date"
         value={inputValue}
         onChange={(e) => onChange(e.target.value.replace(/-/g, ''))}
-        className="outline-none bg-transparent font-medium text-gray-900 w-32"
+        className="outline-none bg-transparent font-medium text-[#4E1D17] w-32"
       />
     </label>
   )
@@ -264,8 +264,8 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
       onClick={onClick}
       className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
         active
-          ? 'border-gray-900 text-gray-900'
-          : 'border-transparent text-gray-500 hover:text-gray-700'
+          ? 'border-[#17494E] text-[#4E1D17]'
+          : 'border-transparent text-[#A68D8A] hover:text-[#4E1D17]'
       }`}
     >
       {label}
@@ -350,82 +350,82 @@ function ResumeTable({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-white border-b border-[#E5DDDC]">
             <tr>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Annonceur</th>
-              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">CV Saisis</th>
-              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">CV Traites</th>
-              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">RDV</th>
-              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">Presents</th>
-              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">Retenus</th>
-              <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">JO</th>
-              <th className="w-12 py-2 px-2 text-xs font-medium text-gray-500 uppercase text-center">Detail</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Annonceur</th>
+              <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">CV Saisis</th>
+              <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">CV Traites</th>
+              <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">RDV</th>
+              <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Presents</th>
+              <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Retenus</th>
+              <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">JO</th>
+              <th className="w-12 py-2 px-2 text-xs font-medium text-[#A68D8A] uppercase text-center">Detail</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id_annonceur} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                <td className="py-2 px-3 font-medium text-gray-900 whitespace-nowrap">{r.lib_annonceur}</td>
+              <tr key={r.id_annonceur} className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]">
+                <td className="py-2 px-3 font-medium text-[#4E1D17] whitespace-nowrap">{r.lib_annonceur}</td>
                 <td className="py-2 px-3 text-right tabular-nums">{r.nb_cv_saisis}</td>
                 <td className="py-2 px-3 text-right tabular-nums">
                   {r.nb_cv_traites}
-                  <span className="text-gray-400 ml-1 text-xs">({pct(r.nb_cv_traites, r.nb_cv_saisis)})</span>
+                  <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(r.nb_cv_traites, r.nb_cv_saisis)})</span>
                 </td>
                 <td className="py-2 px-3 text-right tabular-nums">
                   {r.nb_rdv}
-                  <span className="text-gray-400 ml-1 text-xs">({pct(r.nb_rdv, r.nb_cv_traites)})</span>
+                  <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(r.nb_rdv, r.nb_cv_traites)})</span>
                 </td>
                 <td className="py-2 px-3 text-right tabular-nums">
                   {r.nb_presents}
-                  <span className="text-gray-400 ml-1 text-xs">({pct(r.nb_presents, r.nb_rdv)})</span>
+                  <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(r.nb_presents, r.nb_rdv)})</span>
                 </td>
                 <td className="py-2 px-3 text-right tabular-nums">
                   {r.nb_retenus}
-                  <span className="text-gray-400 ml-1 text-xs">({pct(r.nb_retenus, r.nb_presents)})</span>
+                  <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(r.nb_retenus, r.nb_presents)})</span>
                 </td>
                 <td className="py-2 px-3 text-right tabular-nums">
                   {r.nb_jo}
-                  <span className="text-gray-400 ml-1 text-xs">({pct(r.nb_jo, r.nb_retenus)})</span>
+                  <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(r.nb_jo, r.nb_retenus)})</span>
                 </td>
                 <td className="py-1 px-2 text-center">
                   <button
                     onClick={() => onDetail(r)}
                     title={`Detail ${r.lib_annonceur}`}
-                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200"
+                    className="p-1.5 rounded-md text-[#A68D8A]/80 hover:text-[#4E1D17] hover:bg-white border border-transparent hover:border-[#E5DDDC]"
                   >
                     <Eye className="w-3.5 h-3.5" />
                   </button>
                 </td>
               </tr>
             ))}
-            <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
-              <td className="py-2 px-3 text-gray-900">TOTAL</td>
+            <tr className="bg-white font-semibold border-t-2 border-[#E5DDDC]">
+              <td className="py-2 px-3 text-[#4E1D17]">TOTAL</td>
               <td className="py-2 px-3 text-right tabular-nums">{total.saisis}</td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {total.traites}
-                <span className="text-gray-400 ml-1 text-xs">({pct(total.traites, total.saisis)})</span>
+                <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(total.traites, total.saisis)})</span>
               </td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {total.rdv}
-                <span className="text-gray-400 ml-1 text-xs">({pct(total.rdv, total.traites)})</span>
+                <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(total.rdv, total.traites)})</span>
               </td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {total.pres}
-                <span className="text-gray-400 ml-1 text-xs">({pct(total.pres, total.rdv)})</span>
+                <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(total.pres, total.rdv)})</span>
               </td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {total.ret}
-                <span className="text-gray-400 ml-1 text-xs">({pct(total.ret, total.pres)})</span>
+                <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(total.ret, total.pres)})</span>
               </td>
               <td className="py-2 px-3 text-right tabular-nums">
                 {total.jo}
-                <span className="text-gray-400 ml-1 text-xs">({pct(total.jo, total.ret)})</span>
+                <span className="text-[#A68D8A]/80 ml-1 text-xs">({pct(total.jo, total.ret)})</span>
               </td>
               <td className="py-1 px-2 text-center">
                 <button
@@ -442,7 +442,7 @@ function ResumeTable({
                     })
                   }
                   title="Detail Total"
-                  className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200"
+                  className="p-1.5 rounded-md text-[#A68D8A]/80 hover:text-[#4E1D17] hover:bg-white border border-transparent hover:border-[#E5DDDC]"
                 >
                   <Eye className="w-3.5 h-3.5" />
                 </button>
@@ -490,46 +490,46 @@ function SaisisTable({ rows, loading }: { rows: CvSaisiAnnonceurRow[]; loading: 
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <div className="overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+          <thead className="bg-white border-b border-[#E5DDDC] sticky top-0">
             <tr>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap min-w-[160px]">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase whitespace-nowrap min-w-[160px]">
                 Ope saisie
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase whitespace-nowrap">
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase whitespace-nowrap">
                 Date
               </th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Candidat</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Commune</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Tel</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Statut actuel</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Annonceur</th>
-              <th className="text-center py-2 px-3 text-xs font-medium text-gray-500 uppercase">DPAE</th>
-              <th className="text-center py-2 px-3 text-xs font-medium text-gray-500 uppercase">Fiche Reac</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Candidat</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Commune</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Tel</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Statut actuel</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Annonceur</th>
+              <th className="text-center py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">DPAE</th>
+              <th className="text-center py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Fiche Reac</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={`${r.id_cvtheque}-${i}`} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{r.ope_nom}</td>
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">
+              <tr key={`${r.id_cvtheque}-${i}`} className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]">
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">{r.ope_nom}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">
                   {csvDate(r.date_traitement)}
                   {r.est_reactivation && (
                     <RotateCw className="inline w-3 h-3 ml-1 text-amber-500" aria-label="Reactivation" />
                   )}
                 </td>
-                <td className="py-2 px-3 font-medium text-gray-900 truncate max-w-xs">{r.nom_prenom}</td>
-                <td className="py-2 px-3 text-gray-600 truncate max-w-xs">{r.commune}</td>
-                <td className="py-2 px-3 text-gray-600">{r.tel}</td>
-                <td className="py-2 px-3 text-gray-600">{r.statut_actuel || '—'}</td>
-                <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{r.lib_annonceur}</td>
+                <td className="py-2 px-3 font-medium text-[#4E1D17] truncate max-w-xs">{r.nom_prenom}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">{r.commune}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.tel}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.statut_actuel || '—'}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 whitespace-nowrap">{r.lib_annonceur}</td>
                 <td className="py-2 px-3 text-center">
-                  {r.dpae ? <Check className="inline w-4 h-4 text-emerald-600" /> : '—'}
+                  {r.dpae ? <Check className="inline w-4 h-4 text-[#17494E]" /> : '—'}
                 </td>
                 <td className="py-2 px-3 text-center">
                   {r.fiche_reac ? <Check className="inline w-4 h-4 text-blue-600" /> : '—'}
@@ -569,7 +569,7 @@ function AnnonceurDetailModal({
     base: number
     color: string
   }[] = [
-    { key: 'saisis', label: 'CV Saisis', value: annonceur.nb_cv_saisis, base: annonceur.nb_cv_saisis, color: 'bg-gray-900' },
+    { key: 'saisis', label: 'CV Saisis', value: annonceur.nb_cv_saisis, base: annonceur.nb_cv_saisis, color: 'bg-[#17494E]' },
     { key: 'traites', label: 'CV Traites', value: annonceur.nb_cv_traites, base: annonceur.nb_cv_saisis, color: 'bg-indigo-500' },
     { key: 'rdv', label: 'RDV', value: annonceur.nb_rdv, base: annonceur.nb_cv_traites, color: 'bg-blue-500' },
     { key: 'presents', label: 'Presents', value: annonceur.nb_presents, base: annonceur.nb_rdv, color: 'bg-teal-500' },
@@ -640,10 +640,10 @@ function AnnonceurDetailModal({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC] sticky top-0 bg-white z-10">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{annonceur.lib_annonceur}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Funnel + repartition des statuts</p>
+            <h2 className="text-lg font-bold text-[#4E1D17]">{annonceur.lib_annonceur}</h2>
+            <p className="text-xs text-[#A68D8A] mt-0.5">Funnel + repartition des statuts</p>
           </div>
           <div className="flex items-center gap-2">
             <PdfExportButton
@@ -653,7 +653,7 @@ function AnnonceurDetailModal({
             />
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -664,11 +664,11 @@ function AnnonceurDetailModal({
 
         <div ref={contentRef} className="p-6 space-y-6">
           {/* Funnel cliquable */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center justify-between">
+          <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+            <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide flex items-center justify-between">
               <span>Funnel de conversion</span>
               {showAnnonceurBreakdown && (
-                <span className="text-[10px] normal-case text-gray-400 font-normal">
+                <span className="text-[10px] normal-case text-[#A68D8A]/80 font-normal">
                   Clique une etape pour voir par annonceur
                 </span>
               )}
@@ -700,29 +700,29 @@ function AnnonceurDetailModal({
                       type="button"
                       onClick={() => canExpand && setExpandedStep(isExpanded ? null : s.key)}
                       disabled={!canExpand}
-                      className={`w-full text-left ${canExpand ? 'cursor-pointer hover:bg-gray-50 rounded-md px-2 -mx-2 py-1' : 'cursor-default'}`}
+                      className={`w-full text-left ${canExpand ? 'cursor-pointer hover:bg-[#EFE9E7] rounded-md px-2 -mx-2 py-1' : 'cursor-default'}`}
                     >
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="flex items-center gap-1 text-gray-700 font-medium">
+                        <span className="flex items-center gap-1 text-[#4E1D17] font-medium">
                           {canExpand && (
                             isExpanded ? (
-                              <ChevronDown className="w-3 h-3 text-gray-400" />
+                              <ChevronDown className="w-3 h-3 text-[#A68D8A]/80" />
                             ) : (
-                              <ChevronRight className="w-3 h-3 text-gray-400" />
+                              <ChevronRight className="w-3 h-3 text-[#A68D8A]/80" />
                             )
                           )}
                           {s.label}
                         </span>
-                        <span className="tabular-nums text-gray-500">
-                          <span className="font-semibold text-gray-900">{s.value}</span>
+                        <span className="tabular-nums text-[#A68D8A]">
+                          <span className="font-semibold text-[#4E1D17]">{s.value}</span>
                           {i > 0 && (
-                            <span className="ml-1.5 text-gray-400">
+                            <span className="ml-1.5 text-[#A68D8A]/80">
                               ({p.toFixed(1)} % vs {steps[i - 1].label})
                             </span>
                           )}
                         </span>
                       </div>
-                      <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2.5 bg-[#EFE9E7] rounded-full overflow-hidden">
                         <div
                           className={`h-full ${s.color} transition-all`}
                           style={{ width: `${Math.min(100, p)}%` }}
@@ -746,15 +746,15 @@ function AnnonceurDetailModal({
                               return (
                                 <div key={a.lib}>
                                   <div className="flex items-center justify-between text-[11px] mb-0.5">
-                                    <span className="text-gray-600 truncate">{a.lib}</span>
-                                    <span className="tabular-nums text-gray-500 shrink-0 ml-2">
+                                    <span className="text-[#4E1D17]/80 truncate">{a.lib}</span>
+                                    <span className="tabular-nums text-[#A68D8A] shrink-0 ml-2">
                                       {a.nb}
-                                      <span className="text-gray-400 ml-1">
+                                      <span className="text-[#A68D8A]/80 ml-1">
                                         ({pa.toFixed(1)} %)
                                       </span>
                                     </span>
                                   </div>
-                                  <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="w-full h-1 bg-[#EFE9E7] rounded-full overflow-hidden">
                                     <div
                                       className={`h-full ${s.color} opacity-60 transition-all`}
                                       style={{ width: `${pa}%` }}
@@ -775,8 +775,8 @@ function AnnonceurDetailModal({
 
           {/* Repartition par annonceur (seulement quand il y en a plusieurs, ex. TOTAL) */}
           {showAnnonceurBreakdown && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+              <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide">
                 Repartition par annonceur (CV Saisis)
               </div>
               <div className="p-4 space-y-1.5">
@@ -785,13 +785,13 @@ function AnnonceurDetailModal({
                   return (
                     <div key={a.lib}>
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="font-medium text-gray-700">{a.lib}</span>
-                        <span className="tabular-nums text-gray-500">
-                          <span className="font-semibold text-gray-900">{a.nb}</span>
-                          <span className="ml-1.5 text-gray-400">({p.toFixed(1)} %)</span>
+                        <span className="font-medium text-[#4E1D17]">{a.lib}</span>
+                        <span className="tabular-nums text-[#A68D8A]">
+                          <span className="font-semibold text-[#4E1D17]">{a.nb}</span>
+                          <span className="ml-1.5 text-[#A68D8A]/80">({p.toFixed(1)} %)</span>
                         </span>
                       </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-[#EFE9E7] rounded-full overflow-hidden">
                         <div
                           className="h-full bg-sky-500 transition-all"
                           style={{ width: `${p}%` }}
@@ -806,11 +806,11 @@ function AnnonceurDetailModal({
 
           {/* Breakdown des statuts actuels (cliquable pour breakdown par annonceur) */}
           {breakdown.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center justify-between">
+            <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+              <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide flex items-center justify-between">
                 <span>Repartition des statuts actuels</span>
                 {showAnnonceurBreakdown && (
-                  <span className="text-[10px] normal-case text-gray-400 font-normal">
+                  <span className="text-[10px] normal-case text-[#A68D8A]/80 font-normal">
                     Clique un statut pour voir par annonceur
                   </span>
                 )}
@@ -849,27 +849,27 @@ function AnnonceurDetailModal({
                         type="button"
                         onClick={() => canExpand && setExpandedStatut(isExpanded ? null : g.label)}
                         disabled={!canExpand}
-                        className={`w-full text-left ${canExpand ? 'cursor-pointer hover:bg-gray-50 rounded-md px-2 -mx-2 py-1' : 'cursor-default'}`}
+                        className={`w-full text-left ${canExpand ? 'cursor-pointer hover:bg-[#EFE9E7] rounded-md px-2 -mx-2 py-1' : 'cursor-default'}`}
                       >
                         <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="flex items-center gap-1 font-semibold text-gray-900">
+                          <span className="flex items-center gap-1 font-semibold text-[#4E1D17]">
                             {canExpand && (
                               isExpanded ? (
-                                <ChevronDown className="w-3 h-3 text-gray-400" />
+                                <ChevronDown className="w-3 h-3 text-[#A68D8A]/80" />
                               ) : (
-                                <ChevronRight className="w-3 h-3 text-gray-400" />
+                                <ChevronRight className="w-3 h-3 text-[#A68D8A]/80" />
                               )
                             )}
                             {g.label}
                           </span>
-                          <span className="tabular-nums text-gray-500">
-                            <span className="font-semibold text-gray-900">{g.total}</span>
-                            <span className="ml-1.5 text-gray-400">
+                          <span className="tabular-nums text-[#A68D8A]">
+                            <span className="font-semibold text-[#4E1D17]">{g.total}</span>
+                            <span className="ml-1.5 text-[#A68D8A]/80">
                               ({pctGroup.toFixed(1)} %)
                             </span>
                           </span>
                         </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-[#EFE9E7] rounded-full overflow-hidden">
                           <div
                             className="h-full bg-violet-400 transition-all"
                             style={{ width: `${pctGroup}%` }}
@@ -885,15 +885,15 @@ function AnnonceurDetailModal({
                             return (
                               <div key={s.lib}>
                                 <div className="flex items-center justify-between text-[11px] mb-0.5">
-                                  <span className="text-gray-600 truncate">{s.lib}</span>
-                                  <span className="tabular-nums text-gray-500 shrink-0 ml-2">
+                                  <span className="text-[#4E1D17]/80 truncate">{s.lib}</span>
+                                  <span className="tabular-nums text-[#A68D8A] shrink-0 ml-2">
                                     {s.nb}
-                                    <span className="text-gray-400 ml-1">
+                                    <span className="text-[#A68D8A]/80 ml-1">
                                       ({pctSub.toFixed(0)} %)
                                     </span>
                                   </span>
                                 </div>
-                                <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="w-full h-1 bg-[#EFE9E7] rounded-full overflow-hidden">
                                   <div
                                     className="h-full bg-violet-300 transition-all"
                                     style={{ width: `${pctSub}%` }}
@@ -921,15 +921,15 @@ function AnnonceurDetailModal({
                                 return (
                                   <div key={a.lib}>
                                     <div className="flex items-center justify-between text-[11px] mb-0.5">
-                                      <span className="text-gray-600 truncate">{a.lib}</span>
-                                      <span className="tabular-nums text-gray-500 shrink-0 ml-2">
+                                      <span className="text-[#4E1D17]/80 truncate">{a.lib}</span>
+                                      <span className="tabular-nums text-[#A68D8A] shrink-0 ml-2">
                                         {a.nb}
-                                        <span className="text-gray-400 ml-1">
+                                        <span className="text-[#A68D8A]/80 ml-1">
                                           ({pa.toFixed(1)} %)
                                         </span>
                                       </span>
                                     </div>
-                                    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="w-full h-1 bg-[#EFE9E7] rounded-full overflow-hidden">
                                       <div
                                         className="h-full bg-violet-400 opacity-70 transition-all"
                                         style={{ width: `${pa}%` }}
@@ -956,15 +956,15 @@ function AnnonceurDetailModal({
 
 function TableLoader() {
   return (
-    <div className="flex items-center justify-center py-20 bg-white rounded-xl border border-gray-200">
-      <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+    <div className="flex items-center justify-center py-20 bg-white rounded-[10px] border border-[#E5DDDC]">
+      <Loader2 className="w-6 h-6 text-[#E5DDDC] animate-spin" />
     </div>
   )
 }
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="text-center py-20 text-gray-400 text-sm italic bg-white rounded-xl border border-gray-200">
+    <div className="text-center py-20 text-[#A68D8A]/80 text-sm italic bg-white rounded-[10px] border border-[#E5DDDC]">
       {label}
     </div>
   )

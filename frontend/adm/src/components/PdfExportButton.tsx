@@ -30,7 +30,7 @@ export default function PdfExportButton({
       onClick={handleClick}
       disabled={loading}
       title="Exporter en PDF"
-      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[#4E1D17]/80 hover:text-[#4E1D17] bg-white hover:bg-[#EFE9E7] border border-[#E5DDDC] rounded-lg transition-colors disabled:opacity-50"
     >
       {loading ? (
         <Loader2 className="w-3.5 h-3.5 animate-spin" />

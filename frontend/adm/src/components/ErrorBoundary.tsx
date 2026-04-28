@@ -44,26 +44,26 @@ export default class ErrorBoundary extends Component<Props, State> {
     const stack = this.state.errorInfo?.componentStack || ''
 
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <div className="max-w-2xl w-full bg-white rounded-xl border border-red-200 shadow-sm">
+      <div className="min-h-screen flex items-center justify-center p-6 bg-white">
+        <div className="max-w-2xl w-full bg-white rounded-[10px] border border-red-200 shadow-sm">
           <div className="px-6 py-4 border-b border-red-100 bg-red-50 rounded-t-xl flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <AlertTriangle className="w-5 h-5 text-[#993636]" />
             <h2 className="font-semibold text-red-900">Une erreur est survenue</h2>
           </div>
           <div className="p-6 space-y-4">
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-[#4E1D17]">
               L'application a rencontré une erreur inattendue. Tu peux essayer de
               recharger ou de revenir en arrière.
             </p>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-800 overflow-auto max-h-64">
-              <div className="font-semibold text-red-700 mb-1">{err.name}: {err.message}</div>
+            <div className="bg-white border border-[#E5DDDC] rounded-lg p-3 text-xs font-mono text-[#4E1D17] overflow-auto max-h-64">
+              <div className="font-semibold text-[#993636] mb-1">{err.name}: {err.message}</div>
               {err.stack && (
-                <pre className="whitespace-pre-wrap text-gray-600 text-[11px] leading-relaxed">
+                <pre className="whitespace-pre-wrap text-[#4E1D17]/80 text-[11px] leading-relaxed">
                   {err.stack}
                 </pre>
               )}
               {stack && (
-                <pre className="whitespace-pre-wrap text-gray-500 text-[11px] leading-relaxed mt-2 pt-2 border-t border-gray-200">
+                <pre className="whitespace-pre-wrap text-[#A68D8A] text-[11px] leading-relaxed mt-2 pt-2 border-t border-[#E5DDDC]">
                   {stack}
                 </pre>
               )}
@@ -71,14 +71,14 @@ export default class ErrorBoundary extends Component<Props, State> {
             <div className="flex gap-2">
               <button
                 onClick={this.handleReload}
-                className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800"
+                className="flex items-center gap-1.5 px-3 py-2 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90"
               >
                 <RefreshCw className="w-4 h-4" />
                 Recharger la page
               </button>
               <button
                 onClick={this.handleReset}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                className="px-3 py-2 border border-[#E5DDDC] rounded-lg text-sm font-medium hover:bg-[#EFE9E7]"
               >
                 Réessayer
               </button>

@@ -162,19 +162,19 @@ export default function StatRHEntreeSortiePage() {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <button
           onClick={() => navigate('/stat-rh')}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-3"
+          className="flex items-center gap-1.5 text-sm text-[#A68D8A] hover:text-[#4E1D17] mb-3"
         >
           <ChevronLeft className="w-4 h-4" />
           Retour Stats RH
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">Stats DPAE / Sortie</h1>
-        <p className="text-gray-500 mt-1">
+        <h1 className="text-2xl font-bold text-[#4E1D17]">Stats DPAE / Sortie</h1>
+        <p className="text-[#A68D8A] mt-1">
           Entrees et sorties par agence/equipe sur la periode.
         </p>
       </motion.div>
 
       {/* Filtres */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mt-6 flex flex-wrap items-center gap-3">
+      <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-4 mt-6 flex flex-wrap items-center gap-3">
         {hasDroitGr && (
           <Toggle
             value={typeRecherche}
@@ -186,7 +186,7 @@ export default function StatRHEntreeSortiePage() {
           />
         )}
 
-        <div className="h-6 w-px bg-gray-200" />
+        <div className="h-6 w-px bg-[#E5DDDC]" />
 
         <DateField label="Du" value={dateDu} onChange={setDateDu} />
         <DateField label="Au" value={dateAu} onChange={setDateAu} />
@@ -196,7 +196,7 @@ export default function StatRHEntreeSortiePage() {
         <button
           onClick={runCalcul}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90 disabled:opacity-50 shadow-sm"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
           Demarrer le calcul
@@ -206,19 +206,19 @@ export default function StatRHEntreeSortiePage() {
       {/* Chips de la selection multi-orga */}
       {typeRecherche === 'orga' && selectedOrgas.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold mr-1">
+          <span className="text-[10px] uppercase tracking-wide text-[#A68D8A] font-semibold mr-1">
             Blocs :
           </span>
           {selectedOrgas.map((o) => (
             <span
               key={o.id_orga}
-              className="inline-flex items-center gap-1 bg-white border border-gray-300 rounded-full px-2.5 py-1 text-xs"
+              className="inline-flex items-center gap-1 bg-white border border-[#E5DDDC] rounded-full px-2.5 py-1 text-xs"
             >
-              <Building2 className="w-3 h-3 text-gray-400" />
+              <Building2 className="w-3 h-3 text-[#A68D8A]/80" />
               {o.lib_orga}
               <button
                 onClick={() => removeOrga(o.id_orga)}
-                className="text-gray-400 hover:text-gray-700"
+                className="text-[#A68D8A]/80 hover:text-[#4E1D17]"
                 title="Retirer"
               >
                 <X className="w-3 h-3" />
@@ -227,7 +227,7 @@ export default function StatRHEntreeSortiePage() {
           ))}
           <button
             onClick={() => setShowPicker(true)}
-            className="text-xs text-gray-500 hover:text-gray-900 px-2 py-0.5 rounded-full border border-dashed border-gray-300 hover:border-gray-500"
+            className="text-xs text-[#A68D8A] hover:text-[#4E1D17] px-2 py-0.5 rounded-full border border-dashed border-[#E5DDDC] hover:border-[#A68D8A]"
           >
             + Modifier
           </button>
@@ -236,14 +236,14 @@ export default function StatRHEntreeSortiePage() {
 
       {/* Erreur */}
       {error && (
-        <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm">
+        <div className="mt-3 flex items-center gap-2 bg-red-50 border border-red-200 text-[#993636] px-4 py-2.5 rounded-lg text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       )}
 
       {/* Onglets */}
-      <div className="mt-4 border-b border-gray-200 flex gap-1">
+      <div className="mt-4 border-b border-[#E5DDDC] flex gap-1">
         <TabButton active={tab === 'resume'} onClick={() => setTab('resume')} label="Resume" />
         <TabButton active={tab === 'dpae'} onClick={() => setTab('dpae')} label={`DPAE${data ? ` (${data.dpae.length})` : ''}`} />
         <TabButton active={tab === 'sorties'} onClick={() => setTab('sorties')} label={`Sorties${data ? ` (${data.sorties.length})` : ''}`} />
@@ -329,13 +329,13 @@ function Toggle<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
+    <div className="inline-flex bg-[#EFE9E7] rounded-lg p-0.5">
       {options.map((o) => (
         <button
           key={o.v}
           onClick={() => onChange(o.v)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-            value === o.v ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            value === o.v ? 'bg-white text-[#17494E] shadow-sm' : 'text-[#A68D8A] hover:text-[#4E1D17]'
           }`}
         >
           {o.icon}
@@ -351,14 +351,14 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
     ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
     : value
   return (
-    <label className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-      <CalendarIcon className="w-4 h-4 text-gray-400" />
-      <span className="text-gray-500">{label}</span>
+    <label className="flex items-center gap-2 px-3 py-1.5 border border-[#E5DDDC] rounded-lg text-sm">
+      <CalendarIcon className="w-4 h-4 text-[#A68D8A]/80" />
+      <span className="text-[#A68D8A]">{label}</span>
       <input
         type="date"
         value={inputValue}
         onChange={(e) => onChange(e.target.value.replace(/-/g, ''))}
-        className="outline-none bg-transparent font-medium text-gray-900 w-32"
+        className="outline-none bg-transparent font-medium text-[#4E1D17] w-32"
       />
     </label>
   )
@@ -375,7 +375,7 @@ function DetailIconButton({
     <button
       onClick={onClick}
       title={title}
-      className="p-1.5 rounded-md text-gray-400 hover:text-gray-900 hover:bg-white border border-transparent hover:border-gray-200 transition-colors"
+      className="p-1.5 rounded-md text-[#A68D8A]/80 hover:text-[#4E1D17] hover:bg-white border border-transparent hover:border-[#E5DDDC] transition-colors"
     >
       <Eye className="w-3.5 h-3.5" />
     </button>
@@ -387,7 +387,7 @@ function TabButton({ active, onClick, label }: { active: boolean; onClick: () =>
     <button
       onClick={onClick}
       className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-        active ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
+        active ? 'border-[#17494E] text-[#4E1D17]' : 'border-transparent text-[#A68D8A] hover:text-[#4E1D17]'
       }`}
     >
       {label}
@@ -435,8 +435,8 @@ function ResumeTable({
   // Classes des 2 groupes : cadre visuel + tonalite
   const grpNonProd = 'bg-orange-50/60 border-l border-orange-200'
   const grpNonProdLast = 'bg-orange-50/60 border-r border-orange-200'
-  const grpProd = 'bg-emerald-50/60 border-l border-emerald-200'
-  const grpProdLast = 'bg-emerald-50/60 border-r border-emerald-200'
+  const grpProd = 'bg-[#17494E]/5 border-l border-[#17494E]/25'
+  const grpProdLast = 'bg-[#17494E]/5 border-r border-[#17494E]/25'
 
   const handleExport = () => {
     const rowsCsv: (string | number)[][] = []
@@ -487,31 +487,31 @@ function ResumeTable({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-white border-b border-[#E5DDDC]">
             {/* Rangee 1 : groupes */}
             <tr>
-              <th rowSpan={2} className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase align-bottom">Equipe</th>
-              <th rowSpan={2} className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase align-bottom">DPAE</th>
+              <th rowSpan={2} className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase align-bottom">Equipe</th>
+              <th rowSpan={2} className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase align-bottom">DPAE</th>
               <th colSpan={2} className={`text-center py-2 px-3 text-xs font-semibold text-orange-700 uppercase ${grpNonProd} ${grpNonProdLast.replace('bg-orange-50/60 border-l border-orange-200', 'border-r border-orange-200')}`}>
                 Sortants non Prod
               </th>
-              <th colSpan={2} className={`text-center py-2 px-3 text-xs font-semibold text-emerald-700 uppercase ${grpProd} ${grpProdLast.replace('bg-emerald-50/60 border-l border-emerald-200', 'border-r border-emerald-200')}`}>
+              <th colSpan={2} className={`text-center py-2 px-3 text-xs font-semibold text-[#17494E] uppercase ${grpProd} ${grpProdLast.replace('bg-[#17494E]/5 border-l border-[#17494E]/25', 'border-r border-[#17494E]/25')}`}>
                 Sortants Prod
               </th>
-              <th rowSpan={2} className="py-2 px-2 text-xs font-medium text-gray-500 uppercase align-bottom w-12 text-center">Detail</th>
+              <th rowSpan={2} className="py-2 px-2 text-xs font-medium text-[#A68D8A] uppercase align-bottom w-12 text-center">Detail</th>
             </tr>
             {/* Rangee 2 : sous-colonnes */}
             <tr>
               <th className={`text-right py-1.5 px-3 text-[10px] font-medium text-orange-600 uppercase ${grpNonProd}`}>Nb</th>
               <th className={`text-right py-1.5 px-3 text-[10px] font-medium text-orange-600 uppercase ${grpNonProdLast}`}>Moy j</th>
-              <th className={`text-right py-1.5 px-3 text-[10px] font-medium text-emerald-600 uppercase ${grpProd}`}>Nb</th>
-              <th className={`text-right py-1.5 px-3 text-[10px] font-medium text-emerald-600 uppercase ${grpProdLast}`}>Moy j</th>
+              <th className={`text-right py-1.5 px-3 text-[10px] font-medium text-[#17494E] uppercase ${grpProd}`}>Nb</th>
+              <th className={`text-right py-1.5 px-3 text-[10px] font-medium text-[#17494E] uppercase ${grpProdLast}`}>Moy j</th>
             </tr>
           </thead>
           <tbody>
@@ -530,8 +530,8 @@ function ResumeTable({
 
               return (
                 <>
-                  <tr key={`h-${agence}`} className="bg-gray-100">
-                    <td colSpan={6} className="py-1.5 px-3 text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                  <tr key={`h-${agence}`} className="bg-[#EFE9E7]">
+                    <td colSpan={6} className="py-1.5 px-3 text-xs font-semibold text-[#4E1D17] uppercase tracking-wide">
                       {agence}
                     </td>
                     <td className="py-1 px-2 text-center">
@@ -542,13 +542,13 @@ function ResumeTable({
                     </td>
                   </tr>
                   {equipes.map((r) => (
-                    <tr key={r.id_orga} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                      <td className="py-2 px-3 font-medium text-gray-900">{r.lib_orga}</td>
+                    <tr key={r.id_orga} className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]">
+                      <td className="py-2 px-3 font-medium text-[#4E1D17]">{r.lib_orga}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{r.nb_dpae}</td>
                       <td className={`py-2 px-3 text-right tabular-nums ${grpNonProd}`}>{r.nb_sortants_non_prod}</td>
-                      <td className={`py-2 px-3 text-right tabular-nums text-gray-500 ${grpNonProdLast}`}>{moy(r.nb_jour_non_prod, r.nb_sortants_non_prod)}</td>
+                      <td className={`py-2 px-3 text-right tabular-nums text-[#A68D8A] ${grpNonProdLast}`}>{moy(r.nb_jour_non_prod, r.nb_sortants_non_prod)}</td>
                       <td className={`py-2 px-3 text-right tabular-nums ${grpProd}`}>{r.nb_sortants_prod}</td>
-                      <td className={`py-2 px-3 text-right tabular-nums text-gray-500 ${grpProdLast}`}>{moy(r.nb_jour_prod, r.nb_sortants_prod)}</td>
+                      <td className={`py-2 px-3 text-right tabular-nums text-[#A68D8A] ${grpProdLast}`}>{moy(r.nb_jour_prod, r.nb_sortants_prod)}</td>
                       <td className="py-1 px-2 text-center">
                         <DetailIconButton
                           title={`Detail ${r.lib_orga}`}
@@ -558,27 +558,27 @@ function ResumeTable({
                     </tr>
                   ))}
                   {/* Sous-total du bloc */}
-                  <tr key={`sub-${agence}`} className="bg-gray-50 border-y border-gray-200 font-medium">
-                    <td className="py-2 px-3 text-right text-[11px] text-gray-500 uppercase tracking-wide italic">
+                  <tr key={`sub-${agence}`} className="bg-white border-y border-[#E5DDDC] font-medium">
+                    <td className="py-2 px-3 text-right text-[11px] text-[#A68D8A] uppercase tracking-wide italic">
                       Sous-total
                     </td>
-                    <td className="py-2 px-3 text-right tabular-nums text-gray-900">{sub.dpae}</td>
-                    <td className={`py-2 px-3 text-right tabular-nums text-gray-900 ${grpNonProd}`}>{sub.nonProd}</td>
-                    <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpNonProdLast}`}>{moy(sub.jourNonProd, sub.nonProd)}</td>
-                    <td className={`py-2 px-3 text-right tabular-nums text-gray-900 ${grpProd}`}>{sub.prod}</td>
-                    <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpProdLast}`}>{moy(sub.jourProd, sub.prod)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-[#4E1D17]">{sub.dpae}</td>
+                    <td className={`py-2 px-3 text-right tabular-nums text-[#4E1D17] ${grpNonProd}`}>{sub.nonProd}</td>
+                    <td className={`py-2 px-3 text-right tabular-nums text-[#4E1D17]/80 ${grpNonProdLast}`}>{moy(sub.jourNonProd, sub.nonProd)}</td>
+                    <td className={`py-2 px-3 text-right tabular-nums text-[#4E1D17] ${grpProd}`}>{sub.prod}</td>
+                    <td className={`py-2 px-3 text-right tabular-nums text-[#4E1D17]/80 ${grpProdLast}`}>{moy(sub.jourProd, sub.prod)}</td>
                     <td />
                   </tr>
                 </>
               )
             })}
-            <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
-              <td className="py-2 px-3 text-gray-900">TOTAL</td>
+            <tr className="bg-white font-semibold border-t-2 border-[#E5DDDC]">
+              <td className="py-2 px-3 text-[#4E1D17]">TOTAL</td>
               <td className="py-2 px-3 text-right tabular-nums">{total.dpae}</td>
               <td className={`py-2 px-3 text-right tabular-nums ${grpNonProd}`}>{total.nonProd}</td>
-              <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpNonProdLast}`}>{moy(total.jourNonProd, total.nonProd)}</td>
+              <td className={`py-2 px-3 text-right tabular-nums text-[#4E1D17]/80 ${grpNonProdLast}`}>{moy(total.jourNonProd, total.nonProd)}</td>
               <td className={`py-2 px-3 text-right tabular-nums ${grpProd}`}>{total.prod}</td>
-              <td className={`py-2 px-3 text-right tabular-nums text-gray-600 ${grpProdLast}`}>{moy(total.jourProd, total.prod)}</td>
+              <td className={`py-2 px-3 text-right tabular-nums text-[#4E1D17]/80 ${grpProdLast}`}>{moy(total.jourProd, total.prod)}</td>
               <td className="py-1 px-2 text-center">
                 <DetailIconButton title="Detail Total" onClick={onDetailTotal} />
               </td>
@@ -614,41 +614,41 @@ function DpaeTable({ rows, loading }: { rows: DpaeRow[]; loading: boolean }) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <div className="overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+          <thead className="bg-white border-b border-[#E5DDDC] sticky top-0">
             <tr>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Entite</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Nom</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Prenom</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Adresse</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">CP</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Ville</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Date d'entree</th>
-              <th className="text-center py-2 px-3 text-xs font-medium text-gray-500 uppercase">Actif</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Date Sortie</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Fin demandee</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Entite</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Nom</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Prenom</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Adresse</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">CP</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Ville</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Date d'entree</th>
+              <th className="text-center py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Actif</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Date Sortie</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Fin demandee</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id_salarie} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                <td className="py-2 px-3 text-gray-600">{r.id_ste || '—'}</td>
-                <td className="py-2 px-3 font-medium text-gray-900">{r.nom}</td>
-                <td className="py-2 px-3 text-gray-700">{capitalize(r.prenom)}</td>
-                <td className="py-2 px-3 text-gray-600 truncate max-w-xs">{r.adresse}</td>
-                <td className="py-2 px-3 text-gray-600">{r.cp}</td>
-                <td className="py-2 px-3 text-gray-600">{r.ville}</td>
-                <td className="py-2 px-3 text-gray-600">{formatShortDate(r.date_entree)}</td>
+              <tr key={r.id_salarie} className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]">
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.id_ste || '—'}</td>
+                <td className="py-2 px-3 font-medium text-[#4E1D17]">{r.nom}</td>
+                <td className="py-2 px-3 text-[#4E1D17]">{capitalize(r.prenom)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">{r.adresse}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.cp}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.ville}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{formatShortDate(r.date_entree)}</td>
                 <td className="py-2 px-3 text-center">
                   <input type="checkbox" checked={r.en_activite} readOnly className="accent-gray-900" />
                 </td>
-                <td className="py-2 px-3 text-gray-600">{formatShortDate(r.date_sortie)}</td>
-                <td className="py-2 px-3 text-gray-600">{formatShortDate(r.fin_demandee)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{formatShortDate(r.date_sortie)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{formatShortDate(r.fin_demandee)}</td>
               </tr>
             ))}
           </tbody>
@@ -682,39 +682,39 @@ function SortieTable({ rows, loading }: { rows: SortieRow[]; loading: boolean })
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-end">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2 bg-white border-b border-[#E5DDDC] flex items-center justify-end">
         <ExportButton onClick={handleExport} />
       </div>
       <div className="overflow-x-auto max-h-[calc(100vh-400px)] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+          <thead className="bg-white border-b border-[#E5DDDC] sticky top-0">
             <tr>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Entite</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Nom</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Prenom</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Adresse</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">CP</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Ville</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Date entree</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Date sortie</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Fin demandee</th>
-              <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">Type sortie</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Entite</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Nom</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Prenom</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Adresse</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">CP</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Ville</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Date entree</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Date sortie</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Fin demandee</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Type sortie</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id_salarie} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                <td className="py-2 px-3 text-gray-600">{r.id_ste || '—'}</td>
-                <td className="py-2 px-3 font-medium text-gray-900">{r.nom}</td>
-                <td className="py-2 px-3 text-gray-700">{capitalize(r.prenom)}</td>
-                <td className="py-2 px-3 text-gray-600 truncate max-w-xs">{r.adresse}</td>
-                <td className="py-2 px-3 text-gray-600">{r.cp}</td>
-                <td className="py-2 px-3 text-gray-600">{r.ville}</td>
-                <td className="py-2 px-3 text-gray-600">{formatShortDate(r.date_entree)}</td>
-                <td className="py-2 px-3 text-gray-600">{formatShortDate(r.date_sortie_reelle)}</td>
-                <td className="py-2 px-3 text-gray-600">{formatShortDate(r.fin_demandee)}</td>
-                <td className="py-2 px-3 text-gray-600">{r.type_sortie_lib || r.id_type_sortie || '—'}</td>
+              <tr key={r.id_salarie} className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]">
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.id_ste || '—'}</td>
+                <td className="py-2 px-3 font-medium text-[#4E1D17]">{r.nom}</td>
+                <td className="py-2 px-3 text-[#4E1D17]">{capitalize(r.prenom)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">{r.adresse}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.cp}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.ville}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{formatShortDate(r.date_entree)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{formatShortDate(r.date_sortie_reelle)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{formatShortDate(r.fin_demandee)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.type_sortie_lib || r.id_type_sortie || '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -726,15 +726,15 @@ function SortieTable({ rows, loading }: { rows: SortieRow[]; loading: boolean })
 
 function TableLoader() {
   return (
-    <div className="flex items-center justify-center py-20 bg-white rounded-xl border border-gray-200">
-      <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+    <div className="flex items-center justify-center py-20 bg-white rounded-[10px] border border-[#E5DDDC]">
+      <Loader2 className="w-6 h-6 text-[#E5DDDC] animate-spin" />
     </div>
   )
 }
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="text-center py-20 text-gray-400 text-sm italic bg-white rounded-xl border border-gray-200">
+    <div className="text-center py-20 text-[#A68D8A]/80 text-sm italic bg-white rounded-[10px] border border-[#E5DDDC]">
       {label}
     </div>
   )

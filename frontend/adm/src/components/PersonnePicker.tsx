@@ -55,11 +55,11 @@ export default function PersonnePicker({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC]">
+          <h2 className="text-lg font-semibold text-[#4E1D17]">{title}</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+            className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -76,24 +76,24 @@ export default function PersonnePicker({
                 e.key === 'Enter' && (e.preventDefault(), doSearch())
               }
               autoFocus
-              className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="flex-1 px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#17494E] focus:border-transparent"
             />
             <button
               type="button"
               onClick={doSearch}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-3 py-2.5 border border-[#E5DDDC] rounded-lg hover:bg-[#EFE9E7]"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Search className="w-4 h-4 text-gray-700" />
+                <Search className="w-4 h-4 text-[#4E1D17]" />
               )}
             </button>
           </div>
 
-          <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+          <div className="max-h-64 overflow-y-auto border border-[#E5DDDC] rounded-lg">
             {results.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
+              <div className="text-center py-8 text-[#A68D8A]/80 text-sm">
                 {loading ? '' : 'Saisis un nom pour rechercher'}
               </div>
             ) : (
@@ -102,12 +102,12 @@ export default function PersonnePicker({
                   key={r.id_salarie}
                   type="button"
                   onClick={() => setSelected(r)}
-                  className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 ${
-                    selected?.id_salarie === r.id_salarie ? 'bg-gray-100' : ''
+                  className={`w-full text-left px-4 py-2.5 text-sm border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7] ${
+                    selected?.id_salarie === r.id_salarie ? 'bg-[#EFE9E7]' : ''
                   }`}
                 >
-                  <span className="font-medium text-gray-900">{r.nom}</span>{' '}
-                  <span className="text-gray-600">{capitalize(r.prenom)}</span>
+                  <span className="font-medium text-[#4E1D17]">{r.nom}</span>{' '}
+                  <span className="text-[#4E1D17]/80">{capitalize(r.prenom)}</span>
                 </button>
               ))
             )}
@@ -118,14 +118,14 @@ export default function PersonnePicker({
               type="button"
               onClick={() => selected && onSelect(selected)}
               disabled={!selected}
-              className="flex-1 px-3 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+              className="flex-1 px-3 py-2.5 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90 disabled:opacity-50"
             >
               Valider
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+              className="flex-1 px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm font-medium hover:bg-[#EFE9E7]"
             >
               Annuler
             </button>

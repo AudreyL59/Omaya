@@ -15,9 +15,9 @@ export default function PlaceholderPage() {
         transition={{ duration: 0.4 }}
         className="flex flex-col items-center justify-center h-96"
       >
-        <Construction className="w-16 h-16 text-gray-300 mb-4" />
-        <h1 className="text-xl font-semibold text-gray-700">{title}</h1>
-        <p className="text-gray-400 mt-2">Cette page est en cours de construction</p>
+        <Construction className="w-16 h-16 text-[#E5DDDC] mb-4" />
+        <h1 className="text-xl font-semibold text-[#4E1D17]">{title}</h1>
+        <p className="text-[#A68D8A]/80 mt-2">Cette page est en cours de construction</p>
       </motion.div>
     </div>
   )

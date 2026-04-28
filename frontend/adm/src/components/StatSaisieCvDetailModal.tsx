@@ -95,10 +95,10 @@ export default function StatSaisieCvDetailModal({
         className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC] sticky top-0 bg-white z-10">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{title}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <h2 className="text-lg font-bold text-[#4E1D17]">{title}</h2>
+            <p className="text-xs text-[#A68D8A] mt-0.5">
               Detail Stats CV Saisis &amp; traites
             </p>
           </div>
@@ -110,7 +110,7 @@ export default function StatSaisieCvDetailModal({
             />
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
             >
               <X className="w-5 h-5" />
             </button>
@@ -130,7 +130,7 @@ export default function StatSaisieCvDetailModal({
               icon={<CheckCheck className="w-5 h-5" />}
               label="CV Traites"
               value={nbTraites}
-              color="text-emerald-600"
+              color="text-[#17494E]"
             />
           </div>
 
@@ -158,8 +158,8 @@ export default function StatSaisieCvDetailModal({
 
           {/* Statuts des CV Traites */}
           {statuts.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+              <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide">
                 Statut des CV Traites
               </div>
               <div className="p-4 space-y-1.5">
@@ -168,12 +168,12 @@ export default function StatSaisieCvDetailModal({
                   return (
                     <div key={s.lib}>
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-700 font-medium">{s.lib}</span>
-                        <span className="tabular-nums font-semibold text-gray-900">
+                        <span className="text-[#4E1D17] font-medium">{s.lib}</span>
+                        <span className="tabular-nums font-semibold text-[#4E1D17]">
                           {s.nb}
                         </span>
                       </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-[#EFE9E7] rounded-full overflow-hidden">
                         <div
                           className="h-full bg-violet-400 transition-all"
                           style={{ width: `${pct}%` }}
@@ -187,7 +187,7 @@ export default function StatSaisieCvDetailModal({
           )}
 
           {nbSaisis === 0 && nbTraites === 0 && (
-            <div className="text-center py-10 text-gray-400 text-sm italic">
+            <div className="text-center py-10 text-[#A68D8A]/80 text-sm italic">
               Pas de donnees pour ce scope.
             </div>
           )}
@@ -211,8 +211,8 @@ function KpiCard({
   color: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-gray-400">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[#A68D8A]/80">
         {icon}
         <div className="text-[10px] uppercase tracking-wide font-medium">{label}</div>
       </div>
@@ -237,8 +237,8 @@ function BreakdownSection({
   colorSub: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide">
         {title}
       </div>
       <div className="p-4 space-y-3">
@@ -248,13 +248,13 @@ function BreakdownSection({
             <div key={g.source}>
               {/* Barre du groupe */}
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="font-semibold text-gray-900">{g.source}</span>
-                <span className="tabular-nums text-gray-500">
-                  <span className="font-semibold text-gray-900">{g.total}</span>
-                  <span className="ml-1.5 text-gray-400">({pctGroup.toFixed(1)} %)</span>
+                <span className="font-semibold text-[#4E1D17]">{g.source}</span>
+                <span className="tabular-nums text-[#A68D8A]">
+                  <span className="font-semibold text-[#4E1D17]">{g.total}</span>
+                  <span className="ml-1.5 text-[#A68D8A]/80">({pctGroup.toFixed(1)} %)</span>
                 </span>
               </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-[#EFE9E7] rounded-full overflow-hidden">
                 <div
                   className={`h-full ${color} transition-all`}
                   style={{ width: `${pctGroup}%` }}
@@ -268,13 +268,13 @@ function BreakdownSection({
                     return (
                       <div key={s.nom}>
                         <div className="flex items-center justify-between text-[11px] mb-0.5">
-                          <span className="text-gray-600 truncate">{s.nom}</span>
-                          <span className="tabular-nums text-gray-500 shrink-0 ml-2">
+                          <span className="text-[#4E1D17]/80 truncate">{s.nom}</span>
+                          <span className="tabular-nums text-[#A68D8A] shrink-0 ml-2">
                             {s.nb}
-                            <span className="text-gray-400 ml-1">({pctSub.toFixed(0)} %)</span>
+                            <span className="text-[#A68D8A]/80 ml-1">({pctSub.toFixed(0)} %)</span>
                           </span>
                         </div>
-                        <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-full h-1 bg-[#EFE9E7] rounded-full overflow-hidden">
                           <div
                             className={`h-full ${colorSub} transition-all`}
                             style={{ width: `${pctSub}%` }}

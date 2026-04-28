@@ -87,10 +87,10 @@ function Field({
       : String(value || '—')
   return (
     <div>
-      <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+      <p className="text-xs font-medium text-[#A68D8A]/80 uppercase tracking-wide">
         {label}
       </p>
-      <p className="text-sm text-gray-900 mt-0.5">{display}</p>
+      <p className="text-sm text-[#4E1D17] mt-0.5">{display}</p>
     </div>
   )
 }
@@ -111,8 +111,8 @@ function TabButton({
       onClick={onClick}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
         active
-          ? 'bg-gray-900 text-white shadow-sm'
-          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+          ? 'bg-[#17494E] text-white shadow-sm'
+          : 'text-[#A68D8A] hover:bg-[#EFE9E7] hover:text-[#4E1D17]'
       }`}
     >
       {icon}
@@ -185,24 +185,24 @@ export default function FicheSalarieModal({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[92vh] flex flex-col overflow-hidden"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC]">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">
+            <h2 className="text-lg font-bold text-[#4E1D17]">
               Fiche Salarié — {nom} {prenom}
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs text-[#A68D8A]/80 mt-0.5">
               Informations personnelles
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+            className="p-2 rounded-lg text-[#A68D8A]/80 hover:bg-[#EFE9E7] hover:text-[#4E1D17] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="px-6 pt-4 pb-3 border-b border-gray-100 flex gap-2">
+        <div className="px-6 pt-4 pb-3 border-b border-[#E5DDDC] flex gap-2">
           <TabButton
             active={activeTab === 'identite'}
             onClick={() => setActiveTab('identite')}
@@ -223,13 +223,13 @@ export default function FicheSalarieModal({
           />
         </div>
 
-        <div className="flex-1 overflow-auto p-6 bg-gray-50">
+        <div className="flex-1 overflow-auto p-6 bg-white">
           {loading ? (
             <div className="flex items-center justify-center py-24">
-              <Loader2 className="w-8 h-8 text-gray-300 animate-spin" />
+              <Loader2 className="w-8 h-8 text-[#E5DDDC] animate-spin" />
             </div>
           ) : !data || !id || !co ? (
-            <div className="text-center py-24 text-gray-400 text-sm italic">
+            <div className="text-center py-24 text-[#A68D8A]/80 text-sm italic">
               Impossible de charger la fiche
             </div>
           ) : (
@@ -242,17 +242,17 @@ export default function FicheSalarieModal({
                   exit={{ opacity: 0, x: 10 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 flex gap-8">
+                  <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-6 flex gap-8">
                     <div className="shrink-0">
                       {id.photo ? (
                         <img
                           src={`data:image/png;base64,${id.photo}`}
                           alt="Photo"
-                          className="w-28 h-28 rounded-xl object-cover"
+                          className="w-28 h-28 rounded-[10px] object-cover"
                         />
                       ) : (
-                        <div className="w-28 h-28 rounded-xl bg-gray-100 flex items-center justify-center">
-                          <User className="w-10 h-10 text-gray-300" />
+                        <div className="w-28 h-28 rounded-[10px] bg-[#EFE9E7] flex items-center justify-center">
+                          <User className="w-10 h-10 text-[#E5DDDC]" />
                         </div>
                       )}
                     </div>
@@ -278,8 +278,8 @@ export default function FicheSalarieModal({
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 mt-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                  <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-6 mt-4">
+                    <h3 className="text-sm font-semibold text-[#4E1D17] mb-4">
                       Naissance
                     </h3>
                     <div className="grid grid-cols-3 gap-x-12 gap-y-4">
@@ -289,8 +289,8 @@ export default function FicheSalarieModal({
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 mt-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                  <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-6 mt-4">
+                    <h3 className="text-sm font-semibold text-[#4E1D17] mb-4">
                       Informations administratives
                     </h3>
                     <div className="grid grid-cols-3 gap-x-12 gap-y-4">
@@ -320,8 +320,8 @@ export default function FicheSalarieModal({
                   exit={{ opacity: 0, x: 10 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                  <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-6">
+                    <h3 className="text-sm font-semibold text-[#4E1D17] mb-4">
                       Coordonnées postales et téléphoniques
                     </h3>
                     <div className="grid grid-cols-2 gap-x-12 gap-y-4">
@@ -342,8 +342,8 @@ export default function FicheSalarieModal({
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                    <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-6">
+                      <h3 className="text-sm font-semibold text-[#4E1D17] mb-4">
                         Personne à contacter en cas d'urgence
                       </h3>
                       <div className="space-y-4">
@@ -353,8 +353,8 @@ export default function FicheSalarieModal({
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-xl border border-gray-200 p-6">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                    <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-6">
+                      <h3 className="text-sm font-semibold text-[#4E1D17] mb-4">
                         Coordonnées bancaires
                       </h3>
                       <div className="space-y-4">
@@ -374,35 +374,35 @@ export default function FicheSalarieModal({
                   exit={{ opacity: 0, x: 10 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                  <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-6">
+                    <h3 className="text-sm font-semibold text-[#4E1D17] mb-4">
                       Fiches de salaire
                     </h3>
                     {docsLoading ? (
                       <div className="flex items-center justify-center py-12">
-                        <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+                        <Loader2 className="w-6 h-6 text-[#E5DDDC] animate-spin" />
                       </div>
                     ) : documents.length === 0 ? (
-                      <p className="text-gray-400 text-sm py-8 text-center">
+                      <p className="text-[#A68D8A]/80 text-sm py-8 text-center">
                         Aucun document
                       </p>
                     ) : (
                       <>
-                        <p className="text-xs text-gray-400 mb-2">
+                        <p className="text-xs text-[#A68D8A]/80 mb-2">
                           {documents.length} document
                           {documents.length > 1 ? 's' : ''}
                         </p>
-                        <div className="max-h-[500px] overflow-y-auto border border-gray-100 rounded-lg">
+                        <div className="max-h-[500px] overflow-y-auto border border-[#E5DDDC] rounded-lg">
                           <table className="w-full text-sm">
-                            <thead className="sticky top-0 bg-gray-50 z-10">
-                              <tr className="border-b border-gray-200">
-                                <th className="text-left py-2 px-3 text-gray-500 font-medium">
+                            <thead className="sticky top-0 bg-white z-10">
+                              <tr className="border-b border-[#E5DDDC]">
+                                <th className="text-left py-2 px-3 text-[#A68D8A] font-medium">
                                   Nom
                                 </th>
-                                <th className="text-right py-2 px-3 text-gray-500 font-medium w-24">
+                                <th className="text-right py-2 px-3 text-[#A68D8A] font-medium w-24">
                                   Taille
                                 </th>
-                                <th className="text-right py-2 px-3 text-gray-500 font-medium w-32">
+                                <th className="text-right py-2 px-3 text-[#A68D8A] font-medium w-32">
                                   Date
                                 </th>
                               </tr>
@@ -416,16 +416,16 @@ export default function FicheSalarieModal({
                                 >
                                   <td className="py-2.5 px-3">
                                     <div className="flex items-center gap-2">
-                                      <FileDown className="w-4 h-4 text-gray-300 shrink-0" />
-                                      <span className="text-gray-700 truncate">
+                                      <FileDown className="w-4 h-4 text-[#E5DDDC] shrink-0" />
+                                      <span className="text-[#4E1D17] truncate">
                                         {doc.nom}
                                       </span>
                                     </div>
                                   </td>
-                                  <td className="py-2.5 px-3 text-right text-gray-500">
+                                  <td className="py-2.5 px-3 text-right text-[#A68D8A]">
                                     {doc.taille_mo} Mo
                                   </td>
-                                  <td className="py-2.5 px-3 text-right text-gray-500">
+                                  <td className="py-2.5 px-3 text-right text-[#A68D8A]">
                                     {doc.date}
                                   </td>
                                 </tr>
@@ -459,10 +459,10 @@ export default function FicheSalarieModal({
                 onClick={(e) => e.stopPropagation()}
                 className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden"
               >
-                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-[#E5DDDC]">
                   <div className="flex items-center gap-3 min-w-0">
-                    <FileDown className="w-5 h-5 text-gray-400 shrink-0" />
-                    <h3 className="text-sm font-semibold text-gray-700 truncate">
+                    <FileDown className="w-5 h-5 text-[#A68D8A]/80 shrink-0" />
+                    <h3 className="text-sm font-semibold text-[#4E1D17] truncate">
                       {previewDoc.nom}
                     </h3>
                   </div>
@@ -471,21 +471,21 @@ export default function FicheSalarieModal({
                       href={previewDoc.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                      className="p-2 rounded-lg text-[#A68D8A] hover:bg-[#EFE9E7] hover:text-[#4E1D17] transition-colors"
                       title="Ouvrir dans un nouvel onglet"
                     >
                       <ExternalLink className="w-4 h-4" />
                     </a>
                     <button
                       onClick={() => setPreviewDoc(null)}
-                      className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                      className="p-2 rounded-lg text-[#A68D8A] hover:bg-[#EFE9E7] hover:text-[#4E1D17] transition-colors"
                       title="Fermer"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 bg-gray-50">
+                <div className="flex-1 bg-white">
                   {/[.](png|jpe?g|gif|webp|bmp|svg)$/i.test(previewDoc.nom) ? (
                     <div className="w-full h-full flex items-center justify-center p-4">
                       <img

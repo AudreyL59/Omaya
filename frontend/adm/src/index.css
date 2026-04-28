@@ -1,25 +1,94 @@
 @import "tailwindcss";
 
+/* Police Nunito Sans (variable font) */
+@font-face {
+  font-family: 'Nunito Sans';
+  src: url('/fonts/NunitoSans.ttf') format('truetype-variations');
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Nunito Sans';
+  src: url('/fonts/NunitoSans-Italic.ttf') format('truetype-variations');
+  font-weight: 200 1000;
+  font-style: italic;
+  font-display: swap;
+}
+
 @theme {
-  --color-omaya-primary: #1e40af;
-  --color-omaya-primary-light: #3b82f6;
-  --color-omaya-primary-dark: #1e3a8a;
-  --color-omaya-accent: #f59e0b;
-  --color-omaya-bg: #f0f4f8;
+  --color-omaya-primary: #17494E;       /* vert foncé Omaya */
+  --color-omaya-link: #4E1D17;          /* marron des liens menu */
+  --color-omaya-bg: #FAF6F2;            /* fond page */
+  --color-omaya-menu: #EFE9E7;          /* fond cartes menu */
   --color-omaya-surface: #ffffff;
   --color-omaya-text: #1e293b;
   --color-omaya-text-light: #64748b;
-  --color-omaya-border: #e2e8f0;
+  --color-omaya-border: #E5DDDC;        /* contour de champ */
+  --color-omaya-placeholder: #A68D8A;   /* texte d'indication dans les champs */
+  --color-omaya-danger: #993636;        /* rouge boutons destructifs */
   --color-omaya-error: #ef4444;
   --color-omaya-success: #22c55e;
 }
 
+/* Style global des champs de saisie ADM (cf. maquette Figma).
+   Exclu : checkbox/radio/submit/button (boutons) et date/time/month/week
+   (généralement présentés dans une wrapper qui porte déjà le cadre). */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]),
+  textarea,
+  select {
+    border-radius: 10px;
+    border: 1px solid var(--color-omaya-border);
+    background-color: #ffffff;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-omaya-placeholder);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--color-omaya-primary);
+    box-shadow: 0 0 0 2px rgba(23, 73, 78, 0.15);
+  }
+
+  /* Date pickers : fond transparent + pas de cadre interne (le wrapper s'en charge) */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    background-color: transparent;
+    border: 0;
+    outline: none;
+  }
+  input[type="date"]:focus,
+  input[type="time"]:focus,
+  input[type="datetime-local"]:focus,
+  input[type="month"]:focus,
+  input[type="week"]:focus {
+    outline: none;
+    box-shadow: none;
+  }
+}
+
 body {
   margin: 0;
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Nunito Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   background-color: var(--color-omaya-bg);
-  color: var(--color-omaya-text);
+  color: var(--color-omaya-link);
+  font-weight: 700;
   min-height: 100vh;
+}
+
+/* Labels devant les champs */
+label {
+  color: var(--color-omaya-link);
+  font-weight: 700;
 }
 
 #root {

@@ -110,10 +110,10 @@ export default function StatRdvDetailModal({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC] sticky top-0 bg-white z-10">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{title}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Detail Stats RDV Pris</p>
+            <h2 className="text-lg font-bold text-[#4E1D17]">{title}</h2>
+            <p className="text-xs text-[#A68D8A] mt-0.5">Detail Stats RDV Pris</p>
           </div>
           <div className="flex items-center gap-2">
             <PdfExportButton
@@ -123,7 +123,7 @@ export default function StatRdvDetailModal({
             />
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
             >
               <X className="w-5 h-5" />
             </button>
@@ -137,7 +137,7 @@ export default function StatRdvDetailModal({
               icon={<FileText className="w-5 h-5" />}
               label="RDV"
               value={nbRdv}
-              color="text-gray-900"
+              color="text-[#4E1D17]"
             />
             <KpiCard
               icon={<UserCheck className="w-5 h-5" />}
@@ -151,7 +151,7 @@ export default function StatRdvDetailModal({
               label="Retenus"
               value={nbRetenus}
               sub={pct(nbRetenus, nbPresents)}
-              color="text-emerald-600"
+              color="text-[#17494E]"
             />
             <KpiCard
               icon={<GraduationCap className="w-5 h-5" />}
@@ -164,11 +164,11 @@ export default function StatRdvDetailModal({
 
           {/* Sources (avec sous-niveau annonceur/coopteur) */}
           {sources.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide flex items-center justify-between">
+            <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+              <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide flex items-center justify-between">
                 <span>Sources des CV</span>
                 {showPerParty && (
-                  <span className="text-[10px] normal-case text-gray-400 font-normal">
+                  <span className="text-[10px] normal-case text-[#A68D8A]/80 font-normal">
                     Clique une source pour voir le detail
                   </span>
                 )}
@@ -184,25 +184,25 @@ export default function StatRdvDetailModal({
                         type="button"
                         onClick={() => canExpand && setExpandedSource(isExpanded ? null : g.source)}
                         disabled={!canExpand}
-                        className={`w-full text-left ${canExpand ? 'cursor-pointer hover:bg-gray-50 rounded-md px-2 -mx-2 py-1' : 'cursor-default'}`}
+                        className={`w-full text-left ${canExpand ? 'cursor-pointer hover:bg-[#EFE9E7] rounded-md px-2 -mx-2 py-1' : 'cursor-default'}`}
                       >
                         <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="flex items-center gap-1 font-semibold text-gray-900">
+                          <span className="flex items-center gap-1 font-semibold text-[#4E1D17]">
                             {canExpand && (
                               isExpanded ? (
-                                <ChevronDown className="w-3 h-3 text-gray-400" />
+                                <ChevronDown className="w-3 h-3 text-[#A68D8A]/80" />
                               ) : (
-                                <ChevronRight className="w-3 h-3 text-gray-400" />
+                                <ChevronRight className="w-3 h-3 text-[#A68D8A]/80" />
                               )
                             )}
                             {g.source}
                           </span>
-                          <span className="tabular-nums text-gray-500">
-                            <span className="font-semibold text-gray-900">{g.total}</span>
-                            <span className="ml-1.5 text-gray-400">({pctGroup.toFixed(1)} %)</span>
+                          <span className="tabular-nums text-[#A68D8A]">
+                            <span className="font-semibold text-[#4E1D17]">{g.total}</span>
+                            <span className="ml-1.5 text-[#A68D8A]/80">({pctGroup.toFixed(1)} %)</span>
                           </span>
                         </div>
-                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-full h-2 bg-[#EFE9E7] rounded-full overflow-hidden">
                           <div
                             className="h-full bg-blue-500 transition-all"
                             style={{ width: `${pctGroup}%` }}
@@ -227,15 +227,15 @@ export default function StatRdvDetailModal({
                                   return (
                                     <div key={s.nom}>
                                       <div className="flex items-center justify-between text-[11px] mb-0.5">
-                                        <span className="text-gray-600 truncate">{s.nom}</span>
-                                        <span className="tabular-nums text-gray-500 shrink-0 ml-2">
+                                        <span className="text-[#4E1D17]/80 truncate">{s.nom}</span>
+                                        <span className="tabular-nums text-[#A68D8A] shrink-0 ml-2">
                                           {s.nb}
-                                          <span className="text-gray-400 ml-1">
+                                          <span className="text-[#A68D8A]/80 ml-1">
                                             ({pctSub.toFixed(0)} %)
                                           </span>
                                         </span>
                                       </div>
-                                      <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                                      <div className="w-full h-1 bg-[#EFE9E7] rounded-full overflow-hidden">
                                         <div
                                           className="h-full bg-blue-300 transition-all"
                                           style={{ width: `${pctSub}%` }}
@@ -258,8 +258,8 @@ export default function StatRdvDetailModal({
 
           {/* Statuts RDV (bars horizontal) */}
           {statuts.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+              <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide">
                 Statut des RDV Pris
               </div>
               <div className="p-4 space-y-1.5">
@@ -268,12 +268,12 @@ export default function StatRdvDetailModal({
                   return (
                     <div key={s.lib}>
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-700 font-medium">{s.lib}</span>
-                        <span className="tabular-nums font-semibold text-gray-900">
+                        <span className="text-[#4E1D17] font-medium">{s.lib}</span>
+                        <span className="tabular-nums font-semibold text-[#4E1D17]">
                           {s.nb}
                         </span>
                       </div>
-                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-[#EFE9E7] rounded-full overflow-hidden">
                         <div
                           className="h-full bg-violet-400 transition-all"
                           style={{ width: `${p}%` }}
@@ -287,7 +287,7 @@ export default function StatRdvDetailModal({
           )}
 
           {nbRdv === 0 && (
-            <div className="text-center py-10 text-gray-400 text-sm italic">
+            <div className="text-center py-10 text-[#A68D8A]/80 text-sm italic">
               Pas de RDV pour ce scope.
             </div>
           )}
@@ -311,13 +311,13 @@ function KpiCard({
   color: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-gray-400">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[#A68D8A]/80">
         {icon}
         <div className="text-[10px] uppercase tracking-wide font-medium">{label}</div>
       </div>
       <div className={`text-xl font-bold tabular-nums mt-0.5 ${color}`}>{value}</div>
-      {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[10px] text-[#A68D8A]/80 mt-0.5">{sub}</div>}
     </div>
   )
 }

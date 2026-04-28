@@ -65,11 +65,11 @@ export default function OrgaPicker({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC]">
+          <h2 className="text-lg font-semibold text-[#4E1D17]">{title}</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+            className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -86,36 +86,36 @@ export default function OrgaPicker({
                 e.key === 'Enter' && (e.preventDefault(), doSearch())
               }
               autoFocus
-              className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="flex-1 px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#17494E] focus:border-transparent"
             />
             <button
               type="button"
               onClick={doSearch}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-3 py-2.5 border border-[#E5DDDC] rounded-lg hover:bg-[#EFE9E7]"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Search className="w-4 h-4 text-gray-700" />
+                <Search className="w-4 h-4 text-[#4E1D17]" />
               )}
             </button>
           </div>
 
           {/* Selection courante */}
           {selected.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 rounded-lg border border-gray-200">
-              <span className="text-[10px] uppercase tracking-wide text-gray-500 font-semibold self-center mr-1">
+            <div className="flex flex-wrap gap-1.5 p-2 bg-white rounded-lg border border-[#E5DDDC]">
+              <span className="text-[10px] uppercase tracking-wide text-[#A68D8A] font-semibold self-center mr-1">
                 Selection ({selected.length}) :
               </span>
               {selected.map((s) => (
                 <span
                   key={s.id_orga}
-                  className="inline-flex items-center gap-1 bg-white border border-gray-300 rounded-full px-2 py-0.5 text-xs"
+                  className="inline-flex items-center gap-1 bg-white border border-[#E5DDDC] rounded-full px-2 py-0.5 text-xs"
                 >
                   {s.lib_orga}
                   <button
                     onClick={() => toggle(s)}
-                    className="text-gray-400 hover:text-gray-700"
+                    className="text-[#A68D8A]/80 hover:text-[#4E1D17]"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -125,9 +125,9 @@ export default function OrgaPicker({
           )}
 
           {/* Resultats de recherche */}
-          <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg">
+          <div className="max-h-72 overflow-y-auto border border-[#E5DDDC] rounded-lg">
             {results.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
+              <div className="text-center py-8 text-[#A68D8A]/80 text-sm">
                 {loading ? '' : "Saisis un nom d'agence ou d'equipe pour rechercher"}
               </div>
             ) : (
@@ -138,31 +138,31 @@ export default function OrgaPicker({
                     key={r.id_orga}
                     type="button"
                     onClick={() => toggle(r)}
-                    className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 flex items-start gap-2 ${
-                      checked ? 'bg-gray-50' : ''
+                    className={`w-full text-left px-4 py-2.5 text-sm border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7] flex items-start gap-2 ${
+                      checked ? 'bg-white' : ''
                     }`}
                   >
                     <div
                       className={`shrink-0 mt-0.5 w-4 h-4 rounded border flex items-center justify-center ${
                         checked
-                          ? 'bg-gray-900 border-gray-900 text-white'
-                          : 'border-gray-300 bg-white'
+                          ? 'bg-[#17494E] border-[#17494E] text-white'
+                          : 'border-[#E5DDDC] bg-white'
                       }`}
                     >
                       {checked && <Check className="w-3 h-3" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                        <span className="font-medium text-gray-900">{r.lib_orga}</span>
+                        <Building2 className="w-3.5 h-3.5 text-[#A68D8A]/80 shrink-0" />
+                        <span className="font-medium text-[#4E1D17]">{r.lib_orga}</span>
                         {r.lib_niveau && (
-                          <span className="text-[10px] uppercase tracking-wide text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] uppercase tracking-wide text-[#A68D8A]/80 bg-[#EFE9E7] px-1.5 py-0.5 rounded">
                             {r.lib_niveau}
                           </span>
                         )}
                       </div>
                       {r.lib_parent && (
-                        <div className="text-[11px] text-gray-400 mt-0.5 ml-5">
+                        <div className="text-[11px] text-[#A68D8A]/80 mt-0.5 ml-5">
                           {r.lib_parent}
                         </div>
                       )}
@@ -178,14 +178,14 @@ export default function OrgaPicker({
               type="button"
               onClick={() => onSelect(selected)}
               disabled={selected.length === 0}
-              className="flex-1 px-3 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+              className="flex-1 px-3 py-2.5 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90 disabled:opacity-50"
             >
               Valider ({selected.length})
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+              className="flex-1 px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm font-medium hover:bg-[#EFE9E7]"
             >
               Annuler
             </button>

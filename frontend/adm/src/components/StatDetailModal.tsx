@@ -117,10 +117,10 @@ export default function StatDetailModal({
         className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC] sticky top-0 bg-white z-10">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{title}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Detail Entrees / Sorties</p>
+            <h2 className="text-lg font-bold text-[#4E1D17]">{title}</h2>
+            <p className="text-xs text-[#A68D8A] mt-0.5">Detail Entrees / Sorties</p>
           </div>
           <div className="flex items-center gap-2">
             <PdfExportButton
@@ -130,7 +130,7 @@ export default function StatDetailModal({
             />
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
             >
               <X className="w-5 h-5" />
             </button>
@@ -144,7 +144,7 @@ export default function StatDetailModal({
               icon={<FileText className="w-5 h-5" />}
               label="DPAE"
               value={nbDpae}
-              color="text-gray-900"
+              color="text-[#4E1D17]"
             />
             <KpiCard
               icon={<FileText className="w-5 h-5" />}
@@ -158,7 +158,7 @@ export default function StatDetailModal({
               label="DPAE actives"
               value={nbDpaeActifs}
               sub={`${pctActifs.toFixed(1)} %`}
-              color="text-emerald-600"
+              color="text-[#17494E]"
             />
             <KpiCard
               icon={<LogOut className="w-5 h-5" />}
@@ -189,7 +189,7 @@ export default function StatDetailModal({
                 label="DPAE total"
                 value={nbDpae}
                 pct={100}
-                color="bg-gray-900"
+                color="bg-[#17494E]"
               />
               <FunnelBar
                 label="DPAE actives"
@@ -231,7 +231,7 @@ export default function StatDetailModal({
                 label="Sorties total"
                 value={nbSorties}
                 pct={100}
-                color="bg-gray-900"
+                color="bg-[#17494E]"
               />
               <FunnelBar
                 label="Prod"
@@ -252,36 +252,36 @@ export default function StatDetailModal({
 
           {/* Tableau sorties par type */}
           {sortiesParTypeArr.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+              <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide">
                 Sorties par type
               </div>
               <table className="w-full text-sm">
-                <thead className="bg-white border-b border-gray-200">
+                <thead className="bg-white border-b border-[#E5DDDC]">
                   <tr>
-                    <th className="text-left py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                       Type de sortie
                     </th>
-                    <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                       Nb
                     </th>
-                    <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                       % sur sorties
                     </th>
-                    <th className="text-right py-2 px-3 text-xs font-medium text-gray-500 uppercase">
+                    <th className="text-right py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">
                       Moy duree (j)
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortiesParTypeArr.map((r) => (
-                    <tr key={r.type} className="border-b border-gray-100 last:border-0">
-                      <td className="py-2 px-3 font-medium text-gray-900">{r.type}</td>
+                    <tr key={r.type} className="border-b border-[#E5DDDC] last:border-0">
+                      <td className="py-2 px-3 font-medium text-[#4E1D17]">{r.type}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{r.nb}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-gray-500">
+                      <td className="py-2 px-3 text-right tabular-nums text-[#A68D8A]">
                         {((r.nb / nbSorties) * 100).toFixed(1)} %
                       </td>
-                      <td className="py-2 px-3 text-right tabular-nums text-gray-500">
+                      <td className="py-2 px-3 text-right tabular-nums text-[#A68D8A]">
                         {r.moy_j}
                       </td>
                     </tr>
@@ -292,7 +292,7 @@ export default function StatDetailModal({
           )}
 
           {nbDpae === 0 && nbSorties === 0 && (
-            <div className="text-center py-10 text-gray-400 text-sm italic">
+            <div className="text-center py-10 text-[#A68D8A]/80 text-sm italic">
               Pas de donnees pour ce scope.
             </div>
           )}
@@ -320,8 +320,8 @@ function KpiCard({
   color: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-gray-400">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] px-3 py-2.5">
+      <div className="flex items-center gap-1.5 text-[#A68D8A]/80">
         {icon}
         <div className="text-[10px] uppercase tracking-wide font-medium">{label}</div>
       </div>
@@ -329,7 +329,7 @@ function KpiCard({
         {value}
         {unit && <span className="text-sm font-normal ml-1">{unit}</span>}
       </div>
-      {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[10px] text-[#A68D8A]/80 mt-0.5">{sub}</div>}
     </div>
   )
 }
@@ -342,8 +342,8 @@ function FunnelSection({
   children: React.ReactNode
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      <div className="px-4 py-2.5 bg-white border-b border-[#E5DDDC] text-xs font-semibold text-[#4E1D17]/80 uppercase tracking-wide">
         {title}
       </div>
       <div className="p-4 space-y-1.5">{children}</div>
@@ -369,16 +369,16 @@ function FunnelBar({
   return (
     <div className={`${indent ? 'pl-4' : ''}`}>
       <div className="flex items-center justify-between text-xs mb-1">
-        <div className="flex items-center gap-1.5 text-gray-700 font-medium">
+        <div className="flex items-center gap-1.5 text-[#4E1D17] font-medium">
           {icon}
           {label}
         </div>
-        <div className="tabular-nums text-gray-500">
-          <span className="font-semibold text-gray-900">{value}</span>
-          <span className="ml-1.5 text-gray-400">({pct.toFixed(1)} %)</span>
+        <div className="tabular-nums text-[#A68D8A]">
+          <span className="font-semibold text-[#4E1D17]">{value}</span>
+          <span className="ml-1.5 text-[#A68D8A]/80">({pct.toFixed(1)} %)</span>
         </div>
       </div>
-      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className="w-full h-2 bg-[#EFE9E7] rounded-full overflow-hidden">
         <div
           className={`h-full ${color} transition-all`}
           style={{ width: `${Math.min(100, pct)}%` }}

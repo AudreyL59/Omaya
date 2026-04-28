@@ -217,19 +217,19 @@ export default function AgendaRecrutementPage() {
   return (
     <div className="p-8">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold text-gray-900">Agenda de recrutement</h1>
-        <p className="text-gray-500 mt-1">RDV d'entretiens</p>
+        <h1 className="text-2xl font-bold text-[#4E1D17]">Agenda de recrutement</h1>
+        <p className="text-[#A68D8A] mt-1">RDV d'entretiens</p>
       </motion.div>
 
       <div className="max-w-5xl mt-6">
         {/* Toolbar */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex items-center gap-3 flex-wrap">
+        <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-4 mb-4 flex items-center gap-3 flex-wrap">
           {/* Mode toggle */}
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex gap-1 bg-[#EFE9E7] rounded-lg p-1">
             <button
               onClick={() => setMode('day')}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                mode === 'day' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                mode === 'day' ? 'bg-white text-[#17494E] shadow-sm' : 'text-[#A68D8A]'
               }`}
             >
               Jour
@@ -237,7 +237,7 @@ export default function AgendaRecrutementPage() {
             <button
               onClick={() => setMode('range')}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                mode === 'range' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                mode === 'range' ? 'bg-white text-[#17494E] shadow-sm' : 'text-[#A68D8A]'
               }`}
             >
               Période
@@ -248,12 +248,12 @@ export default function AgendaRecrutementPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => shiftDay(-1)}
-                className="p-1.5 rounded-lg hover:bg-gray-100"
+                className="p-1.5 rounded-lg hover:bg-[#EFE9E7]"
               >
-                <ChevronLeft className="w-4 h-4 text-gray-600" />
+                <ChevronLeft className="w-4 h-4 text-[#4E1D17]/80" />
               </button>
-              <div className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm">
-                <CalendarIcon className="w-4 h-4 text-gray-400" />
+              <div className="flex items-center gap-2 px-3 py-1.5 border border-[#E5DDDC] rounded-lg text-sm">
+                <CalendarIcon className="w-4 h-4 text-[#A68D8A]/80" />
                 <input
                   type="date"
                   value={toISODate(day)}
@@ -266,15 +266,15 @@ export default function AgendaRecrutementPage() {
               </div>
               <button
                 onClick={() => shiftDay(1)}
-                className="p-1.5 rounded-lg hover:bg-gray-100"
+                className="p-1.5 rounded-lg hover:bg-[#EFE9E7]"
               >
-                <ChevronRight className="w-4 h-4 text-gray-600" />
+                <ChevronRight className="w-4 h-4 text-[#4E1D17]/80" />
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg text-sm">
-                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+              <div className="flex items-center gap-1 px-2 py-1 border border-[#E5DDDC] rounded-lg text-sm">
+                <CalendarIcon className="w-3.5 h-3.5 text-[#A68D8A]/80" />
                 <input
                   type="date"
                   value={dateFrom}
@@ -282,9 +282,9 @@ export default function AgendaRecrutementPage() {
                   className="border-0 text-sm focus:outline-none font-medium bg-transparent"
                 />
               </div>
-              <span className="text-gray-400 text-xs">→</span>
-              <div className="flex items-center gap-1 px-2 py-1 border border-gray-200 rounded-lg text-sm">
-                <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-[#A68D8A]/80 text-xs">→</span>
+              <div className="flex items-center gap-1 px-2 py-1 border border-[#E5DDDC] rounded-lg text-sm">
+                <CalendarIcon className="w-3.5 h-3.5 text-[#A68D8A]/80" />
                 <input
                   type="date"
                   value={dateTo}
@@ -295,44 +295,44 @@ export default function AgendaRecrutementPage() {
             </div>
           )}
 
-          <div className="h-6 w-px bg-gray-200 mx-1" />
+          <div className="h-6 w-px bg-[#E5DDDC] mx-1" />
 
           <button
             onClick={() => setShowRecruteurPicker(true)}
-            className="flex items-center gap-2 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 border border-[#E5DDDC] rounded-lg text-sm text-[#4E1D17] hover:bg-[#EFE9E7] transition-colors"
           >
-            <User className="w-4 h-4 text-gray-400" />
+            <User className="w-4 h-4 text-[#A68D8A]/80" />
             <span className="font-medium">{recruteurName}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#A68D8A]/80" />
           </button>
 
           <div className="flex-1" />
 
           <div className="relative">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[#A68D8A]/80 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Rechercher un candidat..."
               value={searchCandidat}
               onChange={(e) => setSearchCandidat(e.target.value)}
-              className="pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-56"
+              className="pl-9 pr-3 py-1.5 border border-[#E5DDDC] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#E5DDDC] w-56"
             />
           </div>
         </div>
 
         {/* Stats cards */}
         <div className="grid grid-cols-5 gap-3 mb-5">
-          <StatCard label="RDV total" value={stats.total} accent="text-gray-900" />
-          <StatCard label="Retenus" value={stats.retenu} accent="text-emerald-600" />
-          <StatCard label="Non retenus" value={stats.non_retenu} accent="text-red-600" />
+          <StatCard label="RDV total" value={stats.total} accent="text-[#4E1D17]" />
+          <StatCard label="Retenus" value={stats.retenu} accent="text-[#17494E]" />
+          <StatCard label="Non retenus" value={stats.non_retenu} accent="text-[#993636]" />
           <StatCard label="Absents" value={stats.absent} accent="text-slate-600" />
-          <StatCard label="En attente" value={stats.attente} accent="text-gray-500" />
+          <StatCard label="En attente" value={stats.attente} accent="text-[#A68D8A]" />
         </div>
 
         {/* Filter pills */}
         {categories.length > 0 && (
           <div className="flex items-center gap-2 mb-5 flex-wrap">
-            <Filter className="w-4 h-4 text-gray-400" />
+            <Filter className="w-4 h-4 text-[#A68D8A]/80" />
             <FilterPill
               active={filter === 'all'}
               onClick={() => setFilter('all')}
@@ -357,11 +357,11 @@ export default function AgendaRecrutementPage() {
 
         {/* Timeline */}
         {loading ? (
-          <div className="flex items-center justify-center py-20 bg-white rounded-xl border border-gray-200">
-            <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+          <div className="flex items-center justify-center py-20 bg-white rounded-[10px] border border-[#E5DDDC]">
+            <Loader2 className="w-6 h-6 text-[#E5DDDC] animate-spin" />
           </div>
         ) : filteredRdvs.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 text-sm bg-white rounded-xl border border-gray-200">
+          <div className="text-center py-12 text-[#A68D8A]/80 text-sm bg-white rounded-[10px] border border-[#E5DDDC]">
             Aucun RDV sur cette période
           </div>
         ) : (
@@ -372,17 +372,17 @@ export default function AgendaRecrutementPage() {
                 <div key={dkey}>
                   {mode === 'range' && (
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="text-sm font-semibold text-gray-900 capitalize">
+                      <div className="text-sm font-semibold text-[#4E1D17] capitalize">
                         {formatDayFr(dkey)}
                       </div>
-                      <div className="flex-1 h-px bg-gray-200" />
-                      <div className="text-xs text-gray-500">
+                      <div className="flex-1 h-px bg-[#E5DDDC]" />
+                      <div className="text-xs text-[#A68D8A]">
                         {dayRdvs.length} RDV{dayRdvs.length > 1 ? 's' : ''}
                       </div>
                     </div>
                   )}
                   <div className="relative">
-                    <div className="absolute left-[52px] top-3 bottom-3 w-px bg-gray-200" />
+                    <div className="absolute left-[52px] top-3 bottom-3 w-px bg-[#E5DDDC]" />
                     <div className="space-y-3">
                       {dayRdvs.map((rdv) => (
                         <TimelineCard
@@ -444,9 +444,9 @@ function StatCard({
   accent: string
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] px-4 py-3">
       <div className={`text-2xl font-bold ${accent}`}>{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+      <div className="text-xs text-[#A68D8A] mt-0.5">{label}</div>
     </div>
   )
 }
@@ -469,8 +469,8 @@ function FilterPill({
       onClick={onClick}
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
         active
-          ? 'bg-gray-900 text-white'
-          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+          ? 'bg-[#17494E] text-white'
+          : 'bg-white border border-[#E5DDDC] text-[#4E1D17]/80 hover:bg-[#EFE9E7]'
       }`}
     >
       {dotColor && (
@@ -480,7 +480,7 @@ function FilterPill({
         />
       )}
       {label}
-      <span className={active ? 'text-gray-300' : 'text-gray-400'}>{count}</span>
+      <span className={active ? 'text-[#E5DDDC]' : 'text-[#A68D8A]/80'}>{count}</span>
     </button>
   )
 }
@@ -506,8 +506,8 @@ function TimelineCard({
   return (
     <div className="flex gap-4 items-start">
       <div className="text-right pt-3 w-[44px] shrink-0">
-        <div className="text-sm font-medium text-gray-900">{time}</div>
-        {duration > 0 && <div className="text-xs text-gray-400">{duration}min</div>}
+        <div className="text-sm font-medium text-[#4E1D17]">{time}</div>
+        {duration > 0 && <div className="text-xs text-[#A68D8A]/80">{duration}min</div>}
       </div>
 
       <div className="relative pt-4 shrink-0">
@@ -517,14 +517,14 @@ function TimelineCard({
         />
       </div>
 
-      <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-gray-300 transition-colors">
+      <div className="flex-1 bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden hover:border-[#E5DDDC] transition-colors">
         <button
           onClick={onToggle}
-          className="w-full px-5 py-3.5 flex items-center gap-3 text-left hover:bg-gray-50/50"
+          className="w-full px-5 py-3.5 flex items-center gap-3 text-left hover:bg-[#EFE9E7]/50"
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
-              <h3 className="font-semibold text-gray-900">{candidateName}</h3>
+              <h3 className="font-semibold text-[#4E1D17]">{candidateName}</h3>
               <span
                 className="px-2 py-0.5 rounded-full text-xs font-medium border"
                 style={badgeStyle}
@@ -532,7 +532,7 @@ function TimelineCard({
                 {rdv.lib_categorie}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5 truncate">
+            <p className="text-xs text-[#A68D8A] mt-0.5 truncate">
               {rdv.profil || '—'}
               {rdv.gsm && ` · ${rdv.gsm}`}
             </p>
@@ -543,7 +543,7 @@ function TimelineCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              className="p-1.5 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
               title="Ouvrir le CV"
             >
               <FileText className="w-4 h-4" />
@@ -554,13 +554,13 @@ function TimelineCard({
               e.stopPropagation()
               onStatuer()
             }}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+            className="p-1.5 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
             title="Statuer le RDV"
           >
             <Pencil className="w-4 h-4" />
           </button>
           <ChevronDown
-            className={`w-4 h-4 text-gray-400 transition-transform ${
+            className={`w-4 h-4 text-[#A68D8A]/80 transition-transform ${
               expanded ? 'rotate-180' : ''
             }`}
           />
@@ -575,7 +575,7 @@ function TimelineCard({
               transition={{ duration: 0.2 }}
               className="overflow-hidden"
             >
-              <div className="px-5 pb-5 border-t border-gray-100">
+              <div className="px-5 pb-5 border-t border-[#E5DDDC]">
                 <div className="grid grid-cols-2 gap-x-6 gap-y-3 mt-4 text-sm">
                   <DetailRow
                     icon={<User className="w-3.5 h-3.5" />}
@@ -600,22 +600,22 @@ function TimelineCard({
                 </div>
 
                 {rdv.contenu && (
-                  <div className="mt-5 pt-4 border-t border-gray-100">
-                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
+                  <div className="mt-5 pt-4 border-t border-[#E5DDDC]">
+                    <div className="text-xs font-medium text-[#A68D8A] uppercase tracking-wide mb-3">
                       Historique
                     </div>
-                    <div className="text-xs text-gray-600 whitespace-pre-line leading-relaxed">
+                    <div className="text-xs text-[#4E1D17]/80 whitespace-pre-line leading-relaxed">
                       {rdv.contenu}
                     </div>
                   </div>
                 )}
 
                 {rdv.observ && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                  <div className="mt-4 pt-4 border-t border-[#E5DDDC]">
+                    <div className="text-xs font-medium text-[#A68D8A] uppercase tracking-wide mb-2">
                       Observations
                     </div>
-                    <div className="text-xs text-gray-600 whitespace-pre-line leading-relaxed">
+                    <div className="text-xs text-[#4E1D17]/80 whitespace-pre-line leading-relaxed">
                       {rdv.observ}
                     </div>
                   </div>
@@ -640,10 +640,10 @@ function DetailRow({
 }) {
   return (
     <div className="flex gap-2">
-      <div className="text-gray-300 mt-0.5">{icon}</div>
+      <div className="text-[#E5DDDC] mt-0.5">{icon}</div>
       <div className="min-w-0">
-        <div className="text-xs text-gray-400 uppercase tracking-wide">{label}</div>
-        <div className="text-gray-900 mt-0.5 truncate">{value}</div>
+        <div className="text-xs text-[#A68D8A]/80 uppercase tracking-wide">{label}</div>
+        <div className="text-[#4E1D17] mt-0.5 truncate">{value}</div>
       </div>
     </div>
   )
@@ -691,11 +691,11 @@ function RecruteurPicker({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Choisir le recruteur</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC]">
+          <h2 className="text-lg font-semibold text-[#4E1D17]">Choisir le recruteur</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+            className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -710,24 +710,24 @@ function RecruteurPicker({
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), doSearch())}
               autoFocus
-              className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="flex-1 px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#17494E] focus:border-transparent"
             />
             <button
               type="button"
               onClick={doSearch}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="px-3 py-2.5 border border-[#E5DDDC] rounded-lg hover:bg-[#EFE9E7]"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Search className="w-4 h-4 text-gray-700" />
+                <Search className="w-4 h-4 text-[#4E1D17]" />
               )}
             </button>
           </div>
 
-          <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+          <div className="max-h-64 overflow-y-auto border border-[#E5DDDC] rounded-lg">
             {results.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">
+              <div className="text-center py-8 text-[#A68D8A]/80 text-sm">
                 {loading ? '' : 'Saisis un nom pour rechercher'}
               </div>
             ) : (
@@ -736,12 +736,12 @@ function RecruteurPicker({
                   key={r.id_salarie}
                   type="button"
                   onClick={() => setSelected(r)}
-                  className={`w-full text-left px-4 py-2.5 text-sm border-b border-gray-100 last:border-0 hover:bg-gray-50 ${
-                    selected?.id_salarie === r.id_salarie ? 'bg-gray-100' : ''
+                  className={`w-full text-left px-4 py-2.5 text-sm border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7] ${
+                    selected?.id_salarie === r.id_salarie ? 'bg-[#EFE9E7]' : ''
                   }`}
                 >
-                  <span className="font-medium text-gray-900">{r.nom}</span>{' '}
-                  <span className="text-gray-600">{capitalize(r.prenom)}</span>
+                  <span className="font-medium text-[#4E1D17]">{r.nom}</span>{' '}
+                  <span className="text-[#4E1D17]/80">{capitalize(r.prenom)}</span>
                 </button>
               ))
             )}
@@ -752,14 +752,14 @@ function RecruteurPicker({
               type="button"
               onClick={() => selected && onSelect(selected)}
               disabled={!selected}
-              className="flex-1 px-3 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+              className="flex-1 px-3 py-2.5 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90 disabled:opacity-50"
             >
               Valider
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+              className="flex-1 px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm font-medium hover:bg-[#EFE9E7]"
             >
               Annuler
             </button>
@@ -865,11 +865,11 @@ function StatuerModal({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
-          <h2 className="text-lg font-semibold text-gray-900">Statuer le RDV</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5DDDC] sticky top-0 bg-white z-10">
+          <h2 className="text-lg font-semibold text-[#4E1D17]">Statuer le RDV</h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+            className="p-1 rounded-lg hover:bg-[#EFE9E7] text-[#A68D8A]/80 hover:text-[#4E1D17]"
           >
             <X className="w-5 h-5" />
           </button>
@@ -877,10 +877,10 @@ function StatuerModal({
 
         <div className="p-6 space-y-4">
           <div>
-            <div className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">
+            <div className="text-xs font-medium text-[#A68D8A]/80 uppercase tracking-wide mb-1">
               Candidat
             </div>
-            <div className="text-sm font-semibold text-gray-900">
+            <div className="text-sm font-semibold text-[#4E1D17]">
               {rdv.nom || rdv.prenom
                 ? `${rdv.nom} ${capitalize(rdv.prenom)}`.trim()
                 : rdv.titre}
@@ -888,14 +888,14 @@ function StatuerModal({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1 block">
+            <label className="text-xs font-medium text-[#A68D8A]/80 uppercase tracking-wide mb-1 block">
               Statut RDV
             </label>
             <select
               value={idCategorie}
               onChange={(e) => setIdCategorie(parseInt(e.target.value))}
               disabled={!rdv.statut_modif}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#17494E] disabled:bg-white disabled:text-[#A68D8A] disabled:cursor-not-allowed"
             >
               <option value={0}>Choisir le statut</option>
               {statuts.map((s) => (
@@ -905,7 +905,7 @@ function StatuerModal({
               ))}
             </select>
             {!rdv.statut_modif && (
-              <p className="text-xs text-gray-500 mt-1.5 italic">
+              <p className="text-xs text-[#A68D8A] mt-1.5 italic">
                 Ce RDV a déjà été statué, le statut n'est plus modifiable.
               </p>
             )}
@@ -917,7 +917,7 @@ function StatuerModal({
               animate={{ opacity: 1, height: 'auto' }}
               className="space-y-2"
             >
-              <div className="text-xs text-gray-600">
+              <div className="text-xs text-[#4E1D17]/80">
                 Vous n'avez pas retenu le candidat pour les raisons suivantes :
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -946,7 +946,7 @@ function StatuerModal({
           )}
 
           <div>
-            <label className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1 block">
+            <label className="text-xs font-medium text-[#A68D8A]/80 uppercase tracking-wide mb-1 block">
               Motif {showRefus && <span className="text-red-500">*</span>}
             </label>
             <textarea
@@ -954,12 +954,12 @@ function StatuerModal({
               onChange={(e) => setMotif(e.target.value)}
               rows={3}
               placeholder="Minimum 5 caractères"
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#17494E]"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p className="text-sm text-[#993636] bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
@@ -970,7 +970,7 @@ function StatuerModal({
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex-1 px-3 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-3 py-2.5 bg-[#17494E] text-white rounded-lg text-sm font-medium hover:bg-[#17494E]/90 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 Valider
@@ -978,7 +978,7 @@ function StatuerModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-3 py-2.5 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                className="flex-1 px-3 py-2.5 border border-[#E5DDDC] rounded-lg text-sm font-medium hover:bg-[#EFE9E7]"
               >
                 Annuler
               </button>
@@ -986,7 +986,7 @@ function StatuerModal({
           )}
 
           {CONVOC_CATEGORIES.has(rdv.id_categorie) && (
-            <div className="pt-4 mt-2 border-t border-gray-200">
+            <div className="pt-4 mt-2 border-t border-[#E5DDDC]">
               <ConvocJoButton
                 idRdv={rdv.id_evenement}
                 onDone={onSaved}
@@ -1048,7 +1048,7 @@ function ConvocJoButton({
         Convoquer en JO
       </button>
       {error && (
-        <p className="text-xs text-red-600 mt-2 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
+        <p className="text-xs text-[#993636] mt-2 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
           {error}
         </p>
       )}
@@ -1066,7 +1066,7 @@ function Checkbox({
   onChange: (v: boolean) => void
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-gray-700 px-3 py-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+    <label className="flex items-center gap-2 text-sm text-[#4E1D17] px-3 py-2 border border-[#E5DDDC] rounded-lg cursor-pointer hover:bg-[#EFE9E7]">
       <input
         type="checkbox"
         checked={checked}
