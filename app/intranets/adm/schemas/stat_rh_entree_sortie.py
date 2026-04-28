@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class DpaeRow(BaseModel):
     id_salarie: str
     id_ste: int = 0
+    rs_interne: str = ""       # societe.RS_Interne
     nom: str = ""
     prenom: str = ""
     adresse: str = ""
@@ -16,12 +17,15 @@ class DpaeRow(BaseModel):
     origine: str = ""
     detail_origine: str = ""
     id_orga: str = "0"
+    agence: str = ""           # libellé du parent de l'orga (Agence)
+    equipe: str = ""           # libellé de l'orga elle-même (Équipe)
     prod: bool = False
 
 
 class SortieRow(BaseModel):
     id_salarie: str
     id_ste: int = 0
+    rs_interne: str = ""
     nom: str = ""
     prenom: str = ""
     adresse: str = ""
@@ -33,6 +37,8 @@ class SortieRow(BaseModel):
     id_type_sortie: int = 0
     type_sortie_lib: str = ""
     id_orga: str = "0"
+    agence: str = ""
+    equipe: str = ""
     prod: bool = False
 
 

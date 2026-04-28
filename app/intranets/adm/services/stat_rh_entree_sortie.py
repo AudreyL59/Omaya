@@ -281,6 +281,35 @@ def calculer_stats_entree_sortie(
                     "fin_demandee": r.get("DateSortieDemandée") or "",
                 }
 
+    # --- Lookup societe : IdSte → RS_Interne ------------------------------
+    societe_rs: dict[int, str] = {}
+    try:
+        ste_rows = db_rh.query("SELECT IdSte, RS_Interne FROM societe")
+        for s in ste_rows:
+            societe_rs[_to_int(s.get("IdSte"))] = s.get("RS_Interne") or ""
+    except Exception:
+        pass
+
+    # --- Helper : agence + équipe d'un salarié à partir de son orga ------
+    # orga_info construit ici, réutilisé plus bas dans le bloc Resume.
+    orga_info: dict[int, dict] = {}
+    for o in all_orgas:
+        oid = _to_int(o.get("idorganigramme"))
+        orga_info[oid] = {
+            "lib_orga": o.get("Lib_ORGA") or "",
+            "id_parent": _to_int(o.get("IdPARENT")),
+        }
+
+    def _agence_equipe(id_orga: int) -> tuple[str, str]:
+        info = orga_info.get(id_orga)
+        if not info:
+            return ("", "")
+        equipe_lib = info["lib_orga"]
+        parent_id = info["id_parent"]
+        parent_info = orga_info.get(parent_id, {})
+        agence_lib = parent_info.get("lib_orga", "")
+        return (agence_lib, equipe_lib)
+
     # --- Construction des lignes DPAE -------------------------------------
     dpae_list: list[dict] = []
     for r in dpae_rows:
@@ -289,12 +318,13 @@ def calculer_stats_entree_sortie(
         sortie = sortie_by_sal.get(sid, {})
         id_cvtheque = _to_int(r.get("IDcvtheque"))
         id_source = cvtheque_source.get(id_cvtheque, 0)
-        # Coopte (WinDev) = IDcvsource = 1 (salarié), CVtheque = 2+ (annonceur / autre)
-        # Si pas de cvtheque rattachée, on considère "Cooptation" par defaut (comme WinDev).
         origine = "Cooptation" if id_source <= 1 or id_cvtheque == 0 else "CVtheque"
+        id_ste = _to_int(r.get("IdSte"))
+        agence_lib, equipe_lib = _agence_equipe(id_orga_sal)
         dpae_list.append({
             "id_salarie": str(sid),
-            "id_ste": _to_int(r.get("IdSte")),
+            "id_ste": id_ste,
+            "rs_interne": societe_rs.get(id_ste, ""),
             "nom": (r.get("Nom") or "").strip(),
             "prenom": (r.get("Prenom") or "").strip(),
             "adresse": r.get("ADRESSE1") or "",
@@ -307,6 +337,8 @@ def calculer_stats_entree_sortie(
             "origine": origine,
             "detail_origine": "",
             "id_orga": str(id_orga_sal),
+            "agence": agence_lib,
+            "equipe": equipe_lib,
             "prod": sid in productifs,
         })
 
@@ -316,9 +348,12 @@ def calculer_stats_entree_sortie(
         sid = _to_int(r.get("IDSalarie"))
         id_orga_sal = salarie_to_orga.get(sid, 0)
         id_type = _to_int(r.get("IDTypeSortie"))
+        id_ste = _to_int(r.get("IdSte"))
+        agence_lib, equipe_lib = _agence_equipe(id_orga_sal)
         sortie_list.append({
             "id_salarie": str(sid),
-            "id_ste": _to_int(r.get("IdSte")),
+            "id_ste": id_ste,
+            "rs_interne": societe_rs.get(id_ste, ""),
             "nom": (r.get("Nom") or "").strip(),
             "prenom": (r.get("Prenom") or "").strip(),
             "adresse": r.get("ADRESSE1") or "",
@@ -330,19 +365,13 @@ def calculer_stats_entree_sortie(
             "id_type_sortie": id_type,
             "type_sortie_lib": type_sortie_map.get(id_type, ""),
             "id_orga": str(id_orga_sal),
+            "agence": agence_lib,
+            "equipe": equipe_lib,
             "prod": sid in productifs,
         })
 
     # --- Agregation par orga (Resume) -------------------------------------
-    # Libelles orga + parent
-    orga_info: dict[int, dict] = {}
-    for o in all_orgas:
-        oid = _to_int(o.get("idorganigramme"))
-        orga_info[oid] = {
-            "lib_orga": o.get("Lib_ORGA") or "",
-            "id_parent": _to_int(o.get("IdPARENT")),
-        }
-    # Map id -> Lib_ORGA (pour retrouver le nom du parent)
+    # orga_info déjà construit plus haut. Map id -> Lib_ORGA pour le parent.
     orga_libs: dict[int, str] = {
         oid: info["lib_orga"] for oid, info in orga_info.items()
     }

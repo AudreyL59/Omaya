@@ -25,6 +25,7 @@ type TypeRecherche = 'reseau' | 'orga'
 interface DpaeRow {
   id_salarie: string
   id_ste: number
+  rs_interne: string
   nom: string
   prenom: string
   adresse: string
@@ -37,12 +38,15 @@ interface DpaeRow {
   origine: string
   detail_origine: string
   id_orga: string
+  agence: string
+  equipe: string
   prod: boolean
 }
 
 interface SortieRow {
   id_salarie: string
   id_ste: number
+  rs_interne: string
   nom: string
   prenom: string
   adresse: string
@@ -54,6 +58,8 @@ interface SortieRow {
   id_type_sortie: number
   type_sortie_lib: string
   id_orga: string
+  agence: string
+  equipe: string
   prod: boolean
 }
 
@@ -597,11 +603,13 @@ function DpaeTable({ rows, loading }: { rows: DpaeRow[]; loading: boolean }) {
   const handleExport = () => {
     exportToCSV(
       'stats-entree-sortie-dpae',
-      ['Entite', 'Nom', 'Prenom', 'Adresse', 'CP', 'Ville', "Date d'entree", 'Actif', 'Date Sortie', 'Fin demandee'],
+      ['Entite', 'Nom', 'Prenom', 'Agence', 'Equipe', 'Adresse', 'CP', 'Ville', "Date d'entree", 'Actif', 'Date Sortie', 'Fin demandee'],
       rows.map((r) => [
-        r.id_ste || '',
+        r.rs_interne || (r.id_ste || ''),
         r.nom,
         capitalize(r.prenom),
+        r.agence,
+        r.equipe,
         r.adresse,
         r.cp,
         r.ville,
@@ -625,6 +633,8 @@ function DpaeTable({ rows, loading }: { rows: DpaeRow[]; loading: boolean }) {
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Entite</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Nom</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Prenom</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Agence</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Equipe</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Adresse</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">CP</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Ville</th>
@@ -637,9 +647,11 @@ function DpaeTable({ rows, loading }: { rows: DpaeRow[]; loading: boolean }) {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id_salarie} className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]">
-                <td className="py-2 px-3 text-[#4E1D17]/80">{r.id_ste || '—'}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.rs_interne || r.id_ste || '—'}</td>
                 <td className="py-2 px-3 font-medium text-[#4E1D17]">{r.nom}</td>
                 <td className="py-2 px-3 text-[#4E1D17]">{capitalize(r.prenom)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.agence || '—'}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.equipe || '—'}</td>
                 <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">{r.adresse}</td>
                 <td className="py-2 px-3 text-[#4E1D17]/80">{r.cp}</td>
                 <td className="py-2 px-3 text-[#4E1D17]/80">{r.ville}</td>
@@ -665,11 +677,13 @@ function SortieTable({ rows, loading }: { rows: SortieRow[]; loading: boolean })
   const handleExport = () => {
     exportToCSV(
       'stats-entree-sortie-sorties',
-      ['Entite', 'Nom', 'Prenom', 'Adresse', 'CP', 'Ville', 'Date entree', 'Date sortie', 'Fin demandee', 'Type sortie'],
+      ['Entite', 'Nom', 'Prenom', 'Agence', 'Equipe', 'Adresse', 'CP', 'Ville', 'Date entree', 'Date sortie', 'Fin demandee', 'Type sortie'],
       rows.map((r) => [
-        r.id_ste || '',
+        r.rs_interne || (r.id_ste || ''),
         r.nom,
         capitalize(r.prenom),
+        r.agence,
+        r.equipe,
         r.adresse,
         r.cp,
         r.ville,
@@ -693,6 +707,8 @@ function SortieTable({ rows, loading }: { rows: SortieRow[]; loading: boolean })
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Entite</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Nom</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Prenom</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Agence</th>
+              <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Equipe</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Adresse</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">CP</th>
               <th className="text-left py-2 px-3 text-xs font-medium text-[#A68D8A] uppercase">Ville</th>
@@ -705,9 +721,11 @@ function SortieTable({ rows, loading }: { rows: SortieRow[]; loading: boolean })
           <tbody>
             {rows.map((r) => (
               <tr key={r.id_salarie} className="border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7]">
-                <td className="py-2 px-3 text-[#4E1D17]/80">{r.id_ste || '—'}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.rs_interne || r.id_ste || '—'}</td>
                 <td className="py-2 px-3 font-medium text-[#4E1D17]">{r.nom}</td>
                 <td className="py-2 px-3 text-[#4E1D17]">{capitalize(r.prenom)}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.agence || '—'}</td>
+                <td className="py-2 px-3 text-[#4E1D17]/80">{r.equipe || '—'}</td>
                 <td className="py-2 px-3 text-[#4E1D17]/80 truncate max-w-xs">{r.adresse}</td>
                 <td className="py-2 px-3 text-[#4E1D17]/80">{r.cp}</td>
                 <td className="py-2 px-3 text-[#4E1D17]/80">{r.ville}</td>
