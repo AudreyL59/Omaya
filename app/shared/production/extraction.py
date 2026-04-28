@@ -2035,10 +2035,18 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
         if (r.get("puissance") or 0) >= 6
     )
 
-    # Consentement : unique par client
-    id_clients = {r.get("id_client") for r in oen if r.get("id_client") and r.get("id_client") != "0"}
+    # Clients + consentement : uniques par client, **hors anomalies**
+    # (id_type_etat == 3 = anomalie). Cf. WinDev StatsOEN.
+    oen_hors_anom = [r for r in oen if r.get("id_type_etat") != 3]
+    id_clients = {
+        r.get("id_client") for r in oen_hors_anom
+        if r.get("id_client") and r.get("id_client") != "0"
+    }
     nb_clients = len(id_clients)
-    clients_consent = {r.get("id_client") for r in oen if r.get("client_rap_part") and r.get("id_client") and r.get("id_client") != "0"}
+    clients_consent = {
+        r.get("id_client") for r in oen_hors_anom
+        if r.get("client_rap_part") and r.get("id_client") and r.get("id_client") != "0"
+    }
     nb_consent = len(clients_consent)
 
     # Note moyenne
@@ -2112,14 +2120,15 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
             v["nb_6kva_total"] += 2 if is_dual else 1
             if puiss >= 6:
                 v["nb_6kva"] += 1
-        # Consentement par client unique
-        cid = r.get("id_client") or "0"
-        if cid and cid != "0" and cid not in v["_clients_seen"]:
-            v["_clients_seen"].add(cid)
-            v["nb_clients"] += 1
-            if r.get("client_rap_part"):
-                v["_clients_consent"].add(cid)
-                v["nb_consent"] += 1
+        # Consentement par client unique (HORS anomalies, comme le KPI global)
+        if id_te != 3:
+            cid = r.get("id_client") or "0"
+            if cid and cid != "0" and cid not in v["_clients_seen"]:
+                v["_clients_seen"].add(cid)
+                v["nb_clients"] += 1
+                if r.get("client_rap_part"):
+                    v["_clients_consent"].add(cid)
+                    v["nb_consent"] += 1
 
     tx_racc_vendeur: list[dict] = []
     for v in v_rows.values():
