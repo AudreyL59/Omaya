@@ -1,5 +1,34 @@
 @import "tailwindcss";
 
+/* Variables CSS de thème pour les composants partagés (frontend/shared/).
+   Les composants utilisent ces tokens via bg-[var(--c-...)] etc., chaque
+   intranet définissant ses propres valeurs (rendu différencié). */
+:root {
+  /* Surfaces */
+  --c-page: #f9fafb;             /* gray-50 */
+  --c-surface: #ffffff;
+  --c-surface-soft: #f9fafb;     /* gray-50 */
+  --c-surface-medium: #f3f4f6;   /* gray-100 */
+  --c-inverse: #111827;          /* gray-900 — éléments sombres */
+  --c-inverse-hover: #1f2937;    /* gray-800 */
+  /* Bordures */
+  --c-line: #e5e7eb;             /* gray-200 */
+  --c-line-soft: #f3f4f6;        /* gray-100 */
+  --c-line-strong: #d1d5db;      /* gray-300 */
+  /* Encre / texte */
+  --c-ink: #111827;              /* gray-900 */
+  --c-ink-soft: #374151;         /* gray-700 */
+  --c-ink-muted: #4b5563;        /* gray-600 */
+  --c-ink-faint: #6b7280;        /* gray-500 */
+  --c-ink-faint-2: #9ca3af;      /* gray-400 */
+  --c-ink-icon: #d1d5db;         /* gray-300 */
+  /* Accent / marque */
+  --c-brand: #059669;            /* emerald-600 */
+  --c-brand-strong: #047857;     /* emerald-700 */
+  --c-brand-soft: #ecfdf5;       /* emerald-50 */
+  --c-brand-line: #a7f3d0;       /* emerald-200 */
+}
+
 @theme {
   --color-omaya-primary: #1e40af;
   --color-omaya-primary-light: #3b82f6;

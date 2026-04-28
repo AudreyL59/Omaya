@@ -255,9 +255,9 @@ function consoGaz(car: number): string {
 
 function BoolBadge({ v }: { v: boolean }) {
   return v ? (
-    <Check className="w-3.5 h-3.5 text-emerald-600 inline-block" />
+    <Check className="w-3.5 h-3.5 text-[var(--c-brand)] inline-block" />
   ) : (
-    <Minus className="w-3.5 h-3.5 text-gray-300 inline-block" />
+    <Minus className="w-3.5 h-3.5 text-[var(--c-ink-icon)] inline-block" />
   )
 }
 
@@ -279,39 +279,39 @@ type ColorKind =
   | 'none'
 
 function colorClass(value: number, kind: ColorKind = 'none'): string {
-  if (kind === 'none') return 'text-gray-900'
+  if (kind === 'none') return 'text-[var(--c-ink)]'
   switch (kind) {
     case 'racc':
-      return value >= 70 ? 'text-emerald-600'
+      return value >= 70 ? 'text-[var(--c-brand)]'
         : value >= 60 ? 'text-amber-600' : 'text-red-600'
     case 'resil':
-      return value <= 15 ? 'text-emerald-600' : 'text-red-600'
+      return value <= 15 ? 'text-[var(--c-brand)]' : 'text-red-600'
     case 'consent':
-      return value >= 80 ? 'text-emerald-600' : 'text-red-600'
+      return value >= 80 ? 'text-[var(--c-brand)]' : 'text-red-600'
     case 'prise':
     case 'pc':
-      return value >= 80 ? 'text-emerald-600'
+      return value >= 80 ? 'text-[var(--c-brand)]'
         : value >= 70 ? 'text-amber-600' : 'text-red-600'
     case 'dual':
-      return value > 90 ? 'text-emerald-600'
+      return value > 90 ? 'text-[var(--c-brand)]'
         : value >= 80 ? 'text-amber-600' : 'text-red-600'
     case 'premium':
     case 'cq':
-      return value >= 90 ? 'text-emerald-600'
+      return value >= 90 ? 'text-[var(--c-brand)]'
         : value >= 80 ? 'text-amber-600' : 'text-red-600'
     case 'portab':
-      return value >= 80 ? 'text-emerald-600'
+      return value >= 80 ? 'text-[var(--c-brand)]'
         : value >= 70 ? 'text-amber-600' : 'text-red-600'
     case 'mob':
-      return value >= 49 ? 'text-emerald-600'
+      return value >= 49 ? 'text-[var(--c-brand)]'
         : value >= 30 ? 'text-amber-600' : 'text-red-600'
     case 'f200':
-      return value >= 29 ? 'text-emerald-600'
+      return value >= 29 ? 'text-[var(--c-brand)]'
         : value >= 20 ? 'text-amber-600' : 'text-red-600'
     case 'dg':
-      return value <= 15 ? 'text-emerald-600' : 'text-red-600'
+      return value <= 15 ? 'text-[var(--c-brand)]' : 'text-red-600'
     case 'note':
-      return value >= 9 ? 'text-emerald-600'
+      return value >= 9 ? 'text-[var(--c-brand)]'
         : value >= 8.6 ? 'text-amber-600' : 'text-red-600'
   }
 }
@@ -329,19 +329,19 @@ function Kpi({
   const numVal = typeof value === 'number' ? value : parseFloat(String(value))
   const colored = typeof value === 'number' || !isNaN(numVal)
   return (
-    <div className={`bg-white rounded-xl border border-gray-200 px-4 ${small ? 'py-2.5' : 'py-3'}`}>
-      <div className="text-[11px] font-medium text-gray-500 uppercase tracking-wide truncate">
+    <div className={`bg-white rounded-xl border border-[var(--c-line)] px-4 ${small ? 'py-2.5' : 'py-3'}`}>
+      <div className="text-[11px] font-medium text-[var(--c-ink-faint)] uppercase tracking-wide truncate">
         {label}
       </div>
       <div className={`${small ? 'text-xl' : 'text-2xl'} font-bold tabular-nums mt-0.5 ${
-        colored ? colorClass(numVal, tint) : 'text-gray-900'
+        colored ? colorClass(numVal, tint) : 'text-[var(--c-ink)]'
       }`}>
         {typeof value === 'number'
           ? (Number.isInteger(value) ? value.toLocaleString('fr-FR') : value.toFixed(1))
           : value}
-        {suffix && <span className="text-sm font-medium text-gray-500 ml-1">{suffix}</span>}
+        {suffix && <span className="text-sm font-medium text-[var(--c-ink-faint)] ml-1">{suffix}</span>}
       </div>
-      {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
+      {sub && <div className="text-[11px] text-[var(--c-ink-faint-2)] mt-0.5">{sub}</div>}
     </div>
   )
 }
@@ -349,7 +349,7 @@ function Kpi({
 function DashboardSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">{title}</h3>
+      <h3 className="text-sm font-semibold text-[var(--c-ink-soft)] uppercase tracking-wide mb-3">{title}</h3>
       {children}
     </div>
   )
@@ -370,8 +370,8 @@ interface ColDef {
 const COLUMNS: ColDef[] = [
   { key: 'vendeur_nom', label: 'Vendeur', render: (r) => (
     <span>
-      <span className="font-medium text-gray-900">{r.vendeur_nom}</span>{' '}
-      <span className="text-gray-600">{capitalize(r.vendeur_prenom)}</span>
+      <span className="font-medium text-[var(--c-ink)]">{r.vendeur_nom}</span>{' '}
+      <span className="text-[var(--c-ink-muted)]">{capitalize(r.vendeur_prenom)}</span>
       {!r.en_activite && <span className="ml-1 text-xs text-red-500">(inactif)</span>}
     </span>
   )},
@@ -379,7 +379,7 @@ const COLUMNS: ColDef[] = [
     <span className="font-mono text-xs">{r.num_bs}</span>
   )},
   { key: 'partenaire', label: 'Part.', render: (r) => (
-    <span className="font-semibold text-gray-900">{r.partenaire}</span>
+    <span className="font-semibold text-[var(--c-ink)]">{r.partenaire}</span>
   )},
   { key: 'lib_produit', label: 'Produit', render: (r) => r.lib_produit },
   { key: 'type_prod', label: 'Type Prod', render: (r) => r.type_prod },
@@ -414,7 +414,7 @@ const COLUMNS: ColDef[] = [
   { key: 'sfr_cluster_nom', label: 'Cluster Nom', onlyIfPartenaire: ['SFR'],
     render: (r) => r.sfr_cluster_nom },
   { key: 'poste', label: 'Poste', render: (r) => (
-    <span className="text-xs text-gray-500">{r.poste}</span>
+    <span className="text-xs text-[var(--c-ink-faint)]">{r.poste}</span>
   )},
   { key: 'date_embauche', label: 'Date Embauche',
     render: (r) => <span className="tabular-nums">{shortDate(r.date_embauche)}</span> },
@@ -435,7 +435,7 @@ const COLUMNS: ColDef[] = [
   { key: 'client_ville', label: 'Ville', render: (r) => r.client_ville },
   { key: 'client_mail', label: 'Mail', onlyIfDroit: 'InfoClientCoord',
     render: (r) => (
-      <span className="text-xs text-gray-600">{r.client_mail}</span>
+      <span className="text-xs text-[var(--c-ink-muted)]">{r.client_mail}</span>
     )},
   { key: 'client_mobile', label: 'Mobile', onlyIfDroit: 'InfoClientCoord',
     render: (r) => <span className="tabular-nums">{r.client_mobile}</span> },
@@ -452,7 +452,7 @@ const COLUMNS: ColDef[] = [
     render: (r) => <span className="tabular-nums">{r.nb_points}</span> },
   { key: 'info_partagee', label: 'Infos Contrats',
     render: (r) => (
-      <span className="text-xs text-gray-600 line-clamp-2">{r.info_partagee}</span>
+      <span className="text-xs text-[var(--c-ink-muted)] line-clamp-2">{r.info_partagee}</span>
     )},
   { key: 'gaz_actif', label: 'Gaz Actif', align: 'center',
     onlyIfPartenaire: ['ENI'],
@@ -514,7 +514,7 @@ const COLUMNS: ColDef[] = [
       <span className="tabular-nums font-medium">{r.notation.toFixed(1)}</span>
     ) : '' },
   { key: 'notation_info', label: 'Notation Info', onlyIfDroit: 'InfoNotation',
-    render: (r) => <span className="text-xs text-gray-600">{r.notation_info}</span> },
+    render: (r) => <span className="text-xs text-[var(--c-ink-muted)]">{r.notation_info}</span> },
 ]
 
 // --- Page --------------------------------------------------------
@@ -571,15 +571,15 @@ export default function ProductionDetailPage({ apiBase, listBase = '/production'
         <div className="flex items-center gap-3 min-w-0">
           <Link
             to={listBase}
-            className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+            className="p-2 text-[var(--c-ink-faint-2)] hover:text-[var(--c-ink)] hover:bg-[var(--c-surface-medium)] rounded-lg"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 truncate">
+            <h1 className="text-xl font-bold text-[var(--c-ink)] truncate">
               {job?.titre || 'Extraction'}
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-[var(--c-ink-faint)] mt-0.5">
               {stats ? stats.total_contrats.toLocaleString('fr-FR') : '…'} contrats
               {stats && stats.total_paye > 0 && (
                 <> · {stats.total_paye.toLocaleString('fr-FR')} payés</>
@@ -589,14 +589,14 @@ export default function ProductionDetailPage({ apiBase, listBase = '/production'
         </div>
         <button
           onClick={downloadCsv}
-          className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="flex items-center gap-2 px-3 py-2 border border-[var(--c-line)] rounded-lg text-sm font-medium text-[var(--c-ink-soft)] hover:bg-[var(--c-surface-soft)]"
         >
           <FileDown className="w-4 h-4" />
           Export CSV
         </button>
       </motion.div>
 
-      <div className="mt-5 border-b border-gray-200 flex items-center gap-1">
+      <div className="mt-5 border-b border-[var(--c-line)] flex items-center gap-1">
         <TabButton
           icon={<TableIcon className="w-4 h-4" />}
           label="Contrats"
@@ -643,8 +643,8 @@ function TabButton({
       onClick={onClick}
       className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
         active
-          ? 'border-gray-900 text-gray-900'
-          : 'border-transparent text-gray-500 hover:text-gray-700'
+          ? 'border-[var(--c-inverse)] text-[var(--c-ink)]'
+          : 'border-transparent text-[var(--c-ink-faint)] hover:text-[var(--c-ink-soft)]'
       }`}
     >
       {icon}
@@ -743,63 +743,63 @@ function ContratsTable({
           <select
             value={partenaireFilter}
             onChange={(e) => { setPartenaireFilter(e.target.value); setPage(1) }}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
+            className="px-3 py-1.5 border border-[var(--c-line-strong)] rounded-lg text-sm"
           >
             <option value="">Tous partenaires</option>
             {partenairesUniques.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         )}
         <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--c-ink-faint-2)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             placeholder="Vendeur…"
             value={vendeurFilter}
             onChange={(e) => { setVendeurFilter(e.target.value); setPage(1) }}
-            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-48"
+            className="pl-9 pr-3 py-1.5 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[var(--c-line-strong)] w-48"
           />
         </div>
         <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--c-ink-faint-2)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             placeholder="Client…"
             value={clientFilter}
             onChange={(e) => { setClientFilter(e.target.value); setPage(1) }}
-            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-40"
+            className="pl-9 pr-3 py-1.5 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[var(--c-line-strong)] w-40"
           />
         </div>
         <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--c-ink-faint-2)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             placeholder="Num BS…"
             value={numBsFilter}
             onChange={(e) => { setNumBsFilter(e.target.value); setPage(1) }}
-            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-36 font-mono"
+            className="pl-9 pr-3 py-1.5 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[var(--c-line-strong)] w-36 font-mono"
           />
         </div>
         <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--c-ink-faint-2)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             placeholder="Type Prod…"
             value={typeProdFilter}
             onChange={(e) => { setTypeProdFilter(e.target.value); setPage(1) }}
-            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-36"
+            className="pl-9 pr-3 py-1.5 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[var(--c-line-strong)] w-36"
           />
         </div>
-        <div className="text-xs text-gray-500 ml-auto">
+        <div className="text-xs text-[var(--c-ink-faint)] ml-auto">
           {visibleColumns.length} colonnes
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-[var(--c-line)] overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-320px)]">
           <table className="text-sm" style={{ minWidth: '100%' }}>
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_rgb(229_231_235)]">
+            <thead className="bg-[var(--c-surface-soft)] text-xs text-[var(--c-ink-faint)] uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_rgb(229_231_235)]">
               <tr>
                 {visibleColumns.map((c) => (
                   <th
                     key={c.key}
                     onClick={() => toggleSort(c.key)}
-                    className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-gray-100 bg-gray-50`}
+                    className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-[var(--c-surface-medium)] bg-[var(--c-surface-soft)]`}
                   >
                     <span className="inline-flex items-center gap-1">
                       {c.label}
@@ -813,16 +813,16 @@ function ContratsTable({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[var(--c-line-soft)]">
               {loading ? (
                 <tr>
                   <td colSpan={visibleColumns.length} className="text-center py-12">
-                    <Loader2 className="w-5 h-5 text-gray-300 animate-spin mx-auto" />
+                    <Loader2 className="w-5 h-5 text-[var(--c-ink-icon)] animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : !data || data.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={visibleColumns.length} className="text-center py-12 text-gray-400">
+                  <td colSpan={visibleColumns.length} className="text-center py-12 text-[var(--c-ink-faint-2)]">
                     Aucun contrat
                   </td>
                 </tr>
@@ -830,12 +830,12 @@ function ContratsTable({
                 data.rows.map((r, idx) => (
                   <tr
                     key={`${r.partenaire}-${r.id_contrat}-${idx}`}
-                    className="hover:bg-gray-50"
+                    className="hover:bg-[var(--c-surface-soft)]"
                   >
                     {visibleColumns.map((c) => (
                       <td
                         key={c.key}
-                        className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2 text-gray-700 whitespace-nowrap`}
+                        className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2 text-[var(--c-ink-soft)] whitespace-nowrap`}
                       >
                         {c.render(r)}
                       </td>
@@ -848,8 +848,8 @@ function ContratsTable({
         </div>
 
         {data && data.total > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm">
-            <div className="text-gray-500">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--c-line)] bg-[var(--c-surface-soft)] text-sm">
+            <div className="text-[var(--c-ink-faint)]">
               {showAll ? (
                 <>Tous les {data.total.toLocaleString('fr-FR')} contrats</>
               ) : (
@@ -872,7 +872,7 @@ function ContratsTable({
                     setPage(1)
                   }
                 }}
-                className="px-2 py-1 border border-gray-300 rounded text-sm"
+                className="px-2 py-1 border border-[var(--c-line-strong)] rounded text-sm"
               >
                 {[50, 100, 200, 500].map((s) => (
                   <option key={s} value={s}>{s}/page</option>
@@ -884,15 +884,15 @@ function ContratsTable({
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="px-2.5 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-white"
+                    className="px-2.5 py-1 border border-[var(--c-line-strong)] rounded disabled:opacity-40 hover:bg-white"
                   >
                     Précédent
                   </button>
-                  <span className="tabular-nums text-gray-700">{page} / {totalPages}</span>
+                  <span className="tabular-nums text-[var(--c-ink-soft)]">{page} / {totalPages}</span>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="px-2.5 py-1 border border-gray-300 rounded disabled:opacity-40 hover:bg-white"
+                    className="px-2.5 py-1 border border-[var(--c-line-strong)] rounded disabled:opacity-40 hover:bg-white"
                   >
                     Suivant
                   </button>
@@ -911,8 +911,8 @@ function ContratsTable({
 function RepartTable({ stats }: { stats: JobStats | null }) {
   if (!stats) {
     return (
-      <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-gray-200">
-        <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+      <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-[var(--c-line)]">
+        <Loader2 className="w-5 h-5 text-[var(--c-ink-icon)] animate-spin" />
       </div>
     )
   }
@@ -920,7 +920,7 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
   const rows = stats.repart_partenaires
   if (rows.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-400 text-sm border border-dashed border-gray-300 rounded-xl">
+      <div className="text-center py-16 text-[var(--c-ink-faint-2)] text-sm border border-dashed border-[var(--c-line-strong)] rounded-xl">
         Aucune donnée.
       </div>
     )
@@ -944,10 +944,10 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
   const num = (n: number) => n.toLocaleString('fr-FR')
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl border border-[var(--c-line)] overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+          <thead className="bg-[var(--c-surface-soft)] text-xs text-[var(--c-ink-faint)] uppercase tracking-wide">
             <tr>
               <th className="text-left px-4 py-2.5 font-medium">Partenaire</th>
               <th className="text-right px-3 py-2.5 font-medium">Brut</th>
@@ -961,36 +961,36 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
               <th className="text-right px-3 py-2.5 font-medium">Raccordé/Activé</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-[var(--c-line-soft)]">
             {rows.map((r) => (
-              <tr key={r.partenaire} className="hover:bg-gray-50">
-                <td className="px-4 py-2 font-medium text-gray-900 flex items-center gap-2">
+              <tr key={r.partenaire} className="hover:bg-[var(--c-surface-soft)]">
+                <td className="px-4 py-2 font-medium text-[var(--c-ink)] flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: r.couleur_hex || '#9ca3af' }} />
                   {r.partenaire}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">{num(r.brut)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-600">{num(r.temporaire)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-600">{num(r.envoye)}</td>
+                <td className="px-3 py-2 text-right tabular-nums font-semibold text-[var(--c-ink)]">{num(r.brut)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-muted)]">{num(r.temporaire)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-muted)]">{num(r.envoye)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-red-600">{num(r.rejet)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-orange-600">{num(r.resil)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-emerald-700 font-medium">{num(r.payé)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-gray-500">{num(r.decomm)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--c-brand-strong)] font-medium">{num(r.payé)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-faint)]">{num(r.decomm)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-red-500">{num(r.racc_activ_ko)}</td>
-                <td className="px-3 py-2 text-right tabular-nums text-emerald-600">{num(r.racc_active)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[var(--c-brand)]">{num(r.racc_active)}</td>
               </tr>
             ))}
-            <tr className="bg-gray-50 font-semibold border-t-2 border-gray-200">
-              <td className="px-4 py-2 text-gray-900">TOTAL</td>
-              <td className="px-3 py-2 text-right tabular-nums text-gray-900">{num(totals.brut)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-gray-700">{num(totals.temporaire)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-gray-700">{num(totals.envoye)}</td>
+            <tr className="bg-[var(--c-surface-soft)] font-semibold border-t-2 border-[var(--c-line)]">
+              <td className="px-4 py-2 text-[var(--c-ink)]">TOTAL</td>
+              <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink)]">{num(totals.brut)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-soft)]">{num(totals.temporaire)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-soft)]">{num(totals.envoye)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-red-700">{num(totals.rejet)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-orange-700">{num(totals.resil)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-emerald-800">{num(totals.payé)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-gray-600">{num(totals.decomm)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-[var(--c-brand-strong)]">{num(totals.payé)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-muted)]">{num(totals.decomm)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-red-600">{num(totals.racc_activ_ko)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{num(totals.racc_active)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-[var(--c-brand-strong)]">{num(totals.racc_active)}</td>
             </tr>
           </tbody>
         </table>
@@ -1013,8 +1013,8 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
 
   if (!stats) {
     return (
-      <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-gray-200">
-        <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+      <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-[var(--c-line)]">
+        <Loader2 className="w-5 h-5 text-[var(--c-ink-icon)] animate-spin" />
       </div>
     )
   }
@@ -1032,7 +1032,7 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
 
   if (stats.vendeurs.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-400 text-sm border border-dashed border-gray-300 rounded-xl">
+      <div className="text-center py-16 text-[var(--c-ink-faint-2)] text-sm border border-dashed border-[var(--c-line-strong)] rounded-xl">
         Aucun vendeur.
       </div>
     )
@@ -1042,23 +1042,23 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
     <>
       <div className="flex items-center gap-3 mb-4">
         <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--c-ink-faint-2)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             placeholder="Rechercher vendeur / agence / équipe…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-96"
+            className="pl-9 pr-3 py-1.5 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[var(--c-line-strong)] w-96"
           />
         </div>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-[var(--c-ink-faint)]">
           {filtered.length} / {stats.vendeurs.length} vendeurs
         </span>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-[var(--c-line)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <thead className="bg-[var(--c-surface-soft)] text-xs text-[var(--c-ink-faint)] uppercase tracking-wide">
               <tr>
                 <th className="text-left px-3 py-2.5 font-medium">Vendeur</th>
                 <th className="text-left px-3 py-2.5 font-medium">Agence</th>
@@ -1073,39 +1073,39 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[var(--c-line-soft)]">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8 + partenaires.length} className="text-center py-12 text-gray-400">
+                  <td colSpan={8 + partenaires.length} className="text-center py-12 text-[var(--c-ink-faint-2)]">
                     Aucun résultat
                   </td>
                 </tr>
               ) : (
                 filtered.map((v) => (
-                  <tr key={v.id_salarie} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium text-gray-900">
+                  <tr key={v.id_salarie} className="hover:bg-[var(--c-surface-soft)]">
+                    <td className="px-3 py-2 font-medium text-[var(--c-ink)]">
                       {v.nom} {capitalize(v.prenom)}
                       {!v.en_activite && (
                         <span className="ml-1.5 text-xs text-red-500">(inactif)</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-gray-600">{v.agence || '—'}</td>
-                    <td className="px-3 py-2 text-gray-600">{v.equipe || '—'}</td>
-                    <td className="px-3 py-2 text-gray-500 text-xs">{v.poste || '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900">
+                    <td className="px-3 py-2 text-[var(--c-ink-muted)]">{v.agence || '—'}</td>
+                    <td className="px-3 py-2 text-[var(--c-ink-muted)]">{v.equipe || '—'}</td>
+                    <td className="px-3 py-2 text-[var(--c-ink-faint)] text-xs">{v.poste || '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-[var(--c-ink)]">
                       {v.nb_contrats.toLocaleString('fr-FR')}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">
+                    <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-soft)]">
                       {v.nb_hors_rejet.toLocaleString('fr-FR')}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-emerald-700 font-medium">
+                    <td className="px-3 py-2 text-right tabular-nums text-[var(--c-brand-strong)] font-medium">
                       {v.nb_paye.toLocaleString('fr-FR')}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">
+                    <td className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-soft)]">
                       {v.nb_points.toLocaleString('fr-FR')}
                     </td>
                     {partenaires.map((p) => (
-                      <td key={p} className="px-3 py-2 text-right tabular-nums text-gray-500">
+                      <td key={p} className="px-3 py-2 text-right tabular-nums text-[var(--c-ink-faint)]">
                         {v.par_partenaire[p] ? v.par_partenaire[p] : '—'}
                       </td>
                     ))}
@@ -1139,15 +1139,15 @@ function AnalyseDashboard({
 
   if (!stats) {
     return (
-      <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-gray-200">
-        <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+      <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-[var(--c-line)]">
+        <Loader2 className="w-5 h-5 text-[var(--c-ink-icon)] animate-spin" />
       </div>
     )
   }
 
   if (!hasSFR && !hasOEN && !hasENI) {
     return (
-      <div className="text-center py-16 text-gray-400 text-sm border border-dashed border-gray-300 rounded-xl">
+      <div className="text-center py-16 text-[var(--c-ink-faint-2)] text-sm border border-dashed border-[var(--c-line-strong)] rounded-xl">
         Aucune donnée d'analyse. Les dashboards sont disponibles pour SFR, OEN et ENI.
       </div>
     )
@@ -1155,12 +1155,12 @@ function AnalyseDashboard({
 
   return (
     <>
-      <div className="flex items-center gap-1 mb-4 bg-gray-100 rounded-lg p-0.5 w-fit">
+      <div className="flex items-center gap-1 mb-4 bg-[var(--c-surface-medium)] rounded-lg p-0.5 w-fit">
         {hasSFR && (
           <button
             onClick={() => setSub('sfr')}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              sub === 'sfr' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+              sub === 'sfr' ? 'bg-white text-[var(--c-ink)] shadow-sm' : 'text-[var(--c-ink-faint)]'
             }`}
           >Analyse SFR</button>
         )}
@@ -1168,7 +1168,7 @@ function AnalyseDashboard({
           <button
             onClick={() => setSub('oen')}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              sub === 'oen' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+              sub === 'oen' ? 'bg-white text-[var(--c-ink)] shadow-sm' : 'text-[var(--c-ink-faint)]'
             }`}
           >Analyse Ohm Energie</button>
         )}
@@ -1176,7 +1176,7 @@ function AnalyseDashboard({
           <button
             onClick={() => setSub('eni')}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              sub === 'eni' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+              sub === 'eni' ? 'bg-white text-[var(--c-ink)] shadow-sm' : 'text-[var(--c-ink-faint)]'
             }`}
           >Analyse ENI</button>
         )}
@@ -1343,13 +1343,13 @@ function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
     .join(' ')
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="bg-white rounded-xl border border-[var(--c-line)] p-4">
       {/* Légende + total */}
       <div className="flex items-center gap-6 mb-3 text-xs">
         <div className="flex items-center gap-2">
           <span className="inline-block w-3 h-3 rounded-full bg-sky-500"></span>
-          <span className="text-gray-700">Ventes finalisées</span>
-          <span className="text-gray-400 tabular-nums">({totalVentes})</span>
+          <span className="text-[var(--c-ink-soft)]">Ventes finalisées</span>
+          <span className="text-[var(--c-ink-faint-2)] tabular-nums">({totalVentes})</span>
         </div>
       </div>
 
@@ -1418,18 +1418,18 @@ function HorairesSignChart({ data }: { data: HoraireSignRow[] }) {
         {/* Tooltip */}
         {hover !== null && (
           <div
-            className="absolute bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs pointer-events-none"
+            className="absolute bg-white border border-[var(--c-line)] rounded-lg shadow-md px-3 py-2 text-xs pointer-events-none"
             style={{
               left: `${(x(hover) / W) * 100}%`,
               top: 4,
               transform: 'translateX(-50%)',
             }}
           >
-            <div className="font-semibold text-gray-900 mb-1">{filled[hover].h}h</div>
+            <div className="font-semibold text-[var(--c-ink)] mb-1">{filled[hover].h}h</div>
             <div className="flex items-center gap-2">
               <span className="inline-block w-2 h-2 rounded-full bg-sky-500"></span>
-              <span className="text-gray-500">Ventes :</span>
-              <span className="tabular-nums text-gray-900">{filled[hover].ventes}</span>
+              <span className="text-[var(--c-ink-faint)]">Ventes :</span>
+              <span className="tabular-nums text-[var(--c-ink)]">{filled[hover].ventes}</span>
             </div>
           </div>
         )}
@@ -1476,15 +1476,15 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
     <>
       <div className="flex items-center gap-3 mb-3">
         <div className="relative">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[var(--c-ink-faint-2)] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             placeholder="Vendeur / agence / équipe…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="pl-9 pr-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-gray-300 w-72"
+            className="pl-9 pr-3 py-1.5 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[var(--c-line-strong)] w-72"
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex items-center gap-2 text-sm text-[var(--c-ink-soft)]">
           <input
             type="checkbox"
             checked={hideInactive}
@@ -1493,12 +1493,12 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
           />
           Masquer inactifs
         </label>
-        <span className="text-xs text-gray-500 ml-auto">{filtered.length} lignes</span>
+        <span className="text-xs text-[var(--c-ink-faint)] ml-auto">{filtered.length} lignes</span>
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-[var(--c-line)] overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-340px)]">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_rgb(229_231_235)]">
+            <thead className="bg-[var(--c-surface-soft)] text-xs text-[var(--c-ink-faint)] uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_rgb(229_231_235)]">
               <tr>
                 {([
                   ['nom', 'Vendeur', 'left'],
@@ -1522,7 +1522,7 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
                   <th
                     key={k}
                     onClick={() => toggleSort(k as keyof TxRaccVendeurRow)}
-                    className={`${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-gray-100 bg-gray-50`}
+                    className={`${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-[var(--c-surface-medium)] bg-[var(--c-surface-soft)]`}
                   >
                     <span className="inline-flex items-center gap-1">
                       {label}
@@ -1536,10 +1536,10 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-[var(--c-line-soft)]">
               {filtered.map((v) => (
-                <tr key={v.id_salarie} className={`hover:bg-gray-50 ${!v.en_activite ? 'bg-gray-50/50 text-gray-500' : ''}`}>
-                  <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap">
+                <tr key={v.id_salarie} className={`hover:bg-[var(--c-surface-soft)] ${!v.en_activite ? 'bg-[var(--c-surface-soft)]/50 text-[var(--c-ink-faint)]' : ''}`}>
+                  <td className="px-3 py-2 font-medium text-[var(--c-ink)] whitespace-nowrap">
                     {v.nom} {capitalize(v.prenom)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{v.nb_ra}</td>
@@ -1573,13 +1573,13 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
                     {v.productivite.toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{v.nb_jour_pres}</td>
-                  <td className="px-3 py-2 text-gray-600">{v.agence}</td>
-                  <td className="px-3 py-2 text-gray-600">{v.equipe}</td>
+                  <td className="px-3 py-2 text-[var(--c-ink-muted)]">{v.agence}</td>
+                  <td className="px-3 py-2 text-[var(--c-ink-muted)]">{v.equipe}</td>
                   <td className="px-3 py-2 text-center">
                     {v.en_activite ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600 inline-block" />
+                      <Check className="w-3.5 h-3.5 text-[var(--c-brand)] inline-block" />
                     ) : (
-                      <Minus className="w-3.5 h-3.5 text-gray-300 inline-block" />
+                      <Minus className="w-3.5 h-3.5 text-[var(--c-ink-icon)] inline-block" />
                     )}
                   </td>
                 </tr>
