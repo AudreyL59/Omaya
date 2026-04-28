@@ -2050,6 +2050,102 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
     car_vals = [(r.get("car") or 0) for r in (oen_gaz + oen_dual) if (r.get("car") or 0) > 0]
     car_moy = int(sum(car_vals) / len(car_vals)) if car_vals else 0
 
+    # --- Tableau par vendeur (TableTxRaccVendeur OEN — équivalent WinDev)
+    # Compteurs alimentés uniquement pour les vendeurs en activité.
+    v_rows: dict[str, dict] = {}
+
+    def _vrow(r: dict) -> dict | None:
+        id_s = r.get("id_salarie") or "0"
+        if id_s == "0":
+            return None
+        v = v_rows.get(id_s)
+        if v is None:
+            v = {
+                "id_salarie": id_s,
+                "nom": r.get("vendeur_nom", ""),
+                "prenom": r.get("vendeur_prenom", ""),
+                "agence": r.get("agence", ""),
+                "equipe": r.get("equipe", ""),
+                "en_activite": bool(r.get("en_activite", True)),
+                # Compteurs en coeff (dual = 0.5)
+                "nb_ctt": 0.0,
+                "nb_anomalie": 0.0,
+                "nb_resil": 0.0,
+                "nb_dual": 0.0,
+                # Compteurs PDL (mono + dual*2 selon contexte)
+                "nb_base": 0,             # car ≤ 1000 sur mono gaz + dual
+                "nb_base_total": 0,       # mono gaz + dual*2 (dénominateur)
+                "nb_6kva": 0,             # puissance ≥ 6 sur mono elec + dual
+                "nb_6kva_total": 0,       # mono elec + dual*2 (dénominateur)
+                # Consentement par client unique
+                "_clients_seen": set(),
+                "_clients_consent": set(),
+                "nb_clients": 0,
+                "nb_consent": 0,
+            }
+            v_rows[id_s] = v
+        return v if v["en_activite"] else None
+
+    for r in oen:
+        v = _vrow(r)
+        if v is None:
+            continue
+        coeff = _coeff(r)
+        v["nb_ctt"] += coeff
+        id_te = r.get("id_type_etat") or 0
+        if id_te == 3:
+            v["nb_anomalie"] += coeff
+        if id_te == 4:
+            v["nb_resil"] += coeff
+        tp = _type(r)
+        is_dual = tp not in ("GAZ", "ELEC")
+        if is_dual:
+            v["nb_dual"] += 0.5
+        # Base / 6Kva selon segment
+        car = r.get("car") or 0
+        puiss = r.get("puissance") or 0
+        if tp == "GAZ" or is_dual:
+            v["nb_base_total"] += 2 if is_dual else 1
+            if 0 < car <= 1000:
+                v["nb_base"] += 1
+        if tp == "ELEC" or is_dual:
+            v["nb_6kva_total"] += 2 if is_dual else 1
+            if puiss >= 6:
+                v["nb_6kva"] += 1
+        # Consentement par client unique
+        cid = r.get("id_client") or "0"
+        if cid and cid != "0" and cid not in v["_clients_seen"]:
+            v["_clients_seen"].add(cid)
+            v["nb_clients"] += 1
+            if r.get("client_rap_part"):
+                v["_clients_consent"].add(cid)
+                v["nb_consent"] += 1
+
+    tx_racc_vendeur: list[dict] = []
+    for v in v_rows.values():
+        nb_hors_a = v["nb_ctt"] - v["nb_anomalie"]
+        tx_racc_vendeur.append({
+            "id_salarie": v["id_salarie"],
+            "nom": v["nom"],
+            "prenom": v["prenom"],
+            "agence": v["agence"],
+            "equipe": v["equipe"],
+            "en_activite": v["en_activite"],
+            "nb_ctt": round(v["nb_ctt"], 1),
+            "nb_resil": round(v["nb_resil"], 1),
+            "nb_dual": round(v["nb_dual"], 1),
+            "nb_base": v["nb_base"],
+            "nb_6kva": v["nb_6kva"],
+            "nb_clients": v["nb_clients"],
+            "nb_consent": v["nb_consent"],
+            "tx_resil": _pct(v["nb_resil"], nb_hors_a) if nb_hors_a > 0 else 0.0,
+            "tx_dual": _pct(v["nb_dual"], v["nb_ctt"]),
+            "tx_base": _pct(v["nb_base"], v["nb_base_total"]),
+            "tx_6kva": _pct(v["nb_6kva"], v["nb_6kva_total"]),
+            "tx_consent": _pct(v["nb_consent"], v["nb_clients"]),
+        })
+    tx_racc_vendeur.sort(key=lambda x: (x["nom"].lower(), x["prenom"].lower()))
+
     return {
         "nb_pdl_brut": nb_pdl_brut,
         "nb_ctt": round(nb_ctt, 1),
@@ -2079,6 +2175,7 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
         "note_moy": round(note_moy, 2),
         "pct_notes": pct_notes,
         "car_moy": car_moy,
+        "tx_racc_vendeur": tx_racc_vendeur,
     }
 
 

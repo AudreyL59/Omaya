@@ -1592,8 +1592,30 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
   )
 }
 
-function DashboardOEN({ d }: { d: Record<string, number> }) {
+interface TxRaccVendeurOENRow {
+  id_salarie: string
+  nom: string
+  prenom: string
+  agence: string
+  equipe: string
+  en_activite: boolean
+  nb_ctt: number
+  nb_resil: number
+  nb_dual: number
+  nb_base: number
+  nb_6kva: number
+  nb_clients: number
+  nb_consent: number
+  tx_resil: number
+  tx_dual: number
+  tx_base: number
+  tx_6kva: number
+  tx_consent: number
+}
+
+function DashboardOEN({ d }: { d: any }) {
   const n = (k: string) => Number((d ?? {})[k] ?? 0)
+  const vendeurs: TxRaccVendeurOENRow[] = (d && d.tx_racc_vendeur) || []
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1629,7 +1651,130 @@ function DashboardOEN({ d }: { d: Record<string, number> }) {
             sub="Consommation gaz moyenne" />
         </div>
       </DashboardSection>
+
+      {vendeurs.length > 0 && (
+        <DashboardSection title={`Analyse / vendeur (${vendeurs.length})`}>
+          <VendeurOENTable rows={vendeurs} />
+        </DashboardSection>
+      )}
     </div>
+  )
+}
+
+function VendeurOENTable({ rows }: { rows: TxRaccVendeurOENRow[] }) {
+  const [filter, setFilter] = useState('')
+  const [hideInactive, setHideInactive] = useState(false)
+  const [sortKey, setSortKey] = useState<keyof TxRaccVendeurOENRow>('nom')
+  const [sortDesc, setSortDesc] = useState(false)
+
+  const filtered = useMemo(() => {
+    let r = rows
+    if (filter) {
+      const q = filter.toLowerCase()
+      r = r.filter((v) =>
+        v.nom.toLowerCase().includes(q) ||
+        v.prenom.toLowerCase().includes(q) ||
+        v.agence.toLowerCase().includes(q) ||
+        v.equipe.toLowerCase().includes(q),
+      )
+    }
+    if (hideInactive) r = r.filter((v) => v.en_activite)
+    const dir = sortDesc ? -1 : 1
+    return [...r].sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+      return String(av ?? '').localeCompare(String(bv ?? ''), 'fr') * dir
+    })
+  }, [rows, filter, hideInactive, sortKey, sortDesc])
+
+  const toggleSort = (k: keyof TxRaccVendeurOENRow) => {
+    if (sortKey === k) setSortDesc(!sortDesc)
+    else { setSortKey(k); setSortDesc(false) }
+  }
+  const pct = (v: number) => `${v.toFixed(1)} %`
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="relative">
+          <Search className="w-4 h-4 text-c-ink-faint-2 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            placeholder="Vendeur / agence / équipe…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="pl-9 pr-3 py-1.5 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-c-line-strong w-72"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-c-ink-soft">
+          <input
+            type="checkbox"
+            checked={hideInactive}
+            onChange={(e) => setHideInactive(e.target.checked)}
+            className="w-4 h-4"
+          />
+          Masquer inactifs
+        </label>
+        <span className="text-xs text-c-ink-faint ml-auto">{filtered.length} lignes</span>
+      </div>
+      <div className="bg-white rounded-xl border border-c-line overflow-hidden">
+        <div className="overflow-auto max-h-[calc(100vh-340px)]">
+          <table className="w-full text-sm">
+            <thead className="bg-c-surface-soft text-xs text-c-ink-faint uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_var(--color-c-line)]">
+              <tr>
+                {([
+                  ['nom', 'Vendeur', 'left'],
+                  ['nb_ctt', 'nb Ctt', 'right'],
+                  ['tx_resil', 'Tx de Résil', 'right'],
+                  ['tx_dual', 'Tx Dual', 'right'],
+                  ['tx_6kva', 'Tx 6Kva et +', 'right'],
+                  ['tx_base', 'Tx Base', 'right'],
+                  ['tx_consent', 'Tx Consent', 'right'],
+                  ['agence', 'Agence', 'left'],
+                  ['equipe', 'Équipe', 'left'],
+                  ['en_activite', 'Actif', 'center'],
+                ] as const).map(([k, label, align]) => (
+                  <th
+                    key={k}
+                    onClick={() => toggleSort(k as keyof TxRaccVendeurOENRow)}
+                    className={`${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-c-surface-medium bg-c-surface-soft`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {sortKey === k && (sortDesc ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />)}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-c-line-soft">
+              {filtered.map((v) => (
+                <tr key={v.id_salarie} className={`hover:bg-c-surface-soft ${!v.en_activite ? 'bg-c-surface-soft/50 text-c-ink-faint' : ''}`}>
+                  <td className="px-3 py-2 font-medium text-c-ink whitespace-nowrap">
+                    {v.nom} {capitalize(v.prenom)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{v.nb_ctt}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_resil, 'resil')}`}>{pct(v.tx_resil)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_dual, 'dual')}`}>{pct(v.tx_dual)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_6kva, 'dual')}`}>{pct(v.tx_6kva)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{pct(v.tx_base)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_consent, 'consent')}`}>{pct(v.tx_consent)}</td>
+                  <td className="px-3 py-2 text-c-ink-muted">{v.agence}</td>
+                  <td className="px-3 py-2 text-c-ink-muted">{v.equipe}</td>
+                  <td className="px-3 py-2 text-center">
+                    {v.en_activite ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 inline-block" />
+                    ) : (
+                      <Minus className="w-3.5 h-3.5 text-c-line-strong inline-block" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   )
 }
 
