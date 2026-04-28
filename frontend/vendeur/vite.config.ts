@@ -11,6 +11,15 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, '../shared'),
     },
+    // Les composants partagés (frontend/shared) doivent résoudre les deps
+    // (react, framer-motion, etc.) depuis node_modules de l'intranet courant.
+    dedupe: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'framer-motion',
+      'lucide-react',
+    ],
   },
   server: {
     fs: {

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind v4 ne scanne pas hors du root du projet → on déclare explicitement
+   le dossier des composants partagés pour que les classes (notamment bg-c-*,
+   text-c-*) y soient détectées. */
+@source "../../shared/**/*.{ts,tsx}";
+
 /* Police Nunito Sans (variable font) */
 @font-face {
   font-family: 'Nunito Sans';
