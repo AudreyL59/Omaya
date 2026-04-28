@@ -29,34 +29,28 @@
   --color-omaya-danger: #993636;        /* rouge boutons destructifs */
   --color-omaya-error: #ef4444;
   --color-omaya-success: #22c55e;
-}
 
-/* Variables CSS de thème pour les composants partagés (frontend/shared/).
-   Mêmes noms que dans vendeur, mais valeurs alignées sur la charte ADM. */
-:root {
-  /* Surfaces */
-  --c-page: #FAF6F2;
-  --c-surface: #ffffff;
-  --c-surface-soft: #FAF6F2;
-  --c-surface-medium: #EFE9E7;
-  --c-inverse: #17494E;
-  --c-inverse-hover: #0F353A;
-  /* Bordures */
-  --c-line: #E5DDDC;
-  --c-line-soft: #E5DDDC;
-  --c-line-strong: #E5DDDC;
-  /* Encre / texte */
-  --c-ink: #4E1D17;
-  --c-ink-soft: rgba(78, 29, 23, 0.85);
-  --c-ink-muted: rgba(78, 29, 23, 0.7);
-  --c-ink-faint: #A68D8A;
-  --c-ink-faint-2: rgba(166, 141, 138, 0.7);
-  --c-ink-icon: #E5DDDC;
-  /* Accent / marque */
-  --c-brand: #17494E;
-  --c-brand-strong: #0F353A;
-  --c-brand-soft: rgba(23, 73, 78, 0.08);
-  --c-brand-line: rgba(23, 73, 78, 0.25);
+  /* --- Tokens de thème pour les composants partagés (frontend/shared/) ---
+     Mêmes noms que dans vendeur, valeurs alignées sur la charte ADM. */
+  --color-c-page: #FAF6F2;
+  --color-c-surface: #ffffff;
+  --color-c-surface-soft: #FAF6F2;
+  --color-c-surface-medium: #EFE9E7;
+  --color-c-inverse: #17494E;
+  --color-c-inverse-hover: #0F353A;
+  --color-c-line: #E5DDDC;
+  --color-c-line-soft: #E5DDDC;
+  --color-c-line-strong: #E5DDDC;
+  --color-c-ink: #4E1D17;
+  --color-c-ink-soft: rgba(78, 29, 23, 0.85);
+  --color-c-ink-muted: rgba(78, 29, 23, 0.7);
+  --color-c-ink-faint: #A68D8A;
+  --color-c-ink-faint-2: rgba(166, 141, 138, 0.7);
+  --color-c-ink-icon: #E5DDDC;
+  --color-c-brand: #17494E;
+  --color-c-brand-strong: #0F353A;
+  --color-c-brand-soft: rgba(23, 73, 78, 0.08);
+  --color-c-brand-line: rgba(23, 73, 78, 0.25);
 }
 
 /* Style global des champs de saisie ADM (cf. maquette Figma).

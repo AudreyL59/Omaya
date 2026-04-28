@@ -62,7 +62,7 @@ function StatusBadge({ job }: { job: ProductionJob }) {
   switch (job.statut) {
     case 'pending':
       return (
-        <span className={`${base} bg-[var(--c-surface-medium)] text-[var(--c-ink-muted)]`}>
+        <span className={`${base} bg-c-surface-medium text-c-ink-muted`}>
           <Clock className="w-3 h-3" />
           En attente
         </span>
@@ -76,7 +76,7 @@ function StatusBadge({ job }: { job: ProductionJob }) {
       )
     case 'done':
       return (
-        <span className={`${base} bg-[var(--c-brand-soft)] text-[var(--c-brand-strong)] border border-[var(--c-brand-line)]`}>
+        <span className={`${base} bg-c-brand-soft text-c-brand-strong border border-c-brand-line`}>
           <CheckCircle2 className="w-3 h-3" />
           Terminé
         </span>
@@ -89,7 +89,7 @@ function StatusBadge({ job }: { job: ProductionJob }) {
         </span>
       )
     default:
-      return <span className={`${base} bg-[var(--c-surface-medium)] text-[var(--c-ink-muted)]`}>{job.statut}</span>
+      return <span className={`${base} bg-c-surface-medium text-c-ink-muted`}>{job.statut}</span>
   }
 }
 
@@ -145,8 +145,8 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-2xl font-bold text-[var(--c-ink)]">Production</h1>
-          <p className="text-[var(--c-ink-faint)] mt-1">
+          <h1 className="text-2xl font-bold text-c-ink">Production</h1>
+          <p className="text-c-ink-faint mt-1">
             Extractions de production · historique et résultats
           </p>
         </div>
@@ -154,13 +154,13 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
           <button
             onClick={loadJobs}
             title="Rafraîchir"
-            className="p-2 text-[var(--c-ink-faint-2)] hover:text-[var(--c-ink-soft)] hover:bg-[var(--c-surface-medium)] rounded-lg"
+            className="p-2 text-c-ink-faint-2 hover:text-c-ink-soft hover:bg-c-surface-medium rounded-lg"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[var(--c-inverse)] text-white rounded-lg text-sm font-medium hover:bg-[var(--c-inverse-hover)] shadow-sm"
+            className="flex items-center gap-2 px-4 py-2.5 bg-c-inverse text-white rounded-lg text-sm font-medium hover:bg-c-inverse-hover shadow-sm"
           >
             <Plus className="w-4 h-4" />
             Nouvelle extraction
@@ -168,18 +168,18 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
         </div>
       </motion.div>
 
-      <div className="mt-6 bg-white rounded-xl border border-[var(--c-line)] overflow-hidden">
+      <div className="mt-6 bg-white rounded-xl border border-c-line overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-48">
-            <Loader2 className="w-6 h-6 text-[var(--c-ink-icon)] animate-spin" />
+            <Loader2 className="w-6 h-6 text-c-ink-icon animate-spin" />
           </div>
         ) : jobs.length === 0 ? (
-          <div className="text-center py-16 text-[var(--c-ink-faint-2)] text-sm">
+          <div className="text-center py-16 text-c-ink-faint-2 text-sm">
             Aucune extraction pour le moment. Clique sur "Nouvelle extraction" pour commencer.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-[var(--c-surface-soft)] text-xs text-[var(--c-ink-faint)] uppercase tracking-wide">
+            <thead className="bg-c-surface-soft text-xs text-c-ink-faint uppercase tracking-wide">
               <tr>
                 <th className="text-left px-4 py-3 font-medium">Extraction</th>
                 <th className="text-left px-4 py-3 font-medium">Statut</th>
@@ -189,13 +189,13 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
                 <th className="w-[120px]"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--c-line-soft)]">
+            <tbody className="divide-y divide-c-line-soft">
               {jobs.map((job) => (
-                <tr key={job.id_job} className="hover:bg-[var(--c-surface-soft)]">
+                <tr key={job.id_job} className="hover:bg-c-surface-soft">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-[var(--c-ink)]">{job.titre}</div>
+                    <div className="font-medium text-c-ink">{job.titre}</div>
                     {job.statut === 'running' && job.progression_msg && (
-                      <div className="text-xs text-[var(--c-ink-faint)] mt-0.5">
+                      <div className="text-xs text-c-ink-faint mt-0.5">
                         {job.progression_msg}
                       </div>
                     )}
@@ -208,7 +208,7 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
                   <td className="px-4 py-3">
                     <StatusBadge job={job} />
                     {job.statut === 'running' && (
-                      <div className="w-32 h-1 bg-[var(--c-surface-medium)] rounded-full mt-2 overflow-hidden">
+                      <div className="w-32 h-1 bg-c-surface-medium rounded-full mt-2 overflow-hidden">
                         <div
                           className="h-full bg-amber-500 transition-all"
                           style={{ width: `${job.progression_pct}%` }}
@@ -216,13 +216,13 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[var(--c-ink-muted)]">
+                  <td className="px-4 py-3 text-c-ink-muted">
                     {formatDateHeure(job.date_crea)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[var(--c-ink)]">
+                  <td className="px-4 py-3 text-right tabular-nums text-c-ink">
                     {job.statut === 'done' ? job.nb_lignes.toLocaleString('fr-FR') : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-[var(--c-ink-muted)]">
+                  <td className="px-4 py-3 text-right tabular-nums text-c-ink-muted">
                     {formatDuree(job.duree_s)}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -231,7 +231,7 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
                         <>
                           <Link
                             to={`${detailBase}/jobs/${job.id_job}`}
-                            className="p-1.5 text-[var(--c-ink-faint-2)] hover:text-[var(--c-ink)] hover:bg-[var(--c-surface-medium)] rounded-lg"
+                            className="p-1.5 text-c-ink-faint-2 hover:text-c-ink hover:bg-c-surface-medium rounded-lg"
                             title="Ouvrir"
                           >
                             <FileText className="w-4 h-4" />
@@ -254,7 +254,7 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
                               a.click()
                               URL.revokeObjectURL(url)
                             }}
-                            className="p-1.5 text-[var(--c-ink-faint-2)] hover:text-[var(--c-ink)] hover:bg-[var(--c-surface-medium)] rounded-lg"
+                            className="p-1.5 text-c-ink-faint-2 hover:text-c-ink hover:bg-c-surface-medium rounded-lg"
                             title="Télécharger CSV"
                           >
                             <FileDown className="w-4 h-4" />
@@ -263,7 +263,7 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
                       )}
                       <button
                         onClick={() => handleDelete(job.id_job)}
-                        className="p-1.5 text-[var(--c-ink-faint-2)] hover:text-red-600 hover:bg-red-50 rounded-lg"
+                        className="p-1.5 text-c-ink-faint-2 hover:text-red-600 hover:bg-red-50 rounded-lg"
                         title="Supprimer"
                       >
                         <Trash2 className="w-4 h-4" />

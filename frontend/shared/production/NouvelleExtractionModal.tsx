@@ -182,16 +182,16 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--c-line)] sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-c-line sticky top-0 bg-white z-10">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--c-ink)]">Nouvelle extraction</h2>
-            <p className="text-xs text-[var(--c-ink-faint)] mt-0.5">
+            <h2 className="text-lg font-semibold text-c-ink">Nouvelle extraction</h2>
+            <p className="text-xs text-c-ink-faint mt-0.5">
               L'extraction part en tâche de fond — tu pourras consulter le résultat plus tard.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-[var(--c-surface-medium)] text-[var(--c-ink-faint-2)] hover:text-[var(--c-ink-soft)]"
+            className="p-1 rounded-lg hover:bg-c-surface-medium text-c-ink-faint-2 hover:text-c-ink-soft"
           >
             <X className="w-5 h-5" />
           </button>
@@ -200,7 +200,7 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
         <div className="p-6 space-y-6">
           {/* Mode date */}
           <div>
-            <label className="text-xs font-medium text-[var(--c-ink-faint)] uppercase tracking-wide mb-2 block">
+            <label className="text-xs font-medium text-c-ink-faint uppercase tracking-wide mb-2 block">
               Mode
             </label>
             <div className="flex gap-2">
@@ -213,8 +213,8 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
                   onClick={() => setModeDate(k)}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     modeDate === k
-                      ? 'bg-[var(--c-inverse)] text-white'
-                      : 'bg-[var(--c-surface-medium)] text-[var(--c-ink-soft)] hover:bg-[var(--c-surface-medium)]'
+                      ? 'bg-c-inverse text-white'
+                      : 'bg-c-surface-medium text-c-ink-soft hover:bg-c-surface-medium'
                   }`}
                 >
                   {label}
@@ -226,11 +226,11 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
           {/* Dates */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-[var(--c-ink-faint)] uppercase tracking-wide mb-1 block">
+              <label className="text-xs font-medium text-c-ink-faint uppercase tracking-wide mb-1 block">
                 Du
               </label>
-              <div className="flex items-center gap-2 px-3 py-2 border border-[var(--c-line-strong)] rounded-lg">
-                <Calendar className="w-4 h-4 text-[var(--c-ink-faint-2)]" />
+              <div className="flex items-center gap-2 px-3 py-2 border border-c-line-strong rounded-lg">
+                <Calendar className="w-4 h-4 text-c-ink-faint-2" />
                 <input
                   type="date"
                   value={dateDu}
@@ -240,11 +240,11 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-[var(--c-ink-faint)] uppercase tracking-wide mb-1 block">
+              <label className="text-xs font-medium text-c-ink-faint uppercase tracking-wide mb-1 block">
                 Au
               </label>
-              <div className="flex items-center gap-2 px-3 py-2 border border-[var(--c-line-strong)] rounded-lg">
-                <Calendar className="w-4 h-4 text-[var(--c-ink-faint-2)]" />
+              <div className="flex items-center gap-2 px-3 py-2 border border-c-line-strong rounded-lg">
+                <Calendar className="w-4 h-4 text-c-ink-faint-2" />
                 <input
                   type="date"
                   value={dateAu}
@@ -257,7 +257,7 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
 
           {/* Partenaires */}
           <div>
-            <label className="text-xs font-medium text-[var(--c-ink-faint)] uppercase tracking-wide mb-2 block">
+            <label className="text-xs font-medium text-c-ink-faint uppercase tracking-wide mb-2 block">
               Partenaires
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -269,13 +269,13 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
                     onClick={() => togglePart(p.prefix)}
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${
                       selected
-                        ? 'border-[var(--c-inverse)] bg-[var(--c-inverse)] text-white'
-                        : 'border-[var(--c-line)] bg-white hover:bg-[var(--c-surface-soft)]'
+                        ? 'border-c-inverse bg-c-inverse text-white'
+                        : 'border-c-line bg-white hover:bg-c-surface-soft'
                     } ${!p.is_actif ? 'opacity-60' : ''}`}
                   >
                     <div
                       className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${
-                        selected ? 'bg-white/20' : 'bg-[var(--c-surface-medium)]'
+                        selected ? 'bg-white/20' : 'bg-c-surface-medium'
                       }`}
                     >
                       {selected && <Check className="w-3 h-3" />}
@@ -291,13 +291,13 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
 
           {/* État */}
           <div>
-            <label className="text-xs font-medium text-[var(--c-ink-faint)] uppercase tracking-wide mb-1 block">
+            <label className="text-xs font-medium text-c-ink-faint uppercase tracking-wide mb-1 block">
               État
             </label>
             <select
               value={idTypeEtat}
               onChange={(e) => setIdTypeEtat(parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--c-inverse)]"
+              className="w-full px-3 py-2 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-c-inverse"
             >
               <option value={0}>Tous</option>
               {typesEtat.map((t) => (
@@ -310,7 +310,7 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
 
           {/* Scope */}
           <div>
-            <label className="text-xs font-medium text-[var(--c-ink-faint)] uppercase tracking-wide mb-2 block">
+            <label className="text-xs font-medium text-c-ink-faint uppercase tracking-wide mb-2 block">
               Périmètre
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -325,8 +325,8 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
                   onClick={() => setScope(k as Scope)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                     scope === k
-                      ? 'bg-[var(--c-inverse)] text-white border-[var(--c-inverse)]'
-                      : 'bg-white text-[var(--c-ink-soft)] border-[var(--c-line)] hover:bg-[var(--c-surface-soft)]'
+                      ? 'bg-c-inverse text-white border-c-inverse'
+                      : 'bg-white text-c-ink-soft border-c-line hover:bg-c-surface-soft'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -338,24 +338,24 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
 
           {/* Scope Vendeur : picker + Prod Groupe */}
           {scope === 1 && (
-            <div className="space-y-3 border-t border-[var(--c-line-soft)] pt-4">
+            <div className="space-y-3 border-t border-c-line-soft pt-4">
               <button
                 onClick={() => setShowVendeurPicker(true)}
-                className="w-full flex items-center justify-between px-3 py-2.5 border border-[var(--c-line-strong)] rounded-lg hover:bg-[var(--c-surface-soft)] text-sm"
+                className="w-full flex items-center justify-between px-3 py-2.5 border border-c-line-strong rounded-lg hover:bg-c-surface-soft text-sm"
               >
-                <span className="flex items-center gap-2 text-[var(--c-ink-soft)]">
-                  <User className="w-4 h-4 text-[var(--c-ink-faint-2)]" />
+                <span className="flex items-center gap-2 text-c-ink-soft">
+                  <User className="w-4 h-4 text-c-ink-faint-2" />
                   {vendeur ? (
                     <span className="font-medium">
                       {vendeur.nom} {capitalize(vendeur.prenom)}
                     </span>
                   ) : (
-                    <span className="text-[var(--c-ink-faint-2)]">Choisir le vendeur</span>
+                    <span className="text-c-ink-faint-2">Choisir le vendeur</span>
                   )}
                 </span>
-                <ChevronDown className="w-4 h-4 text-[var(--c-ink-faint-2)]" />
+                <ChevronDown className="w-4 h-4 text-c-ink-faint-2" />
               </button>
-              <label className="flex items-center gap-2 text-sm text-[var(--c-ink-soft)]">
+              <label className="flex items-center gap-2 text-sm text-c-ink-soft">
                 <input
                   type="checkbox"
                   checked={prodGroupe}
@@ -369,23 +369,23 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
 
           {/* Scope Équipe : picker orga */}
           {scope === 2 && (
-            <div className="border-t border-[var(--c-line-soft)] pt-4">
+            <div className="border-t border-c-line-soft pt-4">
               <button
                 onClick={() => setShowOrgaPicker(true)}
-                className="w-full flex items-center justify-between px-3 py-2.5 border border-[var(--c-line-strong)] rounded-lg hover:bg-[var(--c-surface-soft)] text-sm"
+                className="w-full flex items-center justify-between px-3 py-2.5 border border-c-line-strong rounded-lg hover:bg-c-surface-soft text-sm"
               >
-                <span className="flex items-center gap-2 text-[var(--c-ink-soft)]">
-                  <Users className="w-4 h-4 text-[var(--c-ink-faint-2)]" />
+                <span className="flex items-center gap-2 text-c-ink-soft">
+                  <Users className="w-4 h-4 text-c-ink-faint-2" />
                   {orga ? (
                     <span className="font-medium">
                       {orga.parent_lib ? `${orga.parent_lib} → ` : ''}
                       {orga.lib_orga}
                     </span>
                   ) : (
-                    <span className="text-[var(--c-ink-faint-2)]">Choisir l'équipe</span>
+                    <span className="text-c-ink-faint-2">Choisir l'équipe</span>
                   )}
                 </span>
-                <ChevronDown className="w-4 h-4 text-[var(--c-ink-faint-2)]" />
+                <ChevronDown className="w-4 h-4 text-c-ink-faint-2" />
               </button>
             </div>
           )}
@@ -397,17 +397,17 @@ export default function NouvelleExtractionModal({ apiBase, open, onClose, onCrea
           )}
         </div>
 
-        <div className="flex gap-2 px-6 py-4 border-t border-[var(--c-line)] bg-[var(--c-surface-soft)] sticky bottom-0">
+        <div className="flex gap-2 px-6 py-4 border-t border-c-line bg-c-surface-soft sticky bottom-0">
           <button
             onClick={onClose}
-            className="flex-1 px-3 py-2.5 border border-[var(--c-line-strong)] rounded-lg text-sm font-medium bg-white hover:bg-[var(--c-surface-medium)]"
+            className="flex-1 px-3 py-2.5 border border-c-line-strong rounded-lg text-sm font-medium bg-white hover:bg-c-surface-medium"
           >
             Annuler
           </button>
           <button
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
-            className="flex-1 px-3 py-2.5 bg-[var(--c-inverse)] text-white rounded-lg text-sm font-medium hover:bg-[var(--c-inverse-hover)] disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 px-3 py-2.5 bg-c-inverse text-white rounded-lg text-sm font-medium hover:bg-c-inverse-hover disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Lancer l'extraction
@@ -475,11 +475,11 @@ function VendeurPicker({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-xl shadow-2xl w-full max-w-md"
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--c-line)]">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-c-line">
           <h3 className="text-base font-semibold">Choisir un vendeur</h3>
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-[var(--c-surface-medium)] text-[var(--c-ink-faint-2)]"
+            className="p-1 rounded hover:bg-c-surface-medium text-c-ink-faint-2"
           >
             <X className="w-4 h-4" />
           </button>
@@ -495,18 +495,18 @@ function VendeurPicker({
               onKeyDown={(e) =>
                 e.key === 'Enter' && (e.preventDefault(), doSearch())
               }
-              className="flex-1 px-3 py-2 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--c-inverse)]"
+              className="flex-1 px-3 py-2 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-c-inverse"
             />
             <button
               onClick={doSearch}
-              className="px-3 py-2 border border-[var(--c-line-strong)] rounded-lg hover:bg-[var(--c-surface-soft)]"
+              className="px-3 py-2 border border-c-line-strong rounded-lg hover:bg-c-surface-soft"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             </button>
           </div>
-          <div className="max-h-64 overflow-y-auto border border-[var(--c-line)] rounded-lg divide-y divide-[var(--c-line-soft)]">
+          <div className="max-h-64 overflow-y-auto border border-c-line rounded-lg divide-y divide-c-line-soft">
             {results.length === 0 ? (
-              <div className="text-center py-8 text-[var(--c-ink-faint-2)] text-sm">
+              <div className="text-center py-8 text-c-ink-faint-2 text-sm">
                 {loading ? '' : 'Saisis un nom…'}
               </div>
             ) : (
@@ -514,10 +514,10 @@ function VendeurPicker({
                 <button
                   key={v.id_salarie}
                   onClick={() => onSelect(v)}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-[var(--c-surface-soft)]"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-c-surface-soft"
                 >
                   <span className="font-medium">{v.nom}</span>{' '}
-                  <span className="text-[var(--c-ink-muted)]">{capitalize(v.prenom)}</span>
+                  <span className="text-c-ink-muted">{capitalize(v.prenom)}</span>
                 </button>
               ))
             )}
@@ -562,11 +562,11 @@ function OrgaPicker({
         onClick={(e) => e.stopPropagation()}
         className="bg-white rounded-xl shadow-2xl w-full max-w-md"
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--c-line)]">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-c-line">
           <h3 className="text-base font-semibold">Choisir une équipe</h3>
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-[var(--c-surface-medium)] text-[var(--c-ink-faint-2)]"
+            className="p-1 rounded hover:bg-c-surface-medium text-c-ink-faint-2"
           >
             <X className="w-4 h-4" />
           </button>
@@ -588,18 +588,18 @@ function OrgaPicker({
               onKeyDown={(e) =>
                 e.key === 'Enter' && (e.preventDefault(), doSearch())
               }
-              className="flex-1 px-3 py-2 border border-[var(--c-line-strong)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--c-inverse)]"
+              className="flex-1 px-3 py-2 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-c-inverse"
             />
             <button
               onClick={doSearch}
-              className="px-3 py-2 border border-[var(--c-line-strong)] rounded-lg hover:bg-[var(--c-surface-soft)]"
+              className="px-3 py-2 border border-c-line-strong rounded-lg hover:bg-c-surface-soft"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             </button>
           </div>
-          <div className="max-h-64 overflow-y-auto border border-[var(--c-line)] rounded-lg divide-y divide-[var(--c-line-soft)]">
+          <div className="max-h-64 overflow-y-auto border border-c-line rounded-lg divide-y divide-c-line-soft">
             {results.length === 0 ? (
-              <div className="text-center py-8 text-[var(--c-ink-faint-2)] text-sm">
+              <div className="text-center py-8 text-c-ink-faint-2 text-sm">
                 {loading ? '' : 'Saisis au moins 2 caractères…'}
               </div>
             ) : (
@@ -607,11 +607,11 @@ function OrgaPicker({
                 <button
                   key={o.id_organigramme}
                   onClick={() => onSelect(o)}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-[var(--c-surface-soft)]"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-c-surface-soft"
                 >
                   <div className="font-medium">{o.lib_orga}</div>
                   {o.parent_lib && (
-                    <div className="text-xs text-[var(--c-ink-faint)]">{o.parent_lib}</div>
+                    <div className="text-xs text-c-ink-faint">{o.parent_lib}</div>
                   )}
                 </button>
               ))
