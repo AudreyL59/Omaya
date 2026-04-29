@@ -1812,7 +1812,7 @@ function DashboardENI({ d }: { d: any }) {
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Kpi label="Nb Ctt Brut" value={n('nb_ctt')} />
-        <Kpi label="Nb PDL Hors anomalie" value={n('nb_pdl_brut')} />
+        <Kpi label="Nb Ctt Hors anomalie" value={n('nb_pdl_brut')} />
         <Kpi label="Note moyenne" value={n('note_moy')} suffix="/ 10"
           sub={`${n('pct_notes').toFixed(1)} % de ctt notés`} />
         <Kpi label="Car moy" value={n('car_moy')} suffix="KWh"

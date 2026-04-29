@@ -2290,9 +2290,11 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
     eni_gaz_part = [r for r in eni if _has_gaz(r)]
     eni_elec_part = [r for r in eni if _has_elec(r)]
     eni_dual = [r for r in eni if _is_dual(r)]
+    # Hors anomalies (id_type_etat == 3 = anomalie)
+    eni_hors_anom = [r for r in eni if r.get("id_type_etat") != 3]
 
-    nb_pdl_brut = len(eni)
-    nb_ctt = len(eni)                 # pas de coeff pour ENI
+    nb_pdl_brut = len(eni_hors_anom)  # ENI : 1 ligne = 1 contrat → "Nb Ctt Hors anomalie"
+    nb_ctt = len(eni)                  # pas de coeff pour ENI
     nb_ctt_dual = len(eni_dual)
     nb_gaz = len(eni_gaz_part)
     nb_elec = len(eni_elec_part)

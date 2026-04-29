@@ -1,0 +1,388 @@
+2026-04-22 17:42:05,692 [INFO] Worker production démarré
+2026-04-22 17:42:05,692 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-22 17:42:05,692 [INFO] Rétention : 90 jours
+2026-04-22 17:42:06,444 [INFO] ▶ job 20260422174033131 : Reseau Hors Distrib / 30/03/2026-22/04/2026
+2026-04-22 17:42:08,023 [INFO] Worker arrêté (Ctrl+C)
+2026-04-22 17:43:04,747 [INFO] Worker production démarré
+2026-04-22 17:43:04,747 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-22 17:43:04,748 [INFO] Rétention : 90 jours
+2026-04-22 17:45:39,239 [INFO] ▶ job 20260422174536922 : Reseau Hors Distrib / 06/04/2026-22/04/2026
+2026-04-22 17:51:44,610 [INFO] ✔ job 20260422174536922 : 0 lignes en 364s
+2026-04-22 17:51:45,361 [INFO] ▶ job 20260422174725231 : Reseau / 06/04/2026-22/04/2026
+2026-04-22 17:57:46,913 [INFO] ✔ job 20260422174725231 : 2383 lignes en 360s
+2026-04-22 17:57:47,681 [INFO] ▶ job 20260422175737956 : Equipe / 20/04/2026-22/04/2026
+2026-04-22 17:58:53,289 [INFO] ✔ job 20260422175737956 : 0 lignes en 64s
+2026-04-23 08:23:25,022 [INFO] Worker production démarré
+2026-04-23 08:23:25,029 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 08:23:25,030 [INFO] Rétention : 90 jours
+2026-04-23 08:24:27,552 [INFO] ▶ job 20260423082424930 : Reseau Hors Distrib / 20/04/2026-23/04/2026
+2026-04-23 08:25:10,439 [INFO] ✔ job 20260423082424930 : 22 lignes en 42s
+2026-04-23 09:16:20,983 [INFO] ▶ job 20260423091620345 : Reseau Hors Distrib / 20/04/2026-23/04/2026
+2026-04-23 09:22:33,571 [INFO] Worker production démarré
+2026-04-23 09:22:33,571 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 09:22:33,571 [INFO] Rétention : 90 jours
+2026-04-23 09:22:57,071 [INFO] ▶ job 20260423092255060 : Reseau Hors Distrib / 20/04/2026-23/04/2026
+2026-04-23 09:23:50,251 [INFO] ✔ job 20260423092255060 : 26 lignes en 52s
+2026-04-23 09:27:23,141 [INFO] ▶ job 20260423092721241 : Reseau Hors Distrib / 20/04/2026-23/04/2026
+2026-04-23 09:28:17,990 [INFO] ✔ job 20260423092721241 : 26 lignes en 54s
+2026-04-23 09:29:17,995 [INFO] ▶ job 20260423092916118 : Reseau Hors Distrib / 20/04/2026-23/04/2026
+2026-04-23 09:30:08,879 [INFO] ✔ job 20260423092916118 : 24 lignes en 50s
+2026-04-23 09:35:26,822 [INFO] ▶ job 20260423093524640 : Reseau Hors Distrib / 20/04/2026-23/04/2026
+2026-04-23 09:36:20,902 [INFO] ✔ job 20260423093524640 : 26 lignes en 53s
+2026-04-23 09:36:21,656 [INFO] ▶ job 20260423093556685 : Reseau Hors Distrib / 20/04/2026-23/04/2026
+2026-04-23 09:37:16,112 [INFO] ✔ job 20260423093556685 : 26 lignes en 53s
+2026-04-23 09:46:26,960 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 09:46:28,875 [INFO] Worker production démarré
+2026-04-23 09:46:28,875 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 09:46:28,876 [INFO] Rétention : 90 jours
+2026-04-23 09:46:59,185 [INFO] ▶ job 20260423094657575 : Reseau Hors Distrib / 01/04/2026-23/04/2026
+2026-04-23 09:47:04,222 [ERROR] ✗ job 20260423094657575 : [WinError 206] Nom de fichier ou extension trop long
+Traceback (most recent call last):
+  File "D:\Claude\Projet Omaya\worker_production.py", line 281, in main
+    result = extract_job_to_parquet(
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\intranets\vendeur\services\production_extraction.py", line 639, in extract_job_to_parquet
+    clients_info = _load_clients_info(db_adv, ids_clients)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\intranets\vendeur\services\production_extraction.py", line 395, in _load_clients_info
+    rows = db_adv.query(
+           ^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\core\database\connections.py", line 81, in query
+    return execute_query(
+           ^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\core\database\hfsql_bridge.py", line 81, in execute_query
+    proc = subprocess.Popen(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\aloud\AppData\Local\Programs\Python\Python312\Lib\subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "C:\Users\aloud\AppData\Local\Programs\Python\Python312\Lib\subprocess.py", line 1538, in _execute_child
+    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [WinError 206] Nom de fichier ou extension trop long
+
+2026-04-23 09:49:29,782 [INFO] ▶ job 20260423094928062 : Reseau Hors Distrib / 01/04/2026-23/04/2026
+2026-04-23 09:49:35,055 [ERROR] ✗ job 20260423094928062 : [WinError 206] Nom de fichier ou extension trop long
+Traceback (most recent call last):
+  File "D:\Claude\Projet Omaya\worker_production.py", line 281, in main
+    result = extract_job_to_parquet(
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\intranets\vendeur\services\production_extraction.py", line 639, in extract_job_to_parquet
+    r["_prefix"] = prefix
+           ^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\intranets\vendeur\services\production_extraction.py", line 395, in _load_clients_info
+  File "D:\Claude\Projet Omaya\app\core\database\connections.py", line 81, in query
+    return execute_query(
+           ^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\core\database\hfsql_bridge.py", line 81, in execute_query
+    proc = subprocess.Popen(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\aloud\AppData\Local\Programs\Python\Python312\Lib\subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "C:\Users\aloud\AppData\Local\Programs\Python\Python312\Lib\subprocess.py", line 1538, in _execute_child
+    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [WinError 206] Nom de fichier ou extension trop long
+
+2026-04-23 09:49:40,959 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 09:49:46,529 [INFO] Worker production démarré
+2026-04-23 09:49:46,529 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 09:49:46,529 [INFO] Rétention : 90 jours
+2026-04-23 09:49:56,716 [INFO] ▶ job 20260423094955510 : Reseau Hors Distrib / 01/04/2026-23/04/2026
+2026-04-23 10:02:41,005 [INFO] ✔ job 20260423094955510 : 1296 lignes en 763s
+2026-04-23 11:14:49,072 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 11:14:50,209 [INFO] Worker production démarré
+2026-04-23 11:14:50,209 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 11:14:50,209 [INFO] Rétention : 90 jours
+2026-04-23 11:15:00,121 [INFO] ▶ job 20260423111458184 : Reseau Hors Distrib / 01/04/2026-23/04/2026
+2026-04-23 11:27:18,503 [INFO] ✔ job 20260423111458184 : 1299 lignes en 737s
+2026-04-23 11:45:05,954 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 11:45:07,147 [INFO] Worker production démarré
+2026-04-23 11:45:07,147 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 11:45:07,148 [INFO] Rétention : 90 jours
+2026-04-23 11:45:19,295 [INFO] ▶ job 20260423114517032 : Reseau Hors Distrib / 06/04/2026-23/04/2026
+2026-04-23 11:54:52,556 [INFO] ✔ job 20260423114517032 : 1090 lignes en 572s
+2026-04-23 12:05:40,833 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 12:05:42,146 [INFO] Worker production démarré
+2026-04-23 12:05:42,146 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 12:05:42,146 [INFO] Rétention : 90 jours
+2026-04-23 12:05:54,362 [INFO] ▶ job 20260423120553014 : Reseau Hors Distrib / 06/04/2026-23/04/2026
+2026-04-23 12:15:18,750 [INFO] ✔ job 20260423120553014 : 1090 lignes en 563s
+2026-04-23 12:49:25,386 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 12:49:26,733 [INFO] Worker production démarré
+2026-04-23 12:49:26,733 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 12:49:26,734 [INFO] Rétention : 90 jours
+2026-04-23 12:50:08,098 [INFO] ▶ job 20260423125007190 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-23 12:55:33,917 [INFO] ✔ job 20260423125007190 : 548 lignes en 325s
+2026-04-23 14:24:36,764 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:24:40,149 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:53:36,950 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:53:56,241 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:54:21,835 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:54:34,160 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:54:46,403 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:54:59,606 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:55:12,021 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:55:14,522 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:55:26,839 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:55:39,288 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:55:48,014 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:56:00,664 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:56:03,050 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:56:05,129 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-23 14:56:17,516 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 14:56:19,882 [INFO] Worker production démarré
+2026-04-23 14:56:19,883 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 14:56:19,883 [INFO] Rétention : 90 jours
+2026-04-23 14:59:06,042 [INFO] ▶ job 20260423145903725 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-23 15:08:26,946 [INFO] ✔ job 20260423145903725 : 548 lignes en 560s
+2026-04-23 15:36:17,531 [INFO] ▶ job 20260423153614461 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-23 15:45:29,634 [INFO] ✔ job 20260423153614461 : 548 lignes en 551s
+2026-04-23 15:46:48,723 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 15:46:52,816 [INFO] Worker production démarré
+2026-04-23 15:46:52,817 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 15:46:52,818 [INFO] Rétention : 90 jours
+2026-04-23 16:28:30,145 [INFO] ▶ job 20260423162827642 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-23 16:37:55,152 [INFO] ✔ job 20260423162827642 : 548 lignes en 564s
+2026-04-23 16:48:32,747 [INFO] ▶ job 20260423164829962 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-23 16:57:56,292 [INFO] ✔ job 20260423164829962 : 548 lignes en 562s
+2026-04-23 17:00:29,332 [INFO] ▶ job 20260423170027851 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-23 17:09:49,461 [INFO] ✔ job 20260423170027851 : 548 lignes en 559s
+2026-04-23 17:10:17,067 [INFO] Worker arrêté (Ctrl+C)
+2026-04-23 17:10:20,694 [INFO] Worker production démarré
+2026-04-23 17:10:20,694 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-23 17:10:20,695 [INFO] Rétention : 90 jours
+2026-04-23 17:17:49,073 [INFO] ▶ job 20260423171747067 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-23 17:27:10,265 [INFO] ✔ job 20260423171747067 : 548 lignes en 560s
+2026-04-24 12:29:46,621 [INFO] Worker production démarré
+2026-04-24 12:29:46,622 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-24 12:29:46,622 [INFO] Rétention : 90 jours
+2026-04-24 12:56:26,141 [INFO] Worker arrêté (Ctrl+C)
+2026-04-24 12:56:34,231 [INFO] Worker production démarré
+2026-04-24 12:56:34,231 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-24 12:56:34,231 [INFO] Rétention : 90 jours
+2026-04-27 09:33:50,581 [INFO] Worker production démarré
+2026-04-27 09:33:50,583 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-27 09:33:50,583 [INFO] Rétention : 90 jours
+2026-04-27 10:49:39,549 [INFO] Worker production démarré
+2026-04-27 10:49:39,550 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-27 10:49:39,550 [INFO] Rétention : 90 jours
+2026-04-27 10:54:03,056 [INFO] Worker production démarré
+2026-04-27 10:54:03,056 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-27 10:54:03,056 [INFO] Rétention : 90 jours
+2026-04-27 12:32:10,479 [INFO] ▶ job 20260427123209290 : Reseau Hors Distrib / 20/04/2026-27/04/2026
+2026-04-27 12:36:04,899 [INFO] ✔ job 20260427123209290 : 549 lignes en 233s
+2026-04-27 13:34:47,818 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 13:34:51,406 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 14:51:33,573 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 14:51:35,970 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 14:51:48,638 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 14:52:33,510 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 14:52:46,234 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 14:52:58,507 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 14:53:10,644 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 15:01:13,331 [INFO] ▶ job 20260427150111992 : Reseau Hors Distrib / 20/04/2026-27/04/2026
+2026-04-27 15:08:29,312 [INFO] ✔ job 20260427150111992 : 573 lignes en 435s
+2026-04-27 15:10:06,029 [INFO] Worker arrêté (Ctrl+C)
+2026-04-27 15:10:10,919 [INFO] Worker production démarré
+2026-04-27 15:10:10,919 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-27 15:10:10,919 [INFO] Rétention : 90 jours
+2026-04-27 15:10:46,313 [INFO] ▶ job 20260427151042888 : Reseau Hors Distrib / 20/04/2026-27/04/2026
+2026-04-27 15:18:04,817 [INFO] ✔ job 20260427151042888 : 573 lignes en 437s
+2026-04-27 15:22:36,038 [INFO] Worker arrêté (Ctrl+C)
+2026-04-27 15:22:41,734 [INFO] Worker production démarré
+2026-04-27 15:22:41,734 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-27 15:22:41,734 [INFO] Rétention : 90 jours
+2026-04-27 15:23:59,787 [INFO] ▶ job 20260427152358187 : Reseau Hors Distrib / 20/04/2026-27/04/2026
+2026-04-27 15:29:50,501 [ERROR] impossible de marquer le job 20260427152358187 en error : La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 15:29:50,502 [ERROR] ✗ job 20260427152358187 : La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+Traceback (most recent call last):
+  File "D:\Claude\Projet Omaya\worker_production.py", line 281, in main
+    result = extract_job_to_parquet(
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\intranets\vendeur\services\production_extraction.py", line 964, in extract_job_to_parquet
+    affect = get_affect(id_salarie, date_c_ymd or prod_fin)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\intranets\vendeur\services\production_extraction.py", line 924, in get_affect
+    prow = db_rh.query_one(
+           ^^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\core\database\connections.py", line 93, in query_one
+    rows = self.query(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\core\database\connections.py", line 81, in query
+    return execute_query(
+           ^^^^^^^^^^^^^^
+  File "D:\Claude\Projet Omaya\app\core\database\hfsql_bridge.py", line 139, in execute_query
+    raise HFSQLError(data.get("error", "Erreur inconnue"))
+app.core.database.hfsql_bridge.HFSQLError: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+
+2026-04-27 15:29:50,860 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 15:30:03,032 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 15:40:56,897 [INFO] Worker arrêté (Ctrl+C)
+2026-04-27 15:40:59,623 [INFO] Worker production démarré
+2026-04-27 15:40:59,624 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-27 15:40:59,624 [INFO] Rétention : 90 jours
+2026-04-27 15:41:17,858 [INFO] ▶ job 20260427154116029 : Reseau Hors Distrib / 20/04/2026-27/04/2026
+2026-04-27 15:48:23,680 [INFO] ✔ job 20260427154116029 : 573 lignes en 425s
+2026-04-27 16:09:27,708 [INFO] Worker arrêté (Ctrl+C)
+2026-04-27 16:09:30,965 [INFO] Worker production démarré
+2026-04-27 16:09:30,965 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-27 16:09:30,967 [INFO] Rétention : 90 jours
+2026-04-27 16:10:13,279 [INFO] ▶ job 20260427161012147 : Reseau Hors Distrib / 20/04/2026-27/04/2026
+2026-04-27 16:17:15,648 [INFO] ✔ job 20260427161012147 : 573 lignes en 421s
+2026-04-27 16:46:00,636 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 16:46:13,219 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-27 16:46:25,534 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 08:01:45,959 [ERROR] erreur pop_next_pending_job: Bridge timeout (30s)
+2026-04-28 08:01:48,302 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 08:01:50,389 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 08:01:52,452 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 08:02:04,529 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 10:12:37,796 [INFO] ▶ job 20260428101236450 : Reseau Hors Distrib / 01/04/2026-12/04/2026
+2026-04-28 10:17:03,810 [INFO] ✔ job 20260428101236450 : 68 lignes en 265s
+2026-04-28 10:21:07,692 [INFO] ▶ job 20260428102106165 : Reseau Hors Distrib [OEN+ENI] / 01/04/2026-12/04/2026
+2026-04-28 10:25:40,007 [INFO] ✔ job 20260428102106165 : 80 lignes en 271s
+2026-04-28 10:44:09,229 [INFO] ▶ job 20260428104407644 : Reseau Hors Distrib [OEN] / 01/04/2026-12/04/2026
+2026-04-28 10:45:33,825 [INFO] Worker arrêté (Ctrl+C)
+2026-04-28 10:45:36,049 [INFO] Worker production démarré
+2026-04-28 10:45:36,049 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-28 10:45:36,049 [INFO] Rétention : 90 jours
+2026-04-28 10:45:37,256 [INFO] ▶ job 20260428104518667 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 10:50:31,233 [INFO] ✔ job 20260428104518667 : 1326 lignes en 293s
+2026-04-28 12:42:13,163 [INFO] ▶ job 20260428124209548 : Reseau / 01/04/2026-12/04/2026
+2026-04-28 12:46:42,329 [INFO] ✔ job 20260428124209548 : 1326 lignes en 268s
+2026-04-28 14:37:14,822 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 14:37:17,277 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 14:37:19,590 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 14:56:02,318 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 14:56:04,435 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 16:14:27,974 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 16:14:30,176 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-28 16:29:51,192 [INFO] ▶ job 20260428162949557 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 16:34:35,933 [INFO] ✔ job 20260428162949557 : 1326 lignes en 283s
+2026-04-28 16:41:27,680 [INFO] Worker arrêté (Ctrl+C)
+2026-04-28 16:41:29,877 [INFO] Worker production démarré
+2026-04-28 16:41:29,877 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-28 16:41:29,878 [INFO] Rétention : 90 jours
+2026-04-28 16:42:07,776 [INFO] ▶ job 20260428164205364 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 16:45:57,633 [INFO] Worker arrêté (Ctrl+C)
+2026-04-28 16:46:00,519 [INFO] Worker production démarré
+2026-04-28 16:46:00,519 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-28 16:46:00,520 [INFO] Rétention : 90 jours
+2026-04-28 16:46:53,582 [INFO] ▶ job 20260428164651852 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 16:51:36,897 [INFO] ✔ job 20260428164651852 : 1326 lignes en 282s
+2026-04-28 16:57:49,002 [INFO] ▶ job 20260428165745981 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 17:02:27,131 [INFO] ✔ job 20260428165745981 : 1326 lignes en 277s
+2026-04-28 17:09:27,431 [INFO] Worker arrêté (Ctrl+C)
+2026-04-28 17:09:28,520 [INFO] Worker production démarré
+2026-04-28 17:09:28,521 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-28 17:09:28,521 [INFO] Rétention : 90 jours
+2026-04-28 17:10:12,404 [INFO] ▶ job 20260428171010958 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 17:14:52,433 [INFO] ✔ job 20260428171010958 : 1326 lignes en 279s
+2026-04-28 17:16:03,416 [INFO] Worker arrêté (Ctrl+C)
+2026-04-28 17:16:05,733 [INFO] Worker production démarré
+2026-04-28 17:16:05,733 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-28 17:16:05,733 [INFO] Rétention : 90 jours
+2026-04-28 17:17:24,031 [INFO] ▶ job 20260428171722610 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 17:21:59,392 [INFO] ✔ job 20260428171722610 : 1326 lignes en 274s
+2026-04-28 17:23:08,496 [INFO] Worker arrêté (Ctrl+C)
+2026-04-28 17:23:11,377 [INFO] Worker production démarré
+2026-04-28 17:23:11,378 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-28 17:23:11,378 [INFO] Rétention : 90 jours
+2026-04-28 17:25:27,934 [INFO] ▶ job 20260428172525621 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 17:30:02,649 [INFO] ✔ job 20260428172525621 : 1326 lignes en 273s
+2026-04-28 17:33:18,465 [INFO] Worker arrêté (Ctrl+C)
+2026-04-28 17:33:22,153 [INFO] Worker production démarré
+2026-04-28 17:33:22,153 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-28 17:33:22,154 [INFO] Rétention : 90 jours
+2026-04-28 17:34:00,472 [INFO] ▶ job 20260428173358853 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-28 17:38:45,227 [INFO] ✔ job 20260428173358853 : 1326 lignes en 284s
+2026-04-28 22:57:42,838 [ERROR] erreur pop_next_pending_job: Bridge timeout (30s)
+2026-04-28 22:57:53,033 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:14:09,951 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:38:18,802 [INFO] Worker production démarré
+2026-04-29 08:38:18,818 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 08:38:18,818 [INFO] Rétention : 90 jours
+2026-04-29 08:38:28,941 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:38:41,007 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:38:53,073 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:39:05,312 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:39:17,391 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:39:29,457 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:39:41,535 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:39:53,612 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:40:05,669 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:40:17,729 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:40:30,242 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:40:42,317 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:40:54,394 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:41:06,469 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:41:18,553 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:41:30,633 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:41:42,692 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:41:54,756 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:42:06,838 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:42:18,915 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:42:30,988 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:42:43,058 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:42:55,124 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:43:07,207 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:43:19,288 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 08:44:24,434 [INFO] ▶ job 20260429084421396 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-29 08:48:46,552 [INFO] ✔ job 20260429084421396 : 1326 lignes en 261s
+2026-04-29 09:00:52,088 [INFO] Worker arrêté (Ctrl+C)
+2026-04-29 09:00:54,788 [INFO] Worker production démarré
+2026-04-29 09:00:54,788 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 09:00:54,789 [INFO] Rétention : 90 jours
+2026-04-29 09:01:20,310 [INFO] ▶ job 20260429090118251 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-29 09:05:34,570 [INFO] ✔ job 20260429090118251 : 1326 lignes en 253s
+2026-04-29 09:12:11,827 [ERROR] erreur pop_next_pending_job: Bridge timeout (30s)
+2026-04-29 09:31:00,160 [INFO] Worker arrêté (Ctrl+C)
+2026-04-29 09:31:02,152 [INFO] Worker production démarré
+2026-04-29 09:31:02,152 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 09:31:02,152 [INFO] Rétention : 90 jours
+2026-04-29 09:31:50,325 [INFO] ▶ job 20260429093147201 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-29 09:36:08,520 [INFO] ✔ job 20260429093147201 : 1326 lignes en 257s
+2026-04-29 09:39:35,137 [INFO] Worker arrêté (Ctrl+C)
+2026-04-29 09:39:37,833 [INFO] Worker production démarré
+2026-04-29 09:39:37,833 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 09:39:37,834 [INFO] Rétention : 90 jours
+2026-04-29 09:40:01,578 [INFO] ▶ job 20260429093959756 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-29 09:44:17,317 [INFO] ✔ job 20260429093959756 : 1326 lignes en 254s
+2026-04-29 10:02:32,891 [INFO] Worker arrêté (Ctrl+C)
+2026-04-29 10:02:34,397 [INFO] Worker production démarré
+2026-04-29 10:02:34,398 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 10:02:34,398 [INFO] Rétention : 90 jours
+2026-04-29 10:02:59,505 [INFO] ▶ job 20260429100256966 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-29 10:06:56,183 [INFO] ✔ job 20260429100256966 : 1326 lignes en 236s
+2026-04-29 11:00:52,848 [INFO] Worker arrêté (Ctrl+C)
+2026-04-29 11:00:54,720 [INFO] Worker production démarré
+2026-04-29 11:00:54,720 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 11:00:54,720 [INFO] Rétention : 90 jours
+2026-04-29 11:01:29,771 [INFO] ▶ job 20260429110127294 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-29 11:05:39,306 [INFO] ✔ job 20260429110127294 : 1326 lignes en 248s
+2026-04-29 11:11:44,390 [INFO] Worker arrêté (Ctrl+C)
+2026-04-29 11:11:45,737 [INFO] Worker production démarré
+2026-04-29 11:11:45,738 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 11:11:45,738 [INFO] Rétention : 90 jours
+2026-04-29 11:12:11,242 [INFO] ▶ job 20260429111208839 : Reseau [OEN] / 01/04/2026-12/04/2026
+2026-04-29 11:16:27,861 [INFO] ✔ job 20260429111208839 : 1326 lignes en 255s
+2026-04-29 15:05:42,323 [ERROR] erreur pop_next_pending_job: Bridge timeout (30s)
+2026-04-29 15:05:55,745 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 15:06:09,198 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 15:06:21,286 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 15:06:33,375 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 15:06:42,904 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 15:06:55,517 [ERROR] erreur pop_next_pending_job: La connexion au serveur <192.168.1.201:4901> a échoué. Vérifiez qu'il ne s'agit pas d'un problème réseau (machine, switch, câble, firewall...), et que le service HFSQL est bien démarré sur le serveur.
+2026-04-29 16:05:12,703 [INFO] ▶ job 20260429160511500 : Reseau [ENI] / 01/04/2026-12/04/2026
+2026-04-29 16:05:25,123 [INFO] ✔ job 20260429160511500 : 12 lignes en 11s
+2026-04-29 16:07:25,074 [INFO] ▶ job 20260429160724176 : Prod Perso LOUDIEUX Audrey [ENI] / 01/01/2026-29/04/2026
+2026-04-29 16:07:31,678 [INFO] ✔ job 20260429160724176 : 0 lignes en 5s
+2026-04-29 16:10:38,279 [INFO] ▶ job 20260429161035309 : Reseau [ENI] / 01/01/2026-29/04/2026
+2026-04-29 16:11:37,456 [INFO] ✔ job 20260429161035309 : 101 lignes en 58s
+2026-04-29 16:17:42,316 [INFO] Worker arrêté (Ctrl+C)
+2026-04-29 16:17:43,954 [INFO] Worker production démarré
+2026-04-29 16:17:43,954 [INFO] Dossier extractions : D:\Sites\groupeOmaya\production-extracts
+2026-04-29 16:17:43,954 [INFO] Rétention : 90 jours
+2026-04-29 16:18:10,094 [INFO] ▶ job 20260429161808508 : Reseau [ENI] / 01/01/2026-29/04/2026
+2026-04-29 16:19:07,406 [INFO] ✔ job 20260429161808508 : 101 lignes en 56s
+2026-04-29 16:25:29,634 [INFO] Worker arrêté (Ctrl+C)
