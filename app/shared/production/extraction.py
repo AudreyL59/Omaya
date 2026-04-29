@@ -637,6 +637,38 @@ def _load_heure_from_tk(num_bs_list: list[str]) -> dict[str, str]:
     return out
 
 
+def _load_numbs_in_tk_call_panier(num_bs_list: list[str]) -> set[str]:
+    """Retourne l'ensemble des NumBS présents dans TK_Call_Panier (`ticket_bo`).
+
+    Pour OEN (et les autres partenaires non-SFR) — TK_CallSFR_Panier est
+    réservé aux contrats SFR. Sert à filtrer la base de calcul du tx de
+    consentement OEN : seuls les contrats remontés via un panier Call
+    comptent (cf. WinDev StatsOEN).
+    """
+    nums = [str(n) for n in num_bs_list if n]
+    if not nums:
+        return set()
+
+    db_bo = get_connection("ticket_bo")
+    found: set[str] = set()
+    import logging
+    logger = logging.getLogger(__name__)
+    for chunk in _chunked(nums, _IN_CHUNK):
+        nums_sql = ",".join("'" + n.replace("'", "''") + "'" for n in chunk)
+        try:
+            rows = db_bo.query(
+                f"SELECT NumBS FROM TK_Call_Panier WHERE NumBS IN ({nums_sql})"
+            )
+        except Exception as e:
+            logger.warning(f"[tk_call_panier] failed: {e}")
+            continue
+        for r in rows:
+            n = str(r.get("NumBS") or "")
+            if n:
+                found.add(n)
+    return found
+
+
 def _load_clients_info(db_adv, ids_clients: set[int]) -> dict[int, dict]:
     """Charge les infos client en batch (table client dans ADV)."""
     all_ids = [i for i in ids_clients if i]
@@ -989,6 +1021,12 @@ def extract_job_to_parquet(
             nums_for_tk.append(str(nb))
     heure_tk: dict[str, str] = _load_heure_from_tk(nums_for_tk)
 
+    # Pour OEN/ENI : set des NumBS présents dans TK_Call_Panier — sert à
+    # filtrer la base clients du tx de consentement (cf. WinDev StatsOEN/ENI).
+    nums_call = [str(r.get("NumBS")) for r in all_rows
+                 if r["_prefix"] in ("OEN", "ENI") and r.get("NumBS")]
+    in_tk_call: set[str] = _load_numbs_in_tk_call_panier(nums_call)
+
     # Calcul affectation vendeur à la date signature (requête par salarié+date)
     # On cache les résultats pour (id_salarie, date_ymd).
     affect_cache: dict[tuple[int, str], dict] = {}
@@ -1187,6 +1225,8 @@ def extract_job_to_parquet(
             "couleur_etat": te.get("couleur", ""),
             "lib_etat": r.get("Lib_Etat") or "",
             "lib_etat_vend": lib_etat_vend,
+            # OEN/ENI : NumBS présent dans TK_Call_Panier ? (sert au tx consent)
+            "in_tk_call_panier": (prefix in ("OEN", "ENI") and num_bs in in_tk_call),
             # Etat opérateur (SFR/OEN uniquement)
             "id_type_etat_ope": etat_ope_type_id,
             "lib_type_etat_ope": etat_ope_type_lib,
@@ -1995,7 +2035,10 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
     if not oen:
         return {}
 
-    nb_pdl_brut = len(oen)
+    # PDL hors anomalies (id_type_etat == 3 = anomalie). Sert de base pour le
+    # KPI "Nb PDL Hors anomalie" et les segmentations Base / 6Kva.
+    oen_hors_anom = [r for r in oen if r.get("id_type_etat") != 3]
+    nb_pdl_brut = len(oen_hors_anom)
 
     # Segmentation par TypeProd
     def _type(r): return (r.get("type_prod", "") or "").upper()
@@ -2023,39 +2066,66 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
     nb_stand_by = sum(_coeff(r) for r in oen if r.get("id_type_etat") in (1, 9))
     nb_hors_anomalie = nb_ctt - nb_anomalie
 
-    # Base = ctt avec car ≤ 1000 (mono gaz + dual), compté en PDL (coeff 1 pour les deux)
+    # Règle OEN (sur Lib_produit) :
+    #  - contrat avec part Gaz  : Lib_produit contient "gaz"  (mono Gaz + Dual)
+    #  - contrat avec part Elec : Lib_produit contient "elec" OU pas "gaz" (mono Elec + Dual)
+    #  → un Dual compte dans les deux dénominateurs.
+    def _has_gaz(r) -> bool:
+        return "gaz" in (r.get("lib_produit") or "").lower()
+
+    def _has_elec(r) -> bool:
+        lib = (r.get("lib_produit") or "").lower()
+        return "elec" in lib or "gaz" not in lib
+
+    oen_gaz_part = [r for r in oen if _has_gaz(r)]
+    oen_elec_part = [r for r in oen if _has_elec(r)]
+
+    nb_gaz = len(oen_gaz_part)
+    nb_elec = len(oen_elec_part)
+
+    # Base = contrats avec car ≤ 1000 parmi ceux ayant une part Gaz
     nb_base = sum(
-        1 for r in (oen_gaz + oen_dual)
-        if 0 < (r.get("car") or 0) <= 1000
+        1 for r in oen_gaz_part
+        if (r.get("car") or 0) <= 1000
     )
 
-    # 6kva+ = ctt avec puissance ≥ 6 (mono elec + dual), compté en PDL
+    # 6kva+ = contrats avec puissance ≥ 6 parmi ceux ayant une part Elec
     nb_6kva = sum(
-        1 for r in (oen_elec + oen_dual)
+        1 for r in oen_elec_part
         if (r.get("puissance") or 0) >= 6
     )
 
-    # Clients + consentement : uniques par client, **hors anomalies**
-    # (id_type_etat == 3 = anomalie). Cf. WinDev StatsOEN.
-    oen_hors_anom = [r for r in oen if r.get("id_type_etat") != 3]
-    id_clients = {
-        r.get("id_client") for r in oen_hors_anom
-        if r.get("id_client") and r.get("id_client") != "0"
-    }
-    nb_clients = len(id_clients)
-    clients_consent = {
-        r.get("id_client") for r in oen_hors_anom
-        if r.get("client_rap_part") and r.get("id_client") and r.get("id_client") != "0"
-    }
-    nb_consent = len(clients_consent)
+    # Clients + consentement (cf. WinDev StatsOEN) :
+    # Pour chaque contrat OEN dans l'ordre :
+    #   - si NumBS présent dans TK_Call_Panier
+    #   - si IDClient pas encore vu : on l'ajoute, on incrémente nb_consent
+    #     **uniquement si** ce 1er contrat porte le consent (Opt_Partenaire)
+    # → un client n'est compté qu'une fois, sur la base de son 1er contrat Call.
+    seen_clients: set = set()
+    nb_consent = 0
+    for r in oen:
+        if not r.get("in_tk_call_panier"):
+            continue
+        cid = r.get("id_client")
+        if not cid or cid == "0":
+            continue
+        if cid in seen_clients:
+            continue
+        seen_clients.add(cid)
+        if r.get("client_rap_part"):
+            nb_consent += 1
+    nb_clients = len(seen_clients)
 
     # Note moyenne
     noted = [r for r in oen if (r.get("notation") or 0) > 0]
     note_moy = (sum(r.get("notation", 0) for r in noted) / len(noted)) if noted else 0.0
     pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1)
 
-    # Car moyenne sur le gaz (mono + dual)
-    car_vals = [(r.get("car") or 0) for r in (oen_gaz + oen_dual) if (r.get("car") or 0) > 0]
+    # Car moyenne sur le gaz (mono Gaz + Dual), anomalies incluses
+    car_vals = [
+        (r.get("car") or 0) for r in oen_gaz_part
+        if (r.get("car") or 0) > 0
+    ]
     car_moy = int(sum(car_vals) / len(car_vals)) if car_vals else 0
 
     # --- Tableau par vendeur (TableTxRaccVendeur OEN — équivalent WinDev)
@@ -2080,11 +2150,11 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
                 "nb_anomalie": 0.0,
                 "nb_resil": 0.0,
                 "nb_dual": 0.0,
-                # Compteurs PDL (mono + dual*2 selon contexte)
+                # Compteurs PDL (1 par contrat — dual = 1 PDL Gaz + 1 PDL Elec)
                 "nb_base": 0,             # car ≤ 1000 sur mono gaz + dual
-                "nb_base_total": 0,       # mono gaz + dual*2 (dénominateur)
+                "nb_base_total": 0,       # nb Gaz (mono gaz + dual) — dénominateur
                 "nb_6kva": 0,             # puissance ≥ 6 sur mono elec + dual
-                "nb_6kva_total": 0,       # mono elec + dual*2 (dénominateur)
+                "nb_6kva_total": 0,       # nb Elec (mono elec + dual) — dénominateur
                 # Consentement par client unique
                 "_clients_seen": set(),
                 "_clients_consent": set(),
@@ -2109,19 +2179,27 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
         is_dual = tp not in ("GAZ", "ELEC")
         if is_dual:
             v["nb_dual"] += 0.5
-        # Base / 6Kva selon segment
+        # Base / 6Kva : un Dual compte dans Gaz ET dans Elec.
+        # Détection sur Lib_produit (cf. règle OEN) :
+        #   has_gaz  = lib contient "gaz"           (mono Gaz + Dual)
+        #   has_elec = lib contient "elec" OU pas "gaz" (mono Elec + Dual)
+        lib_prod = (r.get("lib_produit") or "").lower()
+        has_gaz = "gaz" in lib_prod
+        has_elec = ("elec" in lib_prod) or (not has_gaz)
         car = r.get("car") or 0
         puiss = r.get("puissance") or 0
-        if tp == "GAZ" or is_dual:
-            v["nb_base_total"] += 2 if is_dual else 1
-            if 0 < car <= 1000:
+        if has_gaz:
+            v["nb_base_total"] += 1
+            if car <= 1000:
                 v["nb_base"] += 1
-        if tp == "ELEC" or is_dual:
-            v["nb_6kva_total"] += 2 if is_dual else 1
+        if has_elec:
+            v["nb_6kva_total"] += 1
             if puiss >= 6:
                 v["nb_6kva"] += 1
-        # Consentement par client unique (HORS anomalies, comme le KPI global)
-        if id_te != 3:
+        # Consentement par client unique (uniquement contrats dans
+        # TK_Call_Panier — pas de filtre anomalie, cf. KPI global).
+        # 1er contrat rencontré pour ce client → décide du consent.
+        if r.get("in_tk_call_panier"):
             cid = r.get("id_client") or "0"
             if cid and cid != "0" and cid not in v["_clients_seen"]:
                 v["_clients_seen"].add(cid)
@@ -2176,8 +2254,8 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
         "tx_valide_ope": _pct(nb_valide_ope, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
         "tx_attente": _pct(nb_attente, nb_ctt),
         "tx_dual": _pct(nb_ctt_dual, nb_ctt),
-        "tx_base": _pct(nb_base, nb_ctt_mono_gaz + nb_ctt_dual * 2),
-        "tx_6kva": _pct(nb_6kva, nb_ctt_mono_elec + nb_ctt_dual * 2),
+        "tx_base": _pct(nb_base, nb_gaz),
+        "tx_6kva": _pct(nb_6kva, nb_elec),
         "nb_consent": nb_consent,
         "nb_clients": nb_clients,
         "tx_consent": _pct(nb_consent, nb_clients),
@@ -2190,79 +2268,212 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
 
 def _compute_dashboard_eni(rows: list[dict]) -> dict:
     """
-    Dashboard ENI — KPIs répartition, résiliation et options.
+    Dashboard ENI — miroir OEN, sans coefficient (1 ligne = 1 contrat).
+
+    Type ENI : "GAZ" / "ELEC" / "GAZ-ELEC" (= mono Gaz / mono Elec / Dual).
     """
     eni = [r for r in rows if r.get("partenaire") == "ENI"]
     if not eni:
         return {}
 
     def _type(r): return (r.get("type_prod", "") or "").upper()
-    eni_gaz = [r for r in eni if _type(r) == "GAZ"]
-    eni_elec = [r for r in eni if _type(r) == "ELEC"]
-    eni_dual = [r for r in eni if _type(r) not in ("GAZ", "ELEC")]
 
-    nb_brut = len(eni)
-    nb_mono_gaz = len(eni_gaz)
-    nb_mono_elec = len(eni_elec)
-    nb_dual = len(eni_dual)
-    nb_tot = nb_mono_gaz + nb_mono_elec + nb_dual
+    def _has_gaz(r) -> bool:
+        return _type(r) in ("GAZ", "GAZ-ELEC")
 
-    # États
+    def _has_elec(r) -> bool:
+        return _type(r) in ("ELEC", "GAZ-ELEC")
+
+    def _is_dual(r) -> bool:
+        return _type(r) == "GAZ-ELEC"
+
+    eni_gaz_part = [r for r in eni if _has_gaz(r)]
+    eni_elec_part = [r for r in eni if _has_elec(r)]
+    eni_dual = [r for r in eni if _is_dual(r)]
+
+    nb_pdl_brut = len(eni)
+    nb_ctt = len(eni)                 # pas de coeff pour ENI
+    nb_ctt_dual = len(eni_dual)
+    nb_gaz = len(eni_gaz_part)
+    nb_elec = len(eni_elec_part)
+
+    # Compteurs d'états (1 par ligne, pas de coeff)
     nb_anomalie = sum(1 for r in eni if r.get("id_type_etat") == 3)
+    nb_valide = sum(1 for r in eni if r.get("id_type_etat") in (5, 8))
     nb_resil = sum(1 for r in eni if r.get("id_type_etat") == 4)
+    nb_attente = sum(1 for r in eni if r.get("id_type_etat") == 2)
     nb_stand_by = sum(1 for r in eni if r.get("id_type_etat") in (1, 9))
-    nb_hors_anomalie = nb_brut - nb_anomalie
+    nb_hors_anomalie = nb_ctt - nb_anomalie
 
-    # Type B1+ = contrats gaz avec car > 6000
-    ctt_gaz = eni_gaz + eni_dual
-    nb_b1_plus = sum(1 for r in ctt_gaz if (r.get("car") or 0) > 6000)
+    # Base = contrats avec car ≤ 1000 parmi ceux ayant une part Gaz
+    nb_base = sum(
+        1 for r in eni_gaz_part
+        if (r.get("car") or 0) <= 1000
+    )
 
-    # Options
+    # 6kva+ = contrats avec puissance ≥ 6 parmi les Elec
+    nb_6kva = sum(
+        1 for r in eni_elec_part
+        if (r.get("puissance") or 0) >= 6
+    )
+
+    # Clients + consentement (cf. OEN) : itère dans l'ordre, NumBS dans
+    # TK_Call_Panier obligatoire, 1er contrat décide du consent. Pas de
+    # filtre anomalie.
+    seen_clients: set = set()
+    nb_consent = 0
+    for r in eni:
+        if not r.get("in_tk_call_panier"):
+            continue
+        cid = r.get("id_client")
+        if not cid or cid == "0":
+            continue
+        if cid in seen_clients:
+            continue
+        seen_clients.add(cid)
+        if r.get("client_rap_part"):
+            nb_consent += 1
+    nb_clients = len(seen_clients)
+
+    # Note moyenne
+    noted = [r for r in eni if (r.get("notation") or 0) > 0]
+    note_moy = (sum(r.get("notation", 0) for r in noted) / len(noted)) if noted else 0.0
+    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1)
+
+    # Car moyenne sur le gaz (mono Gaz + Dual), anomalies incluses
+    car_vals = [
+        (r.get("car") or 0) for r in eni_gaz_part
+        if (r.get("car") or 0) > 0
+    ]
+    car_moy = int(sum(car_vals) / len(car_vals)) if car_vals else 0
+
+    # Options (gardées car spécifiques ENI)
     nb_demat = sum(1 for r in eni if r.get("opt_demat"))
     nb_maintenance = sum(1 for r in eni if r.get("opt_maintenance"))
     nb_energie_verte = sum(1 for r in eni if r.get("opt_energie_verte_gaz"))
     nb_reforestation = sum(1 for r in eni if r.get("opt_reforestation"))
     nb_protection = sum(1 for r in eni if r.get("opt_protection"))
 
-    # Note
-    noted = [r for r in eni if (r.get("notation") or 0) > 0]
-    note_moy = (sum(r.get("notation", 0) for r in noted) / len(noted)) if noted else 0.0
-    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1)
+    # --- Tableau par vendeur (miroir OEN, sans coeff)
+    v_rows: dict[str, dict] = {}
 
-    # Car moyenne gaz
-    car_vals = [(r.get("car") or 0) for r in ctt_gaz if (r.get("car") or 0) > 0]
-    car_moy = int(sum(car_vals) / len(car_vals)) if car_vals else 0
+    def _vrow(r: dict) -> dict | None:
+        id_s = r.get("id_salarie") or "0"
+        if id_s == "0":
+            return None
+        v = v_rows.get(id_s)
+        if v is None:
+            v = {
+                "id_salarie": id_s,
+                "nom": r.get("vendeur_nom", ""),
+                "prenom": r.get("vendeur_prenom", ""),
+                "agence": r.get("agence", ""),
+                "equipe": r.get("equipe", ""),
+                "en_activite": bool(r.get("en_activite", True)),
+                "nb_ctt": 0, "nb_anomalie": 0, "nb_resil": 0, "nb_dual": 0,
+                "nb_base": 0, "nb_base_total": 0,
+                "nb_6kva": 0, "nb_6kva_total": 0,
+                "_clients_seen": set(),
+                "_clients_consent": set(),
+                "nb_clients": 0, "nb_consent": 0,
+            }
+            v_rows[id_s] = v
+        return v if v["en_activite"] else None
+
+    for r in eni:
+        v = _vrow(r)
+        if v is None:
+            continue
+        v["nb_ctt"] += 1
+        id_te = r.get("id_type_etat") or 0
+        if id_te == 3:
+            v["nb_anomalie"] += 1
+        if id_te == 4:
+            v["nb_resil"] += 1
+        if _is_dual(r):
+            v["nb_dual"] += 1
+        car = r.get("car") or 0
+        puiss = r.get("puissance") or 0
+        if _has_gaz(r):
+            v["nb_base_total"] += 1
+            if car <= 1000:
+                v["nb_base"] += 1
+        if _has_elec(r):
+            v["nb_6kva_total"] += 1
+            if puiss >= 6:
+                v["nb_6kva"] += 1
+        # Consentement : 1er contrat dans TK_Call_Panier décide
+        if r.get("in_tk_call_panier"):
+            cid = r.get("id_client") or "0"
+            if cid and cid != "0" and cid not in v["_clients_seen"]:
+                v["_clients_seen"].add(cid)
+                v["nb_clients"] += 1
+                if r.get("client_rap_part"):
+                    v["_clients_consent"].add(cid)
+                    v["nb_consent"] += 1
+
+    tx_racc_vendeur: list[dict] = []
+    for v in v_rows.values():
+        nb_hors_a = v["nb_ctt"] - v["nb_anomalie"]
+        tx_racc_vendeur.append({
+            "id_salarie": v["id_salarie"],
+            "nom": v["nom"],
+            "prenom": v["prenom"],
+            "agence": v["agence"],
+            "equipe": v["equipe"],
+            "en_activite": v["en_activite"],
+            "nb_ctt": v["nb_ctt"],
+            "nb_resil": v["nb_resil"],
+            "nb_dual": v["nb_dual"],
+            "nb_base": v["nb_base"],
+            "nb_6kva": v["nb_6kva"],
+            "nb_clients": v["nb_clients"],
+            "nb_consent": v["nb_consent"],
+            "tx_resil": _pct(v["nb_resil"], nb_hors_a) if nb_hors_a > 0 else 0.0,
+            "tx_dual": _pct(v["nb_dual"], v["nb_ctt"]),
+            "tx_base": _pct(v["nb_base"], v["nb_base_total"]),
+            "tx_6kva": _pct(v["nb_6kva"], v["nb_6kva_total"]),
+            "tx_consent": _pct(v["nb_consent"], v["nb_clients"]),
+        })
+    tx_racc_vendeur.sort(key=lambda x: (x["nom"].lower(), x["prenom"].lower()))
 
     return {
-        "nb_brut": nb_brut,
+        "nb_pdl_brut": nb_pdl_brut,
+        "nb_ctt": nb_ctt,
+        "nb_ctt_dual": nb_ctt_dual,
         "nb_hors_anomalie": nb_hors_anomalie,
-        "nb_mono_gaz": nb_mono_gaz,
-        "nb_mono_elec": nb_mono_elec,
-        "nb_dual": nb_dual,
-        "nb_b1_plus": nb_b1_plus,
         "nb_anomalie": nb_anomalie,
+        "nb_valide": nb_valide,
         "nb_resil": nb_resil,
+        "nb_attente": nb_attente,
         "nb_stand_by": nb_stand_by,
-        "tx_mono_gaz": _pct(nb_mono_gaz, nb_tot),
-        "tx_mono_elec": _pct(nb_mono_elec, nb_tot),
-        "tx_dual": _pct(nb_dual, nb_tot),
-        "tx_b1_plus": _pct(nb_b1_plus, len(ctt_gaz)),
-        "tx_anomalie": _pct(nb_anomalie, nb_brut),
-        "tx_resil": _pct(nb_resil, nb_brut),
-        "tx_stand_by": _pct(nb_stand_by, nb_brut),
+        "nb_base": nb_base,
+        "nb_6kva": nb_6kva,
+        "tx_anomalie": _pct(nb_anomalie, nb_ctt),
+        "tx_resil": _pct(nb_resil, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
+        "tx_valide": _pct(nb_valide, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
+        "tx_attente": _pct(nb_attente, nb_ctt),
+        "tx_dual": _pct(nb_ctt_dual, nb_ctt),
+        "tx_base": _pct(nb_base, nb_gaz),
+        "tx_6kva": _pct(nb_6kva, nb_elec),
+        "nb_consent": nb_consent,
+        "nb_clients": nb_clients,
+        "tx_consent": _pct(nb_consent, nb_clients),
+        "note_moy": round(note_moy, 2),
+        "pct_notes": pct_notes,
+        "car_moy": car_moy,
+        # Options ENI (gardées)
         "nb_demat": nb_demat,
         "nb_maintenance": nb_maintenance,
         "nb_energie_verte": nb_energie_verte,
         "nb_reforestation": nb_reforestation,
         "nb_protection": nb_protection,
-        "tx_demat": _pct(nb_demat, nb_brut),
-        "tx_maintenance": _pct(nb_maintenance, nb_brut),
-        "tx_energie_verte": _pct(nb_energie_verte, nb_brut),
-        "tx_reforestation": _pct(nb_reforestation, nb_brut),
-        "tx_protection": _pct(nb_protection, nb_brut),
-        "note_moy": round(note_moy, 2),
-        "pct_notes": pct_notes,
-        "car_moy": car_moy,
+        "tx_demat": _pct(nb_demat, nb_ctt),
+        "tx_maintenance": _pct(nb_maintenance, nb_ctt),
+        "tx_energie_verte": _pct(nb_energie_verte, nb_ctt),
+        "tx_reforestation": _pct(nb_reforestation, nb_ctt),
+        "tx_protection": _pct(nb_protection, nb_ctt),
+        "tx_racc_vendeur": tx_racc_vendeur,
     }
 
 
@@ -2331,6 +2542,7 @@ EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("client_mail",          "Mail"),
     ("client_mobile",        "Mobile"),
     ("client_rap_part",      "Recueil consentement"),
+    ("in_tk_call_panier",    "Call TK"),
     ("opt_num",              "Opt Numérique"),
     ("mois_p",               "Mois Paiement"),
     ("sfr_mois_p_distrib",   "Mois Paiement Distrib"),

@@ -200,12 +200,17 @@ export default function AgendaRecrutementPage() {
 
   const days = Array.from(new Set(filteredRdvs.map((r) => dayKey(r.date_debut)))).sort()
 
+  // Compteurs : seuls les vrais RDV (titre commence par "RDV : ") sont
+  // comptabilisés. Les autres événements restent visibles dans le calendrier.
+  const rdvOnly = rdvs.filter((r) => (r.titre || '').startsWith('RDV : '))
+  const isRetenu = (lib: string) =>
+    /retenu.*premier|retenu.*1er|retenu.*second|retenu.*2[èe]me|venu.*jo/i.test(lib)
   const stats = {
-    total: rdvs.length,
-    retenu: rdvs.filter((r) => /retenu.*\(e\)$|Retenu/.test(r.lib_categorie)).length,
-    non_retenu: rdvs.filter((r) => /Non.Retenu|Pas.Retenu/i.test(r.lib_categorie)).length,
-    absent: rdvs.filter((r) => /Absent/i.test(r.lib_categorie)).length,
-    attente: rdvs.filter((r) => /attente|traité/i.test(r.lib_categorie)).length,
+    total: rdvOnly.length,
+    retenu: rdvOnly.filter((r) => isRetenu(r.lib_categorie)).length,
+    non_retenu: rdvOnly.filter((r) => /Non.Retenu|Pas.Retenu/i.test(r.lib_categorie)).length,
+    absent: rdvOnly.filter((r) => /Absent/i.test(r.lib_categorie)).length,
+    attente: rdvOnly.filter((r) => /attente|traité/i.test(r.lib_categorie)).length,
   }
 
   const shiftDay = (delta: number) => {

@@ -107,6 +107,9 @@ interface ContratRow {
   opt_reforestation: boolean
   opt_protection: boolean
 
+  // OEN : NumBS présent dans TK_Call_Panier (pour filtre tx consentement)
+  in_tk_call_panier: boolean
+
   // STR/VAL
   opt_num: string
 }
@@ -441,6 +444,9 @@ const COLUMNS: ColDef[] = [
     render: (r) => <span className="tabular-nums">{r.client_mobile}</span> },
   { key: 'client_rap_part', label: 'Recueil consentement', align: 'center',
     render: (r) => <BoolBadge v={r.client_rap_part} /> },
+  { key: 'in_tk_call_panier', label: 'Call TK', align: 'center',
+    onlyIfPartenaire: ['OEN'],
+    render: (r) => <BoolBadge v={r.in_tk_call_panier} /> },
   { key: 'opt_num', label: 'Opt Numérique', onlyIfPartenaire: ['STR', 'VAL'],
     render: (r) => r.opt_num },
   { key: 'mois_p', label: 'Mois Paiement',
@@ -1622,7 +1628,7 @@ function DashboardOEN({ d }: { d: any }) {
         <Kpi label="Nb Ctt Brut" value={n('nb_ctt')}
           sub="Mono + Dual/2" />
         <Kpi label="Nb PDL Hors anomalie" value={n('nb_pdl_brut')} />
-        <Kpi label="Nb Ctt Hors anomalie" value={n('nb_hors_anomalie')} />
+        <Kpi label="Nb clients Hors anomalie" value={n('nb_hors_anomalie')} />
         <Kpi label="Note moyenne" value={n('note_moy')} suffix="/ 10"
           sub={`${n('pct_notes').toFixed(1)} % de ctt notés`} />
       </div>
@@ -1778,40 +1784,59 @@ function VendeurOENTable({ rows }: { rows: TxRaccVendeurOENRow[] }) {
   )
 }
 
-function DashboardENI({ d }: { d: Record<string, number> }) {
+interface TxRaccVendeurENIRow {
+  id_salarie: string
+  nom: string
+  prenom: string
+  agence: string
+  equipe: string
+  en_activite: boolean
+  nb_ctt: number
+  nb_resil: number
+  nb_dual: number
+  nb_base: number
+  nb_6kva: number
+  nb_clients: number
+  nb_consent: number
+  tx_resil: number
+  tx_dual: number
+  tx_base: number
+  tx_6kva: number
+  tx_consent: number
+}
+
+function DashboardENI({ d }: { d: any }) {
   const n = (k: string) => Number((d ?? {})[k] ?? 0)
+  const vendeurs: TxRaccVendeurENIRow[] = (d && d.tx_racc_vendeur) || []
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Kpi label="Nb Brut" value={n('nb_brut')} />
-        <Kpi label="Nb Hors anomalie" value={n('nb_hors_anomalie')} />
+        <Kpi label="Nb Ctt Brut" value={n('nb_ctt')} />
+        <Kpi label="Nb PDL Hors anomalie" value={n('nb_pdl_brut')} />
         <Kpi label="Note moyenne" value={n('note_moy')} suffix="/ 10"
           sub={`${n('pct_notes').toFixed(1)} % de ctt notés`} />
         <Kpi label="Car moy" value={n('car_moy')} suffix="KWh"
-          sub="Conso gaz moyenne" />
+          sub="Consommation gaz moyenne" />
       </div>
 
-      <DashboardSection title="Répartition">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Kpi label="% Mono Gaz" value={n('tx_mono_gaz')} suffix="%"
-            sub={`${n('nb_mono_gaz')} contrats`} />
-          <Kpi label="% Mono Elec" value={n('tx_mono_elec')} suffix="%"
-            sub={`${n('nb_mono_elec')} contrats`} />
-          <Kpi label="% Dual" value={n('tx_dual')} suffix="%" tint="dual"
-            sub={`${n('nb_dual')} contrats`} />
-          <Kpi label="% Type B1+" value={n('tx_b1_plus')} suffix="%"
-            sub={`${n('nb_b1_plus')} ctts > 6000 KWh`} />
-        </div>
-      </DashboardSection>
-
-      <DashboardSection title="États">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <DashboardSection title="Ratios clés">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <Kpi label="% Valide" value={n('tx_valide')} suffix="%" tint="dual"
+            sub={`${n('nb_valide')} / ${n('nb_hors_anomalie')}`} />
           <Kpi label="% Anomalie" value={n('tx_anomalie')} suffix="%" tint="resil"
-            sub={`${n('nb_anomalie')} / ${n('nb_brut')}`} />
+            sub={`${n('nb_anomalie')} / ${n('nb_ctt')}`} />
           <Kpi label="% Résil" value={n('tx_resil')} suffix="%" tint="resil"
-            sub={`${n('nb_resil')} / ${n('nb_brut')}`} />
-          <Kpi label="% Stand-By" value={n('tx_stand_by')} suffix="%"
-            sub={`${n('nb_stand_by')} / ${n('nb_brut')}`} />
+            sub={`${n('nb_resil')} / ${n('nb_hors_anomalie')}`} />
+          <Kpi label="% Attente" value={n('tx_attente')} suffix="%"
+            sub={`${n('nb_attente')} / ${n('nb_ctt')}`} />
+          <Kpi label="% Dual" value={n('tx_dual')} suffix="%" tint="dual"
+            sub={`${n('nb_ctt_dual')} / ${n('nb_ctt')}`} />
+          <Kpi label="% Base" value={n('tx_base')} suffix="%"
+            sub={`${n('nb_base')} ≤ 1000 KWh`} />
+          <Kpi label="% 6kva et +" value={n('tx_6kva')} suffix="%" tint="dual"
+            sub={`${n('nb_6kva')} Elec ≥ 6 kVA`} />
+          <Kpi label="% Consentement" value={n('tx_consent')} suffix="%" tint="consent"
+            sub={`${n('nb_consent')} / ${n('nb_clients')}`} />
         </div>
       </DashboardSection>
 
@@ -1829,6 +1854,129 @@ function DashboardENI({ d }: { d: Record<string, number> }) {
             sub={`${n('nb_protection')}`} small />
         </div>
       </DashboardSection>
+
+      {vendeurs.length > 0 && (
+        <DashboardSection title={`Analyse / vendeur (${vendeurs.length})`}>
+          <VendeurENITable rows={vendeurs} />
+        </DashboardSection>
+      )}
     </div>
+  )
+}
+
+function VendeurENITable({ rows }: { rows: TxRaccVendeurENIRow[] }) {
+  const [filter, setFilter] = useState('')
+  const [hideInactive, setHideInactive] = useState(false)
+  const [sortKey, setSortKey] = useState<keyof TxRaccVendeurENIRow>('nom')
+  const [sortDesc, setSortDesc] = useState(false)
+
+  const filtered = useMemo(() => {
+    let r = rows
+    if (filter) {
+      const q = filter.toLowerCase()
+      r = r.filter((v) =>
+        v.nom.toLowerCase().includes(q) ||
+        v.prenom.toLowerCase().includes(q) ||
+        v.agence.toLowerCase().includes(q) ||
+        v.equipe.toLowerCase().includes(q),
+      )
+    }
+    if (hideInactive) r = r.filter((v) => v.en_activite)
+    const dir = sortDesc ? -1 : 1
+    return [...r].sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
+      return String(av ?? '').localeCompare(String(bv ?? ''), 'fr') * dir
+    })
+  }, [rows, filter, hideInactive, sortKey, sortDesc])
+
+  const toggleSort = (k: keyof TxRaccVendeurENIRow) => {
+    if (sortKey === k) setSortDesc(!sortDesc)
+    else { setSortKey(k); setSortDesc(false) }
+  }
+  const pct = (v: number) => `${v.toFixed(1)} %`
+
+  return (
+    <>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="relative">
+          <Search className="w-4 h-4 text-c-ink-faint-2 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            placeholder="Vendeur / agence / équipe…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="pl-9 pr-3 py-1.5 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-c-line-strong w-72"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-c-ink-soft">
+          <input
+            type="checkbox"
+            checked={hideInactive}
+            onChange={(e) => setHideInactive(e.target.checked)}
+            className="w-4 h-4"
+          />
+          Masquer inactifs
+        </label>
+        <span className="text-xs text-c-ink-faint ml-auto">{filtered.length} lignes</span>
+      </div>
+      <div className="bg-white rounded-xl border border-c-line overflow-hidden">
+        <div className="overflow-auto max-h-[calc(100vh-340px)]">
+          <table className="w-full text-sm">
+            <thead className="bg-c-surface-soft text-xs text-c-ink-faint uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_var(--color-c-line)]">
+              <tr>
+                {([
+                  ['nom', 'Vendeur', 'left'],
+                  ['nb_ctt', 'nb Ctt', 'right'],
+                  ['tx_resil', 'Tx de Résil', 'right'],
+                  ['tx_dual', 'Tx Dual', 'right'],
+                  ['tx_6kva', 'Tx 6Kva et +', 'right'],
+                  ['tx_base', 'Tx Base', 'right'],
+                  ['tx_consent', 'Tx Consent', 'right'],
+                  ['agence', 'Agence', 'left'],
+                  ['equipe', 'Équipe', 'left'],
+                  ['en_activite', 'Actif', 'center'],
+                ] as const).map(([k, label, align]) => (
+                  <th
+                    key={k}
+                    onClick={() => toggleSort(k as keyof TxRaccVendeurENIRow)}
+                    className={`${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'} px-3 py-2.5 font-medium cursor-pointer select-none whitespace-nowrap hover:bg-c-surface-medium bg-c-surface-soft`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {label}
+                      {sortKey === k && (sortDesc ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />)}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-c-line-soft">
+              {filtered.map((v) => (
+                <tr key={v.id_salarie} className={`hover:bg-c-surface-soft ${!v.en_activite ? 'bg-c-surface-soft/50 text-c-ink-faint' : ''}`}>
+                  <td className="px-3 py-2 font-medium text-c-ink whitespace-nowrap">
+                    {v.nom} {capitalize(v.prenom)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{v.nb_ctt}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_resil, 'resil')}`}>{pct(v.tx_resil)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_dual, 'dual')}`}>{pct(v.tx_dual)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_6kva, 'dual')}`}>{pct(v.tx_6kva)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{pct(v.tx_base)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${colorClass(v.tx_consent, 'consent')}`}>{pct(v.tx_consent)}</td>
+                  <td className="px-3 py-2 text-c-ink-muted">{v.agence}</td>
+                  <td className="px-3 py-2 text-c-ink-muted">{v.equipe}</td>
+                  <td className="px-3 py-2 text-center">
+                    {v.en_activite ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 inline-block" />
+                    ) : (
+                      <Minus className="w-3.5 h-3.5 text-c-line-strong inline-block" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   )
 }
