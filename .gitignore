@@ -9,3 +9,6 @@ bridge/
 test_*.py
 node_modules/
 dist/
+.claude/
+logs/
+favicon.ico

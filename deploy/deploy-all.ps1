@@ -36,18 +36,20 @@ try {
         Write-Host ""
         Write-Host "[1/5] Verification des modifs locales..." -ForegroundColor Cyan
 
-        $status = git status --porcelain
-        if ($status) {
-            Write-Host "  Modifs locales detectees :" -ForegroundColor Yellow
-            git status --short
+        # Ne stage QUE les fichiers deja tracked (pas de nouveaux fichiers
+        # serveur qui pourraient salir le repo : logs, .claude, favicon, etc.).
+        $tracked = git diff --name-only
+        if ($tracked) {
+            Write-Host "  Modifs locales sur fichiers tracked :" -ForegroundColor Yellow
+            git diff --stat
             Write-Host ""
             $msg = "deploy: auto-commit avant pull (" + (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + ")"
-            git add -A
+            git add -u
             git commit -m $msg
             git push
             Write-Host "  Commit + push OK" -ForegroundColor Green
         } else {
-            Write-Host "  Working tree clean" -ForegroundColor Green
+            Write-Host "  Aucune modif tracked" -ForegroundColor Green
         }
 
         Write-Host ""
