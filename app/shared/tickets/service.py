@@ -4,10 +4,36 @@ from __future__ import annotations
 
 import base64
 import struct
+import time
 from datetime import datetime
-from functools import lru_cache
 
 from app.core.database import get_connection
+
+
+# ---------------------------------------------------------------
+# Cache mémoire (TTL) — évite les bursts d'appels au bridge HFSQL
+# pour des données qui changent rarement (TK_TypeDemande / TK_Statut).
+# ---------------------------------------------------------------
+
+_CACHE_TTL_S = 60.0  # 60 secondes — invalidation auto
+
+# (frozen_droits, droit_field) -> (timestamp, list[dict])
+_types_cache: dict[tuple, tuple[float, list[dict]]] = {}
+# (frozen_droits, droit_field) -> (timestamp, set[int])
+_type_ids_cache: dict[tuple, tuple[float, set[int]]] = {}
+# Statuts (statique) -> (timestamp, list[dict])
+_statuts_cache: tuple[float, list[dict]] | None = None
+
+
+def _cache_get(store: dict, key, ttl: float = _CACHE_TTL_S):
+    item = store.get(key)
+    if not item:
+        return None
+    ts, val = item
+    if time.time() - ts > ttl:
+        store.pop(key, None)
+        return None
+    return val
 
 
 # ---------------------------------------------------------------
@@ -76,6 +102,35 @@ def _windev_to_iso(s: str) -> str:
 # TK_TypeDemande
 # ---------------------------------------------------------------
 
+def list_type_ids_par_droit(droits: list[str], droit_field: str) -> set[int]:
+    """Variante "light" de list_types_par_droit pour les contrôles d'accès :
+    une seule requête (pas de fetch des mémos Lib_TypeDemande).
+
+    Cache TTL 60s.
+    """
+    cache_key = (frozenset(droits or []), droit_field)
+    cached = _cache_get(_type_ids_cache, cache_key)
+    if cached is not None:
+        return cached
+    db = get_connection("ticket")
+    rows = db.query(
+        f"""SELECT IDTK_TypeDemande, {droit_field}
+        FROM TK_TypeDemande
+        WHERE ModifELEM <> 'suppr'"""
+    )
+    droits_set = set(droits or [])
+    out: set[int] = set()
+    for r in rows:
+        droit = (r.get(droit_field) or "").strip()
+        if droit and droit not in droits_set:
+            continue
+        idt = _clean_id(_to_int(r.get("IDTK_TypeDemande")))
+        if idt:
+            out.add(idt)
+    _type_ids_cache[cache_key] = (time.time(), out)
+    return out
+
+
 def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
     """Liste les types de demande accessibles selon les droits du user.
 
@@ -86,8 +141,14 @@ def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
     Lib_TypeDemande est un mémo texte → fetch séparé pour éviter la
     troncature du bridge HFSQL sur les SELECT multi-colonnes.
 
+    Cache TTL 60s — la table TK_TypeDemande change rarement.
+
     Retour trié par Service puis Lib_TypeDemande.
     """
+    cache_key = (frozenset(droits or []), droit_field)
+    cached = _cache_get(_types_cache, cache_key)
+    if cached is not None:
+        return cached
     db = get_connection("ticket")
 
     # 1. SELECT des champs simples (pas de mémo). Le champ droit est sélectionné
@@ -136,6 +197,7 @@ def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
             "icone_data_url": "",  # mémo binaire — sera ajouté plus tard
         })
     out.sort(key=lambda x: (x["service"], x["lib_type_demande"].lower()))
+    _types_cache[cache_key] = (time.time(), out)
     return out
 
 
@@ -169,27 +231,31 @@ def _icone_to_data_url(blob) -> str:
 # TK_Statut
 # ---------------------------------------------------------------
 
-@lru_cache(maxsize=1)
-def _load_statuts_cache_key() -> tuple:
-    """Clé de cache (stub) — on invalide manuellement si besoin."""
-    return ("v1",)
-
-
 def list_statuts() -> list[dict]:
-    """Liste complète des statuts de tickets, ordonnés par IDTK_Statut."""
+    """Liste complète des statuts de tickets, ordonnés par IDTK_Statut.
+
+    Cache TTL 60s — la table TK_Statut change quasi-jamais.
+    """
+    global _statuts_cache
+    if _statuts_cache is not None:
+        ts, val = _statuts_cache
+        if time.time() - ts <= _CACHE_TTL_S:
+            return val
     db = get_connection("ticket")
     rows = db.query(
         """SELECT IDTK_Statut, Lib_Statut FROM TK_Statut
         WHERE ModifELEM <> 'suppr'
         ORDER BY IDTK_Statut ASC"""
     )
-    return [
+    out = [
         {
             "id_statut": _to_int(r.get("IDTK_Statut")),
             "lib_statut": (r.get("Lib_Statut") or "").strip(),
         }
         for r in rows
     ]
+    _statuts_cache = (time.time(), out)
+    return out
 
 
 # ---------------------------------------------------------------

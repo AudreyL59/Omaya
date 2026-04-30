@@ -10,6 +10,7 @@ Côté intranet, l'inclusion ressemble à :
 """
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -28,6 +29,7 @@ from .schemas import (
 from .service import (
     list_statuts,
     list_tickets_par_type,
+    list_type_ids_par_droit,
     list_types_par_droit,
     load_salaries_minimal,
     _to_int,
@@ -80,10 +82,9 @@ def get_tickets_router(droit_field: str) -> APIRouter:
 
         Vérifie l'accès au type de demande selon les droits du user.
         """
-        # Contrôle d'accès
-        types_user = list_types_par_droit(user.droits, droit_field)
-        allowed_ids = {int(t["id_type_demande"]) for t in types_user if t["id_type_demande"].isdigit()}
-        if int(id_type_demande) not in allowed_ids:
+        # Contrôle d'accès — version "light" sans charger les mémos
+        # Lib_TypeDemande (cachée 60s, donc 0 query après le 1er hit).
+        if int(id_type_demande) not in list_type_ids_par_droit(user.droits, droit_field):
             raise HTTPException(
                 status_code=403,
                 detail="Type de demande non accessible avec vos droits",
@@ -103,19 +104,23 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             date_au=_to_wd(date_au, end=True),
         )
 
-        # Batch : salaries (OPDEST + OpTraitementStaff)
+        # Lookups indépendants — lancés en parallèle pour réduire la latence
+        # (chaque query bridge HFSQL = ~400ms de subprocess overhead).
         id_salaries: set[int] = set()
         for r in rows_raw:
             for k in ("op_dest", "op_traitement_staff", "op_crea"):
                 v = r.get(k) or ""
                 if v.isdigit() and int(v) > 0:
                     id_salaries.add(int(v))
-        salaries = load_salaries_minimal(id_salaries)
-
         id_tickets = [int(r["id_ticket"]) for r in rows_raw if r["id_ticket"].isdigit()]
-        infos = donne_info_ticket_batch(int(id_type_demande), id_tickets)
 
-        statuts_all = list_statuts()
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            f_salaries = pool.submit(load_salaries_minimal, id_salaries)
+            f_infos = pool.submit(donne_info_ticket_batch, int(id_type_demande), id_tickets)
+            f_statuts = pool.submit(list_statuts)
+            salaries = f_salaries.result()
+            infos = f_infos.result()
+            statuts_all = f_statuts.result()
         statut_lib = {s["id_statut"]: s["lib_statut"] for s in statuts_all}
 
         rows: list[TicketRow] = []
