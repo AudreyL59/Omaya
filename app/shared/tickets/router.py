@@ -305,6 +305,10 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             cursor = cursor_start
             loop = asyncio.get_event_loop()
             last_emit = loop.time()
+            # Padding initial 4KB : force ARR/IIS à flush la réponse
+            # immédiatement (sinon les premiers events sont retenus jusqu'à
+            # ce que le buffer interne soit plein).
+            yield ":" + (" " * 4096) + "\n\n"
             yield f"event: ready\ndata: {json.dumps({'cursor_start': cursor_start})}\n\n"
             try:
                 while True:

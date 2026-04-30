@@ -13,9 +13,22 @@
     1. Si D:\Sites\groupeOmaya\www\web.config n'existe pas : copier ce fichier tel quel, renommer en web.config.
     2. Sinon, recopier UNIQUEMENT la <rule name="OmayaAPI"> et les <customHeaders> dans les sections
        correspondantes du web.config existant. Les placer AVANT les autres règles de rewrite.
+    3. IMPORTANT pour le SSE (Tickets live update) : ajouter le bloc <proxy ... responseBufferLimit="0" />
+       et <urlCompression doDynamicCompression="false" /> ci-dessous, sinon ARR bufferise la réponse
+       et les events n'arrivent jamais côté navigateur.
 -->
 <configuration>
   <system.webServer>
+    <!-- ARR : désactive le buffering côté reverse proxy.
+         Indispensable pour le SSE (StreamingResponse FastAPI) — sinon
+         IIS retient toute la réponse jusqu'à fermeture du stream. -->
+    <proxy enabled="true" responseBufferLimit="0" />
+
+    <!-- Désactive la compression dynamique : empêche IIS de buffer le SSE
+         pour le compresser. (La compression statique reste active sur les
+         assets buildés du frontend.) -->
+    <urlCompression doDynamicCompression="false" doStaticCompression="true" />
+
     <rewrite>
       <rules>
         <!-- Reverse proxy /api/* → uvicorn. Le backend n'a pas de préfixe /api, on le retire. -->
