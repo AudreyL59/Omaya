@@ -882,6 +882,220 @@ def _info_facturation_distrib(id_tickets: list[int]) -> dict[int, str]:
     return out
 
 
+def _info_doc_distrib(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 31 — Demande Doc Distributeur.
+
+    TK_DemandeDocDistrib (ticket_bo) → Doc_Distrib (rh)
+        → TypeDocDistributeur (rh) + societe (rh).
+    Format : "{LibDoc}, Ste {RaisonSociale}".
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, IDDoc_Distrib
+            FROM TK_DemandeDocDistrib
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    ticket_to_doc: dict[int, int] = {}
+    doc_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idd = _clean_id(_to_int(r.get("IDDoc_Distrib")))
+        if idl and idd:
+            ticket_to_doc[idl] = idd
+            doc_ids.add(idd)
+    if not doc_ids:
+        return {}
+    db_rh = get_connection("rh")
+    doc_info: dict[int, dict] = {}
+    typedoc_ids: set[int] = set()
+    ste_ids: set[int] = set()
+    try:
+        ids_t = ",".join(str(i) for i in doc_ids)
+        drows = db_rh.query(
+            f"""SELECT IDDoc_Distrib, IDTypeDocDistributeur, IdSte
+            FROM Doc_Distrib
+            WHERE IDDoc_Distrib IN ({ids_t})"""
+        )
+        for d in drows:
+            idd = _clean_id(_to_int(d.get("IDDoc_Distrib")))
+            idtd = _clean_id(_to_int(d.get("IDTypeDocDistributeur")))
+            idste = _clean_id(_to_int(d.get("IdSte")))
+            if idd:
+                doc_info[idd] = {"idtd": idtd, "idste": idste}
+                if idtd:
+                    typedoc_ids.add(idtd)
+                if idste:
+                    ste_ids.add(idste)
+    except Exception:
+        return {}
+    typedoc_libs: dict[int, str] = {}
+    if typedoc_ids:
+        try:
+            ids_t = ",".join(str(i) for i in typedoc_ids)
+            trows = db_rh.query(
+                f"""SELECT IDTypeDocDistributeur, LibDoc
+                FROM TypeDocDistributeur
+                WHERE IDTypeDocDistributeur IN ({ids_t})"""
+            )
+            for t in trows:
+                typedoc_libs[_clean_id(_to_int(t.get("IDTypeDocDistributeur")))] = (
+                    t.get("LibDoc") or ""
+                ).strip()
+        except Exception:
+            pass
+    societes: dict[int, str] = {}
+    if ste_ids:
+        try:
+            ids_t = ",".join(str(i) for i in ste_ids)
+            srows = db_rh.query(
+                f"""SELECT IdSte, RaisonSociale FROM societe WHERE IdSte IN ({ids_t})"""
+            )
+            for s in srows:
+                societes[_clean_id(_to_int(s.get("IdSte")))] = (
+                    s.get("RaisonSociale") or ""
+                ).strip()
+        except Exception:
+            pass
+    out: dict[int, str] = {}
+    for idl, idd in ticket_to_doc.items():
+        info = doc_info.get(idd, {})
+        lib = typedoc_libs.get(info.get("idtd", 0), "")
+        rs = societes.get(info.get("idste", 0), "")
+        parts: list[str] = []
+        if lib:
+            parts.append(lib)
+        if rs:
+            parts.append(f"Ste {rs}")
+        if parts:
+            out[idl] = ", ".join(parts)
+    return out
+
+
+def _info_pv_ulease(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 35 — PV Liv/Rest Ulease.
+
+    TK_DemandeSignPVUlease (ticket_bo) → vehicule_Conducteur (ulease)
+        → vehicule_Fiche (ulease) → Vehicule_TypeCapacité (ulease).
+    Format : "{Modèle} {IMMAT} // {Lib_Type}".
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, IdPC
+            FROM TK_DemandeSignPVUlease
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    ticket_to_pc: dict[int, int] = {}
+    pc_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idpc = _clean_id(_to_int(r.get("IdPC")))
+        if idl and idpc:
+            ticket_to_pc[idl] = idpc
+            pc_ids.add(idpc)
+    if not pc_ids:
+        return {}
+    db_ul = get_connection("ulease")
+    # vehicule_Conducteur (PC) → IDvehicule
+    pc_to_vehicule: dict[int, int] = {}
+    veh_ids: set[int] = set()
+    try:
+        ids_t = ",".join(str(i) for i in pc_ids)
+        vcrows = db_ul.query(
+            f"""SELECT IDvehiculePC, IDvehicule
+            FROM vehicule_Conducteur
+            WHERE IDvehiculePC IN ({ids_t})"""
+        )
+        for v in vcrows:
+            idpc = _clean_id(_to_int(v.get("IDvehiculePC")))
+            idv = _clean_id(_to_int(v.get("IDvehicule")))
+            if idpc and idv:
+                pc_to_vehicule[idpc] = idv
+                veh_ids.add(idv)
+    except Exception:
+        return {}
+    veh_info: dict[int, dict] = {}
+    typecapa_ids: set[int] = set()
+    if veh_ids:
+        try:
+            ids_t = ",".join(str(i) for i in veh_ids)
+            vfrows = db_ul.query(
+                f"""SELECT IDvehicule, IMMAT, IDVehicule_TypeCapacité
+                FROM vehicule_Fiche
+                WHERE IDvehicule IN ({ids_t})"""
+            )
+            for v in vfrows:
+                idv = _clean_id(_to_int(v.get("IDvehicule")))
+                immat = (v.get("IMMAT") or "").strip()
+                idtc = _clean_id(_to_int(v.get("IDVehicule_TypeCapacité")))
+                if idv:
+                    veh_info[idv] = {"immat": immat, "idtc": idtc, "modele": ""}
+                    if idtc:
+                        typecapa_ids.add(idtc)
+        except Exception:
+            pass
+    # Modèle est mémo → fetch séparé
+    if veh_ids:
+        try:
+            ids_t = ",".join(str(i) for i in veh_ids)
+            mrows = db_ul.query(
+                f"""SELECT IDvehicule, Modèle
+                FROM vehicule_Fiche
+                WHERE IDvehicule IN ({ids_t})"""
+            )
+            for m in mrows:
+                idv = _clean_id(_to_int(m.get("IDvehicule")))
+                if idv in veh_info:
+                    veh_info[idv]["modele"] = (m.get("Modèle") or "").strip()
+        except Exception:
+            pass
+    typecapa_libs: dict[int, str] = {}
+    if typecapa_ids:
+        try:
+            ids_t = ",".join(str(i) for i in typecapa_ids)
+            tcrows = db_ul.query(
+                f"""SELECT IDVehicule_TypeCapacité, Lib_Type
+                FROM Vehicule_TypeCapacité
+                WHERE IDVehicule_TypeCapacité IN ({ids_t})"""
+            )
+            for t in tcrows:
+                typecapa_libs[_clean_id(_to_int(t.get("IDVehicule_TypeCapacité")))] = (
+                    t.get("Lib_Type") or ""
+                ).strip()
+        except Exception:
+            pass
+    out: dict[int, str] = {}
+    for idl, idpc in ticket_to_pc.items():
+        idv = pc_to_vehicule.get(idpc, 0)
+        v = veh_info.get(idv, {})
+        modele = v.get("modele", "")
+        immat = v.get("immat", "")
+        lib_type = typecapa_libs.get(v.get("idtc", 0), "")
+        parts: list[str] = []
+        if modele or immat:
+            parts.append(f"{modele} {immat}".strip())
+        if lib_type:
+            parts.append(lib_type)
+        if parts:
+            out[idl] = " // ".join(parts)
+    return out
+
+
 def _info_code_vendeur(id_tickets: list[int], desactivation: bool = False) -> dict[int, str]:
     """Cas 38 / 39 — Demande / Désactivation code Vendeur.
 
@@ -1045,6 +1259,8 @@ _DIRECT_CASES = {
     17: _info_sos_juri,
     26: _info_call_sfr_ret_rdv_tech,
     28: _info_facturation_distrib,
+    31: _info_doc_distrib,
+    35: _info_pv_ulease,
     38: lambda ids: _info_code_vendeur(ids, desactivation=False),
     39: lambda ids: _info_code_vendeur(ids, desactivation=True),
 }
