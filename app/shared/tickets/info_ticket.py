@@ -265,10 +265,13 @@ def _info_avance(id_tickets: list[int]) -> dict[int, str]:
 
 
 def _info_attr_exocash(id_tickets: list[int]) -> dict[int, str]:
-    """Cas 25 — Tk_DemandeAttExoCash.IDSalarie + MontantEC (Monétaire)."""
+    """Cas 25 — Tk_DemandeAttExoCash.IDSalarie + MontantEC (Monétaire).
+
+    Table dans ticket_rh.
+    """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_connection("ticket_rh")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
@@ -642,7 +645,7 @@ def _info_reservation(id_tickets: list[int]) -> dict[int, str]:
 
 
 def _info_sos_juri(id_tickets: list[int]) -> dict[int, str]:
-    """Cas 17 — SOS Pôle JURI. TK_DemandeSOS_JU + TK_TypeSOS_JU.
+    """Cas 17 — SOS Pôle JURI. TK_DemandeSOS_JU + TK_TypeSOS_JU (ticket_rh).
 
     Format simplifié : "{Lib_TypeSos} {RefDemande}" + résolution de IdElem
     pour TypeForm=Salarie/Societe (les autres TypeForm renvoient juste la
@@ -650,7 +653,7 @@ def _info_sos_juri(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_connection("ticket_rh")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
@@ -982,13 +985,13 @@ def _info_doc_distrib(id_tickets: list[int]) -> dict[int, str]:
 def _info_pv_ulease(id_tickets: list[int]) -> dict[int, str]:
     """Cas 35 — PV Liv/Rest Ulease.
 
-    TK_DemandeSignPVUlease (ticket_bo) → vehicule_Conducteur (ulease)
+    TK_DemandeSignPVUlease (ticket_rh) → vehicule_Conducteur (ulease)
         → vehicule_Fiche (ulease) → Vehicule_TypeCapacité (ulease).
     Format : "{Modèle} {IMMAT} // {Lib_Type}".
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_connection("ticket_rh")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
@@ -1266,20 +1269,19 @@ _DIRECT_CASES = {
 }
 
 # Cas via id_salarie : (db_key, table, id_col, prefix)
+# Mapping BDD : les tables liées aux RH sont dans `ticket_rh`, les autres
+# dans `ticket_bo`. La doc projet liste les tables ticket_rh (CttW, Conges,
+# CdeExoCash, AttExoCash, Mutuelle, SignPVUlease, SortieRH, SOS_JU, ...).
 _SALARIE_CASES: dict[int, tuple[str, str, str, str]] = {
-    # Cas WinDev → tables TK_Demande*. Les db_key sont des PARIS — à corriger
-    # selon où sont effectivement stockées les tables. Le SELECT plante
-    # silencieusement (try/except) si la table n'existe pas dans la BDD,
-    # auquel cas on renvoie chaîne vide (pas de blocage).
-    27: ("ticket_bo", "TK_DemandeMutuelle", "IDSalarie", "pour "),
-    24: ("ticket_bo", "TK_CdeExoCash", "IDSalarie", "pour "),
+    27: ("ticket_rh", "TK_DemandeMutuelle", "IDSalarie", "pour "),
+    24: ("ticket_rh", "TK_CdeExoCash", "IDSalarie", "pour "),
     23: ("ticket_bo", "TK_DemandeCttCourtage", "IDSalarie", "pour "),
     4:  ("ticket_rh", "TK_DemandeCttW", "IDSalarie", "pour "),
     40: ("ticket_rh", "TK_DemandeCttW", "IDSalarie", "pour "),
-    12: ("ticket_bo", "TK_DemandeSortieRH", "IDSalarie", "pour "),
-    36: ("ticket_bo", "TK_DemandeSortieRH", "IDSalarie", "pour "),
-    37: ("ticket_bo", "TK_DemandeSortieRH", "IDSalarie", "pour "),
-    13: ("ticket_bo", "TK_DemandeConges", "IDSalarie", "pour "),
+    12: ("ticket_rh", "TK_DemandeSortieRH", "IDSalarie", "pour "),
+    36: ("ticket_rh", "TK_DemandeSortieRH", "IDSalarie", "pour "),
+    37: ("ticket_rh", "TK_DemandeSortieRH", "IDSalarie", "pour "),
+    13: ("ticket_rh", "TK_DemandeConges", "IDSalarie", "pour "),
 }
 
 
