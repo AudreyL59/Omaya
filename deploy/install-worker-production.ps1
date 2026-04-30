@@ -33,11 +33,11 @@ if ($existing) {
     & nssm remove $ServiceName confirm | Out-Null
 }
 
-# Creation - on installe d'abord l'exe SEUL puis on set AppParameters
-# avec quotes integrees, sinon NSSM split sur les espaces du chemin
-# (cas "Projet Omaya" : NSSM lit "D:\Claude\Projet" comme script).
+# Creation - NSSM 2.24 ne quote pas AppParameters, donc on passe le script
+# en chemin RELATIF a AppDirectory pour eviter le split sur l'espace de
+# "Projet Omaya".
 & nssm install $ServiceName $PythonExe
-& nssm set $ServiceName AppParameters       "`"$WorkerScript`""
+& nssm set $ServiceName AppParameters       "worker_production.py"
 & nssm set $ServiceName AppDirectory        $ProjectRoot
 & nssm set $ServiceName AppEnvironmentExtra "PYTHONUNBUFFERED=1" "PRODUCTION_WORKER_CONCURRENCY=5"
 & nssm set $ServiceName Start               SERVICE_AUTO_START
