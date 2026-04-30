@@ -275,16 +275,6 @@ function parseHex(hex: string): { r: number; g: number; b: number } | null {
   }
 }
 
-// Fonce une couleur hex (#RRGGBB) en multipliant chaque canal par `factor`.
-// factor < 1 = plus foncé.
-function darkenHex(hex: string, factor = 0.5): string {
-  const c = parseHex(hex)
-  if (!c) return hex
-  const to2 = (n: number) =>
-    Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
-  return `#${to2(c.r * factor)}${to2(c.g * factor)}${to2(c.b * factor)}`
-}
-
 // Choisit la couleur de texte (blanc ou dark) qui contraste le plus avec
 // la couleur de fond donnée. Formule standard de luminance relative.
 function contrastText(hex: string): string {
