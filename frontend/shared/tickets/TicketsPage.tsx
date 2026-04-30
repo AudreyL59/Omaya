@@ -83,7 +83,7 @@ function TicketTypeIcon({ idType }: { idType: string }) {
 
 interface TicketsPageProps {
   apiBase: string                 // ex: '/api/vendeur' ou '/api/adm'
-  getToken: () => string
+  getToken: () => string | null
 }
 
 function shortDateTime(raw: string | undefined | null): string {
