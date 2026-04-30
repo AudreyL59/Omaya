@@ -40,7 +40,7 @@ def _droit(user: UserToken, code: str | None) -> bool:
 # Tout ce qui n'est pas dans ce set est "non codé" → grisé pour le user de
 # référence (id_salarie=6), masqué pour les autres.
 _CODED_ITEMS: set[str] = {"agenda_rec", "stats_rh", "organigramme", "suivi_production"}
-_CODED_HEADER: set[str] = {"organigramme"}
+_CODED_HEADER: set[str] = {"organigramme", "tickets"}
 
 # User de référence pour qui les items non codés restent visibles (en grisé)
 _PROGRESS_USER_ID = 6
@@ -54,6 +54,7 @@ def get_menu(user: UserToken = Depends(get_current_user)):
     header_actions_raw = [
         {"key": "search",       "label": "Recherche",     "route": "/recherche",     "icon": "search",   "droit": None},
         {"key": "organigramme", "label": "Organigramme",  "route": "/organigramme",  "icon": "network",  "droit": "Menu_Salariés"},
+        {"key": "tickets",      "label": "Tickets",       "route": "/tickets",       "icon": "ticket",   "droit": None},
         {"key": "scanner",      "label": "Scanner",       "route": "/scanner",       "icon": "scan",     "droit": "Menu_Salariés"},
         {"key": "exo_news",     "label": "Exo News",      "route": "/exo-news",      "icon": "newspaper","droit": "Menu_COMM"},
         {"key": "societes",     "label": "Sociétés",      "route": "/societes",      "icon": "building", "droit": "Societe"},
