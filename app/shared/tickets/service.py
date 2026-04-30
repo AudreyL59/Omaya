@@ -83,28 +83,59 @@ def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
                   Si vide → un type sans droit configuré est visible
                   (sinon il faut que le code droit soit dans `droits`).
 
+    Lib_TypeDemande est un mémo texte → fetch séparé pour éviter la
+    troncature du bridge HFSQL sur les SELECT multi-colonnes.
+
     Retour trié par Service puis Lib_TypeDemande.
     """
     db = get_connection("ticket")
+
+    # 1. SELECT des champs simples (pas de mémo). Le champ droit est sélectionné
+    #    directement (sans alias) — le bridge HFSQL ne supporte pas les
+    #    "alias avec accent" sur certaines configs.
     rows = db.query(
-        f"""SELECT IDTK_TypeDemande, Service, Lib_TypeDemande,
-            "{droit_field}" AS Droit, icone
+        f"""SELECT IDTK_TypeDemande, Service, {droit_field}
         FROM TK_TypeDemande
         WHERE ModifELEM <> 'suppr'
-        ORDER BY Service ASC, Lib_TypeDemande ASC"""
+        ORDER BY Service"""
     )
     droits_set = set(droits or [])
-    out: list[dict] = []
+    visible: list[tuple[int, str, str]] = []  # (id, service, droit)
     for r in rows:
-        droit = (r.get("Droit") or "").strip()
+        # Le bridge peut renvoyer la clé droit_field telle quelle ou normalisée
+        droit = (r.get(droit_field) or "").strip()
         if droit and droit not in droits_set:
             continue
+        idt = _clean_id(_to_int(r.get("IDTK_TypeDemande")))
+        if not idt:
+            continue
+        visible.append((idt, (r.get("Service") or "").strip(), droit))
+
+    if not visible:
+        return []
+
+    # 2. Fetch séparé du mémo Lib_TypeDemande (1 SELECT par type — peu coûteux,
+    #    une dizaine de types max en pratique). On garde l'ordre Service / Lib.
+    libs: dict[int, str] = {}
+    for idt, _svc, _dr in visible:
+        try:
+            r = db.query_one(
+                "SELECT Lib_TypeDemande FROM TK_TypeDemande WHERE IDTK_TypeDemande = ?",
+                (idt,),
+            )
+            libs[idt] = (r.get("Lib_TypeDemande") if r else "" or "").strip()
+        except Exception:
+            libs[idt] = ""
+
+    out: list[dict] = []
+    for idt, svc, _dr in visible:
         out.append({
-            "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
-            "service": (r.get("Service") or "").strip(),
-            "lib_type_demande": (r.get("Lib_TypeDemande") or "").strip(),
-            "icone_data_url": _icone_to_data_url(r.get("icone")),
+            "id_type_demande": str(idt),
+            "service": svc,
+            "lib_type_demande": libs.get(idt, ""),
+            "icone_data_url": "",  # mémo binaire — sera ajouté plus tard
         })
+    out.sort(key=lambda x: (x["service"], x["lib_type_demande"].lower()))
     return out
 
 
