@@ -205,11 +205,11 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
             {sidebar.map((svc) => {
               const isOpen = openServices.has(svc.service)
               return (
-                <div key={svc.service}>
-                  {/* Bande Service en couleur pleine */}
+                <div key={svc.service} className="px-2 mb-1">
+                  {/* Bande Service en couleur pleine, arrondi 10px */}
                   <button
                     onClick={() => toggleService(svc.service)}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 bg-c-brand text-white text-sm font-semibold border-b border-white/10 hover:brightness-110 transition-all"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-c-brand text-white text-sm font-semibold rounded-[10px] hover:brightness-110 transition-all"
                   >
                     {isOpen
                       ? <ChevronDown className="w-4 h-4" />
