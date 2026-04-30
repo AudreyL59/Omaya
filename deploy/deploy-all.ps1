@@ -70,11 +70,30 @@ try {
             Write-Host "  $Name : service introuvable, skip" -ForegroundColor Yellow
             return
         }
-        Write-Host "  $Name : restart..." -ForegroundColor DarkGray
-        & nssm restart $Name | Out-Null
+        Write-Host "  $Name : stop..." -ForegroundColor DarkGray
+        # Stop force (gere SERVICE_PAUSED si crashes repetes)
+        & nssm stop $Name | Out-Null
         Start-Sleep -Seconds 2
+        Write-Host "  $Name : start..." -ForegroundColor DarkGray
+        & nssm start $Name | Out-Null
+        Start-Sleep -Seconds 3
         $after = Get-Service -Name $Name
-        Write-Host ("  {0} : {1}" -f $Name, $after.Status) -ForegroundColor Green
+        $color = if ($after.Status -eq 'Running') { 'Green' } else { 'Yellow' }
+        Write-Host ("  {0} : {1}" -f $Name, $after.Status) -ForegroundColor $color
+        if ($after.Status -ne 'Running') {
+            Write-Host ("  /!\\ {0} n'a pas demarre. Verifier les logs :" -f $Name) -ForegroundColor Yellow
+            $logBase = Join-Path $ProjectRoot "logs"
+            $logs = @(
+                (Join-Path $logBase "worker-production.log"),
+                (Join-Path $logBase "worker-stderr.log"),
+                (Join-Path $logBase "api-stderr.log")
+            )
+            foreach ($l in $logs) {
+                if (Test-Path $l) {
+                    Write-Host ("    Get-Content '{0}' -Tail 20" -f $l) -ForegroundColor DarkGray
+                }
+            }
+        }
     }
 
     if (-not $SkipApi)    { Restart-NssmService "OmayaVendeurAPI" }    else { Write-Host "  API skip" -ForegroundColor DarkGray }
