@@ -110,12 +110,18 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
 
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4 p-4">
-      {/* Sidebar */}
-      <aside className="w-64 shrink-0 bg-white border border-c-line rounded-xl overflow-y-auto">
-        <div className="px-4 py-3 border-b border-c-line text-sm font-semibold text-c-ink flex items-center gap-2">
-          <Ticket className="w-4 h-4 text-c-brand" />
-          Tickets
+      {/* Sidebar — style WinDev : services en bandes pleines, types en lignes blanches */}
+      <aside className="w-64 shrink-0 bg-white border border-c-line rounded-xl overflow-y-auto flex flex-col">
+        {/* En-tête "Tickets" avec icône */}
+        <div className="px-4 py-3 border-b border-c-line bg-white flex items-center gap-2">
+          <Ticket className="w-5 h-5 text-c-brand" />
+          <span className="text-base font-semibold text-c-brand">Tickets</span>
         </div>
+        {/* Sous-titre "Demande" */}
+        <div className="px-4 py-2 bg-c-surface-soft text-xs font-medium text-c-ink-soft uppercase tracking-wide">
+          Demande
+        </div>
+
         {loadingSidebar ? (
           <div className="p-4 flex justify-center">
             <Loader2 className="w-4 h-4 text-c-ink-icon animate-spin" />
@@ -123,36 +129,42 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
         ) : sidebar.length === 0 ? (
           <div className="p-4 text-xs text-c-ink-faint">Aucun type accessible.</div>
         ) : (
-          <nav className="py-2">
+          <nav className="flex-1">
             {sidebar.map((svc) => {
               const isOpen = openServices.has(svc.service)
               return (
                 <div key={svc.service}>
+                  {/* Bande Service en couleur pleine */}
                   <button
                     onClick={() => toggleService(svc.service)}
-                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-c-ink hover:bg-c-surface-soft transition-colors"
+                    className="w-full flex items-center gap-2 px-4 py-2.5 bg-c-brand text-white text-sm font-semibold border-b border-white/10 hover:brightness-110 transition-all"
                   >
                     {isOpen
-                      ? <ChevronDown className="w-3.5 h-3.5 text-c-ink-faint" />
-                      : <ChevronRight className="w-3.5 h-3.5 text-c-ink-faint" />}
+                      ? <ChevronDown className="w-4 h-4" />
+                      : <ChevronRight className="w-4 h-4" />}
                     {svc.service}
                   </button>
+                  {/* Liste des types (rendu uniquement si ouvert) */}
                   {isOpen && (
-                    <ul className="pb-1">
+                    <ul className="bg-white">
                       {svc.types.map((t) => {
                         const active = selectedType?.id_type_demande === t.id_type_demande
                         return (
                           <li key={t.id_type_demande}>
                             <button
                               onClick={() => setSelectedType(t)}
-                              className={`w-full text-left px-7 py-1.5 text-sm flex items-center gap-2 transition-colors ${
+                              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 border-b border-c-line-soft transition-colors ${
                                 active
-                                  ? 'bg-c-brand-soft text-c-brand-strong font-medium border-l-2 border-c-brand'
-                                  : 'text-c-ink-soft hover:bg-c-surface-soft'
+                                  ? 'bg-c-brand-soft text-c-brand-strong font-medium'
+                                  : 'text-c-brand hover:bg-c-surface-soft'
                               }`}
                             >
-                              {t.icone_data_url && (
-                                <img src={t.icone_data_url} alt="" className="w-4 h-4 shrink-0" />
+                              {t.icone_data_url ? (
+                                <img src={t.icone_data_url} alt="" className="w-5 h-5 shrink-0" />
+                              ) : (
+                                <span className="w-5 h-5 shrink-0 inline-flex items-center justify-center">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-c-brand opacity-60" />
+                                </span>
                               )}
                               <span className="truncate">{t.lib_type_demande}</span>
                             </button>
