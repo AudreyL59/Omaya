@@ -334,48 +334,68 @@ def list_tickets_par_type(
 
 def list_tickets_modified_since(
     id_type_demande: int,
-    since_iso: str,
-    only_open: bool = True,
+    cursor_compact: str,
+    cloturee: bool = False,
+    date_du: str = "",
+    date_au: str = "",
+    limit: int = 100,
 ) -> list[dict]:
-    """Tickets dont ModifDate > since_iso (pour SSE)."""
-    if not since_iso:
-        return list_tickets_par_type(id_type_demande, only_open=only_open, limit=200)
-    # ModifDate stocké en WinDev compact YYYYMMDDHHMMSSmmm.
-    # On compare en chaîne : il faut donc convertir since_iso en compact.
-    s = since_iso.replace("-", "").replace(":", "").replace(" ", "").replace("T", "")[:14]
+    """Tickets dont ModifDate > cursor_compact — pour le polling SSE.
+
+    cursor_compact : chaîne WinDev compacte (≥ 14 chiffres). Vide = pas de
+                     filtre (ramène tout).
+    date_du / date_au : bornes optionnelles sur DATECREA (WinDev compact).
+                        Sert à conserver la cohérence avec le filtre côté UI.
+
+    Retourne les mêmes champs que `list_tickets_par_type`, plus :
+      - `_modif_compact`     : ModifDate brut (str compact WinDev)
+      - `_date_crea_compact` : DATECREA brut (str compact WinDev)
+    Ces 2 champs servent au générateur SSE pour faire avancer son curseur
+    et discriminer added vs modified.
+    """
+    if not cursor_compact:
+        cursor_compact = "00000000000000000"
+    if not date_du:
+        date_du = "20010101000000000"
+    if not date_au:
+        date_au = "30610101000000000"
     db = get_connection("ticket")
-    where = "WHERE IDTK_TypeDemande = ? AND ModifELEM <> 'suppr'"
-    if only_open:
-        where += " AND Cloturée = 0"
-    where += " AND ModifDate > ?"
     rows = db.query(
-        f"""SELECT TOP 200
+        f"""SELECT TOP {int(limit)}
             IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
             IDTK_TypeDemande, IDTK_Statut, DateReport,
-            Cloturée, DateCloture,
-            ModifDate, modification,
+            Cloturée, DateCloture, ModifDate, modification,
             OpTraitementStaff
         FROM TK_Liste
-        {where}
+        WHERE IDTK_TypeDemande = ?
+          AND ModifELEM NOT LIKE '%suppr%'
+          AND Cloturée = ?
+          AND ModifDate > ?
+          AND DATECREA BETWEEN ? AND ?
+          AND IDTK_Statut <> 28
         ORDER BY ModifDate DESC""",
-        (int(id_type_demande), s),
+        (int(id_type_demande), 1 if cloturee else 0, cursor_compact, date_du, date_au),
     )
     out: list[dict] = []
     for r in rows:
+        md_raw = str(r.get("ModifDate") or "").strip()
+        dc_raw = str(r.get("DATECREA") or "").strip()
         out.append({
             "id_ticket": _str_id(r.get("IDTK_Liste")),
             "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
             "service": (r.get("Service") or "").strip(),
             "id_statut": _to_int(r.get("IDTK_Statut")),
-            "date_crea": _windev_to_iso(r.get("DATECREA")),
+            "date_crea": _windev_to_iso(dc_raw),
             "op_crea": _str_id(r.get("OPCREA")),
             "op_dest": _str_id(r.get("OPDEST")),
             "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
             "cloturee": bool(r.get("Cloturée")),
             "date_cloture": _windev_to_iso(r.get("DateCloture")),
             "date_report": _windev_to_iso(r.get("DateReport")),
-            "modif_date": _windev_to_iso(r.get("ModifDate")),
+            "modif_date": _windev_to_iso(md_raw),
             "modification": bool(r.get("modification")),
+            "_modif_compact": md_raw,
+            "_date_crea_compact": dc_raw,
         })
     return out
 

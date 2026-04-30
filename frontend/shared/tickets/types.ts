@@ -44,3 +44,17 @@ export interface TicketListResponse {
   statuts: TicketStatut[]
   total: number
 }
+
+// ---------------------------------------------------------------
+// SSE — événements push reçus du backend (/tickets/stream)
+// ---------------------------------------------------------------
+
+export interface TicketStreamEvent {
+  kind: 'added' | 'modified'
+  row: TicketRow
+}
+
+export interface TicketStreamPayload {
+  events: TicketStreamEvent[]
+  cursor: string
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Banknote,
   Building2,
@@ -33,6 +33,7 @@ import type {
   TicketListResponse,
   TicketRow,
   TicketSidebarItem,
+  TicketStreamPayload,
   TicketTypeDemande,
 } from './types'
 
@@ -110,6 +111,17 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
   const [filterCloturee, setFilterCloturee] = useState(false)
   const [filterDateDu, setFilterDateDu] = useState('')   // YYYY-MM-DD ou ''
   const [filterDateAu, setFilterDateAu] = useState('')   // YYYY-MM-DD ou ''
+  // Live update (SSE)
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
+  const [modifiedIds, setModifiedIds] = useState<Set<string>>(new Set())
+  const addedIdsRef = useRef<Set<string>>(new Set())
+  const presentIdsRef = useRef<Set<string>>(new Set())
+  const streamAbortRef = useRef<AbortController | null>(null)
+  // Refs synchros avec le state (lectures synchrones dans handleSSEBlock).
+  useEffect(() => { addedIdsRef.current = addedIds }, [addedIds])
+  useEffect(() => {
+    presentIdsRef.current = new Set(data?.rows.map((r) => r.id_ticket) || [])
+  }, [data])
 
   // Charge la sidebar (services + types accessibles)
   useEffect(() => {
@@ -129,22 +141,164 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       .finally(() => setLoadingSidebar(false))
   }, [apiBase])
 
+  const handleSSEBlock = useCallback((block: string) => {
+    let eventName = 'message'
+    const dataLines: string[] = []
+    for (const line of block.split('\n')) {
+      if (!line || line.startsWith(':')) continue
+      if (line.startsWith('event:')) eventName = line.slice(6).trim()
+      else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''))
+    }
+    if (dataLines.length === 0) return
+    let payload: any
+    try { payload = JSON.parse(dataLines.join('\n')) } catch { return }
+    if (eventName !== 'tickets') return
+
+    const evts = (payload as TicketStreamPayload).events || []
+    if (evts.length === 0) return
+
+    // Pré-calcul : on a besoin des IDs déjà présents AVANT le merge.
+    setData((prev) => {
+      if (!prev) return prev
+      const rowMap = new Map(prev.rows.map((r) => [r.id_ticket, r] as const))
+      const seenStatuts = new Set(prev.statuts.map((s) => s.id_statut))
+      const newStatuts: typeof prev.statuts = [...prev.statuts]
+      for (const e of evts) {
+        rowMap.set(e.row.id_ticket, e.row)
+        if (!seenStatuts.has(e.row.id_statut)) {
+          seenStatuts.add(e.row.id_statut)
+          newStatuts.push({ id_statut: e.row.id_statut, lib_statut: e.row.lib_statut })
+        }
+      }
+      const allRows = Array.from(rowMap.values()).sort((a, b) => {
+        if (a.id_statut !== b.id_statut) return a.id_statut - b.id_statut
+        return a.date_crea < b.date_crea ? 1 : a.date_crea > b.date_crea ? -1 : 0
+      })
+      newStatuts.sort((a, b) => a.id_statut - b.id_statut)
+      return { rows: allRows, statuts: newStatuts, total: allRows.length }
+    })
+
+    // Marqueurs : added si pas déjà présent dans la liste, sinon modified.
+    // On lit les IDs présents via une ref synchro pour éviter une race
+    // avec le setData ci-dessus.
+    const presentIds = presentIdsRef.current
+    const newAdded = new Set<string>()
+    const newModified = new Set<string>()
+    for (const e of evts) {
+      const id = e.row.id_ticket
+      if (!presentIds.has(id)) newAdded.add(id)
+      else newModified.add(id)
+    }
+    if (newAdded.size > 0) {
+      setAddedIds((prevSet) => {
+        const next = new Set(prevSet)
+        for (const id of newAdded) next.add(id)
+        return next
+      })
+    }
+    if (newModified.size > 0) {
+      setModifiedIds((prevSet) => {
+        const next = new Set(prevSet)
+        for (const id of newModified) {
+          // si déjà dans added (premier coup), garder added
+          if (!addedIdsRef.current.has(id)) next.add(id)
+        }
+        return next
+      })
+    }
+  }, [])
+
+  // Parser SSE manuel (fetch + ReadableStream) — permet de passer le Bearer
+  // header, contrairement à EventSource natif.
+  const startTicketsStream = useCallback(
+    async (
+      signal: AbortSignal,
+      idTypeDemande: string,
+      cloturee: boolean,
+      dateDu: string,
+      dateAu: string,
+    ) => {
+      const sp = new URLSearchParams({ id_type_demande: idTypeDemande })
+      if (cloturee) sp.set('cloturee', '1')
+      if (dateDu) sp.set('date_du', dateDu.replace(/-/g, ''))
+      if (dateAu) sp.set('date_au', dateAu.replace(/-/g, ''))
+      const url = `${apiBase}/tickets/stream?${sp}`
+      try {
+        const resp = await fetch(url, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+          signal,
+        })
+        if (!resp.ok || !resp.body) return
+        const reader = resp.body.getReader()
+        const decoder = new TextDecoder('utf-8')
+        let buf = ''
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          let idx = buf.indexOf('\n\n')
+          while (idx >= 0) {
+            const block = buf.slice(0, idx)
+            buf = buf.slice(idx + 2)
+            handleSSEBlock(block)
+            idx = buf.indexOf('\n\n')
+          }
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return
+        // silencieux : on aura un retry au prochain changement de filtre
+      }
+    },
+    [apiBase, getToken, handleSSEBlock],
+  )
+
   // Charge les tickets quand le type sélectionné OU les filtres changent.
+  // Puis ouvre un stream SSE pour les ajouts/modifs en live.
   useEffect(() => {
     if (!selectedType) return
     setLoadingList(true)
     setSelected(new Set())
+    setAddedIds(new Set())
+    setModifiedIds(new Set())
+    streamAbortRef.current?.abort()
+    const controller = new AbortController()
+    streamAbortRef.current = controller
+
     const params = new URLSearchParams({ id_type_demande: selectedType.id_type_demande })
     if (filterCloturee) params.set('cloturee', '1')
     if (filterDateDu) params.set('date_du', filterDateDu.replace(/-/g, ''))
     if (filterDateAu) params.set('date_au', filterDateAu.replace(/-/g, ''))
+
+    let cancelled = false
     fetch(`${apiBase}/tickets?${params}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
+      signal: controller.signal,
     })
       .then((r) => r.json())
-      .then((d: TicketListResponse) => setData(d))
-      .catch(() => setData(null))
-      .finally(() => setLoadingList(false))
+      .then((d: TicketListResponse) => {
+        if (cancelled) return
+        setData(d)
+        startTicketsStream(
+          controller.signal,
+          selectedType.id_type_demande,
+          filterCloturee,
+          filterDateDu,
+          filterDateAu,
+        )
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return
+        setData(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingList(false)
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, selectedType, filterCloturee, filterDateDu, filterDateAu])
 
   const toggleService = (svc: string) => {
@@ -174,6 +328,24 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       else next.add(id)
       return next
     })
+  }
+
+  // Clic sur la ligne (zone hors checkbox) : retire les marqueurs vert/jaune.
+  const clearRowMarkers = (id: string) => {
+    let changed = false
+    if (addedIds.has(id)) {
+      setAddedIds((prev) => {
+        const next = new Set(prev); next.delete(id); return next
+      })
+      changed = true
+    }
+    if (modifiedIds.has(id)) {
+      setModifiedIds((prev) => {
+        const next = new Set(prev); next.delete(id); return next
+      })
+      changed = true
+    }
+    return changed
   }
 
   return (
@@ -314,6 +486,9 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
                       rows={rows}
                       selected={selected}
                       onToggle={toggleRow}
+                      addedIds={addedIds}
+                      modifiedIds={modifiedIds}
+                      onClearMarkers={clearRowMarkers}
                     />
                   )
                 })}
@@ -399,12 +574,16 @@ function FiltersPopup({
 
 function RowGroup({
   label, count, rows, selected, onToggle,
+  addedIds, modifiedIds, onClearMarkers,
 }: {
   label: string
   count: number
   rows: TicketRow[]
   selected: Set<string>
   onToggle: (id: string) => void
+  addedIds: Set<string>
+  modifiedIds: Set<string>
+  onClearMarkers: (id: string) => void
 }) {
   return (
     <>
@@ -416,14 +595,28 @@ function RowGroup({
       </tr>
       {rows.map((r) => {
         const isSelected = selected.has(r.id_ticket)
+        const isAdded = addedIds.has(r.id_ticket)
+        const isModified = !isAdded && modifiedIds.has(r.id_ticket)
+        // Priorité : added > modified > selected > base
+        const rowBg = isAdded
+          ? 'bg-emerald-50 hover:bg-emerald-100'
+          : isModified
+            ? 'bg-amber-50 hover:bg-amber-100'
+            : isSelected
+              ? 'bg-c-surface-medium'
+              : 'hover:bg-c-surface-soft'
         return (
           <tr
             key={r.id_ticket}
-            className={`border-t border-c-line-soft hover:bg-c-surface-soft ${
-              isSelected ? 'bg-c-surface-medium' : ''
+            onClick={() => {
+              if (isAdded || isModified) onClearMarkers(r.id_ticket)
+            }}
+            className={`border-t border-c-line-soft transition-colors ${rowBg} ${
+              isAdded || isModified ? 'cursor-pointer' : ''
             }`}
+            title={isAdded ? 'Nouveau ticket — cliquer pour retirer le marqueur' : isModified ? 'Ticket modifié — cliquer pour retirer le marqueur' : undefined}
           >
-            <td className="px-3 py-2 text-center">
+            <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
               <input
                 type="checkbox"
                 className="w-4 h-4 cursor-pointer accent-c-brand"
