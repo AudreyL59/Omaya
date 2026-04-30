@@ -71,6 +71,27 @@ def _ids_in_clause(ids: list[int]) -> str:
     return ",".join(str(int(i)) for i in ids if int(i))
 
 
+def _to_montant(v) -> str:
+    """Format d'affichage d'une valeur monétaire (HFSQL Monétaire).
+
+    Accepte int, float, ou string (avec ou sans décimales). Retourne une
+    chaîne formatée sans décimales si entier, avec 2 décimales sinon
+    (séparateur virgule).
+    """
+    if v is None or v == "":
+        return "0"
+    if isinstance(v, (int, float)):
+        f = float(v)
+    else:
+        try:
+            f = float(str(v).replace(",", "."))
+        except (TypeError, ValueError):
+            return "0"
+    if f == int(f):
+        return str(int(f))
+    return f"{f:.2f}".replace(".", ",")
+
+
 # ---------------------------------------------------------------
 # Implémentations par cas (batch)
 # ---------------------------------------------------------------
@@ -224,11 +245,11 @@ def _info_avance(id_tickets: list[int]) -> dict[int, str]:
         )
     except Exception:
         return {}
-    ticket_to: dict[int, tuple[int, int]] = {}
+    ticket_to: dict[int, tuple[int, str]] = {}
     for r in rows:
         idl = _clean_id(_to_int(r.get("IDTK_Liste")))
         ids = _clean_id(_to_int(r.get("Bénéficiaire")))
-        montant = _to_int(r.get("Montant"))
+        montant = _to_montant(r.get("Montant"))
         if idl and ids:
             ticket_to[idl] = (ids, montant)
     if not ticket_to:
@@ -244,7 +265,7 @@ def _info_avance(id_tickets: list[int]) -> dict[int, str]:
 
 
 def _info_attr_exocash(id_tickets: list[int]) -> dict[int, str]:
-    """Cas 25 — Tk_DemandeAttExoCash.IDSalarie + MontantEC."""
+    """Cas 25 — Tk_DemandeAttExoCash.IDSalarie + MontantEC (Monétaire)."""
     if not id_tickets:
         return {}
     db = get_connection("ticket_bo")
@@ -259,11 +280,11 @@ def _info_attr_exocash(id_tickets: list[int]) -> dict[int, str]:
         )
     except Exception:
         return {}
-    ticket_to: dict[int, tuple[int, int]] = {}
+    ticket_to: dict[int, tuple[int, str]] = {}
     for r in rows:
         idl = _clean_id(_to_int(r.get("IDTK_Liste")))
         ids = _clean_id(_to_int(r.get("IDSalarie")))
-        mt = _to_int(r.get("MontantEC"))
+        mt = _to_montant(r.get("MontantEC"))
         if idl and ids:
             ticket_to[idl] = (ids, mt)
     sals = load_salaries_minimal({ids for ids, _ in ticket_to.values()})
@@ -365,29 +386,51 @@ def _info_dpae_distrib(id_tickets: list[int]) -> dict[int, str]:
 
 
 def _info_integration_distrib(id_tickets: list[int]) -> dict[int, str]:
-    """Cas 30 — TK_DemandeDPAE_Distrib.Nom + Prenom + RaisonSociale."""
+    """Cas 30 — TK_DemandeDPAE_Distrib : Nom + Prenom + RaisonSociale.
+
+    NOM, PRENOM, RaisonSociale sont 3 mémos texte. Le bridge HFSQL tronque
+    les mémos dans les SELECT multi-colonnes → on splitte en 2 requêtes :
+    (Nom + Prenom) puis (RaisonSociale séparément).
+    """
     if not id_tickets:
         return {}
     db = get_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
+    nom_prenom: dict[int, tuple[str, str]] = {}
+    raison_sociale: dict[int, str] = {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Nom, Prenom, RaisonSociale
+            f"""SELECT IDTK_Liste, Nom, Prenom
             FROM TK_DemandeDPAE_Distrib
             WHERE IDTK_Liste IN ({ids_sql})"""
         )
+        for r in rows:
+            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            if idl:
+                nom_prenom[idl] = (
+                    (r.get("Nom") or "").strip(),
+                    (r.get("Prenom") or "").strip(),
+                )
     except Exception:
-        return {}
+        pass
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, RaisonSociale
+            FROM TK_DemandeDPAE_Distrib
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+        for r in rows:
+            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            if idl:
+                raison_sociale[idl] = (r.get("RaisonSociale") or "").strip()
+    except Exception:
+        pass
     out: dict[int, str] = {}
-    for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        nom = (r.get("Nom") or "").strip()
-        prenom = (r.get("Prenom") or "").strip()
-        rs = (r.get("RaisonSociale") or "").strip()
-        if not idl:
-            continue
+    for idl in set(nom_prenom) | set(raison_sociale):
+        nom, prenom = nom_prenom.get(idl, ("", ""))
+        rs = raison_sociale.get(idl, "")
         parts: list[str] = []
         if nom or prenom:
             parts.append(f"pour {nom} {_capit(prenom)}".strip())
@@ -429,9 +472,10 @@ def _info_facturation(id_tickets: list[int]) -> dict[int, str]:
 
 
 def _info_carte_pro(id_tickets: list[int]) -> dict[int, str]:
-    """Cas 2 — TK_DemandeCartePRO (potentiellement plusieurs lignes par ticket).
+    """Cas 2 — TK_DemandeCartePRO (peut avoir plusieurs lignes par ticket).
 
-    Format : "Pour NOM1 Prenom1, NOM2 Prenom2..." (suspendu après 1 si plus).
+    Pas de NOM/PRENOM dans la table — il faut joindre via IDSalarie.
+    Format : "Pour NOM Prenom" (+ "..." si plus d'1 carte par ticket).
     """
     if not id_tickets:
         return {}
@@ -441,23 +485,31 @@ def _info_carte_pro(id_tickets: list[int]) -> dict[int, str]:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, NOM, PRENOM
+            f"""SELECT IDTK_Liste, IDSalarie
             FROM TK_DemandeCartePRO
             WHERE IDTK_Liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
-    grouped: dict[int, list[tuple[str, str]]] = {}
+    grouped: dict[int, list[int]] = {}
+    all_salaries: set[int] = set()
     for r in rows:
         idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        if not idl:
+        ids = _clean_id(_to_int(r.get("IDSalarie")))
+        if not idl or not ids:
             continue
-        grouped.setdefault(idl, []).append(
-            ((r.get("NOM") or "").strip(), (r.get("PRENOM") or "").strip())
-        )
+        grouped.setdefault(idl, []).append(ids)
+        all_salaries.add(ids)
+    if not grouped:
+        return {}
+    sals = load_salaries_minimal(all_salaries)
     out: dict[int, str] = {}
-    for idl, names in grouped.items():
-        labels = [f"{n} {_capit(p)}".strip() for n, p in names if n or p]
+    for idl, salarie_ids in grouped.items():
+        labels: list[str] = []
+        for sid in salarie_ids:
+            s = sals.get(sid)
+            if s:
+                labels.append(f"{s['nom']} {_capit(s['prenom'])}".strip())
         if not labels:
             continue
         if len(labels) > 1:
