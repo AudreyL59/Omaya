@@ -471,6 +471,510 @@ def _info_facturation(id_tickets: list[int]) -> dict[int, str]:
     return out
 
 
+def _info_commande_fourniture(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 1 — Commande Fourniture (multi-lignes par ticket).
+
+    Joint TK_DemandeFourniture × TK_TypeCommande (Qté + LibTypeBS).
+    Format : "{Qté} {LibTypeBS}" séparé par ", " + "..." si > 1.
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, Qté, IDTK_TypeCommande
+            FROM TK_DemandeFourniture
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    grouped: dict[int, list[tuple[int, int]]] = {}  # id_ticket -> [(qte, id_typecmd)]
+    type_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        qt = _to_int(r.get("Qté"))
+        idtc = _clean_id(_to_int(r.get("IDTK_TypeCommande")))
+        if not idl:
+            continue
+        grouped.setdefault(idl, []).append((qt, idtc))
+        if idtc:
+            type_ids.add(idtc)
+    if not grouped:
+        return {}
+    type_libs: dict[int, str] = {}
+    if type_ids:
+        try:
+            ids_t = ",".join(str(i) for i in type_ids)
+            trows = db.query(
+                f"""SELECT IDTK_TypeCommande, LibTypeBS
+                FROM TK_TypeCommande
+                WHERE IDTK_TypeCommande IN ({ids_t})"""
+            )
+            for t in trows:
+                type_libs[_clean_id(_to_int(t.get("IDTK_TypeCommande")))] = (
+                    t.get("LibTypeBS") or ""
+                ).strip()
+        except Exception:
+            pass
+    out: dict[int, str] = {}
+    for idl, items in grouped.items():
+        labels = [
+            f"{qt} {type_libs.get(idtc, '')}".strip()
+            for qt, idtc in items
+            if type_libs.get(idtc) or qt
+        ]
+        if not labels:
+            continue
+        text = ", ".join(labels[:1])
+        if len(labels) > 1:
+            text += "..."
+        out[idl] = text
+    return out
+
+
+def _info_reservation(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 9 — Réservation. TK_DemandeResa × TK_TypeResaSSFam × TK_TypeResa.
+
+    Format : "pour NOM Prenom : Lib_TypeResa" + " (Aller-Retour)" si AR=1
+             et IDTK_TypeResa=2. Si pas de Bénéficiaire → fallback sur le
+             1er nom de ListeBénéSupp.
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, Bénéficiaire, IDTK_TypeResaSSFam, AR
+            FROM TK_DemandeResa
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    base: dict[int, dict] = {}
+    ssfam_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        if not idl:
+            continue
+        ssfam = _clean_id(_to_int(r.get("IDTK_TypeResaSSFam")))
+        base[idl] = {
+            "ben": _clean_id(_to_int(r.get("Bénéficiaire"))),
+            "ssfam": ssfam,
+            "ar": bool(r.get("AR")),
+        }
+        if ssfam:
+            ssfam_ids.add(ssfam)
+    # Fallback ListeBénéSupp (mémo, fetch séparé)
+    listebs: dict[int, str] = {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, ListeBénéSupp
+            FROM TK_DemandeResa
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+        for r in rows:
+            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            if idl:
+                listebs[idl] = (r.get("ListeBénéSupp") or "").strip()
+    except Exception:
+        pass
+    # Charge TypeResaSSFam → TypeResa → Lib_TypeResa
+    ssfam_to_resa: dict[int, int] = {}
+    resa_ids: set[int] = set()
+    if ssfam_ids:
+        try:
+            ids_t = ",".join(str(i) for i in ssfam_ids)
+            srows = db.query(
+                f"""SELECT IDTK_TypeResaSSFam, IDTK_TypeResa
+                FROM TK_TypeResaSSFam
+                WHERE IDTK_TypeResaSSFam IN ({ids_t})"""
+            )
+            for s in srows:
+                idss = _clean_id(_to_int(s.get("IDTK_TypeResaSSFam")))
+                idr = _clean_id(_to_int(s.get("IDTK_TypeResa")))
+                if idss and idr:
+                    ssfam_to_resa[idss] = idr
+                    resa_ids.add(idr)
+        except Exception:
+            pass
+    resa_libs: dict[int, str] = {}
+    if resa_ids:
+        try:
+            ids_t = ",".join(str(i) for i in resa_ids)
+            rrows = db.query(
+                f"""SELECT IDTK_TypeResa, Lib_TypeResa
+                FROM TK_TypeResa
+                WHERE IDTK_TypeResa IN ({ids_t})"""
+            )
+            for r in rrows:
+                resa_libs[_clean_id(_to_int(r.get("IDTK_TypeResa")))] = (
+                    r.get("Lib_TypeResa") or ""
+                ).strip()
+        except Exception:
+            pass
+    sals = load_salaries_minimal({d["ben"] for d in base.values() if d["ben"]})
+    out: dict[int, str] = {}
+    for idl, d in base.items():
+        s = sals.get(d["ben"]) if d["ben"] else None
+        if s:
+            qui = f"pour {s['nom']} {_capit(s['prenom'])}"
+        else:
+            # ListeBénéSupp = "Nom1//Nom2//..." → on prend le 1er
+            l = listebs.get(idl, "")
+            first = l.split("//", 1)[0].strip() if l else ""
+            qui = f"pour {first}..." if first else ""
+        idr = ssfam_to_resa.get(d["ssfam"], 0)
+        lib = resa_libs.get(idr, "")
+        text = qui
+        if lib:
+            text = f"{qui} : {lib}" if qui else lib
+        if idr == 2 and d["ar"]:
+            text += " (Aller-Retour)"
+        if text:
+            out[idl] = text
+    return out
+
+
+def _info_sos_juri(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 17 — SOS Pôle JURI. TK_DemandeSOS_JU + TK_TypeSOS_JU.
+
+    Format simplifié : "{Lib_TypeSos} {RefDemande}" + résolution de IdElem
+    pour TypeForm=Salarie/Societe (les autres TypeForm renvoient juste la
+    référence).
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, IDTK_TypeSOS_JU, IdElem
+            FROM TK_DemandeSOS_JU
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    base: dict[int, dict] = {}
+    type_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        if not idl:
+            continue
+        idtype = _clean_id(_to_int(r.get("IDTK_TypeSOS_JU")))
+        idelem = _clean_id(_to_int(r.get("IdElem")))
+        base[idl] = {"idtype": idtype, "idelem": idelem}
+        if idtype:
+            type_ids.add(idtype)
+    # RefDemande mémo (fetch séparé)
+    refs: dict[int, str] = {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, RefDemande
+            FROM TK_DemandeSOS_JU
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+        for r in rows:
+            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            if idl:
+                refs[idl] = (r.get("RefDemande") or "").strip()
+    except Exception:
+        pass
+    type_info: dict[int, dict] = {}
+    if type_ids:
+        try:
+            ids_t = ",".join(str(i) for i in type_ids)
+            trows = db.query(
+                f"""SELECT IDTK_TypeSOS_JU, Lib_TypeSos, TypeForm
+                FROM TK_TypeSOS_JU
+                WHERE IDTK_TypeSOS_JU IN ({ids_t})"""
+            )
+            for t in trows:
+                type_info[_clean_id(_to_int(t.get("IDTK_TypeSOS_JU")))] = {
+                    "lib": (t.get("Lib_TypeSos") or "").strip(),
+                    "form": (t.get("TypeForm") or "").strip(),
+                }
+        except Exception:
+            pass
+    # Résolution IdElem selon TypeForm = "Salarie"
+    salarie_ids = {
+        d["idelem"] for idl, d in base.items()
+        if type_info.get(d["idtype"], {}).get("form") == "Salarie" and d["idelem"]
+    }
+    sals = load_salaries_minimal(salarie_ids)
+    # Résolution IdElem pour TypeForm = "Societe" → societe.RaisonSociale (rh)
+    societe_ids = {
+        d["idelem"] for idl, d in base.items()
+        if type_info.get(d["idtype"], {}).get("form") == "Societe" and d["idelem"]
+    }
+    societes: dict[int, str] = {}
+    if societe_ids:
+        try:
+            db_rh = get_connection("rh")
+            ids_t = ",".join(str(i) for i in societe_ids)
+            srows = db_rh.query(
+                f"""SELECT IdSte, RS_Interne FROM societe WHERE IdSte IN ({ids_t})"""
+            )
+            for s in srows:
+                societes[_clean_id(_to_int(s.get("IdSte")))] = (
+                    s.get("RS_Interne") or ""
+                ).strip()
+        except Exception:
+            pass
+    out: dict[int, str] = {}
+    for idl, d in base.items():
+        ti = type_info.get(d["idtype"], {})
+        lib = ti.get("lib", "")
+        form = ti.get("form", "")
+        ref = refs.get(idl, "")
+        text = lib
+        if form == "Salarie":
+            s = sals.get(d["idelem"])
+            if s:
+                text += f" pour {s['nom']} {_capit(s['prenom'])}"
+        elif form == "Societe":
+            rs = societes.get(d["idelem"], "")
+            if rs:
+                text += f" pour {rs}"
+        elif form == "Vehicule":
+            if ref:
+                text += f" pour {ref.upper()}"
+        else:
+            if ref:
+                text += f" {ref}"
+                if d["idtype"] == 1:
+                    text += " €"
+        if text:
+            out[idl] = text.strip()
+    return out
+
+
+def _info_call_sfr_ret_rdv_tech(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 26 — Call SFR RET RDV Tech. TK_CallSFR_RetRDVTech → SFR_contrat → client.
+
+    Format : "pour {client.NOM} ({SFR_contrat.NumBS})".
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, IDcontrat
+            FROM TK_CallSFR_RetRDVTech
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    ticket_to_contrat: dict[int, int] = {}
+    contrat_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idc = _clean_id(_to_int(r.get("IDcontrat")))
+        if idl and idc:
+            ticket_to_contrat[idl] = idc
+            contrat_ids.add(idc)
+    if not contrat_ids:
+        return {}
+    contrat_to_client: dict[int, tuple[int, str]] = {}  # idc -> (idclient, numbs)
+    client_ids: set[int] = set()
+    try:
+        db_adv = get_connection("adv")
+        ids_t = ",".join(str(i) for i in contrat_ids)
+        crows = db_adv.query(
+            f"""SELECT IDcontrat, IDclient, NumBS
+            FROM SFR_contrat
+            WHERE IDcontrat IN ({ids_t})"""
+        )
+        for c in crows:
+            idc = _clean_id(_to_int(c.get("IDcontrat")))
+            idcl = _clean_id(_to_int(c.get("IDclient")))
+            num = (c.get("NumBS") or "").strip()
+            if idc:
+                contrat_to_client[idc] = (idcl, num)
+                if idcl:
+                    client_ids.add(idcl)
+    except Exception:
+        return {}
+    client_noms: dict[int, str] = {}
+    if client_ids:
+        try:
+            db_adv = get_connection("adv")
+            ids_t = ",".join(str(i) for i in client_ids)
+            clrows = db_adv.query(
+                f"""SELECT IDclient, NOM FROM client WHERE IDclient IN ({ids_t})"""
+            )
+            for cl in clrows:
+                client_noms[_clean_id(_to_int(cl.get("IDclient")))] = (
+                    cl.get("NOM") or ""
+                ).strip()
+        except Exception:
+            pass
+    out: dict[int, str] = {}
+    for idl, idc in ticket_to_contrat.items():
+        idcl, num = contrat_to_client.get(idc, (0, ""))
+        nom = client_noms.get(idcl, "")
+        if nom:
+            out[idl] = f"pour {nom} ({num})" if num else f"pour {nom}"
+    return out
+
+
+def _info_facturation_distrib(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 28 — Facturation Distrib. TK_DemandeFacturationDistrib + societe.
+
+    Format : "pour {RaisonSociale}, montant {Montant} €".
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, IdSte, Montant
+            FROM TK_DemandeFacturationDistrib
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    ticket_to: dict[int, tuple[int, str]] = {}
+    ste_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idste = _clean_id(_to_int(r.get("IdSte")))
+        mt = _to_montant(r.get("Montant"))
+        if idl:
+            ticket_to[idl] = (idste, mt)
+            if idste:
+                ste_ids.add(idste)
+    societes: dict[int, str] = {}
+    if ste_ids:
+        try:
+            db_rh = get_connection("rh")
+            ids_t = ",".join(str(i) for i in ste_ids)
+            srows = db_rh.query(
+                f"""SELECT IdSte, RaisonSociale FROM societe WHERE IdSte IN ({ids_t})"""
+            )
+            for s in srows:
+                societes[_clean_id(_to_int(s.get("IdSte")))] = (
+                    s.get("RaisonSociale") or ""
+                ).strip()
+        except Exception:
+            pass
+    out: dict[int, str] = {}
+    for idl, (idste, mt) in ticket_to.items():
+        rs = societes.get(idste, "")
+        parts: list[str] = []
+        if rs:
+            parts.append(f"pour {rs}")
+        parts.append(f"montant {mt} €")
+        out[idl] = ", ".join(parts)
+    return out
+
+
+def _info_code_vendeur(id_tickets: list[int], desactivation: bool = False) -> dict[int, str]:
+    """Cas 38 / 39 — Demande / Désactivation code Vendeur.
+
+    TK_DemandeCodeVendeur : TypeOri ('TK' = depuis ticket DPAE_Distrib,
+    sinon = IDSalarie direct), IDElem, IDPartenaire.
+
+    Format : "Code {Lib_Partenaire} pour NOM Prenom".
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, TypeOri, IDElem, IDPartenaire
+            FROM TK_DemandeCodeVendeur
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    base: dict[int, dict] = {}
+    part_ids: set[int] = set()
+    salarie_ids: set[int] = set()
+    distrib_ids: set[int] = set()  # IDTK_Liste de TK_DemandeDPAE_Distrib
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        if not idl:
+            continue
+        idp = _clean_id(_to_int(r.get("IDPartenaire")))
+        idelem = _clean_id(_to_int(r.get("IDElem")))
+        typeori = (r.get("TypeOri") or "").strip().upper()
+        base[idl] = {"typeori": typeori, "idelem": idelem, "idp": idp}
+        if idp:
+            part_ids.add(idp)
+        if idelem:
+            if typeori == "TK":
+                distrib_ids.add(idelem)
+            else:
+                salarie_ids.add(idelem)
+    # Partenaires
+    part_libs: dict[int, str] = {}
+    if part_ids:
+        try:
+            db_adv = get_connection("adv")
+            ids_t = ",".join(str(i) for i in part_ids)
+            prows = db_adv.query(
+                f"""SELECT IDPartenaire, Lib_Partenaire FROM Partenaire
+                WHERE IDPartenaire IN ({ids_t})"""
+            )
+            for p in prows:
+                part_libs[_clean_id(_to_int(p.get("IDPartenaire")))] = (
+                    p.get("Lib_Partenaire") or ""
+                ).strip()
+        except Exception:
+            pass
+    # Salaries
+    sals = load_salaries_minimal(salarie_ids)
+    # Distrib (TK_DemandeDPAE_Distrib avec NOM/PRENOM mémos)
+    distrib_names: dict[int, tuple[str, str]] = {}
+    if distrib_ids:
+        try:
+            ids_t = ",".join(str(i) for i in distrib_ids)
+            drows = db.query(
+                f"""SELECT IDTK_Liste, Nom, Prenom
+                FROM TK_DemandeDPAE_Distrib
+                WHERE IDTK_Liste IN ({ids_t})"""
+            )
+            for d in drows:
+                idl_d = _clean_id(_to_int(d.get("IDTK_Liste")))
+                if idl_d:
+                    distrib_names[idl_d] = (
+                        (d.get("Nom") or "").strip(),
+                        (d.get("Prenom") or "").strip(),
+                    )
+        except Exception:
+            pass
+    out: dict[int, str] = {}
+    for idl, d in base.items():
+        lib_part = part_libs.get(d["idp"], "")
+        if d["typeori"] == "TK":
+            nom, prenom = distrib_names.get(d["idelem"], ("", ""))
+        else:
+            s = sals.get(d["idelem"])
+            nom = s["nom"] if s else ""
+            prenom = s["prenom"] if s else ""
+        if not (nom or prenom):
+            continue
+        out[idl] = f"Code {lib_part} pour {nom} {_capit(prenom)}".strip()
+    return out
+
+
 def _info_carte_pro(id_tickets: list[int]) -> dict[int, str]:
     """Cas 2 — TK_DemandeCartePRO (peut avoir plusieurs lignes par ticket).
 
@@ -536,6 +1040,13 @@ _DIRECT_CASES = {
     30: _info_integration_distrib,
     33: _info_facturation,
     2:  _info_carte_pro,
+    1:  _info_commande_fourniture,
+    9:  _info_reservation,
+    17: _info_sos_juri,
+    26: _info_call_sfr_ret_rdv_tech,
+    28: _info_facturation_distrib,
+    38: lambda ids: _info_code_vendeur(ids, desactivation=False),
+    39: lambda ids: _info_code_vendeur(ids, desactivation=True),
 }
 
 # Cas via id_salarie : (db_key, table, id_col, prefix)
