@@ -183,14 +183,14 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4 p-4">
       {/* Sidebar — style WinDev : services en bandes pleines, types en lignes blanches */}
-      <aside className="w-64 shrink-0 bg-white border border-c-line rounded-xl overflow-y-auto flex flex-col">
+      <aside className="w-64 shrink-0 bg-transparent overflow-y-auto flex flex-col">
         {/* En-tête "Tickets" avec icône */}
-        <div className="px-4 py-3 border-b border-c-line bg-white flex items-center gap-2">
+        <div className="px-4 py-3 flex items-center gap-2">
           <Ticket className="w-5 h-5 text-c-brand" />
           <span className="text-base font-semibold text-c-brand">Tickets</span>
         </div>
         {/* Sous-titre "Demande" */}
-        <div className="px-4 py-2 bg-c-surface-soft text-xs font-medium text-c-ink-soft uppercase tracking-wide">
+        <div className="px-4 py-2 text-xs font-medium text-c-ink-soft uppercase tracking-wide">
           Demande
         </div>
 
@@ -218,7 +218,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
                   </button>
                   {/* Liste des types (rendu uniquement si ouvert) */}
                   {isOpen && (
-                    <ul className="bg-white">
+                    <ul>
                       {svc.types.map((t) => {
                         const active = selectedType?.id_type_demande === t.id_type_demande
                         return (
