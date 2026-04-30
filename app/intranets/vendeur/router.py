@@ -12,6 +12,7 @@ from app.intranets.vendeur.routers.organigramme import router as organigramme_ro
 from app.intranets.vendeur.routers.gestion_ohm import router as gestion_ohm_router
 from app.intranets.vendeur.routers.scool import router as scool_router
 from app.shared.production.router import router as production_router
+from app.shared.tickets.router import get_tickets_router
 from app.intranets.vendeur.routers.clusters import router as clusters_router
 from app.intranets.vendeur.routers.tickets import router as tickets_router
 from app.intranets.vendeur.routers.process import router as process_router
@@ -38,6 +39,8 @@ router.include_router(gestion_ohm_router)
 router.include_router(scool_router)
 router.include_router(production_router)
 router.include_router(clusters_router)
+# Module tickets shared : filtre par DroitAccèsVend pour Vendeur
+router.include_router(get_tickets_router("DroitAccèsVend"))
 router.include_router(tickets_router)
 router.include_router(process_router)
 router.include_router(tickets_call_router)

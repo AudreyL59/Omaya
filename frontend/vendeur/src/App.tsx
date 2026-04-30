@@ -10,8 +10,10 @@ import OrganigrammePage from '@/pages/OrganigrammePage'
 import ClustersPage from '@/pages/ClustersPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
+import TicketsPage from '@shared/tickets/TicketsPage'
+import { getToken } from '@/api'
 
-const PRODUCTION_API = '/api/vendeur'
+const VENDEUR_API = '/api/vendeur'
 import PlaceholderPage from '@/pages/PlaceholderPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -43,10 +45,10 @@ function App() {
           <Route path="organigramme" element={<OrganigrammePage />} />
           <Route path="gestion-ohm" element={<PlaceholderPage />} />
           <Route path="scool" element={<PlaceholderPage />} />
-          <Route path="production" element={<ProductionPage apiBase={PRODUCTION_API} />} />
-          <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={PRODUCTION_API} />} />
+          <Route path="production" element={<ProductionPage apiBase={VENDEUR_API} />} />
+          <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={VENDEUR_API} />} />
           <Route path="clusters" element={<ClustersPage />} />
-          <Route path="tickets" element={<PlaceholderPage />} />
+          <Route path="tickets" element={<TicketsPage apiBase={VENDEUR_API} getToken={getToken} />} />
           <Route path="process" element={<PlaceholderPage />} />
           <Route path="tickets-call" element={<PlaceholderPage />} />
           <Route path="tickets-call/energie" element={<PlaceholderPage />} />

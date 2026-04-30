@@ -13,6 +13,7 @@ from app.intranets.adm.routers.annonceurs import router as annonceurs_router
 from app.intranets.adm.routers.agenda_recrutement import router as agenda_recrutement_router
 from app.intranets.adm.routers.mon_compte import router as mon_compte_router
 from app.shared.production.router import router as production_router
+from app.shared.tickets.router import get_tickets_router
 
 router = APIRouter(
     prefix="/adm",
@@ -32,6 +33,8 @@ router.include_router(annonceurs_router)
 router.include_router(agenda_recrutement_router)
 router.include_router(mon_compte_router)
 router.include_router(production_router)
+# Module tickets shared : filtre par DroitAccès pour ADM
+router.include_router(get_tickets_router("DroitAccès"))
 
 
 @router.get("/ping")

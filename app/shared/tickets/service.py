@@ -1,0 +1,288 @@
+"""Service Tickets — accès aux tables TK_Liste / TK_TypeDemande / TK_Statut."""
+
+from __future__ import annotations
+
+import base64
+import struct
+from datetime import datetime
+from functools import lru_cache
+
+from app.core.database import get_connection
+
+
+# ---------------------------------------------------------------
+# Helpers (copiés du pattern production/service.py)
+# ---------------------------------------------------------------
+
+def _to_int(v) -> int:
+    if v is None or v == "":
+        return 0
+    if isinstance(v, (int, float)):
+        return int(v)
+    if isinstance(v, str):
+        try:
+            return int(v)
+        except ValueError:
+            pass
+        try:
+            raw = base64.b64decode(v)
+            if len(raw) == 8:
+                return struct.unpack("<q", raw)[0]
+            if len(raw) == 4:
+                return struct.unpack("<i", raw)[0]
+        except Exception:
+            pass
+    return 0
+
+
+def _clean_id(n: int) -> int:
+    if 0 < n < 9_000_000_000_000_000_000:
+        return n
+    return 0
+
+
+def _str_id(v) -> str:
+    """ID 8 octets en string (cf. règle projet)."""
+    n = _clean_id(_to_int(v))
+    return str(n) if n else ""
+
+
+def _now_windev() -> str:
+    now = datetime.now()
+    return now.strftime("%Y%m%d%H%M%S") + f"{now.microsecond // 1000:03d}"
+
+
+def _windev_to_iso(s: str) -> str:
+    """Format WinDev (YYYYMMDDHHMMSS[mmm]) → ISO 'YYYY-MM-DD HH:MM:SS'.
+
+    Si la chaîne est déjà ISO ou un format reconnaissable, on la renvoie telle
+    quelle (juste tronquée à 19 chars max).
+    """
+    if not s:
+        return ""
+    s = str(s).strip()
+    if not s:
+        return ""
+    # WinDev compact (14 ou 17 chiffres)
+    if len(s) >= 14 and s[:8].isdigit() and s[8:14].isdigit():
+        return f"{s[0:4]}-{s[4:6]}-{s[6:8]} {s[8:10]}:{s[10:12]}:{s[12:14]}"
+    # ISO déjà ?
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:19]
+    return s
+
+
+# ---------------------------------------------------------------
+# TK_TypeDemande
+# ---------------------------------------------------------------
+
+def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
+    """Liste les types de demande accessibles selon les droits du user.
+
+    droit_field : "DroitAccès" pour ADM, "DroitAccèsVend" pour Vendeur.
+                  Si vide → un type sans droit configuré est visible
+                  (sinon il faut que le code droit soit dans `droits`).
+
+    Retour trié par Service puis Lib_TypeDemande.
+    """
+    db = get_connection("ticket")
+    rows = db.query(
+        f"""SELECT IDTK_TypeDemande, Service, Lib_TypeDemande,
+            "{droit_field}" AS Droit, icone
+        FROM TK_TypeDemande
+        WHERE ModifELEM <> 'suppr'
+        ORDER BY Service ASC, Lib_TypeDemande ASC"""
+    )
+    droits_set = set(droits or [])
+    out: list[dict] = []
+    for r in rows:
+        droit = (r.get("Droit") or "").strip()
+        if droit and droit not in droits_set:
+            continue
+        out.append({
+            "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
+            "service": (r.get("Service") or "").strip(),
+            "lib_type_demande": (r.get("Lib_TypeDemande") or "").strip(),
+            "icone_data_url": _icone_to_data_url(r.get("icone")),
+        })
+    return out
+
+
+def _icone_to_data_url(blob) -> str:
+    """Convertit le mémo binaire en data: URL si possible (PNG/JPEG/GIF)."""
+    if not blob:
+        return ""
+    raw = blob if isinstance(blob, bytes) else None
+    if raw is None and isinstance(blob, str) and blob:
+        try:
+            raw = base64.b64decode(blob)
+        except Exception:
+            return ""
+    if not raw or len(raw) < 8:
+        return ""
+    head = raw[:8]
+    if head.startswith(b"\x89PNG"):
+        mime = "image/png"
+    elif head.startswith(b"\xff\xd8\xff"):
+        mime = "image/jpeg"
+    elif head.startswith(b"GIF8"):
+        mime = "image/gif"
+    elif head[:5] == b"<?xml" or raw.lstrip().startswith(b"<svg"):
+        mime = "image/svg+xml"
+    else:
+        return ""
+    return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+
+
+# ---------------------------------------------------------------
+# TK_Statut
+# ---------------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def _load_statuts_cache_key() -> tuple:
+    """Clé de cache (stub) — on invalide manuellement si besoin."""
+    return ("v1",)
+
+
+def list_statuts() -> list[dict]:
+    """Liste complète des statuts de tickets, ordonnés par IDTK_Statut."""
+    db = get_connection("ticket")
+    rows = db.query(
+        """SELECT IDTK_Statut, Lib_Statut FROM TK_Statut
+        WHERE ModifELEM <> 'suppr'
+        ORDER BY IDTK_Statut ASC"""
+    )
+    return [
+        {
+            "id_statut": _to_int(r.get("IDTK_Statut")),
+            "lib_statut": (r.get("Lib_Statut") or "").strip(),
+        }
+        for r in rows
+    ]
+
+
+# ---------------------------------------------------------------
+# TK_Liste
+# ---------------------------------------------------------------
+
+def list_tickets_par_type(
+    id_type_demande: int,
+    only_open: bool = True,
+    limit: int = 500,
+) -> list[dict]:
+    """Liste les tickets pour un type de demande donné.
+
+    only_open : True = exclut Cloturée=1. False = tout, y compris cloturés.
+
+    Retour : list de dicts bruts (id, dates, op_crea, op_traitement_staff,
+    id_statut, modification, …). Le `info` et les libellés sont enrichis
+    par l'appelant (router) pour pouvoir gérer la pagination simple côté frontend.
+    """
+    db = get_connection("ticket")
+    where = "WHERE IDTK_TypeDemande = ? AND ModifELEM <> 'suppr'"
+    if only_open:
+        where += " AND Cloturée = 0"
+    rows = db.query(
+        f"""SELECT TOP {int(limit)}
+            IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
+            IDTK_TypeDemande, IDTK_Statut, DateReport,
+            "Cloturée" AS Cloturee, DateCloture,
+            ModifDate, modification,
+            OpTraitementStaff
+        FROM TK_Liste
+        {where}
+        ORDER BY DATECREA DESC""",
+        (int(id_type_demande),),
+    )
+    out: list[dict] = []
+    for r in rows:
+        out.append({
+            "id_ticket": _str_id(r.get("IDTK_Liste")),
+            "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
+            "service": (r.get("Service") or "").strip(),
+            "id_statut": _to_int(r.get("IDTK_Statut")),
+            "date_crea": _windev_to_iso(r.get("DATECREA")),
+            "op_crea": _str_id(r.get("OPCREA")),
+            "op_dest": _str_id(r.get("OPDEST")),
+            "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
+            "cloturee": bool(r.get("Cloturee")),
+            "date_cloture": _windev_to_iso(r.get("DateCloture")),
+            "date_report": _windev_to_iso(r.get("DateReport")),
+            "modif_date": _windev_to_iso(r.get("ModifDate")),
+            "modification": bool(r.get("modification")),
+        })
+    return out
+
+
+def list_tickets_modified_since(
+    id_type_demande: int,
+    since_iso: str,
+    only_open: bool = True,
+) -> list[dict]:
+    """Tickets dont ModifDate > since_iso (pour SSE)."""
+    if not since_iso:
+        return list_tickets_par_type(id_type_demande, only_open=only_open, limit=200)
+    # ModifDate stocké en WinDev compact YYYYMMDDHHMMSSmmm.
+    # On compare en chaîne : il faut donc convertir since_iso en compact.
+    s = since_iso.replace("-", "").replace(":", "").replace(" ", "").replace("T", "")[:14]
+    db = get_connection("ticket")
+    where = "WHERE IDTK_TypeDemande = ? AND ModifELEM <> 'suppr'"
+    if only_open:
+        where += " AND Cloturée = 0"
+    where += " AND ModifDate > ?"
+    rows = db.query(
+        f"""SELECT TOP 200
+            IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
+            IDTK_TypeDemande, IDTK_Statut, DateReport,
+            "Cloturée" AS Cloturee, DateCloture,
+            ModifDate, modification,
+            OpTraitementStaff
+        FROM TK_Liste
+        {where}
+        ORDER BY ModifDate DESC""",
+        (int(id_type_demande), s),
+    )
+    out: list[dict] = []
+    for r in rows:
+        out.append({
+            "id_ticket": _str_id(r.get("IDTK_Liste")),
+            "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
+            "service": (r.get("Service") or "").strip(),
+            "id_statut": _to_int(r.get("IDTK_Statut")),
+            "date_crea": _windev_to_iso(r.get("DATECREA")),
+            "op_crea": _str_id(r.get("OPCREA")),
+            "op_dest": _str_id(r.get("OPDEST")),
+            "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
+            "cloturee": bool(r.get("Cloturee")),
+            "date_cloture": _windev_to_iso(r.get("DateCloture")),
+            "date_report": _windev_to_iso(r.get("DateReport")),
+            "modif_date": _windev_to_iso(r.get("ModifDate")),
+            "modification": bool(r.get("modification")),
+        })
+    return out
+
+
+# ---------------------------------------------------------------
+# Lookups en batch (pour enrichir les rows)
+# ---------------------------------------------------------------
+
+def load_salaries_minimal(ids: set[int]) -> dict[int, dict]:
+    """Charge {id: {nom, prenom}} pour une liste d'ids salarie."""
+    ids = {i for i in ids if i}
+    if not ids:
+        return {}
+    db = get_connection("rh")
+    ids_sql = ",".join(str(i) for i in ids)
+    rows = db.query(
+        f"""SELECT IDSalarie, NOM, PRENOM FROM salarie
+        WHERE IDSalarie IN ({ids_sql})"""
+    )
+    out: dict[int, dict] = {}
+    for r in rows:
+        sid = _clean_id(_to_int(r.get("IDSalarie")))
+        if sid:
+            out[sid] = {
+                "nom": (r.get("NOM") or "").strip(),
+                "prenom": (r.get("PRENOM") or "").strip(),
+            }
+    return out
