@@ -33,10 +33,13 @@ if ($existing) {
     & nssm remove $ServiceName confirm | Out-Null
 }
 
-# Creation
-& nssm install $ServiceName $PythonExe $WorkerScript
+# Creation - on installe d'abord l'exe SEUL puis on set AppParameters
+# avec quotes integrees, sinon NSSM split sur les espaces du chemin
+# (cas "Projet Omaya" : NSSM lit "D:\Claude\Projet" comme script).
+& nssm install $ServiceName $PythonExe
+& nssm set $ServiceName AppParameters       "`"$WorkerScript`""
 & nssm set $ServiceName AppDirectory        $ProjectRoot
-& nssm set $ServiceName AppEnvironmentExtra "PYTHONUNBUFFERED=1"
+& nssm set $ServiceName AppEnvironmentExtra "PYTHONUNBUFFERED=1" "PRODUCTION_WORKER_CONCURRENCY=5"
 & nssm set $ServiceName Start               SERVICE_AUTO_START
 & nssm set $ServiceName Description         "ERP Omaya - Worker extraction production"
 & nssm set $ServiceName AppStdout           "$LogDir\worker-production-stdout.log"
@@ -44,6 +47,7 @@ if ($existing) {
 & nssm set $ServiceName AppRotateFiles      1
 & nssm set $ServiceName AppRotateBytes      10485760
 & nssm set $ServiceName AppExit             Default Restart
+& nssm set $ServiceName AppThrottle         0
 
 # Demarrage
 & nssm start $ServiceName
