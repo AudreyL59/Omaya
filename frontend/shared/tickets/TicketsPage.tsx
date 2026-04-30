@@ -1,5 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Loader2, Search, Ticket } from 'lucide-react'
+import {
+  Banknote,
+  Building2,
+  Calendar,
+  Car,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  Coins,
+  CreditCard,
+  FilePen,
+  FileSignature,
+  FileText,
+  HeartHandshake,
+  IdCard,
+  Loader2,
+  Package,
+  PhoneCall,
+  Plane,
+  Receipt,
+  Scale,
+  Search,
+  ShoppingCart,
+  Ticket,
+  UserMinus,
+  UserPlus,
+  Wrench,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 import type {
   TicketListResponse,
@@ -7,6 +35,50 @@ import type {
   TicketSidebarItem,
   TicketTypeDemande,
 } from './types'
+
+// Mapping IDTK_TypeDemande → icône lucide. Les valeurs viennent du switch
+// WinDev DonneInfoTicket / des libellés vus dans le screenshot.
+const TICKET_ICON_BY_ID: Record<string, LucideIcon> = {
+  '1':  Package,           // Commande Fourniture
+  '2':  IdCard,            // Carte PRO
+  '3':  UserPlus,          // DPAE
+  '4':  FileSignature,     // Contrat W - Signature
+  '9':  Plane,             // Réservation
+  '10': Coins,             // Avance
+  '11': PhoneCall,         // SOS BO
+  '12': UserMinus,         // Sorties RH
+  '13': Calendar,          // Congés
+  '14': Car,               // Relève Kilométrique
+  '15': Car,               // Mise à dispo / Restitution Véhicule
+  '17': Scale,             // SOS Pôle JURI
+  '18': PhoneCall,         // SOS Info
+  '19': Wrench,            // Retour RDV Tech
+  '20': PhoneCall,         // Call SFR
+  '21': UserPlus,          // DPAE à venir
+  '22': PhoneCall,         // Call energie
+  '23': FileText,          // Contrat de courtage
+  '24': ShoppingCart,      // Commande ExoCash
+  '25': Banknote,          // Attribution ExoCash
+  '26': PhoneCall,         // Call SFR RET RDV Tech
+  '27': HeartHandshake,    // Mutuelle
+  '28': Receipt,           // Facturation Distrib
+  '29': UserPlus,          // DPAE Distributeur
+  '30': Building2,         // Intégration Distributeur
+  '31': FileText,          // Demande Doc Distributeur
+  '33': Receipt,           // Demande facturation
+  '35': Car,               // PV Liv/Rest Ulease
+  '36': UserMinus,         // Sorties FPE
+  '37': UserMinus,         // Sorties Licenciement
+  '38': CreditCard,        // Demande code Vendeur
+  '39': CreditCard,        // Désactivation code Vendeur
+  '40': FilePen,           // Contrat W - Demande
+}
+
+function TicketTypeIcon({ idType }: { idType: string }) {
+  const Icon = TICKET_ICON_BY_ID[idType] || ClipboardList
+  // text-c-brand = vert charter en ADM, emerald en Vendeur
+  return <Icon className="w-5 h-5 shrink-0 text-c-brand" />
+}
 
 interface TicketsPageProps {
   apiBase: string                 // ex: '/api/vendeur' ou '/api/adm'
@@ -153,20 +225,18 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
                           <li key={t.id_type_demande}>
                             <button
                               onClick={() => setSelectedType(t)}
-                              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 border-b border-c-line-soft transition-colors ${
+                              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 border-b border-c-line-soft transition-colors text-c-ink ${
                                 active
-                                  ? 'bg-c-brand-soft text-c-brand-strong font-medium'
-                                  : 'text-c-brand hover:bg-c-surface-soft'
+                                  ? 'bg-c-brand-soft'
+                                  : 'hover:bg-c-surface-soft'
                               }`}
                             >
                               {t.icone_data_url ? (
                                 <img src={t.icone_data_url} alt="" className="w-5 h-5 shrink-0" />
                               ) : (
-                                <span className="w-5 h-5 shrink-0 inline-flex items-center justify-center">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-c-brand opacity-60" />
-                                </span>
+                                <TicketTypeIcon idType={t.id_type_demande} />
                               )}
-                              <span className="truncate">{t.lib_type_demande}</span>
+                              <span className="truncate font-normal">{t.lib_type_demande}</span>
                             </button>
                           </li>
                         )
