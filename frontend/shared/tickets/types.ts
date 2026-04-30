@@ -26,6 +26,8 @@ export interface TicketRow {
   op_crea_nom: string
   op_crea_prenom: string
   op_dest: string
+  op_dest_nom: string
+  op_dest_prenom: string
   op_traitement_staff: string
   op_staff_nom: string
   op_staff_prenom: string

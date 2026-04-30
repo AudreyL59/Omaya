@@ -34,6 +34,8 @@ class TicketRow(BaseModel):
     op_crea_nom: str = ""
     op_crea_prenom: str = ""
     op_dest: str = ""
+    op_dest_nom: str = ""
+    op_dest_prenom: str = ""
     op_traitement_staff: str = ""
     op_staff_nom: str = ""
     op_staff_prenom: str = ""

@@ -198,21 +198,34 @@ def list_statuts() -> list[dict]:
 
 def list_tickets_par_type(
     id_type_demande: int,
-    only_open: bool = True,
+    cloturee: bool = False,
+    date_du: str = "",
+    date_au: str = "",
     limit: int = 500,
 ) -> list[dict]:
-    """Liste les tickets pour un type de demande donné.
+    """Liste les tickets pour un type de demande donné — équivalent
+    REQ_ListeTicketByType (WinDev).
 
-    only_open : True = exclut Cloturée=1. False = tout, y compris cloturés.
+    cloturee : False = uniquement les non clôturés ; True = uniquement les
+               clôturés (cf. Interrupteur1 dans le WinDev).
+    date_du / date_au : période sur DATECREA. Vide = bornes max
+               (2001-01-01 → 3061-01-01) — équivalent au cas Interrupteur1=0
+               du WinDev.
 
-    Retour : list de dicts bruts (id, dates, op_crea, op_traitement_staff,
-    id_statut, modification, …). Le `info` et les libellés sont enrichis
-    par l'appelant (router) pour pouvoir gérer la pagination simple côté frontend.
+    Filtre aussi IDTK_Statut <> 28 (statut "à archiver" exclu côté UI).
+    Tri : IDTK_Statut ASC, DATECREA DESC.
+
+    Retour : list de dicts bruts. Les libellés (lib_statut, op_dest_nom...)
+    et l'Info (DonneInfoTicket) sont enrichis par l'appelant.
     """
+    # Bornes WinDev : si pas de date fournie, on prend 2001-01-01 → 3061-01-01
+    # (au format compact YYYYMMDDHHMMSSmmm 17 chars).
+    if not date_du:
+        date_du = "20010101000000000"
+    if not date_au:
+        date_au = "30610101000000000"
+
     db = get_connection("ticket")
-    where = "WHERE IDTK_TypeDemande = ? AND ModifELEM <> 'suppr'"
-    if only_open:
-        where += " AND Cloturée = 0"
     rows = db.query(
         f"""SELECT TOP {int(limit)}
             IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
@@ -221,9 +234,13 @@ def list_tickets_par_type(
             ModifDate, modification,
             OpTraitementStaff
         FROM TK_Liste
-        {where}
-        ORDER BY DATECREA DESC""",
-        (int(id_type_demande),),
+        WHERE IDTK_TypeDemande = ?
+          AND ModifELEM NOT LIKE '%suppr%'
+          AND "Cloturée" = ?
+          AND DATECREA BETWEEN ? AND ?
+          AND IDTK_Statut <> 28
+        ORDER BY IDTK_Statut ASC, DATECREA DESC""",
+        (int(id_type_demande), 1 if cloturee else 0, date_du, date_au),
     )
     out: list[dict] = []
     for r in rows:

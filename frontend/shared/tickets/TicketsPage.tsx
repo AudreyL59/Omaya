@@ -103,9 +103,13 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
   const [selectedType, setSelectedType] = useState<TicketTypeDemande | null>(null)
   const [data, setData] = useState<TicketListResponse | null>(null)
   const [loadingList, setLoadingList] = useState(false)
-  const [search, setSearch] = useState('')
   const [openServices, setOpenServices] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  // Filtres popup (déclenchée par la loupe)
+  const [showFiltersPopup, setShowFiltersPopup] = useState(false)
+  const [filterCloturee, setFilterCloturee] = useState(false)
+  const [filterDateDu, setFilterDateDu] = useState('')   // YYYY-MM-DD ou ''
+  const [filterDateAu, setFilterDateAu] = useState('')   // YYYY-MM-DD ou ''
 
   // Charge la sidebar (services + types accessibles)
   useEffect(() => {
@@ -125,12 +129,15 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       .finally(() => setLoadingSidebar(false))
   }, [apiBase])
 
-  // Charge les tickets quand le type sélectionné change
+  // Charge les tickets quand le type sélectionné OU les filtres changent.
   useEffect(() => {
     if (!selectedType) return
     setLoadingList(true)
     setSelected(new Set())
     const params = new URLSearchParams({ id_type_demande: selectedType.id_type_demande })
+    if (filterCloturee) params.set('cloturee', '1')
+    if (filterDateDu) params.set('date_du', filterDateDu.replace(/-/g, ''))
+    if (filterDateAu) params.set('date_au', filterDateAu.replace(/-/g, ''))
     fetch(`${apiBase}/tickets?${params}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
@@ -138,7 +145,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       .then((d: TicketListResponse) => setData(d))
       .catch(() => setData(null))
       .finally(() => setLoadingList(false))
-  }, [apiBase, selectedType])
+  }, [apiBase, selectedType, filterCloturee, filterDateDu, filterDateAu])
 
   const toggleService = (svc: string) => {
     setOpenServices((prev) => {
@@ -149,27 +156,16 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
     })
   }
 
-  const filteredRows = useMemo(() => {
-    if (!data) return []
-    const q = search.trim().toLowerCase()
-    if (!q) return data.rows
-    return data.rows.filter((r) =>
-      `${r.op_crea_nom} ${r.op_crea_prenom} ${r.info} ${r.op_staff_nom}`
-        .toLowerCase()
-        .includes(q)
-    )
-  }, [data, search])
-
-  // Groupage par statut
+  // Groupage par statut (les rows sont déjà filtrées côté backend)
   const groupedByStatut = useMemo(() => {
     if (!data) return new Map<number, TicketRow[]>()
     const map = new Map<number, TicketRow[]>()
-    for (const r of filteredRows) {
+    for (const r of data.rows) {
       if (!map.has(r.id_statut)) map.set(r.id_statut, [])
       map.get(r.id_statut)!.push(r)
     }
     return map
-  }, [filteredRows, data])
+  }, [data])
 
   const toggleRow = (id: string) => {
     setSelected((prev) => {
@@ -253,19 +249,32 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       {/* Main */}
       <main className="flex-1 min-w-0 flex flex-col bg-white border border-c-line rounded-xl overflow-hidden">
         {/* Toolbar */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-c-line bg-c-surface-soft">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-c-line bg-c-surface-soft relative">
           <h1 className="text-base font-semibold text-c-ink">
             {selectedType ? selectedType.lib_type_demande : 'Sélectionne un type'}
           </h1>
-          <div className="relative">
-            <Search className="w-4 h-4 text-c-ink-faint-2 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              placeholder="Rechercher…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-3 py-1.5 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-c-line-strong w-72"
+          <button
+            onClick={() => setShowFiltersPopup((v) => !v)}
+            className={`p-2 rounded-lg transition-colors ${
+              filterCloturee || filterDateDu || filterDateAu
+                ? 'bg-c-brand-soft text-c-brand-strong'
+                : 'text-c-ink-faint hover:bg-c-surface-medium'
+            }`}
+            title="Filtres"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+          {showFiltersPopup && (
+            <FiltersPopup
+              cloturee={filterCloturee}
+              dateDu={filterDateDu}
+              dateAu={filterDateAu}
+              onChangeCloturee={setFilterCloturee}
+              onChangeDateDu={setFilterDateDu}
+              onChangeDateAu={setFilterDateAu}
+              onClose={() => setShowFiltersPopup(false)}
             />
-          </div>
+          )}
         </header>
 
         {/* Table */}
@@ -326,6 +335,70 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
   )
 }
 
+function FiltersPopup({
+  cloturee, dateDu, dateAu,
+  onChangeCloturee, onChangeDateDu, onChangeDateAu, onClose,
+}: {
+  cloturee: boolean
+  dateDu: string
+  dateAu: string
+  onChangeCloturee: (v: boolean) => void
+  onChangeDateDu: (v: string) => void
+  onChangeDateAu: (v: string) => void
+  onClose: () => void
+}) {
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-30"
+        onClick={onClose}
+      />
+      <div className="absolute right-3 top-full mt-2 z-40 bg-white rounded-xl border border-c-line shadow-lg p-4 w-80">
+        <div className="flex items-center gap-2 text-sm font-semibold text-c-ink mb-3">
+          <Search className="w-4 h-4 text-c-brand" />
+          Affichage Façon Trello
+        </div>
+        <label className="flex items-center gap-2 text-sm text-c-ink mb-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={cloturee}
+            onChange={(e) => onChangeCloturee(e.target.checked)}
+            className="w-4 h-4 cursor-pointer accent-c-brand"
+          />
+          Afficher les tickets clôturés
+        </label>
+        <div className="flex items-center gap-2 text-sm text-c-ink-soft">
+          <span className="shrink-0">créés entre le</span>
+          <input
+            type="date"
+            value={dateDu}
+            onChange={(e) => onChangeDateDu(e.target.value)}
+            className="px-2 py-1 border border-c-line-strong rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-c-brand-line"
+          />
+          <span className="shrink-0">et le</span>
+          <input
+            type="date"
+            value={dateAu}
+            onChange={(e) => onChangeDateAu(e.target.value)}
+            className="px-2 py-1 border border-c-line-strong rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-c-brand-line"
+          />
+        </div>
+        {(dateDu || dateAu || cloturee) && (
+          <button
+            onClick={() => {
+              onChangeCloturee(false)
+              onChangeDateDu('')
+              onChangeDateAu('')
+            }}
+            className="mt-3 text-xs text-c-ink-faint hover:text-c-ink underline"
+          >Réinitialiser</button>
+        )}
+      </div>
+    </>
+  )
+}
+
+
 function RowGroup({
   label, count, rows, selected, onToggle,
 }: {
@@ -364,11 +437,13 @@ function RowGroup({
               {shortDateTime(r.date_crea)}
             </td>
             <td className="px-3 py-2 text-c-ink whitespace-nowrap">
-              {r.op_crea_nom} {capitalize(r.op_crea_prenom)}
+              {r.op_dest_nom} {capitalize(r.op_dest_prenom)}
             </td>
             <td className="px-3 py-2 text-c-ink-soft">{r.info}</td>
             <td className="px-3 py-2 text-c-ink whitespace-nowrap">
-              {r.op_staff_nom} {capitalize(r.op_staff_prenom)}
+              {r.op_staff_nom
+                ? `${capitalize(r.op_staff_prenom)} ${r.op_staff_nom.charAt(0).toUpperCase()}`
+                : ''}
             </td>
           </tr>
         )

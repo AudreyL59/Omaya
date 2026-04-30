@@ -65,16 +65,22 @@ def get_tickets_router(droit_field: str) -> APIRouter:
     @router.get("", response_model=TicketListResponse)
     def get_tickets(
         id_type_demande: int = Query(..., description="IDTK_TypeDemande"),
-        only_open: bool = Query(True, description="Cacher les tickets cloturés"),
+        cloturee: bool = Query(False, description="True = clôturés uniquement"),
+        date_du: str = Query("", description="Format YYYYMMDD (vide = pas de borne)"),
+        date_au: str = Query("", description="Format YYYYMMDD (vide = pas de borne)"),
         user: UserToken = Depends(get_current_user),
     ):
-        """Liste les tickets pour un type de demande, enrichis avec :
-        - lib_statut, op_crea_nom/prenom, op_staff_nom/prenom
-        - info (via DonneInfoTicket batch).
+        """Liste les tickets pour un type de demande (filtre date / clôture).
 
-        Vérifie aussi que l'utilisateur a bien accès à ce type de demande.
+        Enrichit chaque ligne avec :
+          - lib_statut (TK_Statut)
+          - op_dest_nom/prenom (= "Opérateur" dans la table WinDev)
+          - op_staff_nom/prenom (= "Opé Staff", formaté Prenom + initiale)
+          - info via DonneInfoTicket batch.
+
+        Vérifie l'accès au type de demande selon les droits du user.
         """
-        # Contrôle d'accès : le type doit être dans les types autorisés du user
+        # Contrôle d'accès
         types_user = list_types_par_droit(user.droits, droit_field)
         allowed_ids = {int(t["id_type_demande"]) for t in types_user if t["id_type_demande"].isdigit()}
         if int(id_type_demande) not in allowed_ids:
@@ -83,18 +89,32 @@ def get_tickets_router(droit_field: str) -> APIRouter:
                 detail="Type de demande non accessible avec vos droits",
             )
 
-        rows_raw = list_tickets_par_type(int(id_type_demande), only_open=only_open)
+        # Conversion dates YYYYMMDD → format WinDev compact 17 chars
+        def _to_wd(s: str, end: bool = False) -> str:
+            if not s or len(s) < 8 or not s[:8].isdigit():
+                return ""
+            ymd = s[:8]
+            return f"{ymd}{'235959999' if end else '000000000'}"
 
-        # Lookups en batch
-        id_tickets = [int(r["id_ticket"]) for r in rows_raw if r["id_ticket"].isdigit()]
+        rows_raw = list_tickets_par_type(
+            int(id_type_demande),
+            cloturee=cloturee,
+            date_du=_to_wd(date_du, end=False),
+            date_au=_to_wd(date_au, end=True),
+        )
+
+        # Batch : salaries (OPDEST + OpTraitementStaff)
         id_salaries: set[int] = set()
         for r in rows_raw:
-            for k in ("op_crea", "op_traitement_staff"):
+            for k in ("op_dest", "op_traitement_staff", "op_crea"):
                 v = r.get(k) or ""
                 if v.isdigit() and int(v) > 0:
                     id_salaries.add(int(v))
         salaries = load_salaries_minimal(id_salaries)
+
+        id_tickets = [int(r["id_ticket"]) for r in rows_raw if r["id_ticket"].isdigit()]
         infos = donne_info_ticket_batch(int(id_type_demande), id_tickets)
+
         statuts_all = list_statuts()
         statut_lib = {s["id_statut"]: s["lib_statut"] for s in statuts_all}
 
@@ -106,10 +126,12 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             if id_st not in seen_statuts:
                 seen_statuts.add(id_st)
                 statuts_present.append(id_st)
-            ocrea = int(r["op_crea"]) if r["op_crea"].isdigit() else 0
+            odest = int(r["op_dest"]) if r["op_dest"].isdigit() else 0
             ostaff = int(r["op_traitement_staff"]) if r["op_traitement_staff"].isdigit() else 0
-            ocrea_info = salaries.get(ocrea, {})
+            ocrea = int(r["op_crea"]) if r["op_crea"].isdigit() else 0
+            odest_info = salaries.get(odest, {})
             ostaff_info = salaries.get(ostaff, {})
+            ocrea_info = salaries.get(ocrea, {})
             rows.append(TicketRow(
                 id_ticket=r["id_ticket"],
                 id_type_demande=r["id_type_demande"],
@@ -121,6 +143,8 @@ def get_tickets_router(droit_field: str) -> APIRouter:
                 op_crea_nom=ocrea_info.get("nom", ""),
                 op_crea_prenom=ocrea_info.get("prenom", ""),
                 op_dest=r["op_dest"],
+                op_dest_nom=odest_info.get("nom", ""),
+                op_dest_prenom=odest_info.get("prenom", ""),
                 op_traitement_staff=r["op_traitement_staff"],
                 op_staff_nom=ostaff_info.get("nom", ""),
                 op_staff_prenom=ostaff_info.get("prenom", ""),
@@ -133,8 +157,6 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             ))
 
         statuts_ordered: list[TicketStatut] = []
-        # Ordonne d'abord les statuts présents par leur IDTK_Statut (le code
-        # WinDev affiche en général dans cet ordre — Non traité = 1)
         for sid in sorted(statuts_present):
             statuts_ordered.append(TicketStatut(
                 id_statut=sid,
