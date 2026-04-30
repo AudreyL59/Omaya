@@ -6,7 +6,7 @@ __pycache__/
 *.db
 .DS_Store
 bridge/
-test_*.py
+/test_*.py
 node_modules/
 dist/
 .claude/

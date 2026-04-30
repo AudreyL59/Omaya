@@ -88,18 +88,86 @@ def _make_titre(params: dict, user_nom: str, user_prenom: str) -> str:
     return f"{mode}{suffix} / {periode}"
 
 
+# -- Quotas + priorité ---------------------------------------------------
+
+class QuotaExceeded(Exception):
+    """Levée quand un user dépasse son quota de jobs actifs."""
+
+    def __init__(self, current: int, quota: int):
+        self.current = current
+        self.quota = quota
+        super().__init__(f"Quota dépassé : {current} / {quota} jobs actifs")
+
+
+def quota_for_user(droits: list[str], is_resp: bool) -> int:
+    """Quota de jobs actifs (pending + running) selon les droits.
+
+    - ProdRezo (staff/direction) : 4
+    - Responsable (UsersResp = 1) : 3
+    - Vendeur normal             : 2
+    """
+    droits_set = set(droits or [])
+    if "ProdRezo" in droits_set:
+        return 4
+    if is_resp:
+        return 3
+    return 2
+
+
+def priority_for_user(droits: list[str]) -> int:
+    """Priorité du job dans la queue (plus haut = passe devant).
+
+    - ProdRezo : 1 (canal prioritaire)
+    - autres   : 0 (normal)
+    """
+    return 1 if "ProdRezo" in (droits or []) else 0
+
+
+def count_active_jobs(id_salarie_user: int) -> int:
+    """Nombre de jobs actifs (pending + running) pour ce user, hors suppr."""
+    db = get_connection("divers")
+    rows = db.query(
+        """SELECT COUNT(*) AS N FROM ProductionExtractionJob
+        WHERE IDSalarieUser = ?
+          AND Statut IN ('pending', 'running')
+          AND ModifELEM <> 'suppr'""",
+        (id_salarie_user,),
+    )
+    if not rows:
+        return 0
+    return _to_int((rows[0] or {}).get("N"))
+
+
 # -- CRUD jobs ---------------------------------------------------------
 
-def create_job(id_salarie_user: int, params: dict, user_nom: str, user_prenom: str) -> str:
+def create_job(
+    id_salarie_user: int,
+    params: dict,
+    user_nom: str,
+    user_prenom: str,
+    droits: list[str] | None = None,
+    is_resp: bool = False,
+) -> str:
     """Crée un job en statut 'pending'. Retourne son id en string.
+
+    Vérifie d'abord le quota de jobs actifs pour cet utilisateur :
+    raise QuotaExceeded si dépassement (le router le mappe en 409).
+    Set la Priority en BDD selon les droits (ProdRezo = 1, sinon 0).
 
     On insère d'abord les colonnes de base, puis on met à jour ParamsJSON
     séparément — le bridge a parfois du mal avec les mémos volumineux en INSERT.
     """
+    droits = droits or []
+    quota = quota_for_user(droits, is_resp)
+    current = count_active_jobs(id_salarie_user)
+    if current >= quota:
+        raise QuotaExceeded(current=current, quota=quota)
+
     db = get_connection("divers")
     id_job = _new_id()
     now = _now_windev()
     titre = _make_titre(params, user_nom, user_prenom)
+    priority = priority_for_user(droits)
 
     # 1. INSERT avec ParamsJSON vide (sans le mémo volumineux)
     db.query(
@@ -107,11 +175,13 @@ def create_job(id_salarie_user: int, params: dict, user_nom: str, user_prenom: s
         (IDProductionExtractionJob, IDSalarieUser, DateCrea,
          ParamsJSON, Statut, ProgressionPct, ProgressionMsg,
          NbLignes, DureeS, PathResultat, MessageErreur, Titre,
+         Priority,
          ModifDate, ModifOP, ModifELEM)
         VALUES (?, ?, ?, '', 'pending', 0, '',
                 0, 0, '', '', ?,
+                ?,
                 ?, ?, '')""",
-        (id_job, id_salarie_user, now, titre, now, id_salarie_user),
+        (id_job, id_salarie_user, now, titre, priority, now, id_salarie_user),
     )
 
     # 2. UPDATE du mémo ParamsJSON — encodé en base64 pour éviter que les
@@ -128,31 +198,39 @@ def create_job(id_salarie_user: int, params: dict, user_nom: str, user_prenom: s
 
 
 def list_jobs(id_salarie_user: int, limit: int = 50) -> list[dict]:
-    """Liste les jobs de l'utilisateur, du plus récent au plus ancien."""
+    """Liste les jobs de l'utilisateur, du plus récent au plus ancien.
+
+    Calcule pour chaque job 'pending' sa position dans la file globale
+    (priorité supérieure ou plus ancien à priorité égale = devant).
+    """
     db = get_connection("divers")
     rows = db.query(
         f"""SELECT TOP {int(limit)}
             IDProductionExtractionJob, IDSalarieUser, DateCrea,
             DateDebutTrait, DateFinTrait, Statut, ProgressionPct,
             ProgressionMsg, NbLignes, DureeS, PathResultat,
-            MessageErreur, Titre, ParamsJSON
+            MessageErreur, Titre, ParamsJSON, Priority
         FROM ProductionExtractionJob
         WHERE IDSalarieUser = ?
           AND ModifELEM <> 'suppr'
         ORDER BY DateCrea DESC""",
         (id_salarie_user,),
     )
-    return [_row_to_dict(r) for r in rows]
+    queue = _load_pending_queue()
+    return [_row_to_dict(r, queue) for r in rows]
 
 
 def get_job(id_job: int, id_salarie_user: int) -> dict | None:
-    """Lit un job (vérifie qu'il appartient bien à l'utilisateur)."""
+    """Lit un job (vérifie qu'il appartient bien à l'utilisateur).
+
+    Inclut la position dans la file si le job est en statut 'pending'.
+    """
     db = get_connection("divers")
     row = db.query_one(
         """SELECT IDProductionExtractionJob, IDSalarieUser, DateCrea,
             DateDebutTrait, DateFinTrait, Statut, ProgressionPct,
             ProgressionMsg, NbLignes, DureeS, PathResultat,
-            MessageErreur, Titre, ParamsJSON
+            MessageErreur, Titre, ParamsJSON, Priority
         FROM ProductionExtractionJob
         WHERE IDProductionExtractionJob = ?
           AND IDSalarieUser = ?
@@ -161,7 +239,34 @@ def get_job(id_job: int, id_salarie_user: int) -> dict | None:
     )
     if not row:
         return None
-    return _row_to_dict(row)
+    queue = _load_pending_queue() if (row.get("Statut") or "") == "pending" else None
+    return _row_to_dict(row, queue)
+
+
+def _load_pending_queue() -> list[tuple[int, int, str]]:
+    """Liste tous les jobs pending, triés dans l'ordre où le worker les prendra.
+
+    Retour : list[(id_job, priority, date_crea)] avec ordre = priority DESC,
+    date_crea ASC.
+    """
+    db = get_connection("divers")
+    rows = db.query(
+        """SELECT IDProductionExtractionJob, Priority, DateCrea
+        FROM ProductionExtractionJob
+        WHERE Statut = 'pending'
+          AND ModifELEM <> 'suppr'"""
+    )
+    items = [
+        (
+            _clean_id(_to_int(r.get("IDProductionExtractionJob"))),
+            _to_int(r.get("Priority")),
+            r.get("DateCrea") or "",
+        )
+        for r in rows
+    ]
+    # Priorité descendante puis date_crea ascendante (FIFO à priorité égale)
+    items.sort(key=lambda x: (-x[1], x[2]))
+    return items
 
 
 def delete_job(id_job: int, id_salarie_user: int) -> bool:
@@ -188,8 +293,15 @@ def delete_job(id_job: int, id_salarie_user: int) -> bool:
     return True
 
 
-def _row_to_dict(r: dict) -> dict:
-    """Transforme une row HFSQL en dict compatible avec le schema ProductionJob."""
+def _row_to_dict(
+    r: dict,
+    queue: list[tuple[int, int, str]] | None = None,
+) -> dict:
+    """Transforme une row HFSQL en dict compatible avec le schema ProductionJob.
+
+    Si `queue` est fourni (liste des pending triée), calcule la position
+    dans la file pour les jobs au statut 'pending' (1-indexed).
+    """
     params_raw = (r.get("ParamsJSON") or "").strip()
     params = None
     if params_raw:
@@ -212,13 +324,24 @@ def _row_to_dict(r: dict) -> dict:
         except Exception:
             msg_err = msg_err_raw
 
+    id_job = _clean_id(_to_int(r.get("IDProductionExtractionJob")))
+    statut = r.get("Statut") or ""
+    queue_position = 0
+    queue_total = 0
+    if queue is not None and statut == "pending":
+        queue_total = len(queue)
+        for idx, (qid, _p, _d) in enumerate(queue, start=1):
+            if qid == id_job:
+                queue_position = idx
+                break
+
     return {
-        "id_job": str(_clean_id(_to_int(r.get("IDProductionExtractionJob")))),
+        "id_job": str(id_job),
         "id_salarie_user": str(_clean_id(_to_int(r.get("IDSalarieUser")))),
         "date_crea": r.get("DateCrea") or "",
         "date_debut_trait": r.get("DateDebutTrait") or "",
         "date_fin_trait": r.get("DateFinTrait") or "",
-        "statut": r.get("Statut") or "",
+        "statut": statut,
         "progression_pct": _to_int(r.get("ProgressionPct")),
         "progression_msg": r.get("ProgressionMsg") or "",
         "nb_lignes": _to_int(r.get("NbLignes")),
@@ -226,6 +349,9 @@ def _row_to_dict(r: dict) -> dict:
         "path_resultat": r.get("PathResultat") or "",
         "message_erreur": msg_err,
         "titre": r.get("Titre") or "",
+        "priority": _to_int(r.get("Priority")),
+        "queue_position": queue_position,
+        "queue_total": queue_total,
         "params": params,
     }
 

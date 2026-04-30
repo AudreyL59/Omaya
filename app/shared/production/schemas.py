@@ -60,6 +60,12 @@ class ProductionJob(BaseModel):
     path_resultat: str = ""
     message_erreur: str = ""
     titre: str
+    # Priorité dans la file (0 = normal, 1 = ProdRezo / canal staff)
+    priority: int = 0
+    # Position dans la file (1-indexed) si statut='pending', sinon 0
+    queue_position: int = 0
+    # Nombre total de jobs pending dans la file (pour afficher "X / Y")
+    queue_total: int = 0
     params: ProductionJobCreate | None = None  # extrait du ParamsJSON
 
 
@@ -203,6 +209,7 @@ class TypeEtatItem(BaseModel):
 class RepartPartenaireRow(BaseModel):
     """Une ligne dans l'onglet Tab Stat : répartition par partenaire."""
     partenaire: str
+    lib_partenaire: str = ""
     couleur_hex: str = ""
     brut: int = 0
     temporaire: int = 0
@@ -244,3 +251,9 @@ class JobStats(BaseModel):
     dashboard_sfr: dict = {}
     dashboard_oen: dict = {}
     dashboard_eni: dict = {}
+    # Partenaires "simples" : Brut + Hors anomalie + ratios cles uniquement.
+    dashboard_val: dict = {}
+    dashboard_tlc: dict = {}
+    dashboard_iag: dict = {}
+    dashboard_pro: dict = {}
+    dashboard_str: dict = {}

@@ -1368,7 +1368,8 @@ def extract_job_to_parquet(
 
     progress_cb(97, "Calcul des stats")
     partenaires_couleurs = _load_partenaires_couleurs(db_adv)
-    stats = _compute_stats(rows_out, partenaires_couleurs, nb_jour_pres)
+    partenaires_libs = _load_partenaires_libs(db_adv)
+    stats = _compute_stats(rows_out, partenaires_couleurs, partenaires_libs, nb_jour_pres)
     meta_path = _meta_path(id_salarie_user, id_job)
     meta_path.write_text(
         json.dumps(stats, ensure_ascii=False),
@@ -1383,6 +1384,22 @@ def extract_job_to_parquet(
         "duree_s": duree_s,
         "message_erreur": "",
     }
+
+
+def _load_partenaires_libs(db_adv) -> dict[str, str]:
+    """Retourne un mapping PréfixeBDD -> Lib_Partenaire (depuis la table Partenaire)."""
+    rows = db_adv.query(
+        """SELECT PréfixeBDD, Lib_Partenaire
+        FROM Partenaire
+        WHERE ModifELEM <> 'suppr' AND PréfixeBDD <> ''"""
+    )
+    out: dict[str, str] = {}
+    for r in rows:
+        prefix = (r.get("PréfixeBDD") or "").strip()
+        lib = (r.get("Lib_Partenaire") or "").strip()
+        if prefix:
+            out[prefix] = lib or prefix
+    return out
 
 
 def _load_partenaires_couleurs(db_adv) -> dict[str, str]:
@@ -1407,6 +1424,7 @@ def _load_partenaires_couleurs(db_adv) -> dict[str, str]:
 def _compute_stats(
     rows: list[dict],
     partenaires_couleurs: dict[str, str],
+    partenaires_libs: dict[str, str] | None = None,
     nb_jour_pres_par_salarie: dict[int, int] | None = None,
 ) -> dict:
     """
@@ -1418,6 +1436,7 @@ def _compute_stats(
     Équivalent WinDev : TableRepartContrats + TableVendeur de Fen_suiviProdAsynchrone.
     """
     # Répartition par partenaire : un dict par prefix
+    libs = partenaires_libs or {}
     repart: dict[str, dict] = {}
     for r in rows:
         prefix = r.get("partenaire", "")
@@ -1426,6 +1445,7 @@ def _compute_stats(
         if prefix not in repart:
             repart[prefix] = {
                 "partenaire": prefix,
+                "lib_partenaire": libs.get(prefix, prefix),
                 "couleur_hex": partenaires_couleurs.get(prefix, ""),
                 "brut": 0, "temporaire": 0, "envoye": 0, "rejet": 0,
                 "resil": 0, "payé": 0, "decomm": 0,
@@ -1500,6 +1520,12 @@ def _compute_stats(
     dashboard_sfr = _compute_dashboard_sfr(rows, nb_jour_pres_par_salarie or {})
     dashboard_oen = _compute_dashboard_oen(rows)
     dashboard_eni = _compute_dashboard_eni(rows)
+    # Partenaires "simples" : juste un résumé Brut / Hors anomalie + ratios.
+    dashboard_val = _compute_dashboard_simple(rows, "VAL")
+    dashboard_tlc = _compute_dashboard_simple(rows, "TLC")
+    dashboard_iag = _compute_dashboard_simple(rows, "IAG")
+    dashboard_pro = _compute_dashboard_simple(rows, "PRO")
+    dashboard_str = _compute_dashboard_simple(rows, "STR")
 
     return {
         "total_contrats": total_contrats,
@@ -1510,6 +1536,11 @@ def _compute_stats(
         "dashboard_sfr": dashboard_sfr,
         "dashboard_oen": dashboard_oen,
         "dashboard_eni": dashboard_eni,
+        "dashboard_val": dashboard_val,
+        "dashboard_tlc": dashboard_tlc,
+        "dashboard_iag": dashboard_iag,
+        "dashboard_pro": dashboard_pro,
+        "dashboard_str": dashboard_str,
     }
 
 
@@ -2352,7 +2383,9 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
     # Options (gardées car spécifiques ENI)
     nb_demat = sum(1 for r in eni if r.get("opt_demat"))
     nb_maintenance = sum(1 for r in eni if r.get("opt_maintenance"))
-    nb_energie_verte = sum(1 for r in eni if r.get("opt_energie_verte_gaz"))
+    # Energie Verte Gaz : option specifique aux contrats avec part Gaz
+    # (mono Gaz + Dual). Le denominateur est nb_gaz, pas nb_ctt.
+    nb_energie_verte = sum(1 for r in eni_gaz_part if r.get("opt_energie_verte_gaz"))
     nb_reforestation = sum(1 for r in eni if r.get("opt_reforestation"))
     nb_protection = sum(1 for r in eni if r.get("opt_protection"))
 
@@ -2472,10 +2505,42 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
         "nb_protection": nb_protection,
         "tx_demat": _pct(nb_demat, nb_ctt),
         "tx_maintenance": _pct(nb_maintenance, nb_ctt),
-        "tx_energie_verte": _pct(nb_energie_verte, nb_ctt),
+        "tx_energie_verte": _pct(nb_energie_verte, nb_gaz),
         "tx_reforestation": _pct(nb_reforestation, nb_ctt),
         "tx_protection": _pct(nb_protection, nb_ctt),
         "tx_racc_vendeur": tx_racc_vendeur,
+    }
+
+
+def _compute_dashboard_simple(rows: list[dict], prefix: str) -> dict:
+    """
+    Dashboard minimaliste pour les partenaires sans logique metier propre
+    (VAL, TLC, IAG, PRO) :
+      - Nb Ctt Brut + Nb Ctt Hors anomalie
+      - % Valide / % Anomalie / % Resil / % Attente
+    """
+    sub = [r for r in rows if r.get("partenaire") == prefix]
+    if not sub:
+        return {}
+
+    nb_ctt = len(sub)
+    nb_anomalie = sum(1 for r in sub if r.get("id_type_etat") == 3)
+    nb_valide = sum(1 for r in sub if r.get("id_type_etat") in (5, 8))
+    nb_resil = sum(1 for r in sub if r.get("id_type_etat") == 4)
+    nb_attente = sum(1 for r in sub if r.get("id_type_etat") == 2)
+    nb_hors_anomalie = nb_ctt - nb_anomalie
+
+    return {
+        "nb_ctt": nb_ctt,
+        "nb_hors_anomalie": nb_hors_anomalie,
+        "nb_anomalie": nb_anomalie,
+        "nb_valide": nb_valide,
+        "nb_resil": nb_resil,
+        "nb_attente": nb_attente,
+        "tx_anomalie": _pct(nb_anomalie, nb_ctt),
+        "tx_valide": _pct(nb_valide, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
+        "tx_resil": _pct(nb_resil, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
+        "tx_attente": _pct(nb_attente, nb_ctt),
     }
 
 
@@ -2489,6 +2554,8 @@ def read_job_stats(id_user: int, id_job: int) -> dict:
         "total_contrats": 0, "total_paye": 0, "total_points": 0,
         "repart_partenaires": [], "vendeurs": [],
         "dashboard_sfr": {}, "dashboard_oen": {}, "dashboard_eni": {},
+        "dashboard_val": {}, "dashboard_tlc": {}, "dashboard_iag": {},
+        "dashboard_pro": {}, "dashboard_str": {},
     }
     p = _meta_path(id_user, id_job)
     if not p.exists():

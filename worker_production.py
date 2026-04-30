@@ -3,9 +3,14 @@ Worker Python pour l'extraction production.
 
 Tourne en service NSSM séparé de l'API (OmayaProductionWorker).
 Pop les jobs en statut 'pending' dans ProductionExtractionJob (Bdd_Omaya_Divers),
-exécute l'extraction, stocke le résultat Parquet, MAJ le statut.
+exécute l'extraction (en parallèle via un ThreadPoolExecutor), stocke le
+résultat Parquet, MAJ le statut.
 
-Polling 2s, 1 seul job à la fois (séquentiel pour ne pas saturer HFSQL).
+Concurrence : configurable via env var PRODUCTION_WORKER_CONCURRENCY
+(défaut 5). Le main thread est SEUL à claimer les jobs (pas de race),
+les threads du pool ne font qu'exécuter.
+
+Ordre de pop : Priority DESC, DateCrea ASC (canal prioritaire ProdRezo).
 
 Usage (dev) :
     .venv\\Scripts\\python.exe worker_production.py
@@ -15,9 +20,11 @@ En production (NSSM) :
 """
 
 import logging
+import os
 import sys
 import time
 import traceback
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -48,6 +55,9 @@ logging.basicConfig(
 log = logging.getLogger("prod-worker")
 
 POLL_INTERVAL_S = 2
+# Nombre de jobs traités en parallèle. Configurable via env var.
+# Test bridge HFSQL : 5 = 77% d'efficacité, 10 = 53% (diminishing returns).
+CONCURRENCY = max(1, int(os.environ.get("PRODUCTION_WORKER_CONCURRENCY", "5")))
 
 
 # ============================================================
@@ -56,12 +66,16 @@ POLL_INTERVAL_S = 2
 
 def _pop_next_pending_job() -> dict | None:
     """
-    Prend le plus ancien job 'pending', le passe en 'running', retourne ses infos.
-    On fait un UPDATE ... WHERE Statut='pending' pour éviter les doublons.
+    Prend le prochain job 'pending' selon l'ordre de la file
+    (Priority DESC, DateCrea ASC), le passe en 'running', retourne ses infos.
+
+    Appelé exclusivement par le main thread → pas de race avec les workers
+    du pool. Le UPDATE conserve néanmoins le garde-fou WHERE Statut='pending'
+    par sécurité (au cas où un autre process toucherait la table).
     """
     db = get_connection("divers")
 
-    # 1. Trouver l'id + infos simples du plus ancien pending
+    # 1. Trouver l'id + infos simples du prochain pending dans l'ordre prioritaire
     # IMPORTANT : ne PAS inclure le mémo ParamsJSON dans ce SELECT ;
     # le bridge WinDev tronque les mémos dans les SELECT multi-colonnes.
     rows = db.query(
@@ -69,7 +83,7 @@ def _pop_next_pending_job() -> dict | None:
         FROM ProductionExtractionJob
         WHERE Statut = 'pending'
           AND ModifELEM <> 'suppr'
-        ORDER BY DateCrea ASC"""
+        ORDER BY Priority DESC, DateCrea ASC"""
     )
     if not rows:
         return None
@@ -232,72 +246,98 @@ def _to_int(v) -> int:
         return 0
 
 
+def _run_job(job: dict) -> None:
+    """Exécute un job (parse params + extraction + complete/fail).
+
+    Tourne dans un thread du pool. Ne touche pas à la file — le claim a
+    déjà été fait par le main thread. En cas d'exception, marque en 'error'
+    pour ne pas laisser un job bloqué en 'running'.
+    """
+    id_job = job["id_job"]
+    log.info(">>> job %s : %s", id_job, job["titre"])
+
+    # Parse ParamsJSON
+    try:
+        import base64
+        import json
+        raw = (job["params_json"] or "").strip()
+        if not raw:
+            raise ValueError("ParamsJSON vide (memo non stocke ou tronque)")
+        # Compat : d'abord base64 (format utilisé par l'API), sinon JSON brut
+        try:
+            decoded = base64.b64decode(raw).decode("utf-8")
+            params = json.loads(decoded)
+        except Exception:
+            params = json.loads(raw)
+        if not params.get("date_du") or not params.get("date_au"):
+            raise ValueError(
+                f"ParamsJSON sans date_du/date_au : {list(params.keys())}"
+            )
+    except Exception as e:
+        _fail_job(id_job, f"ParamsJSON invalide : {e} | raw len={len(job.get('params_json') or '')}")
+        log.error("x job %s : ParamsJSON invalide : %s", id_job, e)
+        return
+
+    # Extraction
+    try:
+        result = extract_job_to_parquet(
+            id_job=id_job,
+            id_salarie_user=job["id_salarie_user"],
+            params=params,
+            progress_cb=lambda p, m: _update_progress(id_job, p, m),
+        )
+        _complete_job(
+            id_job=id_job,
+            path_resultat=result["path"],
+            nb_lignes=result["nb_lignes"],
+            duree_s=result["duree_s"],
+        )
+        log.info(
+            "OK job %s : %s lignes en %ss",
+            id_job, result["nb_lignes"], result["duree_s"],
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        _fail_job(id_job, f"{e}\n\n{tb}")
+        log.error("KO job %s : %s\n%s", id_job, e, tb)
+
+
 def main() -> None:
     log.info("Worker production démarré")
     log.info("Dossier extractions : %s", PRODUCTION_EXTRACTS_DIR)
     log.info("Rétention : %s jours", PRODUCTION_EXTRACTS_RETENTION_DAYS)
+    log.info("Concurrence : %s thread(s)", CONCURRENCY)
 
     PRODUCTION_EXTRACTS_DIR.mkdir(parents=True, exist_ok=True)
     _purge_old_extracts()
 
-    while True:
-        try:
-            job = _pop_next_pending_job()
-        except Exception as e:
-            log.error("erreur pop_next_pending_job: %s", e)
+    pool = ThreadPoolExecutor(
+        max_workers=CONCURRENCY, thread_name_prefix="prod-worker"
+    )
+    in_flight: set[Future] = set()
+
+    try:
+        while True:
+            # Nettoyer les futures terminées
+            in_flight = {f for f in in_flight if not f.done()}
+
+            # Remplir les slots libres tant qu'il y a des pending
+            while len(in_flight) < CONCURRENCY:
+                try:
+                    job = _pop_next_pending_job()
+                except Exception as e:
+                    log.error("erreur pop_next_pending_job: %s", e)
+                    job = None
+                    break
+                if not job:
+                    break
+                fut = pool.submit(_run_job, job)
+                in_flight.add(fut)
+
             time.sleep(POLL_INTERVAL_S)
-            continue
-
-        if not job:
-            time.sleep(POLL_INTERVAL_S)
-            continue
-
-        id_job = job["id_job"]
-        log.info("▶ job %s : %s", id_job, job["titre"])
-
-        try:
-            import base64
-            import json
-            raw = (job["params_json"] or "").strip()
-            params = {}
-            if not raw:
-                raise ValueError("ParamsJSON vide (memo non stocke ou tronque)")
-            # Compat : d'abord base64 (format utilisé par l'API), sinon JSON brut
-            try:
-                decoded = base64.b64decode(raw).decode("utf-8")
-                params = json.loads(decoded)
-            except Exception:
-                params = json.loads(raw)
-            if not params.get("date_du") or not params.get("date_au"):
-                raise ValueError(
-                    f"ParamsJSON sans date_du/date_au : {list(params.keys())}"
-                )
-        except Exception as e:
-            _fail_job(id_job, f"ParamsJSON invalide : {e} | raw len={len(job.get('params_json') or '')}")
-            log.error("x job %s : ParamsJSON invalide : %s", id_job, e)
-            continue
-
-        try:
-            result = extract_job_to_parquet(
-                id_job=id_job,
-                id_salarie_user=job["id_salarie_user"],
-                params=params,
-                progress_cb=lambda p, m: _update_progress(id_job, p, m),
-            )
-            _complete_job(
-                id_job=id_job,
-                path_resultat=result["path"],
-                nb_lignes=result["nb_lignes"],
-                duree_s=result["duree_s"],
-            )
-            log.info(
-                "✔ job %s : %s lignes en %ss",
-                id_job, result["nb_lignes"], result["duree_s"],
-            )
-        except Exception as e:
-            tb = traceback.format_exc()
-            _fail_job(id_job, f"{e}\n\n{tb}")
-            log.error("✗ job %s : %s\n%s", id_job, e, tb)
+    finally:
+        log.info("Arrêt du pool — attente des jobs en cours...")
+        pool.shutdown(wait=True)
 
 
 if __name__ == "__main__":

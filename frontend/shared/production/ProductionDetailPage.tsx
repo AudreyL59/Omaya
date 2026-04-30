@@ -127,10 +127,16 @@ interface ProductionJob {
   statut: string
   nb_lignes: number
   duree_s: number
+  priority?: number
+  queue_position?: number
+  queue_total?: number
+  progression_pct?: number
+  progression_msg?: string
 }
 
 interface RepartPartenaireRow {
   partenaire: string
+  lib_partenaire: string
   couleur_hex: string
   brut: number
   temporaire: number
@@ -254,6 +260,39 @@ function consoGaz(car: number): string {
   if (car <= 6000) return 'B0'
   if (car <= 30000) return 'B1'
   return 'B2i'
+}
+
+// Parse un hex (#RGB ou #RRGGBB) en {r, g, b}. Renvoie null si invalide.
+function parseHex(hex: string): { r: number; g: number; b: number } | null {
+  if (!hex || !hex.startsWith('#') || (hex.length !== 7 && hex.length !== 4)) return null
+  const h = hex.length === 4
+    ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
+    : hex
+  return {
+    r: parseInt(h.slice(1, 3), 16),
+    g: parseInt(h.slice(3, 5), 16),
+    b: parseInt(h.slice(5, 7), 16),
+  }
+}
+
+// Fonce une couleur hex (#RRGGBB) en multipliant chaque canal par `factor`.
+// factor < 1 = plus foncé.
+function darkenHex(hex: string, factor = 0.5): string {
+  const c = parseHex(hex)
+  if (!c) return hex
+  const to2 = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0')
+  return `#${to2(c.r * factor)}${to2(c.g * factor)}${to2(c.b * factor)}`
+}
+
+// Choisit la couleur de texte (blanc ou dark) qui contraste le plus avec
+// la couleur de fond donnée. Formule standard de luminance relative.
+function contrastText(hex: string): string {
+  const c = parseHex(hex)
+  if (!c) return '#1f2937'
+  // Luminance perceptuelle (formule WCAG simplifiée).
+  const lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255
+  return lum > 0.6 ? '#1f2937' : '#ffffff'
 }
 
 function BoolBadge({ v }: { v: boolean }) {
@@ -396,18 +435,19 @@ const COLUMNS: ColDef[] = [
     onlyIfPartenaire: ['SFR', 'OEN'],
     render: (r) => <span className="tabular-nums">{shortDate(r.sfr_date_racc_activ)}</span> },
   { key: 'lib_type_etat', label: 'Type Etat', render: (r) => r.lib_type_etat },
-  { key: 'lib_etat_vend', label: 'Etat contrat', render: (r) => (
-    r.lib_etat_vend ? (
+  { key: 'lib_etat_vend', label: 'Etat contrat', render: (r) => {
+    if (!r.lib_etat_vend) return ''
+    const bg = r.couleur_etat || '#6b7280'
+    return (
       <span
-        className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+        className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold"
         style={{
-          color: r.couleur_etat || '#6b7280',
-          backgroundColor: `${r.couleur_etat}15`,
-          border: `1px solid ${r.couleur_etat}40`,
+          color: contrastText(bg),
+          backgroundColor: bg,
         }}
       >{r.lib_etat_vend}</span>
-    ) : ''
-  )},
+    )
+  }},
   { key: 'lib_type_etat_ope', label: 'Type Etat Opérateur',
     onlyIfPartenaire: ['SFR', 'OEN'], onlyIfDroit: 'ProdRezo',
     render: (r) => r.lib_type_etat_ope },
@@ -567,6 +607,17 @@ export default function ProductionDetailPage({ apiBase, listBase = '/production'
     return new Set(stats.repart_partenaires.map((r) => r.partenaire))
   }, [stats])
 
+  // PréfixeBDD → Lib_Partenaire (ex: "OEN" → "Ohm Energie"). Construit
+  // depuis repart_partenaires (chargé depuis la table Partenaire côté worker).
+  const libsMap = useMemo(() => {
+    const m: Record<string, string> = {}
+    if (!stats) return m
+    for (const r of stats.repart_partenaires) {
+      m[r.partenaire] = r.lib_partenaire || r.partenaire
+    }
+    return m
+  }, [stats])
+
   return (
     <div className="p-6">
       <motion.div
@@ -631,9 +682,9 @@ export default function ProductionDetailPage({ apiBase, listBase = '/production'
 
       <div className="mt-5">
         {tab === 'contrats' && (
-          <ContratsTable apiBase={apiBase} idJob={idJob!} partenairesPresents={partenairesPresents} />
+          <ContratsTable apiBase={apiBase} idJob={idJob!} partenairesPresents={partenairesPresents} libsMap={libsMap} />
         )}
-        {tab === 'analyse' && <AnalyseDashboard stats={stats} partenairesPresents={partenairesPresents} />}
+        {tab === 'analyse' && <AnalyseDashboard stats={stats} partenairesPresents={partenairesPresents} libsMap={libsMap} />}
         {tab === 'repart' && <RepartTable stats={stats} />}
         {tab === 'vendeurs' && <VendeursTable stats={stats} />}
       </div>
@@ -665,10 +716,12 @@ function ContratsTable({
   apiBase,
   idJob,
   partenairesPresents,
+  libsMap,
 }: {
   apiBase: string
   idJob: string
   partenairesPresents: Set<string>
+  libsMap: Record<string, string>
 }) {
   const user = getStoredUser()
   const droits = new Set(user?.droits || [])
@@ -683,6 +736,83 @@ function ContratsTable({
   const [clientFilter, setClientFilter] = useState('')
   const [numBsFilter, setNumBsFilter] = useState('')
   const [typeProdFilter, setTypeProdFilter] = useState('')
+  // Filtres par colonne (saisis dans l'entête du tableau).
+  const [colFilters, setColFilters] = useState<Record<string, string>>({})
+  const setColFilter = (key: string, val: string) => {
+    setPage(1)
+    setColFilters((prev) => {
+      const next = { ...prev }
+      if (val) next[key] = val
+      else delete next[key]
+      return next
+    })
+  }
+  const clearColFilters = () => setColFilters({})
+  // Sélection multi-lignes : on garde la row complète (utile pour les actions
+  // côté client comme "Copier NumBS"). La sélection persiste à travers les
+  // pages et les changements de tri.
+  const [selected, setSelected] = useState<Map<string, ContratRow>>(new Map())
+
+  const rowKey = (r: ContratRow) => `${r.partenaire}-${r.id_contrat}`
+
+  const toggleRow = (r: ContratRow) => {
+    const key = rowKey(r)
+    setSelected((prev) => {
+      const next = new Map(prev)
+      if (next.has(key)) next.delete(key)
+      else next.set(key, r)
+      return next
+    })
+  }
+  const toggleAllVisible = () => {
+    if (!data) return
+    const allSelected = data.rows.every((r) => selected.has(rowKey(r)))
+    setSelected((prev) => {
+      const next = new Map(prev)
+      if (allSelected) {
+        data.rows.forEach((r) => next.delete(rowKey(r)))
+      } else {
+        data.rows.forEach((r) => next.set(rowKey(r), r))
+      }
+      return next
+    })
+  }
+  const clearSelection = () => setSelected(new Map())
+
+  const exportSelectionCsv = async () => {
+    const items = Array.from(selected.values()).map((r) => ({
+      partenaire: r.partenaire,
+      id_contrat: r.id_contrat,
+    }))
+    const resp = await fetch(`${apiBase}/production/jobs/${idJob}/export-selection.csv`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ items }),
+    })
+    if (!resp.ok) return
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `production-job-${idJob}-selection.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const copySelectionNumBs = async () => {
+    const numbs = Array.from(selected.values())
+      .map((r) => r.num_bs)
+      .filter(Boolean)
+    if (numbs.length === 0) return
+    try {
+      await navigator.clipboard.writeText(numbs.join('\n'))
+    } catch (_e) {
+      // fallback silencieux
+    }
+  }
 
   // En mode "Totalité", on demande toutes les lignes d'un coup (capé à 1M)
   const effectivePageSize = showAll ? 1_000_000 : pageSize
@@ -700,6 +830,9 @@ function ContratsTable({
     if (clientFilter) params.set('client', clientFilter)
     if (numBsFilter) params.set('num_bs', numBsFilter)
     if (typeProdFilter) params.set('type_prod', typeProdFilter)
+    if (Object.keys(colFilters).length > 0) {
+      params.set('f', JSON.stringify(colFilters))
+    }
     fetch(`${apiBase}/production/jobs/${idJob}/contrats?${params}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
@@ -707,7 +840,7 @@ function ContratsTable({
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [idJob, effectivePage, effectivePageSize, sort, partenaireFilter, vendeurFilter, clientFilter, numBsFilter, typeProdFilter])
+  }, [idJob, effectivePage, effectivePageSize, sort, partenaireFilter, vendeurFilter, clientFilter, numBsFilter, typeProdFilter, colFilters])
 
   const totalPages = useMemo(() => {
     if (!data || showAll) return 1
@@ -719,7 +852,9 @@ function ContratsTable({
     [partenairesPresents],
   )
 
-  // Colonnes visibles : selon partenaires présents + droits user
+  // Colonnes visibles : selon partenaires présents + droits user.
+  // Le rendu de la colonne "partenaire" utilise libsMap pour afficher
+  // le libellé complet (ex: "OEN" → "Ohm Energie") au lieu du préfixe.
   const visibleColumns = useMemo(
     () => COLUMNS.filter((c) => {
       if (c.onlyIfPartenaire && c.onlyIfPartenaire.length > 0) {
@@ -728,8 +863,20 @@ function ContratsTable({
       }
       if (c.onlyIfDroit && !droits.has(c.onlyIfDroit)) return false
       return true
+    }).map((c) => {
+      if (c.key === 'partenaire') {
+        return {
+          ...c,
+          render: (r: ContratRow) => (
+            <span className="font-semibold text-c-ink">
+              {libsMap[r.partenaire] || r.partenaire}
+            </span>
+          ),
+        }
+      }
+      return c
     }),
-    [partenairesPresents, droits],
+    [partenairesPresents, droits, libsMap],
   )
 
   const toggleSort = (col: string) => {
@@ -791,7 +938,28 @@ function ContratsTable({
             className="pl-9 pr-3 py-1.5 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-c-line-strong w-36"
           />
         </div>
-        <div className="text-xs text-c-ink-faint ml-auto">
+        {selected.size > 0 && (
+          <div className="flex items-center gap-2 ml-auto text-xs">
+            <span className="text-c-ink-soft font-medium">
+              {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={copySelectionNumBs}
+              className="px-2 py-1 rounded-md bg-c-surface-medium text-c-ink hover:bg-c-line-soft transition-colors"
+              title="Copie les NumBS dans le presse-papier (un par ligne)"
+            >Copier NumBS</button>
+            <button
+              onClick={exportSelectionCsv}
+              className="px-2 py-1 rounded-md bg-c-brand text-white hover:opacity-90 transition-opacity"
+              title="Télécharge un CSV avec uniquement les lignes sélectionnées"
+            >Exporter sélection</button>
+            <button
+              onClick={clearSelection}
+              className="text-c-ink-faint hover:text-c-ink underline"
+            >Désélectionner</button>
+          </div>
+        )}
+        <div className={`text-xs text-c-ink-faint ${selected.size > 0 ? '' : 'ml-auto'}`}>
           {visibleColumns.length} colonnes
         </div>
       </div>
@@ -801,6 +969,23 @@ function ContratsTable({
           <table className="text-sm" style={{ minWidth: '100%' }}>
             <thead className="bg-c-surface-soft text-xs text-c-ink-faint uppercase tracking-wide sticky top-0 z-10 shadow-[inset_0_-1px_0_rgb(229_231_235)]">
               <tr>
+                <th className="px-3 py-2.5 bg-c-surface-soft text-center select-none">
+                  <input
+                    type="checkbox"
+                    aria-label="Tout (dé)sélectionner"
+                    className="w-4 h-4 cursor-pointer accent-c-brand"
+                    checked={!!data && data.rows.length > 0
+                      && data.rows.every((r) => selected.has(rowKey(r)))}
+                    ref={(el) => {
+                      if (!el || !data) return
+                      const some = data.rows.some((r) => selected.has(rowKey(r)))
+                      const all = data.rows.length > 0
+                        && data.rows.every((r) => selected.has(rowKey(r)))
+                      el.indeterminate = some && !all
+                    }}
+                    onChange={toggleAllVisible}
+                  />
+                </th>
                 {visibleColumns.map((c) => (
                   <th
                     key={c.key}
@@ -818,36 +1003,77 @@ function ContratsTable({
                   </th>
                 ))}
               </tr>
+              {/* Ligne de filtres par colonne — clic sur l'input ne trigger pas le sort */}
+              <tr>
+                <th className="px-3 py-1 bg-c-surface-soft text-center">
+                  {Object.keys(colFilters).length > 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); clearColFilters() }}
+                      className="text-[10px] text-c-ink-faint hover:text-c-ink underline"
+                      title="Effacer tous les filtres de colonne"
+                    >Reset</button>
+                  )}
+                </th>
+                {visibleColumns.map((c) => (
+                  <th
+                    key={`${c.key}-filter`}
+                    className="px-2 py-1 bg-c-surface-soft font-normal normal-case"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="text"
+                      placeholder="Filtrer…"
+                      value={colFilters[c.key] || ''}
+                      onChange={(e) => setColFilter(c.key, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full min-w-[70px] px-1.5 py-0.5 text-xs bg-white border border-c-line rounded focus:outline-none focus:ring-1 focus:ring-c-line-strong text-c-ink"
+                    />
+                  </th>
+                ))}
+              </tr>
             </thead>
             <tbody className="divide-y divide-c-line-soft">
               {loading ? (
                 <tr>
-                  <td colSpan={visibleColumns.length} className="text-center py-12">
+                  <td colSpan={visibleColumns.length + 1} className="text-center py-12">
                     <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : !data || data.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={visibleColumns.length} className="text-center py-12 text-c-ink-faint-2">
+                  <td colSpan={visibleColumns.length + 1} className="text-center py-12 text-c-ink-faint-2">
                     Aucun contrat
                   </td>
                 </tr>
               ) : (
-                data.rows.map((r, idx) => (
-                  <tr
-                    key={`${r.partenaire}-${r.id_contrat}-${idx}`}
-                    className="hover:bg-c-surface-soft"
-                  >
-                    {visibleColumns.map((c) => (
-                      <td
-                        key={c.key}
-                        className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2 text-c-ink-soft whitespace-nowrap`}
-                      >
-                        {c.render(r)}
+                data.rows.map((r, idx) => {
+                  const k = rowKey(r)
+                  const isSelected = selected.has(k)
+                  return (
+                    <tr
+                      key={`${k}-${idx}`}
+                      className={`hover:bg-c-surface-soft ${isSelected ? 'bg-c-surface-medium' : ''}`}
+                    >
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label="Sélectionner la ligne"
+                          className="w-4 h-4 cursor-pointer accent-c-brand"
+                          checked={isSelected}
+                          onChange={() => toggleRow(r)}
+                        />
                       </td>
-                    ))}
-                  </tr>
-                ))
+                      {visibleColumns.map((c) => (
+                        <td
+                          key={c.key}
+                          className={`${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'} px-3 py-2 text-c-ink-soft whitespace-nowrap`}
+                        >
+                          {c.render(r)}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -973,7 +1199,7 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
                 <td className="px-4 py-2 font-medium text-c-ink flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: r.couleur_hex || '#9ca3af' }} />
-                  {r.partenaire}
+                  {r.lib_partenaire || r.partenaire}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums font-semibold text-c-ink">{num(r.brut)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-c-ink-muted">{num(r.temporaire)}</td>
@@ -1129,17 +1355,31 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
 // --- Onglet Analyse (dashboards SFR / OEN / ENI) -----------------
 
 function AnalyseDashboard({
-  stats, partenairesPresents,
+  stats, partenairesPresents, libsMap,
 }: {
   stats: JobStats | null
   partenairesPresents: Set<string>
+  libsMap: Record<string, string>
 }) {
   // Détermine les sous-onglets disponibles selon les partenaires présents
   const hasSFR = partenairesPresents.has('SFR')
   const hasOEN = partenairesPresents.has('OEN')
   const hasENI = partenairesPresents.has('ENI')
-  const defaultSub = hasSFR ? 'sfr' : hasOEN ? 'oen' : hasENI ? 'eni' : 'sfr'
-  const [sub, setSub] = useState<'sfr' | 'oen' | 'eni'>(defaultSub)
+  const hasVAL = partenairesPresents.has('VAL')
+  const hasTLC = partenairesPresents.has('TLC')
+  const hasIAG = partenairesPresents.has('IAG')
+  const hasPRO = partenairesPresents.has('PRO')
+  const hasSTR = partenairesPresents.has('STR')
+  const defaultSub: SubTab = hasSFR ? 'sfr'
+    : hasOEN ? 'oen'
+    : hasENI ? 'eni'
+    : hasVAL ? 'val'
+    : hasTLC ? 'tlc'
+    : hasIAG ? 'iag'
+    : hasPRO ? 'pro'
+    : hasSTR ? 'str'
+    : 'sfr'
+  const [sub, setSub] = useState<SubTab>(defaultSub)
 
   useEffect(() => { setSub(defaultSub) }, [defaultSub])
 
@@ -1151,47 +1391,73 @@ function AnalyseDashboard({
     )
   }
 
-  if (!hasSFR && !hasOEN && !hasENI) {
+  const noDashboard = !hasSFR && !hasOEN && !hasENI && !hasVAL && !hasTLC && !hasIAG && !hasPRO && !hasSTR
+  if (noDashboard) {
     return (
       <div className="text-center py-16 text-c-ink-faint-2 text-sm border border-dashed border-c-line-strong rounded-xl">
-        Aucune donnée d'analyse. Les dashboards sont disponibles pour SFR, OEN et ENI.
+        Aucune donnée d'analyse pour les partenaires sélectionnés.
       </div>
     )
   }
 
+  const tabBtn = (key: SubTab, label: string) => (
+    <button
+      onClick={() => setSub(key)}
+      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+        sub === key ? 'bg-white text-c-ink shadow-sm' : 'text-c-ink-faint'
+      }`}
+    >{label}</button>
+  )
+
   return (
     <>
       <div className="flex items-center gap-1 mb-4 bg-c-surface-medium rounded-lg p-0.5 w-fit">
-        {hasSFR && (
-          <button
-            onClick={() => setSub('sfr')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              sub === 'sfr' ? 'bg-white text-c-ink shadow-sm' : 'text-c-ink-faint'
-            }`}
-          >Analyse SFR</button>
-        )}
-        {hasOEN && (
-          <button
-            onClick={() => setSub('oen')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              sub === 'oen' ? 'bg-white text-c-ink shadow-sm' : 'text-c-ink-faint'
-            }`}
-          >Analyse Ohm Energie</button>
-        )}
-        {hasENI && (
-          <button
-            onClick={() => setSub('eni')}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              sub === 'eni' ? 'bg-white text-c-ink shadow-sm' : 'text-c-ink-faint'
-            }`}
-          >Analyse ENI</button>
-        )}
+        {hasSFR && tabBtn('sfr', `Analyse ${libsMap['SFR'] || 'SFR'}`)}
+        {hasOEN && tabBtn('oen', `Analyse ${libsMap['OEN'] || 'OEN'}`)}
+        {hasENI && tabBtn('eni', `Analyse ${libsMap['ENI'] || 'ENI'}`)}
+        {hasVAL && tabBtn('val', `Analyse ${libsMap['VAL'] || 'VAL'}`)}
+        {hasTLC && tabBtn('tlc', `Analyse ${libsMap['TLC'] || 'TLC'}`)}
+        {hasIAG && tabBtn('iag', `Analyse ${libsMap['IAG'] || 'IAG'}`)}
+        {hasPRO && tabBtn('pro', `Analyse ${libsMap['PRO'] || 'PRO'}`)}
+        {hasSTR && tabBtn('str', `Analyse ${libsMap['STR'] || 'STR'}`)}
       </div>
 
       {sub === 'sfr' && hasSFR && <DashboardSFR d={stats.dashboard_sfr} />}
       {sub === 'oen' && hasOEN && <DashboardOEN d={stats.dashboard_oen} />}
       {sub === 'eni' && hasENI && <DashboardENI d={stats.dashboard_eni} />}
+      {sub === 'val' && hasVAL && <DashboardSimple d={(stats as any).dashboard_val} label={libsMap['VAL'] || 'VAL'} />}
+      {sub === 'tlc' && hasTLC && <DashboardSimple d={(stats as any).dashboard_tlc} label={libsMap['TLC'] || 'TLC'} />}
+      {sub === 'iag' && hasIAG && <DashboardSimple d={(stats as any).dashboard_iag} label={libsMap['IAG'] || 'IAG'} />}
+      {sub === 'pro' && hasPRO && <DashboardSimple d={(stats as any).dashboard_pro} label={libsMap['PRO'] || 'PRO'} />}
+      {sub === 'str' && hasSTR && <DashboardSimple d={(stats as any).dashboard_str} label={libsMap['STR'] || 'STR'} />}
     </>
+  )
+}
+
+type SubTab = 'sfr' | 'oen' | 'eni' | 'val' | 'tlc' | 'iag' | 'pro' | 'str'
+
+function DashboardSimple({ d, label }: { d: any; label: string }) {
+  const n = (k: string) => Number((d ?? {})[k] ?? 0)
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
+        <Kpi label="Nb Ctt Brut" value={n('nb_ctt')} />
+        <Kpi label="Nb Ctt Hors anomalie" value={n('nb_hors_anomalie')} />
+      </div>
+
+      <DashboardSection title={`Ratios clés ${label}`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Kpi label="% Valide" value={n('tx_valide')} suffix="%" tint="dual"
+            sub={`${n('nb_valide')} / ${n('nb_hors_anomalie')}`} />
+          <Kpi label="% Anomalie" value={n('tx_anomalie')} suffix="%" tint="resil"
+            sub={`${n('nb_anomalie')} / ${n('nb_ctt')}`} />
+          <Kpi label="% Résil" value={n('tx_resil')} suffix="%" tint="resil"
+            sub={`${n('nb_resil')} / ${n('nb_hors_anomalie')}`} />
+          <Kpi label="% Attente" value={n('tx_attente')} suffix="%"
+            sub={`${n('nb_attente')} / ${n('nb_ctt')}`} />
+        </div>
+      </DashboardSection>
+    </div>
   )
 }
 

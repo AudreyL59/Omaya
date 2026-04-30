@@ -29,6 +29,9 @@ interface ProductionJob {
   path_resultat: string
   message_erreur: string
   titre: string
+  priority?: number
+  queue_position?: number
+  queue_total?: number
 }
 
 function formatDateHeure(raw: string): string {
@@ -60,13 +63,26 @@ function StatusBadge({ job }: { job: ProductionJob }) {
   const base =
     'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium'
   switch (job.statut) {
-    case 'pending':
+    case 'pending': {
+      const pos = job.queue_position || 0
+      const tot = job.queue_total || 0
+      const isPriority = (job.priority || 0) >= 1
+      const label = pos > 0
+        ? `En file d'attente · ${pos} / ${tot}`
+        : "En file d'attente"
       return (
-        <span className={`${base} bg-c-surface-medium text-c-ink-muted`}>
+        <span
+          className={`${base} ${isPriority
+            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+            : 'bg-c-surface-medium text-c-ink-muted'}`}
+          title={isPriority ? 'Canal prioritaire (ProdRezo)' : undefined}
+        >
           <Clock className="w-3 h-3" />
-          En attente
+          {label}
+          {isPriority && <span className="ml-1 font-bold">⚡</span>}
         </span>
       )
+    }
     case 'running':
       return (
         <span className={`${base} bg-amber-50 text-amber-700 border border-amber-200`}>

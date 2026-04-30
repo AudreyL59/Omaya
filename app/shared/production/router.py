@@ -16,6 +16,7 @@ import io
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -28,6 +29,7 @@ from app.shared.production.schemas import (
     TypeEtatItem,
 )
 from app.shared.production.service import (
+    QuotaExceeded,
     create_job,
     delete_job,
     get_job,
@@ -97,12 +99,24 @@ def post_job(
     if data.date_du > data.date_au:
         raise HTTPException(status_code=400, detail="Date Du > Date Au")
 
-    id_job = create_job(
-        id_salarie_user=user.id_salarie,
-        params=data.model_dump(),
-        user_nom=user.nom,
-        user_prenom=user.prenom,
-    )
+    try:
+        id_job = create_job(
+            id_salarie_user=user.id_salarie,
+            params=data.model_dump(),
+            user_nom=user.nom,
+            user_prenom=user.prenom,
+            droits=user.droits,
+            is_resp=user.is_resp,
+        )
+    except QuotaExceeded as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Quota d'extractions dépassé : {exc.current} / {exc.quota} "
+                "jobs actifs (en file ou en cours). "
+                "Attends qu'un de tes jobs se termine ou supprime-en un."
+            ),
+        )
     return {"id_job": id_job}
 
 
@@ -144,9 +158,18 @@ def get_contrats(
     client: str = Query(""),
     num_bs: str = Query(""),
     type_prod: str = Query(""),
+    f: str = Query("", description="Filtres par colonne, JSON: {\"col\": \"val\"}"),
     user: UserToken = Depends(get_current_user),
 ):
-    """Lecture paginée du tableau contrats (depuis le Parquet)."""
+    """Lecture paginée du tableau contrats (depuis le Parquet).
+
+    Filtres :
+      - les params nommés (partenaire, vendeur, client, num_bs, type_prod)
+        couvrent les recherches "globales" rapides ;
+      - `f` permet de filtrer sur n'importe quelle colonne via JSON
+        (les filtres de colonnes du tableau).
+    Les deux sources sont fusionnées (les filtres de `f` priment).
+    """
     job = get_job(id_job, user.id_salarie)
     if not job:
         raise HTTPException(status_code=404, detail="Job introuvable")
@@ -159,7 +182,7 @@ def get_contrats(
     if not path:
         raise HTTPException(status_code=404, detail="Fichier résultat introuvable")
 
-    filters = {
+    filters: dict = {
         "partenaire": partenaire,
         # Pour vendeur/client on filtre sur le nom uniquement (recherche "contient")
         "vendeur_nom": vendeur,
@@ -167,8 +190,20 @@ def get_contrats(
         "num_bs": num_bs,
         "type_prod": type_prod,
     }
+    if f:
+        try:
+            import json as _json
+            extra = _json.loads(f)
+            if isinstance(extra, dict):
+                for k, v in extra.items():
+                    if v not in (None, ""):
+                        filters[str(k)] = v
+        except Exception:
+            # Si JSON invalide on ignore plutôt que renvoyer une 500
+            pass
+
     # Nettoyer les filtres vides
-    filters = {k: v for k, v in filters.items() if v}
+    filters = {k: v for k, v in filters.items() if v not in (None, "")}
     return read_contrats_page(
         path, page=page, page_size=page_size, sort=sort, filters=filters,
         droits=user.droits,
@@ -223,6 +258,63 @@ def get_export_csv(
         yield buf.getvalue().encode("utf-8")
 
     filename = f"production-job-{id_job}.csv"
+    return StreamingResponse(
+        gen(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+class SelectionExportItem(BaseModel):
+    partenaire: str
+    id_contrat: str
+
+
+class SelectionExportRequest(BaseModel):
+    items: list[SelectionExportItem]
+
+
+@router.post("/jobs/{id_job}/export-selection.csv")
+def post_export_selection_csv(
+    id_job: int,
+    body: SelectionExportRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    """Export CSV des contrats explicitement sélectionnés (multi-lignes)."""
+    job = get_job(id_job, user.id_salarie)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job introuvable")
+    if job["statut"] != "done":
+        raise HTTPException(status_code=409, detail="Job non terminé")
+    path = job["path_resultat"]
+    if not path:
+        raise HTTPException(status_code=404, detail="Fichier résultat introuvable")
+    if not body.items:
+        raise HTTPException(status_code=400, detail="Aucune ligne sélectionnée")
+
+    # Set des clés à conserver : (partenaire, id_contrat)
+    wanted: set[tuple[str, str]] = {
+        (it.partenaire, str(it.id_contrat)) for it in body.items
+    }
+
+    data = read_contrats_page(
+        path, page=1, page_size=1_000_000, droits=user.droits,
+    )
+    rows = [
+        r for r in data["rows"]
+        if (r.get("partenaire", ""), str(r.get("id_contrat", ""))) in wanted
+    ]
+
+    def gen():
+        buf = io.StringIO()
+        buf.write("﻿")  # BOM UTF-8 pour Excel FR
+        writer = csv.writer(buf, delimiter=";")
+        writer.writerow([lbl for _, lbl in EXPORT_COLUMNS])
+        for r in rows:
+            writer.writerow([csv_value(r, k) for k, _ in EXPORT_COLUMNS])
+        yield buf.getvalue().encode("utf-8")
+
+    filename = f"production-job-{id_job}-selection.csv"
     return StreamingResponse(
         gen(),
         media_type="text/csv; charset=utf-8",
