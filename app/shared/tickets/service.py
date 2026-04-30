@@ -226,17 +226,21 @@ def list_tickets_par_type(
         date_au = "30610101000000000"
 
     db = get_connection("ticket")
+    # NOTE : le bridge HFSQL ne supporte pas les colonnes accentuées entre
+    # guillemets ni les alias avec accent. On utilise donc Cloturée
+    # (sans quotes) dans le SELECT/WHERE et on lit la colonne via
+    # r.get("Cloturée") côté Python.
     rows = db.query(
         f"""SELECT TOP {int(limit)}
             IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
             IDTK_TypeDemande, IDTK_Statut, DateReport,
-            "Cloturée" AS Cloturee, DateCloture,
+            Cloturée, DateCloture,
             ModifDate, modification,
             OpTraitementStaff
         FROM TK_Liste
         WHERE IDTK_TypeDemande = ?
           AND ModifELEM NOT LIKE '%suppr%'
-          AND "Cloturée" = ?
+          AND Cloturée = ?
           AND DATECREA BETWEEN ? AND ?
           AND IDTK_Statut <> 28
         ORDER BY IDTK_Statut ASC, DATECREA DESC""",
@@ -253,7 +257,7 @@ def list_tickets_par_type(
             "op_crea": _str_id(r.get("OPCREA")),
             "op_dest": _str_id(r.get("OPDEST")),
             "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
-            "cloturee": bool(r.get("Cloturee")),
+            "cloturee": bool(r.get("Cloturée")),
             "date_cloture": _windev_to_iso(r.get("DateCloture")),
             "date_report": _windev_to_iso(r.get("DateReport")),
             "modif_date": _windev_to_iso(r.get("ModifDate")),
@@ -282,7 +286,7 @@ def list_tickets_modified_since(
         f"""SELECT TOP 200
             IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
             IDTK_TypeDemande, IDTK_Statut, DateReport,
-            "Cloturée" AS Cloturee, DateCloture,
+            Cloturée, DateCloture,
             ModifDate, modification,
             OpTraitementStaff
         FROM TK_Liste
@@ -301,7 +305,7 @@ def list_tickets_modified_since(
             "op_crea": _str_id(r.get("OPCREA")),
             "op_dest": _str_id(r.get("OPDEST")),
             "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
-            "cloturee": bool(r.get("Cloturee")),
+            "cloturee": bool(r.get("Cloturée")),
             "date_cloture": _windev_to_iso(r.get("DateCloture")),
             "date_report": _windev_to_iso(r.get("DateReport")),
             "modif_date": _windev_to_iso(r.get("ModifDate")),
