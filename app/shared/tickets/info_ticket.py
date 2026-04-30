@@ -208,16 +208,282 @@ def _info_via_id_salarie(
     return out
 
 
+def _info_avance(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 10 — TK_DemandeAvance.Bénéficiaire + Montant."""
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, Bénéficiaire, Montant
+            FROM TK_DemandeAvance
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    ticket_to: dict[int, tuple[int, int]] = {}
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        ids = _clean_id(_to_int(r.get("Bénéficiaire")))
+        montant = _to_int(r.get("Montant"))
+        if idl and ids:
+            ticket_to[idl] = (ids, montant)
+    if not ticket_to:
+        return {}
+    sals = load_salaries_minimal({ids for ids, _ in ticket_to.values()})
+    out: dict[int, str] = {}
+    for idl, (ids, mt) in ticket_to.items():
+        s = sals.get(ids)
+        if not s:
+            continue
+        out[idl] = f"pour {s['nom']} {_capit(s['prenom'])} ({mt} €)"
+    return out
+
+
+def _info_attr_exocash(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 25 — Tk_DemandeAttExoCash.IDSalarie + MontantEC."""
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, IDSalarie, MontantEC
+            FROM Tk_DemandeAttExoCash
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    ticket_to: dict[int, tuple[int, int]] = {}
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        ids = _clean_id(_to_int(r.get("IDSalarie")))
+        mt = _to_int(r.get("MontantEC"))
+        if idl and ids:
+            ticket_to[idl] = (ids, mt)
+    sals = load_salaries_minimal({ids for ids, _ in ticket_to.values()})
+    out: dict[int, str] = {}
+    for idl, (ids, mt) in ticket_to.items():
+        s = sals.get(ids)
+        if not s:
+            continue
+        out[idl] = f"pour {s['nom']} {_capit(s['prenom'])} ({mt} EC)"
+    return out
+
+
+def _info_sos_bo(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 11 — TK_DemandeSOS_BO.Bénéficiaire + TK_TypeSOS_BO.Lib_TypeSos.
+
+    Format : "{Lib_TypeSos} pour NOM Prenom".
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    # 1. Demandes
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, Bénéficiaire, IDTK_TypeSOS_BO
+            FROM TK_DemandeSOS_BO
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    ticket_to: dict[int, tuple[int, int]] = {}
+    type_ids: set[int] = set()
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        ben = _clean_id(_to_int(r.get("Bénéficiaire")))
+        idtype = _clean_id(_to_int(r.get("IDTK_TypeSOS_BO")))
+        if idl:
+            ticket_to[idl] = (ben, idtype)
+            type_ids.add(idtype)
+    # 2. Types SOS BO
+    type_libs: dict[int, str] = {}
+    if type_ids:
+        try:
+            ids_t = ",".join(str(i) for i in type_ids if i)
+            if ids_t:
+                trows = db.query(
+                    f"""SELECT IDTK_TypeSOS_BO, Lib_TypeSos
+                    FROM TK_TypeSOS_BO
+                    WHERE IDTK_TypeSOS_BO IN ({ids_t})"""
+                )
+                for t in trows:
+                    type_libs[_clean_id(_to_int(t.get("IDTK_TypeSOS_BO")))] = (
+                        t.get("Lib_TypeSos") or ""
+                    ).strip()
+        except Exception:
+            pass
+    # 3. Salaries
+    sals = load_salaries_minimal({ben for ben, _ in ticket_to.values() if ben})
+    out: dict[int, str] = {}
+    for idl, (ben, idtype) in ticket_to.items():
+        lib = type_libs.get(idtype, "")
+        s = sals.get(ben, {}) if ben else {}
+        parts: list[str] = []
+        if lib:
+            parts.append(lib)
+        if s:
+            parts.append(f"pour {s['nom']} {_capit(s['prenom'])}")
+        if parts:
+            out[idl] = " ".join(parts)
+    return out
+
+
+def _info_dpae_distrib(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 29 — TK_DemandeDPAE_Distrib.Nom + Prenom."""
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, Nom, Prenom
+            FROM TK_DemandeDPAE_Distrib
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    out: dict[int, str] = {}
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        nom = (r.get("Nom") or "").strip()
+        prenom = (r.get("Prenom") or "").strip()
+        if idl and (nom or prenom):
+            out[idl] = f"pour {nom} {_capit(prenom)}".strip()
+    return out
+
+
+def _info_integration_distrib(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 30 — TK_DemandeDPAE_Distrib.Nom + Prenom + RaisonSociale."""
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, Nom, Prenom, RaisonSociale
+            FROM TK_DemandeDPAE_Distrib
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    out: dict[int, str] = {}
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        nom = (r.get("Nom") or "").strip()
+        prenom = (r.get("Prenom") or "").strip()
+        rs = (r.get("RaisonSociale") or "").strip()
+        if not idl:
+            continue
+        parts: list[str] = []
+        if nom or prenom:
+            parts.append(f"pour {nom} {_capit(prenom)}".strip())
+        if rs:
+            parts.append(f"Ste {rs}")
+        if parts:
+            out[idl] = ", ".join(parts)
+    return out
+
+
+def _info_facturation(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 33 — TK_DemandeFacturation.LibFacture + Montant."""
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, LibFacture, Montant
+            FROM TK_DemandeFacturation
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    out: dict[int, str] = {}
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        lib = (r.get("LibFacture") or "").strip()
+        mt = _to_int(r.get("Montant"))
+        if idl and (lib or mt):
+            parts: list[str] = []
+            if lib:
+                parts.append(lib)
+            parts.append(f"{mt} €")
+            out[idl] = ", ".join(parts)
+    return out
+
+
+def _info_carte_pro(id_tickets: list[int]) -> dict[int, str]:
+    """Cas 2 — TK_DemandeCartePRO (potentiellement plusieurs lignes par ticket).
+
+    Format : "Pour NOM1 Prenom1, NOM2 Prenom2..." (suspendu après 1 si plus).
+    """
+    if not id_tickets:
+        return {}
+    db = get_connection("ticket_bo")
+    ids_sql = _ids_in_clause(id_tickets)
+    if not ids_sql:
+        return {}
+    try:
+        rows = db.query(
+            f"""SELECT IDTK_Liste, NOM, PRENOM
+            FROM TK_DemandeCartePRO
+            WHERE IDTK_Liste IN ({ids_sql})"""
+        )
+    except Exception:
+        return {}
+    grouped: dict[int, list[tuple[str, str]]] = {}
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        if not idl:
+            continue
+        grouped.setdefault(idl, []).append(
+            ((r.get("NOM") or "").strip(), (r.get("PRENOM") or "").strip())
+        )
+    out: dict[int, str] = {}
+    for idl, names in grouped.items():
+        labels = [f"{n} {_capit(p)}".strip() for n, p in names if n or p]
+        if not labels:
+            continue
+        if len(labels) > 1:
+            out[idl] = f"Pour {labels[0]}, ..."
+        else:
+            out[idl] = f"Pour {labels[0]}"
+    return out
+
+
 # ---------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------
 
 # Cas avec implémentation directe (ne va PAS via _info_via_id_salarie)
 _DIRECT_CASES = {
-    3: _info_dpae,
+    3:  _info_dpae,
     21: _info_dpae,
     20: _info_call_sfr,
     22: _info_call_energie,
+    10: _info_avance,
+    25: _info_attr_exocash,
+    11: _info_sos_bo,
+    29: _info_dpae_distrib,
+    30: _info_integration_distrib,
+    33: _info_facturation,
+    2:  _info_carte_pro,
 }
 
 # Cas via id_salarie : (db_key, table, id_col, prefix)
