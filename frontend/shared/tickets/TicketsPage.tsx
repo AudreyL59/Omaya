@@ -246,8 +246,8 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
         )}
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 min-w-0 flex flex-col bg-white border border-c-line rounded-xl overflow-hidden">
+      {/* Main — pas d'overflow-hidden ici (sinon clipping de la popup filtres) */}
+      <main className="flex-1 min-w-0 flex flex-col bg-white border border-c-line rounded-xl">
         {/* Toolbar */}
         <header className="flex items-center justify-between px-4 py-3 border-b border-c-line bg-c-surface-soft relative">
           <h1 className="text-base font-semibold text-c-ink">
@@ -353,7 +353,7 @@ function FiltersPopup({
         className="fixed inset-0 z-30"
         onClick={onClose}
       />
-      <div className="absolute right-3 top-full mt-2 z-40 bg-white rounded-xl border border-c-line shadow-lg p-4 w-80">
+      <div className="absolute right-3 top-full mt-2 z-40 bg-white rounded-xl border border-c-line shadow-lg p-4 w-72">
         <div className="flex items-center gap-2 text-sm font-semibold text-c-ink mb-3">
           <Search className="w-4 h-4 text-c-brand" />
           Affichage Façon Trello
@@ -367,22 +367,20 @@ function FiltersPopup({
           />
           Afficher les tickets clôturés
         </label>
-        <div className="flex items-center gap-2 text-sm text-c-ink-soft">
-          <span className="shrink-0">créés entre le</span>
-          <input
-            type="date"
-            value={dateDu}
-            onChange={(e) => onChangeDateDu(e.target.value)}
-            className="px-2 py-1 border border-c-line-strong rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-c-brand-line"
-          />
-          <span className="shrink-0">et le</span>
-          <input
-            type="date"
-            value={dateAu}
-            onChange={(e) => onChangeDateAu(e.target.value)}
-            className="px-2 py-1 border border-c-line-strong rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-c-brand-line"
-          />
-        </div>
+        <div className="text-xs text-c-ink-soft mb-1">Créés entre le</div>
+        <input
+          type="date"
+          value={dateDu}
+          onChange={(e) => onChangeDateDu(e.target.value)}
+          className="w-full px-2 py-1 mb-2 border border-c-line-strong rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-c-brand-line"
+        />
+        <div className="text-xs text-c-ink-soft mb-1">et le</div>
+        <input
+          type="date"
+          value={dateAu}
+          onChange={(e) => onChangeDateAu(e.target.value)}
+          className="w-full px-2 py-1 border border-c-line-strong rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-c-brand-line"
+        />
         {(dateDu || dateAu || cloturee) && (
           <button
             onClick={() => {
