@@ -225,7 +225,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
                           <li key={t.id_type_demande}>
                             <button
                               onClick={() => setSelectedType(t)}
-                              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 border-b border-c-line-soft transition-colors text-c-ink ${
+                              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-3 transition-colors text-c-ink ${
                                 active
                                   ? 'bg-c-brand-soft'
                                   : 'hover:bg-c-surface-soft'
