@@ -4,6 +4,7 @@ import {
   Building2,
   Calendar,
   Car,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ClipboardList,
@@ -19,6 +20,7 @@ import {
   PhoneCall,
   Plane,
   Receipt,
+  Save,
   Scale,
   Search,
   ShoppingCart,
@@ -33,6 +35,7 @@ import type {
   TicketListResponse,
   TicketRow,
   TicketSidebarItem,
+  TicketStatut,
   TicketStreamPayload,
   TicketTypeDemande,
 } from './types'
@@ -111,6 +114,10 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
   const [filterCloturee, setFilterCloturee] = useState(false)
   const [filterDateDu, setFilterDateDu] = useState('')   // YYYY-MM-DD ou ''
   const [filterDateAu, setFilterDateAu] = useState('')   // YYYY-MM-DD ou ''
+  // Action "Statuer la sélection"
+  const [allStatuts, setAllStatuts] = useState<TicketStatut[]>([])
+  const [showStatuerPopup, setShowStatuerPopup] = useState(false)
+  const [reloadNonce, setReloadNonce] = useState(0)
   // Live update (SSE)
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
   const [modifiedIds, setModifiedIds] = useState<Set<string>>(new Set())
@@ -139,6 +146,16 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       })
       .catch(() => setSidebar([]))
       .finally(() => setLoadingSidebar(false))
+  }, [apiBase])
+
+  // Charge la liste complète des statuts (pour le combo "Statuer")
+  useEffect(() => {
+    fetch(`${apiBase}/tickets/statuts`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: TicketStatut[]) => setAllStatuts(Array.isArray(d) ? d : []))
+      .catch(() => setAllStatuts([]))
   }, [apiBase])
 
   const applyEvents = useCallback((evts: TicketStreamPayload['events']) => {
@@ -284,7 +301,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiBase, selectedType, filterCloturee, filterDateDu, filterDateAu])
+  }, [apiBase, selectedType, filterCloturee, filterDateDu, filterDateAu, reloadNonce])
 
   const toggleService = (svc: string) => {
     setOpenServices((prev) => {
@@ -331,6 +348,45 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       changed = true
     }
     return changed
+  }
+
+  // Action "Statuer la sélection" (cf. WinDev Fen_TicketChoixStatut)
+  const doStatuer = async (idStatut: number | null, cloturee: boolean) => {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    const libStatut = cloturee
+      ? 'Clôturer'
+      : allStatuts.find((s) => s.id_statut === idStatut)?.lib_statut || ''
+    if (
+      !window.confirm(
+        `Vous êtes sur le point de statuer la sélection en « ${libStatut} ».\nVoulez-vous continuer ?`,
+      )
+    )
+      return
+    try {
+      const resp = await fetch(`${apiBase}/tickets/statuer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          id_tickets: ids,
+          id_statut: cloturee ? null : idStatut,
+          cloturee,
+        }),
+      })
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => null)
+        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        return
+      }
+      setShowStatuerPopup(false)
+      setSelected(new Set())
+      setReloadNonce((n) => n + 1)
+    } catch {
+      window.alert('Erreur réseau lors du changement de statut.')
+    }
   }
 
   return (
@@ -485,13 +541,95 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
         {data && data.rows.length > 0 && (
           <footer className="px-4 py-2 border-t border-c-line bg-c-surface-soft text-xs text-c-ink-faint flex items-center justify-between">
             <span>{data.total} ticket{data.total > 1 ? 's' : ''}</span>
-            {selected.size > 0 && (
-              <span className="text-c-ink-soft">{selected.size} sélectionné{selected.size > 1 ? 's' : ''}</span>
-            )}
+            <div className="flex items-center gap-3">
+              {selected.size > 0 && (
+                <span className="text-c-ink-soft">
+                  {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
+                </span>
+              )}
+              <button
+                onClick={() => setShowStatuerPopup(true)}
+                disabled={selected.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-c-brand text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Statuer
+              </button>
+            </div>
           </footer>
+        )}
+
+        {showStatuerPopup && (
+          <StatuerPopup
+            statuts={allStatuts}
+            count={selected.size}
+            onValidate={doStatuer}
+            onClose={() => setShowStatuerPopup(false)}
+          />
         )}
       </main>
     </div>
+  )
+}
+
+function StatuerPopup({
+  statuts, count, onValidate, onClose,
+}: {
+  statuts: TicketStatut[]
+  count: number
+  onValidate: (idStatut: number | null, cloturee: boolean) => void
+  onClose: () => void
+}) {
+  const [statutId, setStatutId] = useState<number | ''>('')
+  const [cloturee, setCloturee] = useState(false)
+  const canValidate = cloturee || statutId !== ''
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-white rounded-2xl shadow-xl border border-c-line w-80 p-5">
+        <div className="flex items-center gap-2 text-base font-semibold text-c-ink mb-1">
+          <CheckCircle2 className="w-5 h-5 text-c-brand" />
+          Choisir un statut
+        </div>
+        <p className="text-xs text-c-ink-faint mb-4">
+          {count} ticket{count > 1 ? 's' : ''} sélectionné{count > 1 ? 's' : ''}
+        </p>
+        <select
+          value={statutId}
+          onChange={(e) =>
+            setStatutId(e.target.value === '' ? '' : Number(e.target.value))
+          }
+          disabled={cloturee}
+          className="w-full px-3 py-2 mb-3 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-c-brand-line disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <option value="">Statut…</option>
+          {statuts.map((s) => (
+            <option key={s.id_statut} value={s.id_statut}>
+              {s.lib_statut}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center justify-center gap-2 text-sm text-c-ink mb-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={cloturee}
+            onChange={(e) => setCloturee(e.target.checked)}
+            className="w-4 h-4 cursor-pointer accent-c-brand"
+          />
+          Clôturé
+        </label>
+        <button
+          onClick={() =>
+            onValidate(cloturee ? null : statutId === '' ? null : statutId, cloturee)
+          }
+          disabled={!canValidate}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          <Save className="w-4 h-4" />
+          Je valide ce statut
+        </button>
+      </div>
+    </>
   )
 }
 

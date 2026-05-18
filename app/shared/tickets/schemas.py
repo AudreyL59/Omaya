@@ -56,3 +56,20 @@ class TicketListResponse(BaseModel):
     rows: list[TicketRow] = []
     statuts: list[TicketStatut] = []   # ordonnée
     total: int = 0
+
+
+class StatuerRequest(BaseModel):
+    """Action de masse 'Statuer la sélection' (cf. Fen_TicketChoixStatut).
+
+    - cloturee=True  → clôture (Cloturée=1, DateCloture=now, ModifDate=now),
+                       id_statut ignoré (équivaut au cas WinDev idStatut=666).
+    - cloturee=False → changement de statut (IDTK_Statut=id_statut,
+                       ModifDate=now).
+    """
+    id_tickets: list[str]
+    id_statut: int | None = None
+    cloturee: bool = False
+
+
+class StatuerResponse(BaseModel):
+    updated: int

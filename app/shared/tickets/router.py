@@ -18,9 +18,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.core.auth.security import decode_access_token
+from app.core.database import get_connection
 
 from .info_ticket import donne_info_ticket_batch
 from .schemas import (
+    StatuerRequest,
+    StatuerResponse,
     TicketListResponse,
     TicketRow,
     TicketSidebarItem,
@@ -334,5 +337,51 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             if loop.time() >= deadline:
                 return {"events": [], "cursor": cursor}
             await asyncio.sleep(POLL_INTERVAL_S)
+
+    # -------------------------------------------------------------
+    # Action de masse : Statuer la sélection (Fen_TicketChoixStatut)
+    # -------------------------------------------------------------
+
+    @router.post("/statuer", response_model=StatuerResponse)
+    def statuer(
+        req: StatuerRequest,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Change le statut (ou clôture) des tickets sélectionnés.
+
+        Transposition fidèle du code WinDev "Statuer la sélection" :
+          - clôture  : UPDATE TK_Liste SET Cloturée=1, DateCloture=now,
+                        ModifDate=now WHERE IDTK_Liste IN (...)
+          - statut   : UPDATE TK_Liste SET IDTK_Statut=?, ModifDate=now
+                        WHERE IDTK_Liste IN (...)
+        """
+        ids = [int(t) for t in req.id_tickets if t and str(t).isdigit()]
+        if not ids:
+            raise HTTPException(400, "Aucun ticket sélectionné")
+        if not req.cloturee and not req.id_statut:
+            raise HTTPException(400, "Statut manquant")
+
+        ids_sql = ",".join(str(i) for i in ids)
+        now = _now_windev()
+        db = get_connection("ticket")
+        try:
+            if req.cloturee:
+                db.query(
+                    f"""UPDATE TK_Liste
+                    SET Cloturée = 1, DateCloture = ?, ModifDate = ?
+                    WHERE IDTK_Liste IN ({ids_sql})""",
+                    (now, now),
+                )
+            else:
+                db.query(
+                    f"""UPDATE TK_Liste
+                    SET IDTK_Statut = ?, ModifDate = ?
+                    WHERE IDTK_Liste IN ({ids_sql})""",
+                    (int(req.id_statut), now),
+                )
+        except Exception as e:
+            raise HTTPException(500, f"Erreur lors du statut : {e}")
+
+        return StatuerResponse(updated=len(ids))
 
     return router
