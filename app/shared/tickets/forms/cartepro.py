@@ -1,0 +1,215 @@
+"""FI_CartePro (type 2 — Carte PRO).
+
+Liste TK_DemandeCartePRO du ticket (base ticket_bo) jointe salarié.
+Édition : NumSuivi + photo (remplacement via @ATTACHMEMO@). Si la photo
+du salarié est vide, on l'y recopie (cf. WinDev). Impression PDF
+(EtatCartePro : photo + nom + raison sociale).
+"""
+
+import base64
+import io
+import os
+import tempfile
+
+from app.core.database import get_connection
+
+from ..service import (
+    _clean_id,
+    _icone_to_data_url,
+    _now_windev,
+    _to_int,
+    load_salaries_minimal,
+    maj_op_traitement_ticket,
+    salarie_infos_batch,
+)
+
+
+def _photo_data_url(id_ligne: int) -> str:
+    """Mémo PHOTO d'une ligne → data URL (SELECT isolé : mémo)."""
+    try:
+        db = get_connection("ticket_bo")
+        r = db.query_one(
+            "SELECT PHOTO FROM TK_DemandeCartePRO "
+            "WHERE IDTK_DemandeCartePRO = ?",
+            (int(id_ligne),),
+        )
+        return _icone_to_data_url(r.get("PHOTO") if r else None)
+    except Exception:
+        return ""
+
+
+def load(id_ticket: int) -> dict:
+    db = get_connection("ticket_bo")
+    try:
+        rows = db.query(
+            """SELECT IDTK_DemandeCartePRO, IDSalarie, NumSuivi
+            FROM TK_DemandeCartePRO
+            WHERE IDTK_Liste = ?
+              AND ModifElem NOT LIKE '%suppr%'
+            ORDER BY dateCrea""",
+            (int(id_ticket),),
+        )
+    except Exception:
+        rows = []
+
+    sal_ids: set[int] = set()
+    base: list[dict] = []
+    for r in rows:
+        idl = _clean_id(_to_int(r.get("IDTK_DemandeCartePRO")))
+        if not idl:
+            continue
+        sid = _clean_id(_to_int(r.get("IDSalarie")))
+        if sid:
+            sal_ids.add(sid)
+        base.append({
+            "id": str(idl),
+            "id_salarie": str(sid) if sid else "",
+            "num_suivi": (r.get("NumSuivi") or "").strip(),
+        })
+
+    infos = salarie_infos_batch(sal_ids)
+    for ligne in base:
+        sid = int(ligne["id_salarie"]) if ligne["id_salarie"] else 0
+        inf = infos.get(sid, {})
+        nom = inf.get("nom", "")
+        prenom = inf.get("prenom", "")
+        prenom_cap = (
+            prenom[:1].upper() + prenom[1:].lower() if prenom else ""
+        )
+        ligne["nom_prenom"] = f"{nom} {prenom_cap}".strip()
+        ligne["date_embauche"] = inf.get("date_embauche", "")
+        ligne["entite"] = inf.get("lib_societe", "")
+        ligne["photo_data_url"] = _photo_data_url(int(ligne["id"]))
+
+    return {"lignes": base}
+
+
+def _decode_image(b64: str) -> bytes | None:
+    """data URL ou base64 brut → octets."""
+    if not b64:
+        return None
+    s = b64.strip()
+    if s.startswith("data:"):
+        comma = s.find(",")
+        if comma == -1:
+            return None
+        s = s[comma + 1:]
+    try:
+        return base64.b64decode(s)
+    except Exception:
+        return None
+
+
+def save(id_ticket: int, payload: dict, user_id: int) -> dict:
+    id_ligne = str(payload.get("id_ligne") or "")
+    if not id_ligne.isdigit():
+        return {"ok": False, "error": "Ligne invalide"}
+    num_suivi = str(payload.get("num_suivi") or "").strip()
+    now = _now_windev()
+
+    db = get_connection("ticket_bo")
+    # IDSalarie de la ligne (pour la photo + recopie salarié)
+    row = db.query_one(
+        "SELECT IDSalarie FROM TK_DemandeCartePRO "
+        "WHERE IDTK_DemandeCartePRO = ?",
+        (int(id_ligne),),
+    )
+    if not row:
+        return {"ok": False, "error": "Ligne introuvable"}
+    id_salarie = _clean_id(_to_int(row.get("IDSalarie")))
+
+    db.query(
+        """UPDATE TK_DemandeCartePRO
+        SET NumSuivi = ?, ModifDate = ?, ModifELEM = 'modif', ModifOP = ?
+        WHERE IDTK_DemandeCartePRO = ?""",
+        (num_suivi, now, int(user_id), int(id_ligne)),
+    )
+
+    # Photo (optionnelle) : remplacement du mémo via @ATTACHMEMO@
+    img = _decode_image(payload.get("photo_b64") or "")
+    if img:
+        tmp = os.path.join(
+            tempfile.gettempdir(), f"cartepro_{id_ligne}.jpg"
+        )
+        with open(tmp, "wb") as f:
+            f.write(img)
+        try:
+            db.attach_memo(
+                "TK_DemandeCartePRO", "IDTK_DemandeCartePRO",
+                int(id_ligne), "PHOTO", tmp,
+            )
+            # Si la photo du salarié est vide → on l'y recopie (cf. WinDev)
+            if id_salarie:
+                db_rh = get_connection("rh")
+                sp = db_rh.query_one(
+                    "SELECT Photo FROM salarie WHERE IDSalarie = ?",
+                    (int(id_salarie),),
+                )
+                if not _icone_to_data_url(sp.get("Photo") if sp else None):
+                    db_rh.attach_memo(
+                        "salarie", "IDSalarie", int(id_salarie),
+                        "Photo", tmp,
+                    )
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    maj_op_traitement_ticket(int(id_ticket), int(user_id))
+    return {"ok": True}
+
+
+def print_pdf(id_ticket: int, payload: dict) -> bytes:
+    """État WinDev EtatCartePro → PDF (photo + nom + raison sociale)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    id_ligne = str(payload.get("id_ligne") or "")
+    if not id_ligne.isdigit():
+        raise ValueError("Ligne invalide")
+
+    db = get_connection("ticket_bo")
+    row = db.query_one(
+        "SELECT IDSalarie FROM TK_DemandeCartePRO "
+        "WHERE IDTK_DemandeCartePRO = ?",
+        (int(id_ligne),),
+    )
+    id_salarie = _clean_id(_to_int(row.get("IDSalarie"))) if row else 0
+    sal = load_salaries_minimal({id_salarie}) if id_salarie else {}
+    info_soc = salarie_infos_batch({id_salarie}) if id_salarie else {}
+    s = sal.get(id_salarie, {})
+    nom = s.get("nom", "")
+    prenom = s.get("prenom", "")
+    prenom_cap = prenom[:1].upper() + prenom[1:].lower() if prenom else ""
+    lib_nom = f"{nom} {prenom_cap}".strip()
+    lib_rs = info_soc.get(id_salarie, {}).get("lib_societe", "")
+
+    data_url = _photo_data_url(int(id_ligne))
+    img_bytes = _decode_image(data_url) if data_url else None
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    if img_bytes:
+        try:
+            ir = ImageReader(io.BytesIO(img_bytes))
+            iw, ih = ir.getSize()
+            max_w, max_h = 90 * mm, 110 * mm
+            ratio = min(max_w / iw, max_h / ih)
+            dw, dh = iw * ratio, ih * ratio
+            c.drawImage(
+                ir, (w - dw) / 2, h - 40 * mm - dh,
+                dw, dh, preserveAspectRatio=True, mask="auto",
+            )
+        except Exception:
+            pass
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(w / 2, h - 165 * mm, lib_nom)
+    c.setFont("Helvetica", 13)
+    c.drawCentredString(w / 2, h - 178 * mm, lib_rs)
+    c.showPage()
+    c.save()
+    return buf.getvalue()

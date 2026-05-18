@@ -12,9 +12,10 @@ dispatchent vers le bon handler selon le type du ticket.
 Ordre d'implémentation = ordre du switch WinDev (Fen_TicketContenu).
 """
 
-from . import fourniture
+from . import cartepro, fourniture
 
 # IDTK_TypeDemande → module handler
 FORM_HANDLERS: dict[int, object] = {
     1: fourniture,   # Commande Fourniture
+    2: cartepro,     # Carte PRO
 }

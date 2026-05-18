@@ -454,6 +454,68 @@ def load_salaries_minimal(ids: set[int]) -> dict[int, dict]:
     return out
 
 
+def salarie_infos_batch(ids: set[int]) -> dict[int, dict]:
+    """{id: {nom, prenom, date_embauche(ISO), lib_societe}} pour une liste
+    d'IDSalarie. Multi-embauche → priorité EnActivité=1. Base rh.
+    """
+    ids = {i for i in ids if i}
+    if not ids:
+        return {}
+    db = get_connection("rh")
+    ids_sql = ",".join(str(i) for i in ids)
+    out: dict[int, dict] = {}
+    try:
+        for r in db.query(
+            f"SELECT IDSalarie, NOM, PRENOM FROM salarie "
+            f"WHERE IDSalarie IN ({ids_sql})"
+        ):
+            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            if sid:
+                out[sid] = {
+                    "nom": (r.get("NOM") or "").strip(),
+                    "prenom": (r.get("PRENOM") or "").strip(),
+                    "date_embauche": "",
+                    "lib_societe": "",
+                }
+    except Exception:
+        return out
+
+    emb: dict[int, dict] = {}
+    try:
+        for r in db.query(
+            f"SELECT IDSalarie, DateDébut, EnActivité, IdSte "
+            f"FROM salarie_embauche WHERE IDSalarie IN ({ids_sql})"
+        ):
+            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            if not sid:
+                continue
+            actif = bool(r.get("EnActivité"))
+            prev = emb.get(sid)
+            if prev is None or (actif and not prev["actif"]):
+                emb[sid] = {
+                    "date_debut": _windev_to_iso(r.get("DateDébut"))[:10],
+                    "id_ste": _clean_id(_to_int(r.get("IdSte"))),
+                    "actif": actif,
+                }
+    except Exception:
+        emb = {}
+
+    societes: dict[int, str] = {}
+    try:
+        for r in db.query("SELECT IdSte, RS_Interne FROM societe"):
+            stid = _clean_id(_to_int(r.get("IdSte")))
+            if stid:
+                societes[stid] = (r.get("RS_Interne") or "").strip()
+    except Exception:
+        societes = {}
+
+    for sid, info in out.items():
+        e = emb.get(sid, {})
+        info["date_embauche"] = e.get("date_debut", "")
+        info["lib_societe"] = societes.get(e.get("id_ste", 0), "")
+    return out
+
+
 def search_salaries(q: str, limit: int = 30) -> list[dict]:
     """Recherche de salariés par début de NOM (équivalent
     Fen_RechercheNomSalarié / ReqListeSalarie_ByDebutNom).

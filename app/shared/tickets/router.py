@@ -14,6 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -576,5 +577,29 @@ def get_tickets_router(droit_field: str) -> APIRouter:
         if not res.get("ok"):
             raise HTTPException(400, res.get("error") or "Échec de l'enregistrement")
         return res
+
+    @router.get("/{id_ticket}/form/print")
+    def print_ticket_form(
+        id_ticket: str,
+        id_ligne: str = Query("", description="Ligne à imprimer (selon le type)"),
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Impression PDF du détail (états WinDev). Disponible si le
+        handler du type implémente print_pdf().
+        """
+        _id_type, handler = _handler_for(id_ticket)
+        if handler is None or not hasattr(handler, "print_pdf"):
+            raise HTTPException(400, "Pas d'impression pour ce type de demande")
+        try:
+            pdf = handler.print_pdf(int(id_ticket), {"id_ligne": id_ligne})
+        except Exception as e:
+            raise HTTPException(500, f"Erreur génération PDF : {e}")
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="ticket_{id_ticket}.pdf"'
+            },
+        )
 
     return router
