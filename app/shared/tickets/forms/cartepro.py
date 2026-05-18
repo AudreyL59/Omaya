@@ -198,23 +198,33 @@ def print_pdf(id_ticket: int, payload: dict) -> bytes:
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
+
+    # Cadrage repris de l'état WinDev EtatCartePro (cf. PDF de réf) :
+    # vignette centrée dans un cadre ~42x52 mm, placée vers le haut,
+    # puis nom + raison sociale en gras centrés dessous.
+    box_w, box_h = 42 * mm, 52 * mm
+    box_top = h - 38 * mm           # bord haut du cadre photo
+    bottom_img = box_top - box_h    # bord bas effectif (par défaut)
     if img_bytes:
         try:
             ir = ImageReader(io.BytesIO(img_bytes))
             iw, ih = ir.getSize()
-            max_w, max_h = 90 * mm, 110 * mm
-            ratio = min(max_w / iw, max_h / ih)
+            ratio = min(box_w / iw, box_h / ih)
             dw, dh = iw * ratio, ih * ratio
+            x = (w - dw) / 2
+            y = box_top - dh
             c.drawImage(
-                ir, (w - dw) / 2, h - 40 * mm - dh,
-                dw, dh, preserveAspectRatio=True, mask="auto",
+                ir, x, y, dw, dh,
+                preserveAspectRatio=True, mask="auto",
             )
+            bottom_img = y
         except Exception:
             pass
-    c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(w / 2, h - 165 * mm, lib_nom)
-    c.setFont("Helvetica", 13)
-    c.drawCentredString(w / 2, h - 178 * mm, lib_rs)
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(w / 2, bottom_img - 12 * mm, lib_nom)
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(w / 2, bottom_img - 20 * mm, lib_rs)
     c.showPage()
     c.save()
     return buf.getvalue()
