@@ -622,6 +622,36 @@ def apply_ouverture(id_ticket: int, user_id: int) -> dict | None:
     return raw
 
 
+def maj_op_traitement_ticket(id_ticket: int, id_cial: int) -> None:
+    """Transposition MajOpTraitementTicket (procédure globale WinDev) :
+    UPDATE TK_Liste SET OpTraitementStaff = user, ModifDate = now.
+    Appelée par les FI_* après enregistrement.
+    """
+    db = get_connection("ticket")
+    db.query(
+        """UPDATE TK_Liste
+        SET OpTraitementStaff = ?, ModifDate = ?
+        WHERE IDTK_Liste = ?""",
+        (int(id_cial), _now_windev(), int(id_ticket)),
+    )
+
+
+def date_only_to_iso(v) -> str:
+    """Rubrique HFSQL 'Date' (AAAAMMJJ) → ISO 'YYYY-MM-DD' (vide si nul)."""
+    s = "".join(c for c in str(v or "") if c.isdigit())
+    if len(s) < 8:
+        return ""
+    if s[:8] == "00000000":
+        return ""
+    return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
+
+
+def iso_to_date_only(v) -> str:
+    """ISO 'YYYY-MM-DD' (ou vide) → AAAAMMJJ pour rubrique HFSQL 'Date'."""
+    s = "".join(c for c in str(v or "") if c.isdigit())
+    return s[:8] if len(s) >= 8 else ""
+
+
 def ajout_histo_tk(id_ticket: int, id_statut: int, id_cial: int) -> None:
     """Ajoute une ligne TK_Histo (transposition AjoutHistoTK globale)."""
     now = _now_windev()

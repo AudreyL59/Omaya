@@ -20,6 +20,7 @@ from app.core.auth.schemas import UserToken
 from app.core.auth.security import decode_access_token
 from app.core.database import get_connection
 
+from .forms import FORM_HANDLERS
 from .info_ticket import donne_info_ticket_batch
 from .schemas import (
     SaveInfosRequest,
@@ -40,6 +41,7 @@ from .service import (
     _now_windev,
     apply_ouverture,
     get_lib_type_demande,
+    load_ticket_raw,
     list_statuts,
     list_tickets_modified_since,
     list_tickets_par_type,
@@ -518,5 +520,61 @@ def get_tickets_router(droit_field: str) -> APIRouter:
         if not res.get("ok"):
             raise HTTPException(404, "Ticket introuvable")
         return SaveInfosResponse(ok=True, closed=res.get("closed", False))
+
+    # -------------------------------------------------------------
+    # Détail du ticket — fenêtres internes WinDev FI_* (dispatch
+    # générique selon IDTK_TypeDemande, cf. forms/FORM_HANDLERS).
+    # -------------------------------------------------------------
+
+    def _handler_for(id_ticket: str):
+        if not id_ticket.isdigit():
+            raise HTTPException(400, "id_ticket invalide")
+        raw = load_ticket_raw(int(id_ticket))
+        if raw is None:
+            raise HTTPException(404, "Ticket introuvable")
+        id_type = (
+            int(raw["id_type_demande"])
+            if raw["id_type_demande"].isdigit() else 0
+        )
+        return id_type, FORM_HANDLERS.get(id_type)
+
+    @router.get("/{id_ticket}/form")
+    def get_ticket_form(
+        id_ticket: str,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Détail du ticket : renvoie les données du formulaire spécifique
+        au type (None si le type n'a pas encore de FI_* implémentée).
+        """
+        id_type, handler = _handler_for(id_ticket)
+        if handler is None:
+            return {"id_type_demande": str(id_type), "has_form": False, "data": None}
+        try:
+            data = handler.load(int(id_ticket))
+        except Exception as e:
+            raise HTTPException(500, f"Erreur chargement formulaire : {e}")
+        return {
+            "id_type_demande": str(id_type),
+            "has_form": True,
+            "data": data,
+        }
+
+    @router.post("/{id_ticket}/form")
+    def post_ticket_form(
+        id_ticket: str,
+        payload: dict,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Enregistre le formulaire spécifique au type du ticket."""
+        _id_type, handler = _handler_for(id_ticket)
+        if handler is None:
+            raise HTTPException(400, "Aucun formulaire pour ce type de demande")
+        try:
+            res = handler.save(int(id_ticket), payload or {}, int(user.id_salarie))
+        except Exception as e:
+            raise HTTPException(500, f"Erreur enregistrement formulaire : {e}")
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "Échec de l'enregistrement")
+        return res
 
     return router

@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
+import { FI_COMPONENTS } from './forms'
 import type {
   SalarieItem,
   TicketDetail,
@@ -975,16 +976,28 @@ function TicketContenuModal({
               </button>
             </div>
 
-            {/* Colonne droite — Détail du ticket (FI_* à venir) */}
+            {/* Colonne droite — Détail du ticket (fenêtre interne FI_*) */}
             <div className="flex-1 min-w-0 overflow-y-auto p-6">
               <h3 className="text-sm font-semibold text-c-ink mb-4">
                 Détail du ticket
               </h3>
-              <div className="h-full flex items-center justify-center text-c-ink-faint text-sm text-center">
-                Formulaire spécifique au type «&nbsp;{detail.lib_type_demande}&nbsp;»
-                <br />
-                (à venir)
-              </div>
+              {(() => {
+                const FI = FI_COMPONENTS[detail.id_type_demande]
+                return FI ? (
+                  <FI
+                    apiBase={apiBase}
+                    getToken={getToken}
+                    idTicket={detail.id_ticket}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-c-ink-faint text-sm text-center">
+                    Formulaire spécifique au type «&nbsp;
+                    {detail.lib_type_demande}&nbsp;»
+                    <br />
+                    (à venir)
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )}
