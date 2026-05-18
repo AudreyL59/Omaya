@@ -5,6 +5,7 @@ Transposition des procédures WinDev envoiMailGmailRH(), etc.
 """
 
 import smtplib
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -23,6 +24,7 @@ def envoi_mail_rh(
     destinataires: list[str],
     cci: list[str] | None = None,
     expediteur: str = "",
+    attachments: list[tuple[str, bytes]] | None = None,
 ) -> bool:
     """
     Envoie un mail via le SMTP Gmail RH (noreply.gestionrh@gmail.com).
@@ -38,14 +40,23 @@ def envoi_mail_rh(
     if not destinataires:
         raise ValueError("Aucun destinataire")
 
-    msg = MIMEMultipart("alternative")
+    if attachments:
+        msg = MIMEMultipart("mixed")
+        alt = MIMEMultipart("alternative")
+        alt.attach(MIMEText(html, "html", "utf-8"))
+        msg.attach(alt)
+        for fname, content in attachments:
+            part = MIMEApplication(content, Name=fname)
+            part["Content-Disposition"] = f'attachment; filename="{fname}"'
+            msg.attach(part)
+    else:
+        msg = MIMEMultipart("alternative")
+        msg.attach(MIMEText(html, "html", "utf-8"))
     msg["Subject"] = sujet
     msg["From"] = expediteur or SMTP_RH_FROM
     msg["To"] = ", ".join(destinataires)
     if cci:
         msg["Bcc"] = ", ".join(cci)
-
-    msg.attach(MIMEText(html, "html", "utf-8"))
 
     all_recipients = destinataires + (cci or [])
 

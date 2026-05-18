@@ -26,6 +26,22 @@ from ..service import (
 )
 
 
+def _mail_salarie(id_salarie: int) -> str:
+    """MAIL (salarie_coordonnées, base rh)."""
+    if not id_salarie:
+        return ""
+    try:
+        db = get_connection("rh")
+        r = db.query_one(
+            "SELECT IDSalarie, MAIL FROM salarie_coordonnées "
+            "WHERE IDSalarie = ?",
+            (int(id_salarie),),
+        )
+        return ((r.get("MAIL") if r else "") or "").strip()
+    except Exception:
+        return ""
+
+
 def _gsm_salarie(id_salarie: int) -> str:
     """TélMob (salarie_coordonnées, base rh) nettoyé."""
     if not id_salarie:
@@ -229,6 +245,131 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                 sms_result = f"SMS non envoyé : {e}"
         maj_op_traitement_ticket(int(id_ticket), int(user_id))
         return {"ok": True, "sms_result": sms_result}
+
+    if action == "valider_signe":
+        # « Ce contrat de travail est valide » : régénère le PDF signé,
+        # l'upload dans le dossier salarié (FTP), maj salarie_docRH,
+        # SMS + mail au salarié, clôture optionnelle du ticket.
+        from app.core.config import FTP_GESTION_RH_PATH
+        from app.shared.notifications.mail import envoi_mail_rh
+
+        from .cttw_pdf import ftp_upload, regenerate_signed_pdf
+
+        cloturer = bool(payload.get("cloturer"))
+        db = get_connection("ticket_rh")
+        r = db.query_one(
+            """SELECT IDTK_Liste, IDSalarie, idDA, IDdocRHEDIT, TypeCttW,
+                IDdemandeContratW, datesignature
+            FROM TK_DemandeCttW WHERE IDTK_Liste = ?""",
+            (int(id_ticket),),
+        )
+        if not r:
+            return {"ok": False, "error": "Contrat introuvable"}
+        id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
+        id_da = _clean_id(_to_int(r.get("idDA")))
+        id_doc_edit = _clean_id(_to_int(r.get("IDdocRHEDIT")))
+        type_cttw = str(r.get("TypeCttW") or "").strip()
+        id_dem = str(r.get("IDdemandeContratW") or "").strip()
+        salarie_nom = _salaire_nom(id_salarie)
+
+        # 1. Régénération + upload FTP dossier salarié
+        try:
+            pdf = regenerate_signed_pdf(
+                int(id_ticket), salarie_nom, _salaire_nom(id_da),
+                date_only_to_iso(r.get("datesignature")) or "",
+            )
+            ftp_upload(
+                f"{FTP_GESTION_RH_PATH}/{id_salarie}/Fiches_Salaires",
+                f"{id_ticket}_CttWSigne.pdf",
+                pdf,
+            )
+        except Exception as e:
+            return {"ok": False, "error": f"Génération/upload PDF : {e}"}
+
+        # 2. salarie_docRH : marquer RECU (base rh)
+        rh = get_connection("rh")
+        try:
+            target = None
+            if id_doc_edit:
+                target = id_doc_edit
+            else:
+                ex = rh.query_one(
+                    """SELECT IDsalarie_docRH FROM salarie_docRH
+                    WHERE IDSalarie = ? AND RECU = 0 AND IDdocRHTYPE = ?""",
+                    (int(id_salarie), type_cttw),
+                )
+                if ex:
+                    target = _clean_id(_to_int(ex.get("IDsalarie_docRH")))
+            if target:
+                rh.query(
+                    """UPDATE salarie_docRH SET RECU = 1, RECUDATE = ?,
+                        ModifOP = ?, ModifDate = ?, ModifELEM = 'modif'
+                    WHERE IDsalarie_docRH = ?""",
+                    (now, int(user_id), now, int(target)),
+                )
+            else:
+                new_id = int(now)
+                rh.query(
+                    """INSERT INTO salarie_docRH
+                    (IDsalarie_docRH, IDdocRHTYPE, IDSalarie, ID_DA,
+                     DATE_Edition, RECU, RECUDATE, ModifOP, ModifDate,
+                     ModifELEM)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'new')""",
+                    (new_id, type_cttw, int(id_salarie), int(id_da),
+                     id_dem, now, int(user_id), now),
+                )
+                db.query(
+                    "UPDATE TK_DemandeCttW SET IDdocRHEDIT = ?, "
+                    "ModifDate = ?, ModifOP = ?, ModifELEM = 'modif' "
+                    "WHERE IDTK_Liste = ?",
+                    (new_id, now, int(user_id), int(id_ticket)),
+                )
+        except Exception as e:
+            return {"ok": False, "error": f"salarie_docRH : {e}"}
+
+        # 3. SMS + mail au salarié
+        sms_result = ""
+        gsm = _gsm_salarie(id_salarie)
+        mail = _mail_salarie(id_salarie)
+        if gsm:
+            txt = (
+                "Votre contrat de travail est disponible sur votre espace "
+                "salarié (intranet ou appli Omaya).\n"
+                f"Une copie est envoyée sur votre email : {mail}"
+            )
+            try:
+                sms_result = envoi_sms(txt, gsm, "", salarie_nom)
+            except Exception as e:
+                sms_result = f"SMS non envoyé : {e}"
+        if mail:
+            html = (
+                "<p>Bonjour,</p><p>Voici votre contrat de Travail signé.</p>"
+                "<p>Cdt</p><p>Service RH</p>"
+            )
+            cci = [c for c in (_mail_salarie(id_da), "intranet@omaya.fr") if c]
+            try:
+                envoi_mail_rh(
+                    "Contrat de Travail Signé", html, [mail], cci,
+                    "intranet@omaya.fr",
+                    [(f"{id_ticket}_CttWSigne.pdf", pdf)],
+                )
+            except Exception:
+                pass
+
+        # 4. Clôture optionnelle du ticket
+        if cloturer:
+            get_connection("ticket").query(
+                """UPDATE TK_Liste SET Cloturée = 1, DateCloture = ?,
+                    modification = 1, opModif = ?, idModif = 0,
+                    TypeModif = 'TKSTATUT', ModifDate = ?, ModifOP = ?,
+                    ModifELEM = 'modif'
+                WHERE IDTK_Liste = ?""",
+                (now, int(user_id), now, int(user_id), int(id_ticket)),
+            )
+            ajout_histo_tk(int(id_ticket), 4, int(user_id))
+
+        maj_op_traitement_ticket(int(id_ticket), int(user_id))
+        return {"ok": True, "closed": cloturer, "sms_result": sms_result}
 
     if action == "refuser":
         # « Renvoyer ce contrat en signature » (refus). 100% transposable

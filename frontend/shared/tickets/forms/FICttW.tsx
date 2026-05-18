@@ -157,16 +157,28 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
           </button>
 
           <button
-            disabled
-            title="Régénération du PDF signé : chantier en cours"
-            className="w-full px-3 py-2 rounded-lg bg-c-brand/40 text-white text-sm font-semibold cursor-not-allowed"
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  'Valider ce contrat ? Il sera déposé dans le dossier '
+                    + 'salarié et envoyé par mail au salarié.',
+                )
+              )
+                return
+              const cloturer = window.confirm(
+                'Souhaitez-vous clôturer le ticket ?',
+              )
+              const ok = await post({ action: 'valider_signe', cloturer })
+              if (ok)
+                window.alert(
+                  'Contrat déposé dans le dossier salarié et envoyé par mail.',
+                )
+            }}
+            disabled={saving}
+            className="w-full px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
           >
             Ce contrat de travail est valide
           </button>
-          <p className="text-[11px] text-c-ink-faint">
-            « Ce contrat est valide » (régénération + upload PDF signé +
-            mail) : chantier en cours.
-          </p>
         </div>
       </div>
     )

@@ -58,6 +58,33 @@ def _memo_bytes(id_ticket: int, field: str) -> bytes | None:
         return None
 
 
+def ftp_upload(remote_dir: str, filename: str, data: bytes) -> None:
+    """Upload `data` vers <remote_dir>/<filename> (crée l'arbo au besoin).
+    remote_dir absolu, ex: /OMAYA/gestionRH/<id>/Fiches_Salaires."""
+    import ftplib
+
+    from app.core.config import FTP_HOST, FTP_PASSWORD, FTP_USER
+
+    ftp = ftplib.FTP(timeout=30)
+    ftp.encoding = "latin-1"
+    ftp.connect(FTP_HOST, 21)
+    ftp.login(FTP_USER, FTP_PASSWORD)
+    try:
+        ftp.cwd("/")
+        for part in [p for p in remote_dir.split("/") if p]:
+            try:
+                ftp.cwd(part)
+            except ftplib.error_perm:
+                ftp.mkd(part)
+                ftp.cwd(part)
+        ftp.storbinary(f"STOR {filename}", io.BytesIO(data))
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass
+
+
 def _http_image(url: str) -> bytes | None:
     try:
         with urllib.request.urlopen(url, timeout=15) as resp:
