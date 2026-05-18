@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Download, Loader2, Printer, Save, Upload } from 'lucide-react'
+import { Crop, Download, Loader2, Printer, Save, Upload } from 'lucide-react'
 
 import type { FIProps } from './index'
+import PhotoCropModal from './PhotoCropModal'
 
 interface LigneCartePro {
   id: string
@@ -22,6 +23,7 @@ export default function FICartePro({ apiBase, getToken, idTicket }: FIProps) {
   const [photoB64, setPhotoB64] = useState('') // nouvelle photo à envoyer
   const [saving, setSaving] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [cropSrc, setCropSrc] = useState<string | null>(null) // image à recadrer
   const fileRef = useRef<HTMLInputElement>(null)
 
   const reload = useCallback(() => {
@@ -57,11 +59,12 @@ export default function FICartePro({ apiBase, getToken, idTicket }: FIProps) {
     if (!f) return
     const reader = new FileReader()
     reader.onload = () => {
-      const url = String(reader.result || '')
-      setPhotoUrl(url)
-      setPhotoB64(url) // data URL ; le backend strip le préfixe
+      // Ouvre l'éditeur de recadrage (équivalent EditeurDImages WinDev)
+      setCropSrc(String(reader.result || ''))
     }
     reader.readAsDataURL(f)
+    // reset pour pouvoir re-sélectionner le même fichier
+    e.target.value = ''
   }
 
   const enregistrer = async () => {
@@ -205,13 +208,25 @@ export default function FICartePro({ apiBase, getToken, idTicket }: FIProps) {
               onChange={onPickFile}
               className="hidden"
             />
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-c-line-strong text-xs text-c-ink hover:bg-c-surface-medium transition-colors"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Changer la photo
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-c-line-strong text-xs text-c-ink hover:bg-c-surface-medium transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Changer la photo
+              </button>
+              {photoUrl && (
+                <button
+                  onClick={() => setCropSrc(photoUrl)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-c-line-strong text-xs text-c-ink hover:bg-c-surface-medium transition-colors"
+                  title="Recadrer / pivoter la photo actuelle"
+                >
+                  <Crop className="w-3.5 h-3.5" />
+                  Recadrer
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Champs + actions */}
@@ -260,6 +275,19 @@ export default function FICartePro({ apiBase, getToken, idTicket }: FIProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {cropSrc && (
+        <PhotoCropModal
+          src={cropSrc}
+          aspect={42 / 52}
+          onClose={() => setCropSrc(null)}
+          onValidate={(dataUrl) => {
+            setPhotoUrl(dataUrl)
+            setPhotoB64(dataUrl)
+            setCropSrc(null)
+          }}
+        />
       )}
     </div>
   )

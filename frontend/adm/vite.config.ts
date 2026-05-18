@@ -17,6 +17,7 @@ export default defineConfig({
       'react-router-dom',
       'framer-motion',
       'lucide-react',
+      'react-easy-crop',
     ],
   },
   server: {
