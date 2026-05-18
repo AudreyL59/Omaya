@@ -858,7 +858,7 @@ function TicketContenuModal({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-white rounded-2xl shadow-2xl border border-c-line w-[900px] max-w-[95vw] h-[80vh] flex flex-col overflow-hidden">
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-white rounded-2xl shadow-2xl border border-c-line w-[1400px] max-w-[97vw] h-[88vh] flex flex-col overflow-hidden">
         <header className="flex items-center justify-between px-5 py-3 border-b border-c-line bg-c-surface-soft">
           <div className="flex items-center gap-2 text-base font-semibold text-c-ink">
             <Ticket className="w-5 h-5 text-c-brand" />
