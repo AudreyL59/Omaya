@@ -123,6 +123,9 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
         Enregistrer le ticket
       </button>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        {/* Colonne gauche */}
+        <div className="space-y-6">
       {/* ÉTAT CIVIL */}
       <Section title="Infos état civil">
         <Row>
@@ -191,7 +194,10 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
           <Check label="Travailleur handicapé" checked={!!form.travailleur_handi} onChange={(v) => set('travailleur_handi', v)} />
         </Row>
       </Section>
+        </div>
 
+        {/* Colonne droite */}
+        <div className="space-y-6">
       {/* COORDONNÉES */}
       <Section title="Coordonnées postales et téléphoniques">
         <Row>
@@ -267,6 +273,8 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
           />
         </Row>
       </Section>
+        </div>
+      </div>
 
       {/* DOCUMENTS */}
       <Section title="Documents">
