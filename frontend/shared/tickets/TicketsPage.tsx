@@ -141,21 +141,8 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       .finally(() => setLoadingSidebar(false))
   }, [apiBase])
 
-  const handleSSEBlock = useCallback((block: string) => {
-    let eventName = 'message'
-    const dataLines: string[] = []
-    for (const line of block.split('\n')) {
-      if (!line || line.startsWith(':')) continue
-      if (line.startsWith('event:')) eventName = line.slice(6).trim()
-      else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''))
-    }
-    if (dataLines.length === 0) return
-    let payload: any
-    try { payload = JSON.parse(dataLines.join('\n')) } catch { return }
-    if (eventName !== 'tickets') return
-
-    const evts = (payload as TicketStreamPayload).events || []
-    if (evts.length === 0) return
+  const applyEvents = useCallback((evts: TicketStreamPayload['events']) => {
+    if (!evts || evts.length === 0) return
 
     // Pré-calcul : on a besoin des IDs déjà présents AVANT le merge.
     setData((prev) => {
@@ -208,8 +195,9 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
     }
   }, [])
 
-  // Parser SSE manuel (fetch + ReadableStream) — permet de passer le Bearer
-  // header, contrairement à EventSource natif.
+  // Long-polling : boucle de fetch JSON (le SSE est bufferisé par IIS/ARR).
+  // Chaque requête attend jusqu'à ~25 s côté serveur qu'un ticket bouge,
+  // puis le client reboucle immédiatement.
   const startTicketsStream = useCallback(
     async (
       signal: AbortSignal,
@@ -218,42 +206,39 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       dateDu: string,
       dateAu: string,
     ) => {
-      const sp = new URLSearchParams({ id_type_demande: idTypeDemande })
-      if (cloturee) sp.set('cloturee', '1')
-      if (dateDu) sp.set('date_du', dateDu.replace(/-/g, ''))
-      if (dateAu) sp.set('date_au', dateAu.replace(/-/g, ''))
-      const url = `${apiBase}/tickets/stream?${sp}`
-      try {
-        const resp = await fetch(url, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-          signal,
-        })
-        if (!resp.ok || !resp.body) return
-        const reader = resp.body.getReader()
-        const decoder = new TextDecoder('utf-8')
-        let buf = ''
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          buf += decoder.decode(value, { stream: true })
-          let idx = buf.indexOf('\n\n')
-          while (idx >= 0) {
-            const block = buf.slice(0, idx)
-            buf = buf.slice(idx + 2)
-            handleSSEBlock(block)
-            idx = buf.indexOf('\n\n')
+      let cursor = ''
+      const sleep = (ms: number) =>
+        new Promise<void>((res) => setTimeout(res, ms))
+      while (!signal.aborted) {
+        const sp = new URLSearchParams({ id_type_demande: idTypeDemande })
+        if (cloturee) sp.set('cloturee', '1')
+        if (dateDu) sp.set('date_du', dateDu.replace(/-/g, ''))
+        if (dateAu) sp.set('date_au', dateAu.replace(/-/g, ''))
+        if (cursor) sp.set('cursor', cursor)
+        try {
+          const resp = await fetch(`${apiBase}/tickets/poll?${sp}`, {
+            headers: { Authorization: `Bearer ${getToken()}` },
+            signal,
+          })
+          if (!resp.ok) {
+            // 401/403/500 : on attend un peu avant de réessayer
+            await sleep(5000)
+            continue
           }
+          const payload = (await resp.json()) as TicketStreamPayload
+          if (payload.cursor) cursor = payload.cursor
+          applyEvents(payload.events)
+        } catch (err: any) {
+          if (err?.name === 'AbortError') return
+          await sleep(5000)
         }
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return
-        // silencieux : on aura un retry au prochain changement de filtre
       }
     },
-    [apiBase, getToken, handleSSEBlock],
+    [apiBase, getToken, applyEvents],
   )
 
   // Charge les tickets quand le type sélectionné OU les filtres changent.
-  // Puis ouvre un stream SSE pour les ajouts/modifs en live.
+  // Puis lance la boucle de long-polling pour les ajouts/modifs en live.
   useEffect(() => {
     if (!selectedType) return
     setLoadingList(true)

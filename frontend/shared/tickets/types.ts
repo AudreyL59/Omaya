@@ -46,11 +46,13 @@ export interface TicketListResponse {
 }
 
 // ---------------------------------------------------------------
-// SSE — événements push reçus du backend (/tickets/stream)
+// Live update — réponses du long-polling (/tickets/poll)
 // ---------------------------------------------------------------
 
 export interface TicketStreamEvent {
-  kind: 'added' | 'modified'
+  // added/modified est décidé côté client (présence dans la liste) ;
+  // le backend ne renvoie que la ligne.
+  kind?: 'added' | 'modified'
   row: TicketRow
 }
 

@@ -10,12 +10,10 @@ Côté intranet, l'inclusion ressemble à :
 """
 
 import asyncio
-import json
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -179,11 +177,11 @@ def get_tickets_router(droit_field: str) -> APIRouter:
         )
 
     # -------------------------------------------------------------
-    # SSE — push live des tickets ajoutés/modifiés depuis l'ouverture
+    # Live update — long-polling (cf. /poll plus bas).
+    # SSE abandonné : IIS/ARR bufferise le chunked encoding.
     # -------------------------------------------------------------
 
-    POLL_INTERVAL_S = 4.0      # fréquence de polling DB
-    HEARTBEAT_EVERY_S = 25.0   # commentaire ": ping" pour keep-alive proxies
+    POLL_INTERVAL_S = 3.0      # fréquence de polling DB pendant le long-poll
 
     def _enrich_rows(rows_raw: list[dict]) -> list[dict]:
         """Enrichit (op_dest, op_staff, op_crea, lib_statut, info)."""
@@ -249,29 +247,34 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             out.append(row.model_dump())
         return out
 
-    @router.get("/stream")
-    async def stream_tickets(
+    LONGPOLL_MAX_S = 25.0      # durée max d'attente avant réponse vide
+
+    @router.get("/poll")
+    async def poll_tickets(
         request: Request,
-        id_type_demande: int = Query(..., description="IDTK_TypeDemande à streamer"),
+        id_type_demande: int = Query(..., description="IDTK_TypeDemande à surveiller"),
         cloturee: bool = Query(False),
         date_du: str = Query(""),
         date_au: str = Query(""),
+        cursor: str = Query("", description="Curseur ModifDate compact reçu au tour précédent"),
         token: str = Query("", description="JWT (fallback si pas de header Bearer)"),
     ):
-        """SSE — pousse les tickets ajoutés ou modifiés depuis l'ouverture
-        du stream pour le type de demande sélectionné.
+        """Long-polling : renvoie les tickets ajoutés/modifiés depuis `cursor`.
 
-        Auth flexible : header Bearer OU query param `token` (utile car
-        l'EventSource natif côté navigateur ne permet pas de headers).
+        Choix du long-polling plutôt que SSE : IIS/ARR bufferise le
+        `Transfer-Encoding: chunked` du SSE même avec responseBufferLimit=0.
+        Une réponse JSON classique (Content-Length) traverse ARR sans souci.
 
-        Format des événements :
-          event: ready
-          data: {"cursor_start": "20260430...."}
+        Protocole :
+          - 1er appel sans `cursor` → renvoie {events: [], cursor: <now>}
+            immédiatement (juste pour initialiser le curseur côté client).
+          - appels suivants avec `cursor` → attend jusqu'à 25 s qu'un ticket
+            bouge (poll DB toutes les ~3 s), renvoie dès qu'il y a du nouveau,
+            sinon {events: [], cursor: <inchangé>} au timeout.
 
-          event: tickets
-          data: {"events": [{"kind":"added"|"modified","row":{...}}], "cursor": "..."}
+        Le client reboucle immédiatement après chaque réponse.
 
-          : ping        (commentaire SSE — keep-alive proxies)
+        Auth flexible : header Bearer OU query param `token`.
         """
         # Auth manuelle (Bearer header sinon ?token=)
         auth_header = request.headers.get("Authorization", "")
@@ -290,6 +293,10 @@ def get_tickets_router(droit_field: str) -> APIRouter:
         if int(id_type_demande) not in list_type_ids_par_droit(droits, droit_field):
             raise HTTPException(403, "Type de demande non accessible avec vos droits")
 
+        # 1er appel : pas de curseur → on initialise sans attendre.
+        if not cursor:
+            return {"events": [], "cursor": _now_windev()}
+
         # Conversion YYYYMMDD → WinDev compact 17 chars (cf. get_tickets)
         def _to_wd(s: str, end: bool = False) -> str:
             if not s or len(s) < 8 or not s[:8].isdigit():
@@ -299,75 +306,33 @@ def get_tickets_router(droit_field: str) -> APIRouter:
 
         date_du_wd = _to_wd(date_du, end=False)
         date_au_wd = _to_wd(date_au, end=True)
-        cursor_start = _now_windev()
 
-        async def event_gen():
-            cursor = cursor_start
-            loop = asyncio.get_event_loop()
-            last_emit = loop.time()
-            # Padding initial 4KB : force ARR/IIS à flush la réponse
-            # immédiatement (sinon les premiers events sont retenus jusqu'à
-            # ce que le buffer interne soit plein).
-            yield ":" + (" " * 4096) + "\n\n"
-            yield f"event: ready\ndata: {json.dumps({'cursor_start': cursor_start})}\n\n"
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + LONGPOLL_MAX_S
+        while True:
+            if await request.is_disconnected():
+                return {"events": [], "cursor": cursor}
             try:
-                while True:
-                    if await request.is_disconnected():
-                        break
-                    try:
-                        rows_raw = await asyncio.to_thread(
-                            list_tickets_modified_since,
-                            int(id_type_demande), cursor, cloturee,
-                            date_du_wd, date_au_wd,
-                        )
-                    except Exception as e:
-                        yield f"event: error\ndata: {json.dumps({'msg': str(e)})}\n\n"
-                        await asyncio.sleep(POLL_INTERVAL_S)
-                        continue
+                rows_raw = await asyncio.to_thread(
+                    list_tickets_modified_since,
+                    int(id_type_demande), cursor, cloturee,
+                    date_du_wd, date_au_wd,
+                )
+            except Exception as e:
+                raise HTTPException(500, f"Erreur poll tickets : {e}")
 
-                    if rows_raw:
-                        max_modif = cursor
-                        for r in rows_raw:
-                            mc = r.get("_modif_compact") or ""
-                            if mc and mc > max_modif:
-                                max_modif = mc
-                        cursor = max_modif
+            if rows_raw:
+                new_cursor = cursor
+                for r in rows_raw:
+                    mc = r.get("_modif_compact") or ""
+                    if mc and mc > new_cursor:
+                        new_cursor = mc
+                enriched = await asyncio.to_thread(_enrich_rows, rows_raw)
+                events = [{"row": row} for row in enriched]
+                return {"events": events, "cursor": new_cursor}
 
-                        enriched = await asyncio.to_thread(_enrich_rows, rows_raw)
-                        kind_by_id = {}
-                        for r in rows_raw:
-                            dc = r.get("_date_crea_compact") or ""
-                            kind_by_id[r["id_ticket"]] = (
-                                "added" if dc and dc > cursor_start else "modified"
-                            )
-                        events = [
-                            {
-                                "kind": kind_by_id.get(row["id_ticket"], "modified"),
-                                "row": row,
-                            }
-                            for row in enriched
-                        ]
-                        payload = {"events": events, "cursor": cursor}
-                        yield f"event: tickets\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                        last_emit = loop.time()
-                    else:
-                        now = loop.time()
-                        if now - last_emit >= HEARTBEAT_EVERY_S:
-                            yield ": ping\n\n"
-                            last_emit = now
-
-                    await asyncio.sleep(POLL_INTERVAL_S)
-            except asyncio.CancelledError:
-                return
-
-        return StreamingResponse(
-            event_gen(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache, no-transform",
-                "X-Accel-Buffering": "no",  # désactive le buffering nginx/IIS ARR
-                "Connection": "keep-alive",
-            },
-        )
+            if loop.time() >= deadline:
+                return {"events": [], "cursor": cursor}
+            await asyncio.sleep(POLL_INTERVAL_S)
 
     return router
