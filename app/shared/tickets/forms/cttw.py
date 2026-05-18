@@ -20,6 +20,7 @@ from ..service import (
     _to_int,
     date_only_to_iso,
     iso_to_date_only,
+    ajout_histo_tk,
     load_salaries_minimal,
     maj_op_traitement_ticket,
 )
@@ -206,6 +207,82 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                 sms_result = f"SMS non envoyé : {e}"
         maj_op_traitement_ticket(int(id_ticket), int(user_id))
         return {"ok": True, "sms_result": sms_result}
+
+    if action == "refuser":
+        # « Renvoyer ce contrat en signature » (refus). 100% transposable
+        # (pas de PDF). Cases : pb_sign / pb_paraphe / pb_mention.
+        pb_sign = bool(payload.get("pb_sign"))
+        pb_par = bool(payload.get("pb_paraphe"))
+        pb_mention = bool(payload.get("pb_mention"))
+        if not (pb_sign or pb_par or pb_mention):
+            return {"ok": False, "error": "Coche au moins un problème"}
+
+        db = get_connection("ticket_rh")
+        cur = db.query_one(
+            "SELECT IDSalarie, idDA FROM TK_DemandeCttW WHERE IDTK_Liste = ?",
+            (int(id_ticket),),
+        )
+        if not cur:
+            return {"ok": False, "error": "Contrat introuvable"}
+        id_salarie = _clean_id(_to_int(cur.get("IDSalarie")))
+        id_da = _clean_id(_to_int(cur.get("idDA")))
+
+        sets = [
+            "contratValidé = 1", "contratSigné = 0", "contratAnnul = 0",
+            "datesignature = ''", "ContenuValidation = ''",
+        ]
+        elems: list[str] = []
+        if pb_sign:
+            sets += ["PhotoSalarié = ''", "Signature = ''"]
+            elems.append(" - la signature et la photo")
+        if pb_par:
+            sets.append("paraphe = ''")
+            elems.append(" - la paraphe")
+        if pb_mention:
+            sets.append("luApp = ''")
+            elems.append(" - la mention 'Lu et approuvé'")
+        sets += ["ModifDate = ?", "ModifOP = ?", "ModifELEM = 'modif'"]
+        db.query(
+            f"UPDATE TK_DemandeCttW SET {', '.join(sets)} "
+            f"WHERE IDTK_Liste = ?",
+            (now, int(user_id), int(id_ticket)),
+        )
+
+        # Statut TK_Liste (cascade fidèle au WinDev : 3 cases → 7,
+        # sinon Mention→11, sinon Par→10, sinon Sign→9)
+        if pb_sign and pb_par and pb_mention:
+            statut = 7
+        elif pb_mention:
+            statut = 11
+        elif pb_par:
+            statut = 10
+        else:
+            statut = 9
+        get_connection("ticket").query(
+            """UPDATE TK_Liste SET
+                IDTK_Statut = ?, modification = 1, opModif = ?, idModif = 0,
+                TypeModif = 'TKSTATUT', ModifDate = ?, ModifOP = ?,
+                ModifELEM = 'modif'
+            WHERE IDTK_Liste = ?""",
+            (statut, int(user_id), now, int(user_id), int(id_ticket)),
+        )
+        ajout_histo_tk(int(id_ticket), statut, int(user_id))
+
+        # SMS au DA (best-effort)
+        sms_result = ""
+        gsm_da = _gsm_salarie(id_da)
+        if gsm_da:
+            txt = (
+                f"Le contrat de travail pour {_salaire_nom(id_salarie)} "
+                "n'est pas conforme, merci de faire refaire les elements "
+                "suivant :\n" + "\n".join(elems)
+            )
+            try:
+                sms_result = envoi_sms(txt, gsm_da, "", "OMAYA-Info")
+            except Exception as e:
+                sms_result = f"SMS non envoyé : {e}"
+        maj_op_traitement_ticket(int(id_ticket), int(user_id))
+        return {"ok": True, "closed": True, "sms_result": sms_result}
 
     if action == "da":
         id_da = str(payload.get("id_da") or "")

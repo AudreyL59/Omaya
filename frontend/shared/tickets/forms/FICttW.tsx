@@ -97,9 +97,45 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
           <Info label="Titre" value={data.titre_contrat} />
           <Info label="Type" value={data.type_cttw} />
           <Info label="Signé le" value={data.date_signature} />
-          <p className="text-xs text-c-ink-faint pt-2">
-            Actions « Ce contrat est valide » / « Problème » / « Renvoyer
-            en signature » : en attente du code WinDev.
+
+          <hr className="border-c-line my-2" />
+          <p className="text-xs font-semibold text-c-ink">
+            Problème avec le contrat ?
+          </p>
+          <Chk label="Pb avec la signature et/ou la photo" k="pb_sign" data={data} set={set} />
+          <Chk label="Pb avec la paraphe" k="pb_paraphe" data={data} set={set} />
+          <Chk label="Pb avec Mention « Lu et approuvé »" k="pb_mention" data={data} set={set} />
+          <button
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  'Vous êtes sur le point de refuser ce contrat.\nSouhaitez-vous continuer ?',
+                )
+              )
+                return
+              await post({
+                action: 'refuser',
+                pb_sign: !!data.pb_sign,
+                pb_paraphe: !!data.pb_paraphe,
+                pb_mention: !!data.pb_mention,
+              })
+            }}
+            disabled={saving || (!data.pb_sign && !data.pb_paraphe && !data.pb_mention)}
+            className="w-full px-3 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-semibold hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Renvoyer ce contrat en signature
+          </button>
+
+          <button
+            disabled
+            title="Régénération du PDF signé : chantier en cours"
+            className="w-full px-3 py-2 rounded-lg bg-c-brand/40 text-white text-sm font-semibold cursor-not-allowed"
+          >
+            Ce contrat de travail est valide
+          </button>
+          <p className="text-[11px] text-c-ink-faint">
+            « Ce contrat est valide » (régénération + upload PDF signé +
+            mail) : chantier en cours.
           </p>
         </div>
       </div>
