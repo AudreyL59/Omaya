@@ -611,4 +611,30 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             },
         )
 
+    @router.get("/{id_ticket}/form/file")
+    def get_ticket_form_file(
+        id_ticket: str,
+        name: str = Query(..., description="Nom du fichier (document)"),
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Sert un document attaché au ticket (ex: photos DPAE via FTP).
+        Disponible si le handler du type implémente get_file().
+        """
+        _id_type, handler = _handler_for(id_ticket)
+        if handler is None or not hasattr(handler, "get_file"):
+            raise HTTPException(400, "Pas de document pour ce type de demande")
+        try:
+            data, mime = handler.get_file(int(id_ticket), name)
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+        except Exception as e:
+            raise HTTPException(500, f"Erreur récupération document : {e}")
+        return Response(
+            content=data,
+            media_type=mime,
+            headers={
+                "Content-Disposition": f'inline; filename="{name}"'
+            },
+        )
+
     return router

@@ -44,6 +44,7 @@ PRODUCTION_EXTRACTS_RETENTION_DAYS = int(
 FTP_HOST = os.getenv("FTP_HOST", "192.168.1.202")
 FTP_USER = os.getenv("FTP_USER", "OMAYA")
 FTP_PASSWORD = os.getenv("FTP_PASSWORD", "")
+FTP_PHOTO_DPAE_PATH = os.getenv("FTP_PHOTO_DPAE_PATH", "/OMAYA/PhotoDPAE")
 
 # Emails de service
 MAIL_SUPPORT = os.getenv("MAIL_SUPPORT", "intranet@omaya.fr")

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Save, UserPlus, Users } from 'lucide-react'
+import { FileText, Loader2, Save, UserPlus, Users } from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
@@ -13,6 +13,38 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
   const [picker, setPicker] = useState<
     'coopteur' | 'jocoopteur' | 'equipe' | null
   >(null)
+  const [docUrl, setDocUrl] = useState('')
+  const [docMime, setDocMime] = useState('')
+  const [docName, setDocName] = useState('')
+  const [docLoading, setDocLoading] = useState(false)
+
+  const openDoc = async (nomFichier: string) => {
+    setDocLoading(true)
+    setDocName(nomFichier)
+    try {
+      const resp = await fetch(
+        `${apiBase}/tickets/${idTicket}/form/file?name=${encodeURIComponent(
+          nomFichier,
+        )}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => null)
+        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        return
+      }
+      const blob = await resp.blob()
+      setDocUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return URL.createObjectURL(blob)
+      })
+      setDocMime(blob.type || '')
+    } catch {
+      window.alert('Erreur réseau lors du chargement du document.')
+    } finally {
+      setDocLoading(false)
+    }
+  }
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -234,6 +266,56 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             onClick={() => setPicker('equipe')}
           />
         </Row>
+      </Section>
+
+      {/* DOCUMENTS */}
+      <Section title="Documents">
+        {(form.documents || []).length === 0 ? (
+          <div className="text-sm text-c-ink-faint">Aucun document.</div>
+        ) : (
+          <div className="flex gap-4">
+            <ul className="w-72 shrink-0 border border-c-line rounded-lg divide-y divide-c-line-soft overflow-hidden">
+              {(form.documents as any[]).map((d) => (
+                <li key={d.id}>
+                  <button
+                    onClick={() => openDoc(d.nom_fichier)}
+                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
+                      docName === d.nom_fichier
+                        ? 'bg-c-brand-soft'
+                        : 'hover:bg-c-surface-soft'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 text-c-brand shrink-0" />
+                    <span className="truncate">{d.nom || d.nom_fichier}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="flex-1 min-h-[480px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
+              {docLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
+                </div>
+              ) : !docUrl ? (
+                <div className="h-full flex items-center justify-center text-c-ink-faint text-sm">
+                  Sélectionne un document pour l'aperçu.
+                </div>
+              ) : docMime.startsWith('image/') ? (
+                <img
+                  src={docUrl}
+                  alt={docName}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <iframe
+                  src={docUrl}
+                  title={docName}
+                  className="w-full h-[480px]"
+                />
+              )}
+            </div>
+          </div>
+        )}
       </Section>
 
       {picker === 'coopteur' && (

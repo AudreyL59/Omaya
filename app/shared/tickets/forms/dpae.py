@@ -9,6 +9,15 @@ Lot 1 : formulaire principal uniquement. La sous-table DOCUMENTS
 la DPAE / Attest Info / Régénérer) sont traités dans un lot ultérieur.
 """
 
+import ftplib
+import io
+
+from app.core.config import (
+    FTP_HOST,
+    FTP_PASSWORD,
+    FTP_PHOTO_DPAE_PATH,
+    FTP_USER,
+)
 from app.core.database import get_connection
 
 from ..service import (
@@ -21,6 +30,49 @@ from ..service import (
     iso_to_date_only,
     load_salaries_minimal,
 )
+
+
+def _ftp_download(nom_fichier: str) -> bytes | None:
+    """Télécharge /OMAYA/PhotoDPAE/<nom_fichier> depuis le FTP en mémoire."""
+    if not nom_fichier:
+        return None
+    try:
+        ftp = ftplib.FTP(timeout=15)
+        ftp.encoding = "latin-1"
+        ftp.connect(FTP_HOST, 21)
+        ftp.login(FTP_USER, FTP_PASSWORD)
+        buf = io.BytesIO()
+        ftp.retrbinary(
+            f"RETR {FTP_PHOTO_DPAE_PATH.rstrip('/')}/{nom_fichier}",
+            buf.write,
+        )
+        ftp.quit()
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+def _mime_for(name: str) -> str:
+    n = (name or "").lower()
+    if n.endswith(".pdf"):
+        return "application/pdf"
+    if n.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if n.endswith(".png"):
+        return "image/png"
+    if n.endswith(".gif"):
+        return "image/gif"
+    if n.endswith((".tif", ".tiff")):
+        return "image/tiff"
+    return "application/octet-stream"
+
+
+def get_file(id_ticket: int, name: str) -> tuple[bytes, str]:
+    """Retourne (octets, mime) d'un document DPAE (FTP)."""
+    data = _ftp_download(name)
+    if data is None:
+        raise FileNotFoundError("Document introuvable sur le FTP")
+    return data, _mime_for(name)
 
 # Combos statiques (cf. SituationFam.Ajoute / Civilité WinDev)
 SITUATION_FAM = {
@@ -76,6 +128,29 @@ def load(id_ticket: int) -> dict:
             .strip()
         )
 
+    # Sous-table DOCUMENTS (TK_DemandeDPAEPhoto, fichiers sur le FTP)
+    documents: list[dict] = []
+    try:
+        for d in db.query(
+            """SELECT IDTK_DemandeDPAEPhoto, Nom, NomFichier,
+                IDTK_TypePhotoDPAE
+            FROM TK_DemandeDPAEPhoto
+            WHERE IDTK_Liste = ?
+              AND ModifElem NOT LIKE '%suppr%'
+            ORDER BY Nom""",
+            (int(id_ticket),),
+        ):
+            did = _clean_id(_to_int(d.get("IDTK_DemandeDPAEPhoto")))
+            if did:
+                documents.append({
+                    "id": str(did),
+                    "nom": (d.get("Nom") or "").strip(),
+                    "nom_fichier": (d.get("NomFichier") or "").strip(),
+                    "id_type_photo": _to_int(d.get("IDTK_TypePhotoDPAE")),
+                })
+    except Exception:
+        documents = []
+
     return {
         "found": True,
         "civilite": civilite,
@@ -113,6 +188,7 @@ def load(id_ticket: int) -> dict:
         "avec_enfant": bool(r.get("AvecEnfant")),
         "nb_enfants": _to_int(r.get("NbEnfants")),
         "situation_fam_options": SITUATION_FAM,
+        "documents": documents,
     }
 
 
