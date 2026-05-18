@@ -22,10 +22,14 @@ from app.core.database import get_connection
 
 from .info_ticket import donne_info_ticket_batch
 from .schemas import (
+    SaveInfosRequest,
+    SaveInfosResponse,
+    SalarieItem,
     StatuerRequest,
     StatuerResponse,
     SupprimerRequest,
     SupprimerResponse,
+    TicketDetail,
     TicketListResponse,
     TicketRow,
     TicketSidebarItem,
@@ -34,12 +38,16 @@ from .schemas import (
 )
 from .service import (
     _now_windev,
+    apply_ouverture,
+    get_lib_type_demande,
     list_statuts,
     list_tickets_modified_since,
     list_tickets_par_type,
     list_type_ids_par_droit,
     list_types_par_droit,
     load_salaries_minimal,
+    save_ticket_infos,
+    search_salaries,
 )
 
 
@@ -421,5 +429,94 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             raise HTTPException(500, f"Erreur lors de la suppression : {e}")
 
         return SupprimerResponse(deleted=len(ids))
+
+    # -------------------------------------------------------------
+    # Fen_TicketContenu — bloc "Informations générales" (commun)
+    # -------------------------------------------------------------
+
+    def _enrich_detail(raw: dict) -> TicketDetail:
+        """Complète un raw TK_Liste avec libellés statut/type + noms."""
+        ids: set[int] = set()
+        for k in ("op_dest", "op_traitement_staff"):
+            v = raw.get(k) or ""
+            if v.isdigit() and int(v) > 0:
+                ids.add(int(v))
+        salaries = load_salaries_minimal(ids)
+        statut_lib = {s["id_statut"]: s["lib_statut"] for s in list_statuts()}
+        odest = int(raw["op_dest"]) if raw["op_dest"].isdigit() else 0
+        ostaff = (
+            int(raw["op_traitement_staff"])
+            if raw["op_traitement_staff"].isdigit() else 0
+        )
+        od = salaries.get(odest, {})
+        os_ = salaries.get(ostaff, {})
+        id_type = int(raw["id_type_demande"]) if raw["id_type_demande"].isdigit() else 0
+        return TicketDetail(
+            id_ticket=raw["id_ticket"],
+            id_type_demande=raw["id_type_demande"],
+            service=raw["service"],
+            lib_type_demande=get_lib_type_demande(id_type) if id_type else "",
+            id_statut=raw["id_statut"],
+            lib_statut=statut_lib.get(raw["id_statut"], ""),
+            op_dest=raw["op_dest"],
+            op_dest_nom=od.get("nom", ""),
+            op_dest_prenom=od.get("prenom", ""),
+            op_traitement_staff=raw["op_traitement_staff"],
+            op_staff_nom=os_.get("nom", ""),
+            op_staff_prenom=os_.get("prenom", ""),
+            cloturee=raw["cloturee"],
+            date_cloture=raw["date_cloture"],
+            date_crea=raw["date_crea"],
+        )
+
+    @router.get("/salaries/search", response_model=list[SalarieItem])
+    def salaries_search(
+        q: str = Query(..., min_length=1),
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Recherche salarié par début de nom (Fen_RechercheNomSalarié)."""
+        return [SalarieItem(**s) for s in search_salaries(q)]
+
+    @router.post("/{id_ticket}/ouvrir", response_model=TicketDetail)
+    def ouvrir_ticket(
+        id_ticket: str,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Ouverture d'un ticket (code init Fen_TicketContenu) :
+        applique la règle statut<2 → 2 (sauf types 38/39) puis renvoie
+        le détail enrichi pour le bloc "Informations générales".
+        """
+        if not id_ticket.isdigit():
+            raise HTTPException(400, "id_ticket invalide")
+        raw = apply_ouverture(int(id_ticket), int(user.id_salarie))
+        if raw is None:
+            raise HTTPException(404, "Ticket introuvable")
+        return _enrich_detail(raw)
+
+    @router.post("/{id_ticket}/infos", response_model=SaveInfosResponse)
+    def enregistrer_infos(
+        id_ticket: str,
+        req: SaveInfosRequest,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Enregistre les infos générales (transposition saveTicket())."""
+        if not id_ticket.isdigit():
+            raise HTTPException(400, "id_ticket invalide")
+        try:
+            res = save_ticket_infos(
+                int(id_ticket),
+                int(req.id_statut),
+                req.op_dest,
+                req.op_traitement_staff,
+                req.cloturee,
+                req.date_cloture,
+                int(user.id_salarie),
+                req.prendre_en_charge,
+            )
+        except Exception as e:
+            raise HTTPException(500, f"Erreur enregistrement : {e}")
+        if not res.get("ok"):
+            raise HTTPException(404, "Ticket introuvable")
+        return SaveInfosResponse(ok=True, closed=res.get("closed", False))
 
     return router

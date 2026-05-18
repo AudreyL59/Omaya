@@ -452,3 +452,171 @@ def load_salaries_minimal(ids: set[int]) -> dict[int, dict]:
                 "prenom": (r.get("PRENOM") or "").strip(),
             }
     return out
+
+
+def search_salaries(q: str, limit: int = 30) -> list[dict]:
+    """Recherche de salariés par début de NOM (équivalent
+    Fen_RechercheNomSalarié / ReqListeSalarie_ByDebutNom).
+
+    Fidèle au WinDev : on liste TOUS les salariés (actifs ou non) dont le
+    nom commence par `q`. Le NOM est stocké en majuscules → q en MAJ.
+
+    NB : l'affichage riche du WinDev (poste, société, date d'embauche,
+    "en activité" en vert/rouge) n'est pas repris ici — amélioration
+    possible ultérieurement si besoin.
+    """
+    search = (q or "").strip().upper()
+    if not search:
+        return []
+    db = get_connection("rh")
+    rows = db.query(
+        f"""SELECT DISTINCT TOP {int(limit)} s.IDSalarie, s.NOM, s.PRENOM
+        FROM salarie s
+        WHERE s.NOM LIKE ?
+        ORDER BY s.NOM, s.PRENOM""",
+        (f"{search}%",),
+    )
+    out: list[dict] = []
+    for r in rows:
+        sid = _clean_id(_to_int(r.get("IDSalarie")))
+        if sid:
+            out.append({
+                "id_salarie": str(sid),
+                "nom": (r.get("NOM") or "").strip(),
+                "prenom": (r.get("PRENOM") or "").strip(),
+            })
+    return out
+
+
+# ---------------------------------------------------------------
+# Fen_TicketContenu — détail + saveTicket + historique
+# ---------------------------------------------------------------
+
+def get_lib_type_demande(id_type: int) -> str:
+    """Lib_TypeDemande (mémo) d'un type — fetch isolé (troncature bridge)."""
+    try:
+        db = get_connection("ticket")
+        r = db.query_one(
+            "SELECT Lib_TypeDemande FROM TK_TypeDemande WHERE IDTK_TypeDemande = ?",
+            (int(id_type),),
+        )
+        return ((r.get("Lib_TypeDemande") if r else "") or "").strip()
+    except Exception:
+        return ""
+
+
+def load_ticket_raw(id_ticket: int) -> dict | None:
+    """Lit une ligne TK_Liste (1 ticket) — mêmes champs que la liste."""
+    db = get_connection("ticket")
+    r = db.query_one(
+        """SELECT IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
+            IDTK_TypeDemande, IDTK_Statut, DateReport,
+            Cloturée, DateCloture, ModifDate, modification,
+            OpTraitementStaff
+        FROM TK_Liste
+        WHERE IDTK_Liste = ?""",
+        (int(id_ticket),),
+    )
+    if not r:
+        return None
+    return {
+        "id_ticket": _str_id(r.get("IDTK_Liste")),
+        "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
+        "service": (r.get("Service") or "").strip(),
+        "id_statut": _to_int(r.get("IDTK_Statut")),
+        "date_crea": _windev_to_iso(r.get("DATECREA")),
+        "op_crea": _str_id(r.get("OPCREA")),
+        "op_dest": _str_id(r.get("OPDEST")),
+        "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
+        "cloturee": bool(r.get("Cloturée")),
+        "date_cloture": _windev_to_iso(r.get("DateCloture")),
+        "date_report": _windev_to_iso(r.get("DateReport")),
+        "modif_date": _windev_to_iso(r.get("ModifDate")),
+    }
+
+
+def apply_ouverture(id_ticket: int, user_id: int) -> dict | None:
+    """Règle d'ouverture WinDev (code init Fen_TicketContenu) :
+    si type ≠ 38/39 et IDTK_Statut < 2 → passe le statut à 2
+    (ModifDate/ModifOP/ModifELEM='modif'). Pas d'historique sur ce passage.
+    """
+    raw = load_ticket_raw(id_ticket)
+    if not raw:
+        return None
+    id_type = int(raw["id_type_demande"]) if raw["id_type_demande"].isdigit() else 0
+    if id_type not in (38, 39) and raw["id_statut"] < 2:
+        now = _now_windev()
+        db = get_connection("ticket")
+        db.query(
+            """UPDATE TK_Liste
+            SET IDTK_Statut = 2, ModifDate = ?, ModifOP = ?, ModifELEM = 'modif'
+            WHERE IDTK_Liste = ?""",
+            (now, int(user_id), int(id_ticket)),
+        )
+        raw["id_statut"] = 2
+    return raw
+
+
+def ajout_histo_tk(id_ticket: int, id_statut: int, id_cial: int) -> None:
+    """Ajoute une ligne TK_Histo (transposition AjoutHistoTK globale)."""
+    now = _now_windev()
+    new_id = int(now)  # idEntierDateHeureSys()
+    db = get_connection("ticket")
+    db.query(
+        """INSERT INTO TK_Histo
+        (IDTK_Histo, IDTK_Liste, operateur, dateHisto, IDTK_Statut,
+         ModifDate, ModifELEM, ModifOP)
+        VALUES (?, ?, ?, ?, ?, ?, 'new', ?)""",
+        (new_id, int(id_ticket), int(id_cial), now, int(id_statut), now, int(id_cial)),
+    )
+
+
+def save_ticket_infos(
+    id_ticket: int,
+    id_statut: int,
+    op_dest: str,
+    op_traitement_staff: str,
+    cloturee: bool,
+    date_cloture: str,
+    user_id: int,
+    prendre_en_charge: bool = False,
+) -> dict:
+    """Transposition de saveTicket() : UPDATE TK_Liste + historique si le
+    statut a changé. Renvoie {ok, closed}.
+    """
+    raw = load_ticket_raw(id_ticket)
+    if not raw:
+        return {"ok": False, "closed": False}
+    old_statut = raw["id_statut"]
+    now = _now_windev()
+
+    sets = ["IDTK_Statut = ?", "ModifOP = ?", "ModifDate = ?", "ModifELEM = 'modif'"]
+    params: list = [int(id_statut), int(user_id), now]
+    if op_dest and str(op_dest).isdigit():
+        sets.append("OPDEST = ?")
+        params.append(int(op_dest))
+    if prendre_en_charge:
+        # "Je m'occupe de ce ticket" : OpTraitementStaff = user courant
+        sets.append("OpTraitementStaff = ?")
+        params.append(int(user_id))
+    elif op_traitement_staff and str(op_traitement_staff).isdigit():
+        sets.append("OpTraitementStaff = ?")
+        params.append(int(op_traitement_staff))
+    if cloturee:
+        dc = (date_cloture or "").replace("-", "")[:8]
+        dc_wd = f"{dc}000000000" if len(dc) == 8 and dc.isdigit() else now
+        sets.append("Cloturée = 1")
+        sets.append("DateCloture = ?")
+        params.append(dc_wd)
+    else:
+        sets.append("Cloturée = 0")
+    params.append(int(id_ticket))
+
+    db = get_connection("ticket")
+    db.query(
+        f"UPDATE TK_Liste SET {', '.join(sets)} WHERE IDTK_Liste = ?",
+        tuple(params),
+    )
+    if int(id_statut) != int(old_statut):
+        ajout_histo_tk(id_ticket, id_statut, user_id)
+    return {"ok": True, "closed": bool(cloturee)}

@@ -14,6 +14,7 @@ import {
   FileSignature,
   FileText,
   HeartHandshake,
+  History,
   IdCard,
   Loader2,
   Package,
@@ -29,10 +30,13 @@ import {
   UserMinus,
   UserPlus,
   Wrench,
+  X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import type {
+  SalarieItem,
+  TicketDetail,
   TicketListResponse,
   TicketRow,
   TicketSidebarItem,
@@ -119,6 +123,9 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
   const [allStatuts, setAllStatuts] = useState<TicketStatut[]>([])
   const [showStatuerPopup, setShowStatuerPopup] = useState(false)
   const [reloadNonce, setReloadNonce] = useState(0)
+  // Fen_TicketContenu (clic sur une ligne)
+  const [detail, setDetail] = useState<TicketDetail | null>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
   // Live update (SSE)
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
   const [modifiedIds, setModifiedIds] = useState<Set<string>>(new Set())
@@ -421,6 +428,69 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
     }
   }
 
+  // Clic sur une ligne → ouvre Fen_TicketContenu (applique aussi la
+  // règle WinDev statut<2 → 2 côté backend).
+  const openTicket = async (idTicket: string) => {
+    setLoadingDetail(true)
+    setDetail(null)
+    try {
+      const resp = await fetch(`${apiBase}/tickets/${idTicket}/ouvrir`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => null)
+        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        return
+      }
+      const d = (await resp.json()) as TicketDetail
+      setDetail(d)
+      // Le passage statut→2 modifie la liste : on resynchronise.
+      setReloadNonce((n) => n + 1)
+    } catch {
+      window.alert('Erreur réseau (ouverture du ticket).')
+    } finally {
+      setLoadingDetail(false)
+    }
+  }
+
+  // Enregistrer les infos générales (saveTicket WinDev)
+  const saveInfos = async (payload: {
+    id_statut: number
+    op_dest: string
+    op_traitement_staff: string
+    cloturee: boolean
+    date_cloture: string
+    prendre_en_charge?: boolean
+  }) => {
+    if (!detail) return
+    try {
+      const resp = await fetch(`${apiBase}/tickets/${detail.id_ticket}/infos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => null)
+        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        return
+      }
+      const res = await resp.json()
+      setReloadNonce((n) => n + 1)
+      if (res.closed) {
+        setDetail(null) // clôturé → ferme la fenêtre (cf. WinDev Ferme())
+      } else {
+        // recharge le détail à jour (libellés, noms…)
+        openTicket(detail.id_ticket)
+      }
+    } catch {
+      window.alert('Erreur réseau lors de l’enregistrement.')
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4 p-4">
       {/* Sidebar — style WinDev : services en bandes pleines, types en lignes blanches */}
@@ -562,6 +632,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
                       addedIds={addedIds}
                       modifiedIds={modifiedIds}
                       onClearMarkers={clearRowMarkers}
+                      onOpen={openTicket}
                     />
                   )
                 })}
@@ -607,8 +678,308 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
             onClose={() => setShowStatuerPopup(false)}
           />
         )}
+
+        {(detail || loadingDetail) && (
+          <TicketContenuModal
+            apiBase={apiBase}
+            getToken={getToken}
+            detail={detail}
+            loading={loadingDetail}
+            statuts={allStatuts}
+            onSave={saveInfos}
+            onClose={() => setDetail(null)}
+          />
+        )}
       </main>
     </div>
+  )
+}
+
+function SalariePicker({
+  apiBase, getToken, onPick, onClose,
+}: {
+  apiBase: string
+  getToken: () => string | null
+  onPick: (s: SalarieItem) => void
+  onClose: () => void
+}) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<SalarieItem[]>([])
+  const [searching, setSearching] = useState(false)
+  useEffect(() => {
+    const term = q.trim()
+    if (term.length < 1) {
+      setResults([])
+      return
+    }
+    setSearching(true)
+    const t = setTimeout(() => {
+      fetch(`${apiBase}/tickets/salaries/search?q=${encodeURIComponent(term)}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+        .then((r) => r.json())
+        .then((d: SalarieItem[]) => setResults(Array.isArray(d) ? d : []))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, apiBase])
+  return (
+    <>
+      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] bg-white rounded-2xl shadow-xl border border-c-line w-96 p-5">
+        <div className="flex items-center gap-2 text-base font-semibold text-c-ink mb-3">
+          <UserPlus className="w-5 h-5 text-c-brand" />
+          Recherche un salarié
+        </div>
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Nom (début)…"
+          className="w-full px-3 py-2 mb-3 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-c-brand-line"
+        />
+        <div className="max-h-72 overflow-auto -mx-1">
+          {searching ? (
+            <div className="p-4 flex justify-center">
+              <Loader2 className="w-4 h-4 text-c-ink-icon animate-spin" />
+            </div>
+          ) : results.length === 0 ? (
+            <div className="p-4 text-xs text-c-ink-faint text-center">
+              {q.trim() ? 'Aucun résultat.' : 'Saisis un début de nom.'}
+            </div>
+          ) : (
+            <ul>
+              {results.map((s) => (
+                <li key={s.id_salarie}>
+                  <button
+                    onClick={() => onPick(s)}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
+                  >
+                    {s.nom} {capitalize(s.prenom)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function TicketContenuModal({
+  apiBase, getToken, detail, loading, statuts, onSave, onClose,
+}: {
+  apiBase: string
+  getToken: () => string | null
+  detail: TicketDetail | null
+  loading: boolean
+  statuts: TicketStatut[]
+  onSave: (payload: {
+    id_statut: number
+    op_dest: string
+    op_traitement_staff: string
+    cloturee: boolean
+    date_cloture: string
+    prendre_en_charge?: boolean
+  }) => void
+  onClose: () => void
+}) {
+  const [statutId, setStatutId] = useState<number>(0)
+  const [cloturee, setCloturee] = useState(false)
+  const [dateCloture, setDateCloture] = useState('')
+  const [opDest, setOpDest] = useState('')
+  const [opDestLabel, setOpDestLabel] = useState('')
+  const [opStaff, setOpStaff] = useState('')
+  const [opStaffLabel, setOpStaffLabel] = useState('')
+  const [picker, setPicker] = useState<'dest' | 'staff' | null>(null)
+
+  // (Ré)initialise les champs quand le détail (re)charge
+  useEffect(() => {
+    if (!detail) return
+    setStatutId(detail.id_statut)
+    setCloturee(detail.cloturee)
+    setDateCloture(detail.date_cloture ? detail.date_cloture.slice(0, 10) : '')
+    setOpDest(detail.op_dest || '')
+    setOpDestLabel(
+      detail.op_dest_nom
+        ? `${detail.op_dest_nom} ${capitalize(detail.op_dest_prenom)}`
+        : '',
+    )
+    setOpStaff(detail.op_traitement_staff || '')
+    setOpStaffLabel(
+      detail.op_staff_nom
+        ? `${detail.op_staff_nom} ${capitalize(detail.op_staff_prenom)}`
+        : '',
+    )
+  }, [detail])
+
+  const buildPayload = (over?: Partial<{ op_dest: string; op_traitement_staff: string }>) => ({
+    id_statut: statutId,
+    op_dest: over?.op_dest ?? opDest,
+    op_traitement_staff: over?.op_traitement_staff ?? opStaff,
+    cloturee,
+    date_cloture: dateCloture,
+  })
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-white rounded-2xl shadow-2xl border border-c-line w-[900px] max-w-[95vw] h-[80vh] flex flex-col overflow-hidden">
+        <header className="flex items-center justify-between px-5 py-3 border-b border-c-line bg-c-surface-soft">
+          <div className="flex items-center gap-2 text-base font-semibold text-c-ink">
+            <Ticket className="w-5 h-5 text-c-brand" />
+            {detail ? detail.lib_type_demande || 'Ticket' : 'Ticket'}
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-c-ink-faint hover:bg-c-surface-medium transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </header>
+
+        {loading || !detail ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-c-ink-icon animate-spin" />
+          </div>
+        ) : (
+          <div className="flex-1 flex min-h-0">
+            {/* Colonne gauche — Informations générales */}
+            <div className="w-80 shrink-0 border-r border-c-line bg-c-surface-soft overflow-y-auto p-4 flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-c-brand-strong">
+                Informations générales
+              </h3>
+
+              <button
+                onClick={() => setPicker('dest')}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong bg-white text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
+              >
+                <UserPlus className="w-4 h-4 text-c-brand shrink-0" />
+                <span className="truncate">
+                  {opDestLabel || 'Choisir le destinataire'}
+                </span>
+              </button>
+
+              <select
+                value={statutId}
+                onChange={(e) => setStatutId(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-c-line-strong rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-c-brand-line"
+              >
+                {statuts.map((s) => (
+                  <option key={s.id_statut} value={s.id_statut}>
+                    {s.lib_statut}
+                  </option>
+                ))}
+              </select>
+
+              <label className="flex items-center gap-2 text-sm text-c-ink cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cloturee}
+                  onChange={(e) => setCloturee(e.target.checked)}
+                  className="w-4 h-4 cursor-pointer accent-c-brand"
+                />
+                Clôturé le
+                <input
+                  type="date"
+                  value={dateCloture}
+                  onChange={(e) => setDateCloture(e.target.value)}
+                  disabled={!cloturee}
+                  className="flex-1 px-2 py-1 border border-c-line-strong rounded-md text-xs disabled:opacity-50"
+                />
+              </label>
+
+              <div className="text-xs text-c-ink-soft border border-c-line rounded-lg p-3 bg-white space-y-1">
+                <div>
+                  <span className="text-c-ink-faint">Id Ticket : </span>
+                  {detail.id_ticket}
+                </div>
+                <div>
+                  <span className="text-c-ink-faint">Service : </span>
+                  {detail.service}
+                </div>
+                <div>
+                  <span className="text-c-ink-faint">Id Type Dem : </span>
+                  {detail.id_type_demande}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setPicker('staff')}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong bg-white text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
+              >
+                <UserPlus className="w-4 h-4 text-c-brand shrink-0" />
+                <span className="truncate">
+                  {opStaffLabel || "Choisir l'Opé Staff"}
+                </span>
+              </button>
+
+              <button
+                onClick={() =>
+                  onSave({ ...buildPayload(), prendre_en_charge: true })
+                }
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-c-brand text-c-brand-strong text-sm font-medium hover:bg-c-brand-soft transition-colors"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Je m'occupe de ce ticket
+              </button>
+
+              <button
+                onClick={() => onSave(buildPayload())}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 transition-all"
+              >
+                <Save className="w-4 h-4" />
+                Enregistrer les infos générales
+              </button>
+
+              <button
+                disabled
+                title="Historique — à venir"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-c-ink-faint text-sm opacity-50 cursor-not-allowed"
+              >
+                <History className="w-4 h-4" />
+                Voir l'historique
+              </button>
+            </div>
+
+            {/* Colonne droite — Détail du ticket (FI_* à venir) */}
+            <div className="flex-1 min-w-0 overflow-y-auto p-6">
+              <h3 className="text-sm font-semibold text-c-ink mb-4">
+                Détail du ticket
+              </h3>
+              <div className="h-full flex items-center justify-center text-c-ink-faint text-sm text-center">
+                Formulaire spécifique au type «&nbsp;{detail.lib_type_demande}&nbsp;»
+                <br />
+                (à venir)
+              </div>
+            </div>
+          </div>
+        )}
+
+        {picker && (
+          <SalariePicker
+            apiBase={apiBase}
+            getToken={getToken}
+            onClose={() => setPicker(null)}
+            onPick={(s) => {
+              const label = `${s.nom} ${capitalize(s.prenom)}`
+              if (picker === 'dest') {
+                setOpDest(s.id_salarie)
+                setOpDestLabel(label)
+                onSave(buildPayload({ op_dest: s.id_salarie }))
+              } else {
+                setOpStaff(s.id_salarie)
+                setOpStaffLabel(label)
+                onSave(buildPayload({ op_traitement_staff: s.id_salarie }))
+              }
+              setPicker(null)
+            }}
+          />
+        )}
+      </div>
+    </>
   )
 }
 
@@ -737,7 +1108,7 @@ function FiltersPopup({
 
 function RowGroup({
   label, count, rows, selected, onToggle,
-  addedIds, modifiedIds, onClearMarkers,
+  addedIds, modifiedIds, onClearMarkers, onOpen,
 }: {
   label: string
   count: number
@@ -747,6 +1118,7 @@ function RowGroup({
   addedIds: Set<string>
   modifiedIds: Set<string>
   onClearMarkers: (id: string) => void
+  onOpen: (id: string) => void
 }) {
   return (
     <>
@@ -773,11 +1145,10 @@ function RowGroup({
             key={r.id_ticket}
             onClick={() => {
               if (isAdded || isModified) onClearMarkers(r.id_ticket)
+              onOpen(r.id_ticket)
             }}
-            className={`border-t border-c-line-soft transition-colors ${rowBg} ${
-              isAdded || isModified ? 'cursor-pointer' : ''
-            }`}
-            title={isAdded ? 'Nouveau ticket — cliquer pour retirer le marqueur' : isModified ? 'Ticket modifié — cliquer pour retirer le marqueur' : undefined}
+            className={`border-t border-c-line-soft transition-colors cursor-pointer ${rowBg}`}
+            title="Ouvrir le ticket"
           >
             <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
               <input

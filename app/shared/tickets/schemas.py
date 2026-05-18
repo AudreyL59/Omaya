@@ -86,3 +86,51 @@ class SupprimerRequest(BaseModel):
 
 class SupprimerResponse(BaseModel):
     deleted: int
+
+
+# ---------------------------------------------------------------
+# Fen_TicketContenu — bloc "Informations générales" (commun)
+# ---------------------------------------------------------------
+
+class TicketDetail(BaseModel):
+    """Détail d'un ticket pour l'écran d'édition (infos générales)."""
+    id_ticket: str
+    id_type_demande: str
+    service: str
+    lib_type_demande: str = ""
+    id_statut: int
+    lib_statut: str = ""
+    op_dest: str = ""
+    op_dest_nom: str = ""
+    op_dest_prenom: str = ""
+    op_traitement_staff: str = ""
+    op_staff_nom: str = ""
+    op_staff_prenom: str = ""
+    cloturee: bool = False
+    date_cloture: str = ""
+    date_crea: str = ""
+
+
+class SaveInfosRequest(BaseModel):
+    """Enregistrer les infos générales (cf. WinDev saveTicket()).
+
+    op_dest / op_traitement_staff : "" = inchangé/non renseigné.
+    Le passage cloturee=True renseigne DateCloture (si non fournie = now).
+    """
+    id_statut: int
+    op_dest: str = ""
+    op_traitement_staff: str = ""
+    cloturee: bool = False
+    date_cloture: str = ""        # YYYYMMDD (vide = now si cloturee)
+    prendre_en_charge: bool = False  # "Je m'occupe" → op_staff = user
+
+
+class SaveInfosResponse(BaseModel):
+    ok: bool = True
+    closed: bool = False          # True si le ticket vient d'être clôturé
+
+
+class SalarieItem(BaseModel):
+    id_salarie: str
+    nom: str
+    prenom: str

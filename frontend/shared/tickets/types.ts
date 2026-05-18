@@ -60,3 +60,36 @@ export interface TicketStreamPayload {
   events: TicketStreamEvent[]
   cursor: string
 }
+
+// ---------------------------------------------------------------
+// Fen_TicketContenu — détail + bloc "Informations générales"
+// ---------------------------------------------------------------
+
+export interface TicketDetail {
+  id_ticket: string
+  id_type_demande: string
+  service: string
+  lib_type_demande: string
+  id_statut: number
+  lib_statut: string
+  op_dest: string
+  op_dest_nom: string
+  op_dest_prenom: string
+  op_traitement_staff: string
+  op_staff_nom: string
+  op_staff_prenom: string
+  cloturee: boolean
+  date_cloture: string
+  date_crea: string
+}
+
+export interface SalarieItem {
+  id_salarie: string
+  nom: string
+  prenom: string
+}
+
+export interface SaveInfosResponse {
+  ok: boolean
+  closed: boolean
+}
