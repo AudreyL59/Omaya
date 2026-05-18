@@ -197,9 +197,18 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
         </button>
 
         <button
-          disabled
-          title="En attente du code WinDev"
-          className="w-full px-3 py-2 rounded-lg bg-c-brand/40 text-white text-sm font-semibold cursor-not-allowed"
+          onClick={async () => {
+            if (
+              !window.confirm(
+                'Vous êtes sur le point de valider ce contrat.\nSouhaitez-vous continuer ?',
+              )
+            )
+              return
+            const ok = await post({ action: 'valider' })
+            if (ok) window.alert('Contrat validé. Le DA a été notifié par SMS.')
+          }}
+          disabled={saving}
+          className="w-full px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
         >
           Valider le contrat pour signature
         </button>

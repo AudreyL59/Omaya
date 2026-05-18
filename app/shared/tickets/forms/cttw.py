@@ -12,6 +12,7 @@ salarie_mutuelle + mutuelle : base rh.
 """
 
 from app.core.database import get_connection
+from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
     _clean_id,
@@ -20,7 +21,27 @@ from ..service import (
     date_only_to_iso,
     iso_to_date_only,
     load_salaries_minimal,
+    maj_op_traitement_ticket,
 )
+
+
+def _gsm_salarie(id_salarie: int) -> str:
+    """TélMob (salarie_coordonnées, base rh) nettoyé."""
+    if not id_salarie:
+        return ""
+    try:
+        db = get_connection("rh")
+        r = db.query_one(
+            "SELECT IDSalarie, TélMob FROM salarie_coordonnées "
+            "WHERE IDSalarie = ?",
+            (int(id_salarie),),
+        )
+        tel = (r.get("TélMob") if r else "") or ""
+        for c in (".", " ", "/", "-"):
+            tel = tel.replace(c, "")
+        return tel.strip()
+    except Exception:
+        return ""
 
 PDF_NON_SIGNE_URL = "https://interne.omaya.fr/TempCttw/{id}-cttW.pdf"
 
@@ -142,6 +163,49 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
     """
     action = str(payload.get("action") or "mutuelle")
     now = _now_windev()
+
+    if action == "valider":
+        # « Valider le contrat de travail pour signature »
+        db = get_connection("ticket_rh")
+        cur = db.query_one(
+            "SELECT IDSalarie, idDA FROM TK_DemandeCttW WHERE IDTK_Liste = ?",
+            (int(id_ticket),),
+        )
+        if not cur:
+            return {"ok": False, "error": "Contrat introuvable"}
+        id_salarie = _clean_id(_to_int(cur.get("IDSalarie")))
+        id_da = _clean_id(_to_int(cur.get("idDA")))
+
+        db.query(
+            """UPDATE TK_DemandeCttW SET
+                contratValidé = 1, contratSigné = 0, contratAnnul = 0,
+                datesignature = '', ContenuValidation = '',
+                PhotoSalarié = '', Signature = '', paraphe = '', luApp = '',
+                ModifDate = ?, ModifOP = ?, ModifELEM = 'modif'
+            WHERE IDTK_Liste = ?""",
+            (now, int(user_id), int(id_ticket)),
+        )
+        # TK_Liste → statut 22 (base ticket)
+        get_connection("ticket").query(
+            """UPDATE TK_Liste
+            SET IDTK_Statut = 22, ModifDate = ?, ModifElem = 'modif'
+            WHERE IDTK_Liste = ?""",
+            (now, int(id_ticket)),
+        )
+        # SMS au DA (best-effort, comme le WinDev)
+        sms_result = ""
+        gsm_da = _gsm_salarie(id_da)
+        if gsm_da:
+            txt = (
+                f"Le contrat de travail pour {_salaire_nom(id_salarie)} "
+                "est disponible à la signature sur ton appli OMAYA."
+            )
+            try:
+                sms_result = envoi_sms(txt, gsm_da, "", "OMAYA-Info")
+            except Exception as e:
+                sms_result = f"SMS non envoyé : {e}"
+        maj_op_traitement_ticket(int(id_ticket), int(user_id))
+        return {"ok": True, "sms_result": sms_result}
 
     if action == "da":
         id_da = str(payload.get("id_da") or "")
