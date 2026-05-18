@@ -56,6 +56,42 @@ pour toute chaîne sFichier de sListeFichiers séparée par RC
 	fin
 fin
 
+// =============================================================
+// Mode spécial : attache d'un mémo binaire / image (HAttacheMémo)
+// Déclenché quand sSQL = "@ATTACHMEMO@".
+// Paramètres supplémentaires en ligne de commande :
+//   LigneCommande(9)  = nom de la table (fichier)
+//   LigneCommande(10) = rubrique clé (pour HLitRecherche)
+//   LigneCommande(11) = valeur de la clé
+//   LigneCommande(12) = rubrique mémo à attacher
+//   LigneCommande(13) = chemin du fichier à attacher
+// Le binaire ne transitant pas en SQL, l'appelant a écrit le
+// fichier sur disque au préalable.
+// =============================================================
+si sSQL = "@ATTACHMEMO@" alors
+	sAM_Table		est une chaîne = LigneCommande(9)
+	sAM_RubCle		est une chaîne = LigneCommande(10)
+	sAM_ValCle		est une chaîne = LigneCommande(11)
+	sAM_RubMemo		est une chaîne = LigneCommande(12)
+	sAM_Fichier		est une chaîne = LigneCommande(13)
+
+	HLitRecherche(sAM_Table, sAM_RubCle, sAM_ValCle, hIdentique)
+	si HTrouve(sAM_Table) alors
+		HAttacheMémo(sAM_Table, sAM_RubMemo, sAM_Fichier, hMémoImg)
+		si HModifie(sAM_Table) alors
+			fSauveTexte(sFichierSortie, "{""ok"":true,""rows"":[],""count"":0}")
+		sinon
+			sErrAM est une chaîne = Remplace(HErreurInfo(), """", "\""")
+			sErrAM = Remplace(sErrAM, RC, " ")
+			fSauveTexte(sFichierSortie, "{""ok"":false,""error"":""" + sErrAM + """}")
+		fin
+	sinon
+		fSauveTexte(sFichierSortie, "{""ok"":false,""error"":""Enregistrement introuvable (ATTACHMEMO)""}")
+	fin
+	HFermeConnexion(sNomConnexion)
+	FinProgramme()
+fin
+
 // Détecter le type de requête (SELECT vs INSERT/UPDATE/DELETE)
 // Normaliser : remplacer tous les whitespace (RC, TAB) par espace pour détection fiable
 sSQLMaj est une chaîne = Majuscule(SansEspace(sSQL))

@@ -16,7 +16,11 @@ la classe HFSQLConnection par une implémentation SQLAlchemy.
 import os
 from dotenv import load_dotenv
 
-from app.core.database.hfsql_bridge import execute_query, HFSQLError
+from app.core.database.hfsql_bridge import (
+    attach_memo as _bridge_attach_memo,
+    execute_query,
+    HFSQLError,
+)
 
 load_dotenv()
 
@@ -92,6 +96,36 @@ class HFSQLConnection:
         """Exécute une requête et retourne la première ligne, ou None."""
         rows = self.query(sql, params)
         return rows[0] if rows else None
+
+    def attach_memo(
+        self,
+        table: str,
+        key_field: str,
+        key_value,
+        memo_field: str,
+        file_path: str,
+    ) -> bool:
+        """Attache un fichier à un mémo binaire/image (HAttacheMémo).
+
+        Le SQL ne pouvant pas véhiculer de binaire, l'appelant écrit
+        d'abord la donnée dans `file_path` (fichier local lisible par
+        le bridge), puis appelle cette méthode.
+
+        Nécessite le bridge recompilé avec le mode @ATTACHMEMO@.
+        """
+        return _bridge_attach_memo(
+            server=self.server,
+            user=HFSQL_USER,
+            password=HFSQL_PASSWORD,
+            file_password=HFSQL_DB_PASSWORD,
+            database=self.db_name,
+            table=table,
+            key_field=key_field,
+            key_value=key_value,
+            memo_field=memo_field,
+            file_path=file_path,
+            connection_name=self.connection_name,
+        )
 
 
 def get_db(db_key: str):

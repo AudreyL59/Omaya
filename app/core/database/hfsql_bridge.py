@@ -145,3 +145,99 @@ def execute_query(
     finally:
         if result_file.exists():
             result_file.unlink()
+
+
+def attach_memo(
+    server: str,
+    user: str,
+    password: str,
+    file_password: str,
+    database: str,
+    table: str,
+    key_field: str,
+    key_value,
+    memo_field: str,
+    file_path: str,
+    connection_name: str = "",
+) -> bool:
+    """Attache un fichier (image/binaire) à un mémo via le bridge WinDev.
+
+    Reproduit HAttacheMémo() : le bridge fait HLitRecherche(table,
+    key_field, key_value) puis HAttacheMémo(table, memo_field, file_path,
+    hMémoImg) puis HModifie.
+
+    PRÉREQUIS : bridge Dll_ODBC.exe recompilé avec le bloc @ATTACHMEMO@
+    (cf. docs/hfsql_bridge_windev.wl). Sans ça → HFSQLError explicite.
+
+    Le binaire ne transitant pas en SQL, l'appelant écrit d'abord la
+    donnée dans `file_path` (fichier local lisible par le bridge).
+    """
+    bridge = Path(HFSQL_BRIDGE_PATH)
+    if not bridge.exists():
+        raise HFSQLError(f"Bridge introuvable : {bridge}")
+
+    temp_dir = Path(tempfile.gettempdir())
+    result_file = temp_dir / f"hfsql_{uuid.uuid4().hex}.json"
+
+    try:
+        # Positions = LigneCommande WinDev :
+        #  6=@ATTACHMEMO@  7=result_file  8=connexion
+        #  9=table 10=key_field 11=key_value 12=memo_field 13=file_path
+        args = [
+            str(bridge),
+            server,
+            user,
+            password,
+            file_password,
+            database,
+            "@ATTACHMEMO@",
+            str(result_file),
+            connection_name,
+            str(table),
+            str(key_field),
+            str(key_value),
+            str(memo_field),
+            str(file_path),
+        ]
+
+        proc = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        try:
+            proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise HFSQLError("Bridge timeout (30s) sur @ATTACHMEMO@")
+
+        if not result_file.exists():
+            raise HFSQLError(
+                "Bridge @ATTACHMEMO@ : aucun fichier résultat "
+                f"(exit {proc.returncode}). Le bridge Dll_ODBC.exe est-il "
+                "recompilé avec le bloc @ATTACHMEMO@ ?"
+            )
+
+        for enc in ["utf-8", "latin-1", "cp1252"]:
+            try:
+                content = result_file.read_text(encoding=enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            content = result_file.read_text(encoding="latin-1", errors="replace")
+
+        if not content.strip():
+            raise HFSQLError("Fichier résultat vide (@ATTACHMEMO@)")
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError as e:
+            raise HFSQLError(f"JSON invalide (@ATTACHMEMO@): {e}")
+        if not data.get("ok"):
+            raise HFSQLError(data.get("error", "Erreur @ATTACHMEMO@ inconnue"))
+        return True
+    finally:
+        if result_file.exists():
+            result_file.unlink()
