@@ -454,6 +454,46 @@ def load_salaries_minimal(ids: set[int]) -> dict[int, dict]:
     return out
 
 
+def search_organigrammes(q: str, limit: int = 30) -> list[dict]:
+    """Recherche d'équipes (organigramme) par Lib_ORGA. Base rh."""
+    search = (q or "").strip()
+    if not search:
+        return []
+    db = get_connection("rh")
+    rows = db.query(
+        f"""SELECT TOP {int(limit)} idorganigramme, Lib_ORGA
+        FROM organigramme
+        WHERE Lib_ORGA LIKE ?
+        ORDER BY Lib_ORGA""",
+        (f"%{search}%",),
+    )
+    out: list[dict] = []
+    for r in rows:
+        oid = _clean_id(_to_int(r.get("idorganigramme")))
+        if oid:
+            out.append({
+                "id_organigramme": str(oid),
+                "lib_orga": (r.get("Lib_ORGA") or "").strip(),
+            })
+    return out
+
+
+def get_organigramme_lib(id_orga: int) -> str:
+    """Lib_ORGA d'une équipe (base rh)."""
+    if not id_orga:
+        return ""
+    try:
+        db = get_connection("rh")
+        r = db.query_one(
+            "SELECT idorganigramme, Lib_ORGA FROM organigramme "
+            "WHERE idorganigramme = ?",
+            (int(id_orga),),
+        )
+        return ((r.get("Lib_ORGA") if r else "") or "").strip()
+    except Exception:
+        return ""
+
+
 def salarie_infos_batch(ids: set[int]) -> dict[int, dict]:
     """{id: {nom, prenom, date_embauche(ISO), lib_societe}} pour une liste
     d'IDSalarie. Multi-embauche → priorité EnActivité=1. Base rh.

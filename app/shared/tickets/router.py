@@ -50,6 +50,7 @@ from .service import (
     list_types_par_droit,
     load_salaries_minimal,
     save_ticket_infos,
+    search_organigrammes,
     search_salaries,
 )
 
@@ -479,6 +480,14 @@ def get_tickets_router(droit_field: str) -> APIRouter:
     ):
         """Recherche salarié par début de nom (Fen_RechercheNomSalarié)."""
         return [SalarieItem(**s) for s in search_salaries(q)]
+
+    @router.get("/organigrammes/search")
+    def organigrammes_search(
+        q: str = Query(..., min_length=1),
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Recherche d'équipe (organigramme) par libellé."""
+        return search_organigrammes(q)
 
     @router.post("/{id_ticket}/ouvrir", response_model=TicketDetail)
     def ouvrir_ticket(

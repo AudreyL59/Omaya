@@ -7,6 +7,7 @@
 import type { ComponentType } from 'react'
 
 import FICartePro from './FICartePro'
+import FIDPAE from './FIDPAE'
 import FIFourniture from './FIFourniture'
 
 export interface FIProps {
@@ -18,4 +19,6 @@ export interface FIProps {
 export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '1': FIFourniture, // Commande Fourniture
   '2': FICartePro,   // Carte PRO
+  '3': FIDPAE,       // DPAE
+  '21': FIDPAE,      // DPAE à venir (même formulaire)
 }
