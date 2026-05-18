@@ -25,11 +25,16 @@ from ..service import (
 
 
 def _photo_data_url(id_ligne: int) -> str:
-    """Mémo PHOTO d'une ligne → data URL (SELECT isolé : mémo)."""
+    """Mémo PHOTO d'une ligne → data URL.
+
+    NB : on SELECT aussi la clé. Un SELECT ne contenant QUE le mémo
+    binaire fait planter le bridge (HEnregistrementVersJSON renvoie un
+    objet vide → injection base64 → JSON invalide `{,"PHOTO":...}`).
+    """
     try:
         db = get_connection("ticket_bo")
         r = db.query_one(
-            "SELECT PHOTO FROM TK_DemandeCartePRO "
+            "SELECT IDTK_DemandeCartePRO, PHOTO FROM TK_DemandeCartePRO "
             "WHERE IDTK_DemandeCartePRO = ?",
             (int(id_ligne),),
         )
@@ -142,7 +147,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             if id_salarie:
                 db_rh = get_connection("rh")
                 sp = db_rh.query_one(
-                    "SELECT Photo FROM salarie WHERE IDSalarie = ?",
+                    "SELECT IDSalarie, Photo FROM salarie WHERE IDSalarie = ?",
                     (int(id_salarie),),
                 )
                 if not _icone_to_data_url(sp.get("Photo") if sp else None):

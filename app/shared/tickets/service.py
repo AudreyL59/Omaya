@@ -493,7 +493,7 @@ def salarie_infos_batch(ids: set[int]) -> dict[int, dict]:
             prev = emb.get(sid)
             if prev is None or (actif and not prev["actif"]):
                 emb[sid] = {
-                    "date_debut": _windev_to_iso(r.get("DateDébut"))[:10],
+                    "date_debut": date_only_to_iso(r.get("DateDébut")),
                     "id_ste": _clean_id(_to_int(r.get("IdSte"))),
                     "actif": actif,
                 }
@@ -565,7 +565,7 @@ def search_salaries(q: str, limit: int = 30) -> list[dict]:
             prev = emb_by_id.get(sid)
             if prev is None or (actif and not prev["actif"]):
                 emb_by_id[sid] = {
-                    "date_debut": _windev_to_iso(r.get("DateDébut"))[:10],
+                    "date_debut": date_only_to_iso(r.get("DateDébut")),
                     "actif": actif,
                     "id_poste": _clean_id(_to_int(r.get("IdTypePoste"))),
                     "id_ste": _clean_id(_to_int(r.get("IdSte"))),
