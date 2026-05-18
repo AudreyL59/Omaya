@@ -134,3 +134,7 @@ class SalarieItem(BaseModel):
     id_salarie: str
     nom: str
     prenom: str
+    poste: str = ""
+    lib_societe: str = ""
+    date_embauche: str = ""       # ISO YYYY-MM-DD
+    actif: bool = False           # salarie_embauche.EnActivité

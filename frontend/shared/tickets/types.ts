@@ -87,6 +87,10 @@ export interface SalarieItem {
   id_salarie: string
   nom: string
   prenom: string
+  poste: string
+  lib_societe: string
+  date_embauche: string
+  actif: boolean
 }
 
 export interface SaveInfosResponse {

@@ -458,33 +458,98 @@ def search_salaries(q: str, limit: int = 30) -> list[dict]:
     """Recherche de salariés par début de NOM (équivalent
     Fen_RechercheNomSalarié / ReqListeSalarie_ByDebutNom).
 
-    Fidèle au WinDev : on liste TOUS les salariés (actifs ou non) dont le
-    nom commence par `q`. Le NOM est stocké en majuscules → q en MAJ.
+    Fidèle au WinDev : liste TOUS les salariés (actifs ou non) dont le nom
+    commence par `q` (NOM stocké en MAJ → q en MAJ), enrichi du sous-
+    ensemble affiché par VérifInfo() : poste, société, date d'embauche,
+    "en activité" (vert) / "plus dans les effectifs" (rouge).
 
-    NB : l'affichage riche du WinDev (poste, société, date d'embauche,
-    "en activité" en vert/rouge) n'est pas repris ici — amélioration
-    possible ultérieurement si besoin.
+    Sous-ensemble ciblé de DonneInfoSalarié (pas la structure complète :
+    mutuelle/orga/photo/cooptation hors scope picker). 4 requêtes base rh.
     """
     search = (q or "").strip().upper()
     if not search:
         return []
     db = get_connection("rh")
-    rows = db.query(
+    base = db.query(
         f"""SELECT DISTINCT TOP {int(limit)} s.IDSalarie, s.NOM, s.PRENOM
         FROM salarie s
         WHERE s.NOM LIKE ?
         ORDER BY s.NOM, s.PRENOM""",
         (f"{search}%",),
     )
+    ids = [
+        _clean_id(_to_int(r.get("IDSalarie")))
+        for r in base
+        if _clean_id(_to_int(r.get("IDSalarie")))
+    ]
+    if not ids:
+        return []
+    ids_sql = ",".join(str(i) for i in ids)
+
+    # salarie_embauche : colonnes accentuées → SELECT brut sans alias.
+    # Multi-embauche possible → on garde en priorité la ligne EnActivité=1.
+    emb_by_id: dict[int, dict] = {}
+    try:
+        emb_rows = db.query(
+            f"""SELECT IDSalarie, DateDébut, EnActivité, IdTypePoste, IdSte
+            FROM salarie_embauche
+            WHERE IDSalarie IN ({ids_sql})"""
+        )
+        for r in emb_rows:
+            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            if not sid:
+                continue
+            actif = bool(r.get("EnActivité"))
+            prev = emb_by_id.get(sid)
+            if prev is None or (actif and not prev["actif"]):
+                emb_by_id[sid] = {
+                    "date_debut": _windev_to_iso(r.get("DateDébut"))[:10],
+                    "actif": actif,
+                    "id_poste": _clean_id(_to_int(r.get("IdTypePoste"))),
+                    "id_ste": _clean_id(_to_int(r.get("IdSte"))),
+                }
+    except Exception:
+        emb_by_id = {}
+
+    poste_ids = {e["id_poste"] for e in emb_by_id.values() if e.get("id_poste")}
+    postes: dict[int, str] = {}
+    if poste_ids:
+        try:
+            p_sql = ",".join(str(i) for i in poste_ids)
+            for r in db.query(
+                f"SELECT IdTypePoste, Lib_Poste FROM TypePoste "
+                f"WHERE IdTypePoste IN ({p_sql})"
+            ):
+                pid = _clean_id(_to_int(r.get("IdTypePoste")))
+                if pid:
+                    postes[pid] = (r.get("Lib_Poste") or "").strip()
+        except Exception:
+            postes = {}
+
+    societes: dict[int, str] = {}
+    try:
+        for r in db.query("SELECT IdSte, RS_Interne FROM societe"):
+            stid = _clean_id(_to_int(r.get("IdSte")))
+            if stid:
+                societes[stid] = (r.get("RS_Interne") or "").strip()
+    except Exception:
+        societes = {}
+
     out: list[dict] = []
-    for r in rows:
+    for r in base:
         sid = _clean_id(_to_int(r.get("IDSalarie")))
-        if sid:
-            out.append({
-                "id_salarie": str(sid),
-                "nom": (r.get("NOM") or "").strip(),
-                "prenom": (r.get("PRENOM") or "").strip(),
-            })
+        if not sid:
+            continue
+        e = emb_by_id.get(sid, {})
+        out.append({
+            "id_salarie": str(sid),
+            "nom": (r.get("NOM") or "").strip(),
+            "prenom": (r.get("PRENOM") or "").strip(),
+            "poste": postes.get(e.get("id_poste", 0), ""),
+            "lib_societe": societes.get(e.get("id_ste", 0), ""),
+            "date_embauche": e.get("date_debut", ""),
+            "actif": e.get("actif", False),
+        })
     return out
 
 

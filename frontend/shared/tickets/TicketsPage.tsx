@@ -101,6 +101,13 @@ function shortDateTime(raw: string | undefined | null): string {
   return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`
 }
 
+function shortDate(raw: string | undefined | null): string {
+  if (!raw) return ''
+  const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return raw || ''
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
 function capitalize(s: string): string {
   if (!s) return ''
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
@@ -750,16 +757,40 @@ function SalariePicker({
             </div>
           ) : (
             <ul>
-              {results.map((s) => (
-                <li key={s.id_salarie}>
-                  <button
-                    onClick={() => onPick(s)}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
-                  >
-                    {s.nom} {capitalize(s.prenom)}
-                  </button>
-                </li>
-              ))}
+              {results.map((s) => {
+                const meta = [s.poste, s.lib_societe].filter(Boolean).join(' · ')
+                return (
+                  <li key={s.id_salarie}>
+                    <button
+                      onClick={() => onPick(s)}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-c-brand-soft transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-c-ink">
+                          {s.nom} {capitalize(s.prenom)}
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+                            s.actif
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-red-100 text-red-700'
+                          }`}
+                        >
+                          {s.actif ? 'En activité' : 'Hors effectifs'}
+                        </span>
+                      </div>
+                      {meta && (
+                        <div className="text-xs text-c-ink-soft truncate">{meta}</div>
+                      )}
+                      {s.date_embauche && (
+                        <div className="text-[11px] text-c-ink-faint">
+                          Emb. le {shortDate(s.date_embauche)}
+                        </div>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>
