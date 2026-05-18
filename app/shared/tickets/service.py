@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import struct
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from app.core.database import get_connection
@@ -138,8 +139,10 @@ def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
                   Si vide → un type sans droit configuré est visible
                   (sinon il faut que le code droit soit dans `droits`).
 
-    Lib_TypeDemande est un mémo texte → fetch séparé pour éviter la
-    troncature du bridge HFSQL sur les SELECT multi-colonnes.
+    Lib_TypeDemande (mémo texte) et icone (mémo binaire image) → fetch
+    séparé 1 SELECT par mémo et par type, pour éviter la troncature du
+    bridge HFSQL sur les SELECT multi-colonnes. Les fetchs sont
+    parallélisés (ThreadPoolExecutor) car chaque query bridge ≈ 400 ms.
 
     Cache TTL 60s — la table TK_TypeDemande change rarement.
 
@@ -175,18 +178,43 @@ def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
     if not visible:
         return []
 
-    # 2. Fetch séparé du mémo Lib_TypeDemande (1 SELECT par type — peu coûteux,
-    #    une dizaine de types max en pratique). On garde l'ordre Service / Lib.
-    libs: dict[int, str] = {}
-    for idt, _svc, _dr in visible:
+    # 2. Fetch séparé des mémos Lib_TypeDemande (texte) et icone (binaire) :
+    #    1 SELECT par mémo et par type (le bridge tronque les mémos en
+    #    multi-colonnes). Parallélisé car chaque query ≈ 400 ms.
+    def _fetch_lib(idt: int) -> tuple[int, str]:
         try:
-            r = db.query_one(
+            db_t = get_connection("ticket")
+            r = db_t.query_one(
                 "SELECT Lib_TypeDemande FROM TK_TypeDemande WHERE IDTK_TypeDemande = ?",
                 (idt,),
             )
-            libs[idt] = (r.get("Lib_TypeDemande") if r else "" or "").strip()
+            return idt, ((r.get("Lib_TypeDemande") if r else "") or "").strip()
         except Exception:
-            libs[idt] = ""
+            return idt, ""
+
+    def _fetch_icone(idt: int) -> tuple[int, str]:
+        try:
+            db_t = get_connection("ticket")
+            r = db_t.query_one(
+                "SELECT icone FROM TK_TypeDemande WHERE IDTK_TypeDemande = ?",
+                (idt,),
+            )
+            return idt, _icone_to_data_url(r.get("icone") if r else None)
+        except Exception:
+            return idt, ""
+
+    ids = [idt for idt, _svc, _dr in visible]
+    libs: dict[int, str] = {}
+    icones: dict[int, str] = {}
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        lib_futs = [pool.submit(_fetch_lib, i) for i in ids]
+        ico_futs = [pool.submit(_fetch_icone, i) for i in ids]
+        for f in lib_futs:
+            i, v = f.result()
+            libs[i] = v
+        for f in ico_futs:
+            i, v = f.result()
+            icones[i] = v
 
     out: list[dict] = []
     for idt, svc, _dr in visible:
@@ -194,7 +222,7 @@ def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
             "id_type_demande": str(idt),
             "service": svc,
             "lib_type_demande": libs.get(idt, ""),
-            "icone_data_url": "",  # mémo binaire — sera ajouté plus tard
+            "icone_data_url": icones.get(idt, ""),
         })
     out.sort(key=lambda x: (x["service"], x["lib_type_demande"].lower()))
     _types_cache[cache_key] = (time.time(), out)
