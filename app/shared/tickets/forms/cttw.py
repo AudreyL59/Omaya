@@ -150,11 +150,33 @@ def load(id_ticket: int) -> dict:
         base["mutuelles"] = _list_mutuelles()
         base["pdf_non_signe_url"] = PDF_NON_SIGNE_URL.format(id=id_ticket)
     else:
-        # Plan 2 : PDF signé final — emplacement à brancher (à fournir).
-        base["pdf_signe_url"] = ""
-        base["plan2_pending"] = True
+        # Plan 2 : le PDF signé est régénéré à la demande via
+        # l'endpoint /form/print (cf. print_pdf ci-dessous).
+        base["has_signed_pdf"] = True
 
     return base
+
+
+def print_pdf(id_ticket: int, payload: dict) -> bytes:
+    """Régénère le PDF de contrat signé (FI_CttW Plan 2)."""
+    from .cttw_pdf import regenerate_signed_pdf
+
+    db = get_connection("ticket_rh")
+    r = db.query_one(
+        "SELECT IDTK_Liste, IDSalarie, idDA, datesignature "
+        "FROM TK_DemandeCttW WHERE IDTK_Liste = ?",
+        (int(id_ticket),),
+    )
+    if not r:
+        raise ValueError("Contrat introuvable")
+    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
+    id_da = _clean_id(_to_int(r.get("idDA")))
+    return regenerate_signed_pdf(
+        int(id_ticket),
+        _salaire_nom(id_salarie),
+        _salaire_nom(id_da),
+        date_only_to_iso(r.get("datesignature")) or "",
+    )
 
 
 def save(id_ticket: int, payload: dict, user_id: int) -> dict:

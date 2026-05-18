@@ -9,6 +9,31 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [pickDA, setPickDA] = useState(false)
+  const [signedPdfUrl, setSignedPdfUrl] = useState('')
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  // Plan 2 : régénère + charge le PDF signé (lourd : docx+soffice+fusion)
+  useEffect(() => {
+    if (!data || data.plan !== 2 || !data.has_signed_pdf) return
+    let revoked = ''
+    setPdfLoading(true)
+    fetch(`${apiBase}/tickets/${idTicket}/form/print`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(String(r.status))
+        const blob = await r.blob()
+        const u = URL.createObjectURL(blob)
+        revoked = u
+        setSignedPdfUrl(u)
+      })
+      .catch(() => setSignedPdfUrl(''))
+      .finally(() => setPdfLoading(false))
+    return () => {
+      if (revoked) URL.revokeObjectURL(revoked)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.plan, data?.has_signed_pdf, apiBase, idTicket])
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -74,20 +99,25 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
   if (data.plan === 2) {
     return (
       <div className="flex gap-4 h-full">
-        <div className="flex-1 min-h-[520px] border border-c-line rounded-lg bg-c-surface-soft flex items-center justify-center text-center text-c-ink-faint text-sm p-6">
-          {data.pdf_signe_url ? (
+        <div className="flex-1 min-h-[520px] border border-c-line rounded-lg bg-c-surface-soft flex items-center justify-center text-center text-c-ink-faint text-sm overflow-hidden">
+          {pdfLoading ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Régénération du contrat signé…
+            </span>
+          ) : signedPdfUrl ? (
             <iframe
-              src={data.pdf_signe_url}
+              src={signedPdfUrl}
               title="Contrat signé"
-              className="w-full h-[520px]"
+              className="w-full h-[640px]"
             />
           ) : (
-            <span>
+            <span className="p-6">
               Contrat <strong>validé et signé</strong> le{' '}
               {data.date_signature || '—'}.
               <br />
-              Affichage du PDF signé : emplacement du fichier final à
-              brancher (en attente).
+              Impossible de régénérer le PDF signé (voir logs serveur :
+              LibreOffice / images de signature).
             </span>
           )}
         </div>

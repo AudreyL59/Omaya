@@ -45,6 +45,19 @@ FTP_HOST = os.getenv("FTP_HOST", "192.168.1.202")
 FTP_USER = os.getenv("FTP_USER", "OMAYA")
 FTP_PASSWORD = os.getenv("FTP_PASSWORD", "")
 FTP_PHOTO_DPAE_PATH = os.getenv("FTP_PHOTO_DPAE_PATH", "/OMAYA/PhotoDPAE")
+# Dossier des contrats signés (par salarié) sur le FTP
+FTP_GESTION_RH_PATH = os.getenv("FTP_GESTION_RH_PATH", "/OMAYA/gestionRH")
+
+# LibreOffice (conversion docx -> PDF, headless)
+SOFFICE_BIN = os.getenv(
+    "SOFFICE_BIN",
+    r"C:\Program Files\LibreOffice\program\soffice.exe",
+)
+# URLs des images de signature dématérialisée (fallback si mémo vide)
+CTTW_SIGN_URL = os.getenv("CTTW_SIGN_URL", "https://rest.omaya.fr/sign")
+CTTW_SIGN_URL_FALLBACK = os.getenv(
+    "CTTW_SIGN_URL_FALLBACK", "https://sos.rest.omaya.fr/sign"
+)
 
 # Emails de service
 MAIL_SUPPORT = os.getenv("MAIL_SUPPORT", "intranet@omaya.fr")
