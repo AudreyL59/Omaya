@@ -73,3 +73,16 @@ class StatuerRequest(BaseModel):
 
 class StatuerResponse(BaseModel):
     updated: int
+
+
+class SupprimerRequest(BaseModel):
+    """Action de masse 'Supprimer la sélection' (soft-delete).
+
+    Transposition WinDev : ModifDate=now, ModifOP=user, ModifELEM='suppr'.
+    Les tickets marqués 'suppr' sont exclus de tous les SELECT.
+    """
+    id_tickets: list[str]
+
+
+class SupprimerResponse(BaseModel):
+    deleted: int

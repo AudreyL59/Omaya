@@ -25,6 +25,7 @@ import {
   Search,
   ShoppingCart,
   Ticket,
+  Trash2,
   UserMinus,
   UserPlus,
   Wrench,
@@ -389,6 +390,37 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
     }
   }
 
+  // Action "Supprimer la sélection" (soft-delete, cf. WinDev)
+  const doSupprimer = async () => {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    if (
+      !window.confirm(
+        'Vous êtes sur le point de supprimer cette sélection de ticket.\nVoulez-vous continuer ?',
+      )
+    )
+      return
+    try {
+      const resp = await fetch(`${apiBase}/tickets/supprimer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ id_tickets: ids }),
+      })
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => null)
+        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        return
+      }
+      setSelected(new Set())
+      setReloadNonce((n) => n + 1)
+    } catch {
+      window.alert('Erreur réseau lors de la suppression.')
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4 p-4">
       {/* Sidebar — style WinDev : services en bandes pleines, types en lignes blanches */}
@@ -547,6 +579,14 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
                   {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
                 </span>
               )}
+              <button
+                onClick={doSupprimer}
+                disabled={selected.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Supprimer
+              </button>
               <button
                 onClick={() => setShowStatuerPopup(true)}
                 disabled={selected.size === 0}

@@ -24,6 +24,8 @@ from .info_ticket import donne_info_ticket_batch
 from .schemas import (
     StatuerRequest,
     StatuerResponse,
+    SupprimerRequest,
+    SupprimerResponse,
     TicketListResponse,
     TicketRow,
     TicketSidebarItem,
@@ -383,5 +385,41 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             raise HTTPException(500, f"Erreur lors du statut : {e}")
 
         return StatuerResponse(updated=len(ids))
+
+    # -------------------------------------------------------------
+    # Action de masse : Supprimer la sélection (soft-delete)
+    # -------------------------------------------------------------
+
+    @router.post("/supprimer", response_model=SupprimerResponse)
+    def supprimer(
+        req: SupprimerRequest,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Soft-delete des tickets sélectionnés.
+
+        Transposition fidèle du code WinDev "Supprimer la sélection" :
+          TK_Liste.ModifDate = now
+          TK_Liste.ModifOP   = user (usersCial)
+          TK_Liste.ModifELEM = 'suppr'
+        Les tickets 'suppr' sont exclus de tous les SELECT (liste + poll).
+        """
+        ids = [int(t) for t in req.id_tickets if t and str(t).isdigit()]
+        if not ids:
+            raise HTTPException(400, "Aucun ticket sélectionné")
+
+        ids_sql = ",".join(str(i) for i in ids)
+        now = _now_windev()
+        db = get_connection("ticket")
+        try:
+            db.query(
+                f"""UPDATE TK_Liste
+                SET ModifELEM = 'suppr', ModifDate = ?, ModifOP = ?
+                WHERE IDTK_Liste IN ({ids_sql})""",
+                (now, int(user.id_salarie)),
+            )
+        except Exception as e:
+            raise HTTPException(500, f"Erreur lors de la suppression : {e}")
+
+        return SupprimerResponse(deleted=len(ids))
 
     return router
