@@ -1,0 +1,283 @@
+import { useCallback, useEffect, useState } from 'react'
+import { Loader2, Save, UserPlus } from 'lucide-react'
+
+import type { FIProps } from './index'
+import SearchPicker, { type PickerItem } from './SearchPicker'
+
+export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [pickDA, setPickDA] = useState(false)
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    fetch(`${apiBase}/tickets/${idTicket}/form`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d) => setData(d?.data?.found ? d.data : null))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase, idTicket])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const set = (k: string, v: any) =>
+    setData((d: any) => (d ? { ...d, [k]: v } : d))
+
+  const post = async (body: any) => {
+    setSaving(true)
+    try {
+      const resp = await fetch(`${apiBase}/tickets/${idTicket}/form`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify(body),
+      })
+      if (!resp.ok) {
+        const e = await resp.json().catch(() => null)
+        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        return false
+      }
+      reload()
+      return true
+    } catch {
+      window.alert('Erreur réseau.')
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
+      </div>
+    )
+  }
+  if (!data) {
+    return (
+      <div className="h-full flex items-center justify-center text-c-ink-faint text-sm">
+        Aucune demande de contrat W pour ce ticket.
+      </div>
+    )
+  }
+
+  // ---- Plan 2 : contrat validé + signé ----
+  if (data.plan === 2) {
+    return (
+      <div className="flex gap-4 h-full">
+        <div className="flex-1 min-h-[520px] border border-c-line rounded-lg bg-c-surface-soft flex items-center justify-center text-center text-c-ink-faint text-sm p-6">
+          {data.pdf_signe_url ? (
+            <iframe
+              src={data.pdf_signe_url}
+              title="Contrat signé"
+              className="w-full h-[520px]"
+            />
+          ) : (
+            <span>
+              Contrat <strong>validé et signé</strong> le{' '}
+              {data.date_signature || '—'}.
+              <br />
+              Affichage du PDF signé : emplacement du fichier final à
+              brancher (en attente).
+            </span>
+          )}
+        </div>
+        <div className="w-72 shrink-0 space-y-2 text-sm">
+          <Info label="Salarié" value={data.salarie_nom} />
+          <Info label="DA" value={data.da_nom} />
+          <Info label="Titre" value={data.titre_contrat} />
+          <Info label="Type" value={data.type_cttw} />
+          <Info label="Signé le" value={data.date_signature} />
+          <p className="text-xs text-c-ink-faint pt-2">
+            Actions « Ce contrat est valide » / « Problème » / « Renvoyer
+            en signature » : en attente du code WinDev.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ---- Plan 1 : contrat non signé ----
+  return (
+    <div className="flex gap-4 h-full">
+      {/* Aperçu PDF non signé */}
+      <div className="flex-1 min-h-[520px] border border-c-line rounded-lg overflow-hidden bg-c-surface-soft">
+        {data.pdf_non_signe_url ? (
+          <iframe
+            src={data.pdf_non_signe_url}
+            title="Contrat (non signé)"
+            className="w-full h-[560px]"
+          />
+        ) : (
+          <div className="h-full flex items-center justify-center text-c-ink-faint text-sm">
+            Aperçu indisponible.
+          </div>
+        )}
+      </div>
+
+      {/* Panneau droit : infos mutuelle + DA */}
+      <div className="w-80 shrink-0 space-y-3">
+        <h3 className="text-sm font-semibold text-c-brand-strong uppercase tracking-wide">
+          Infos mutuelle
+        </h3>
+
+        {data.mutuelle_found === false ? (
+          <div className="text-sm text-c-ink-faint">
+            Pas de fiche mutuelle pour ce salarié.
+          </div>
+        ) : (
+          <>
+            <Chk label="Adhésion à la mutuelle" k="adhesion" data={data} set={set} />
+            <DateF label="Date d'adhésion" k="adhesion_date" data={data} set={set} />
+            <select
+              value={data.id_mutuelle || 0}
+              onChange={(e) => set('id_mutuelle', Number(e.target.value))}
+              className="w-full px-2 py-1 border border-c-line-strong rounded-md text-sm bg-white"
+            >
+              <option value={0}>— Mutuelle —</option>
+              {(data.mutuelles || []).map((m: any) => (
+                <option key={m.id} value={m.id}>{m.lib}</option>
+              ))}
+            </select>
+            <Chk label="Mutuelle Dossier" k="mutuelle_dossier" data={data} set={set} />
+            <Chk label="Att SS" k="att_ss" data={data} set={set} />
+            <Chk label="RIB" k="rib" data={data} set={set} />
+            <Chk label="Docs Envoyés" k="docs_envoyes" data={data} set={set} />
+            <Chk label="Récep. Certificat" k="recep_certif" data={data} set={set} />
+            <Chk label="N'adhère pas" k="pas_adhesion" data={data} set={set} />
+            <DateF label="Jusqu'au" k="pas_adhesion_jusquau" data={data} set={set} />
+            <Chk label="Résilié" k="resilie" data={data} set={set} />
+            <DateF label="Le" k="resilie_date" data={data} set={set} />
+
+            <button
+              onClick={() =>
+                post({
+                  action: 'mutuelle',
+                  id_salarie: data.id_salarie,
+                  adhesion: data.adhesion,
+                  adhesion_date: data.adhesion_date,
+                  id_mutuelle: data.id_mutuelle,
+                  mutuelle_dossier: data.mutuelle_dossier,
+                  att_ss: data.att_ss,
+                  rib: data.rib,
+                  docs_envoyes: data.docs_envoyes,
+                  recep_certif: data.recep_certif,
+                  pas_adhesion: data.pas_adhesion,
+                  pas_adhesion_jusquau: data.pas_adhesion_jusquau,
+                  resilie: data.resilie,
+                  resilie_date: data.resilie_date,
+                })
+              }
+              disabled={saving}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Enregistrer les infos mutuelle
+            </button>
+          </>
+        )}
+
+        <hr className="border-c-line" />
+
+        <button
+          onClick={() => setPickDA(true)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong bg-white text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
+        >
+          <UserPlus className="w-4 h-4 text-c-brand shrink-0" />
+          <span className="truncate">{data.da_nom || 'Choisir le DA'}</span>
+        </button>
+
+        <button
+          disabled
+          title="En attente du code WinDev"
+          className="w-full px-3 py-2 rounded-lg bg-c-brand/40 text-white text-sm font-semibold cursor-not-allowed"
+        >
+          Valider le contrat pour signature
+        </button>
+      </div>
+
+      {pickDA && (
+        <SearchPicker
+          apiBase={apiBase}
+          getToken={getToken}
+          title="Choisir le DA"
+          path="/tickets/salaries/search"
+          mapItem={(s) => ({
+            id: s.id_salarie,
+            label: `${s.nom} ${cap(s.prenom)}`,
+            sublabel: [s.poste, s.lib_societe].filter(Boolean).join(' · '),
+          })}
+          onClose={() => setPickDA(false)}
+          onPick={async (it: PickerItem) => {
+            setPickDA(false)
+            await post({ action: 'da', id_da: it.id })
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-sm">
+      <span className="text-c-ink-faint">{label} : </span>
+      <span className="text-c-ink">{value || '—'}</span>
+    </div>
+  )
+}
+
+function Chk({
+  label, k, data, set,
+}: {
+  label: string
+  k: string
+  data: any
+  set: (k: string, v: any) => void
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-c-ink cursor-pointer">
+      <input
+        type="checkbox"
+        checked={!!data[k]}
+        onChange={(e) => set(k, e.target.checked)}
+        className="w-4 h-4 cursor-pointer accent-c-brand"
+      />
+      {label}
+    </label>
+  )
+}
+
+function DateF({
+  label, k, data, set,
+}: {
+  label: string
+  k: string
+  data: any
+  set: (k: string, v: any) => void
+}) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-c-ink-soft w-28 shrink-0">{label}</span>
+      <input
+        type="date"
+        value={data[k] || ''}
+        onChange={(e) => set(k, e.target.value)}
+        className="flex-1 px-2 py-1 border border-c-line-strong rounded-md text-xs"
+      />
+    </div>
+  )
+}
+
+function cap(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : ''
+}
