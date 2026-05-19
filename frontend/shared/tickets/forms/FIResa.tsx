@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  Loader2, Save, UserPlus, Trash2, Upload, FileText, Send, X,
+  Loader2, Save, UserPlus, Trash2, Upload, FileText, Send, X, Download,
 } from 'lucide-react'
 
 import type { FIProps } from './index'
@@ -13,6 +13,8 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
   const [saving, setSaving] = useState(false)
   const [pick, setPick] = useState<'' | 'main' | 'supp'>('')
   const [busyFile, setBusyFile] = useState('')
+  const [selFile, setSelFile] = useState('')
+  const [selBenef, setSelBenef] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
 
   const reload = useCallback(() => {
@@ -290,7 +292,16 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                   </tr>
                 ) : (
                   benefs.map((b) => (
-                    <tr key={b.id_salarie} className="border-t border-c-line">
+                    <tr
+                      key={b.id_salarie}
+                      onClick={() => setSelBenef(b.id_salarie)}
+                      className={
+                        'border-t border-c-line cursor-pointer ' +
+                        (selBenef === b.id_salarie
+                          ? 'bg-c-brand-soft'
+                          : 'hover:bg-c-surface-soft')
+                      }
+                    >
                       <td className="px-3 py-2 text-c-ink">
                         {b.nom}
                         {b.principal && (
@@ -303,7 +314,10 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                       <td className="px-3 py-2">{b.mail || '—'}</td>
                       <td className="px-3 py-2">
                         <button
-                          onClick={() => removeBenef(b.id_salarie)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            removeBenef(b.id_salarie)
+                          }}
                           className="text-c-ink-faint hover:text-red-600"
                           title="Retirer"
                         >
@@ -368,11 +382,17 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                   </tr>
                 ) : (
                   (data.fichiers || []).map((f: any) => (
-                    <tr key={f.nom} className="border-t border-c-line">
-                      <td
-                        className="px-3 py-2 text-c-ink cursor-pointer hover:text-c-brand"
-                        onClick={() => openFile(f.nom)}
-                      >
+                    <tr
+                      key={f.nom}
+                      onClick={() => setSelFile(f.nom)}
+                      className={
+                        'border-t border-c-line cursor-pointer ' +
+                        (selFile === f.nom
+                          ? 'bg-c-brand-soft'
+                          : 'hover:bg-c-surface-soft')
+                      }
+                    >
+                      <td className="px-3 py-2 text-c-ink">
                         <span className="flex items-center gap-1">
                           {busyFile === f.nom ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -387,29 +407,29 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() =>
-                              post({ action: 'sms', nom_fichier: f.nom }).then(
-                                (r: any) =>
-                                  r &&
-                                  window.alert(
-                                    'SMS envoyé :\n' +
-                                      ((r.envois || []).join('\n') || 'OK'),
-                                  ),
-                              )
-                            }
-                            disabled={saving}
-                            title="Envoyer le lien de cette PJ par SMS"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openFile(f.nom)
+                            }}
+                            disabled={busyFile === f.nom}
+                            title="Télécharger / ouvrir"
                             className="text-c-ink-faint hover:text-c-brand"
                           >
-                            <Send className="w-4 h-4" />
+                            <Download className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation()
                               if (!window.confirm(`Supprimer ${f.nom} ?`)) return
                               post({
                                 action: 'delete_pj',
                                 nom_fichier: f.nom,
-                              }).then((r: any) => r && reload())
+                              }).then((r: any) => {
+                                if (r) {
+                                  if (selFile === f.nom) setSelFile('')
+                                  reload()
+                                }
+                              })
                             }}
                             disabled={saving}
                             title="Supprimer"
@@ -424,6 +444,60 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Boutons SMS (cf. WinDev) — agissent sur la PJ sélectionnée */}
+          <div className="mt-2 space-y-1.5">
+            <button
+              onClick={() => {
+                if (!selFile) {
+                  window.alert('Sélectionne d’abord une pièce jointe.')
+                  return
+                }
+                post({ action: 'sms', nom_fichier: selFile }).then(
+                  (r: any) =>
+                    r &&
+                    window.alert(
+                      'SMS envoyé :\n' +
+                        ((r.envois || []).join('\n') || 'OK'),
+                    ),
+                )
+              }}
+              disabled={saving}
+              className="flex items-center gap-2 text-sm text-c-ink hover:text-c-brand disabled:opacity-50"
+            >
+              <Send className="w-4 h-4 text-c-brand" />
+              Envoyer le lien par SMS à tous les bénéficiaires
+            </button>
+            <button
+              onClick={() => {
+                if (!selFile) {
+                  window.alert('Sélectionne d’abord une pièce jointe.')
+                  return
+                }
+                if (!selBenef) {
+                  window.alert('Sélectionne un bénéficiaire dans la liste.')
+                  return
+                }
+                post({
+                  action: 'sms',
+                  nom_fichier: selFile,
+                  id_salarie: selBenef,
+                }).then(
+                  (r: any) =>
+                    r &&
+                    window.alert(
+                      'SMS envoyé :\n' +
+                        ((r.envois || []).join('\n') || 'OK'),
+                    ),
+                )
+              }}
+              disabled={saving}
+              className="flex items-center gap-2 text-sm text-c-ink hover:text-c-brand disabled:opacity-50"
+            >
+              <Send className="w-4 h-4 text-c-brand" />
+              Envoyer le lien de cette PJ par SMS
+            </button>
           </div>
         </div>
       </div>
