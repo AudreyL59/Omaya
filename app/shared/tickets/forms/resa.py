@@ -46,16 +46,49 @@ HEBERGEMENT, TRANSPORT, SALLE = 1, 2, 3
 # --------------------------------------------------------------------
 
 def _heure_to_hhmm(v) -> str:
-    d = "".join(c for c in str(v or "") if c.isdigit())
+    """Rubrique HFSQL 'Heure' -> 'HH:MM'. Le bridge la renvoie en
+    'HH:MM' (parfois tronquée du dernier caractère en SELECT multi-
+    colonnes -> toujours la lire en SELECT isolé via _heure())."""
+    s = str(v or "").strip()
+    if not s:
+        return ""
+    if ":" in s:
+        p = s.split(":")
+        h = p[0].strip()
+        m = p[1].strip() if len(p) > 1 else "0"
+        if not h.isdigit():
+            return ""
+        hh = int(h)
+        mm = int(m) if m.isdigit() else 0
+        if hh == 0 and mm == 0:
+            return ""
+        return f"{hh:02d}:{mm:02d}"
+    d = "".join(c for c in s if c.isdigit())
     if len(d) < 4 or d[:4] == "0000":
         return ""
     return f"{d[0:2]}:{d[2:4]}"
 
 
 def _hhmm_to_heure(v) -> str:
-    """'HH:MM' -> 'HHMMSSCC' (8 chiffres, sec/centièmes à 0)."""
-    d = "".join(c for c in str(v or "") if c.isdigit())
-    return (d[:4] + "0000") if len(d) >= 4 else ""
+    """'HH:MM' -> 'HH:MM:SS' (littéral TIME, cf. lecture bridge 'HH:MM').
+    Vide -> '' (rubrique Heure non renseignée)."""
+    s = str(v or "").strip()
+    if not s:
+        return ""
+    if ":" in s:
+        p = s.split(":")
+        h = p[0].strip()
+        m = p[1].strip() if len(p) > 1 else "0"
+    else:
+        d = "".join(c for c in s if c.isdigit())
+        if len(d) < 4:
+            return ""
+        h, m = d[0:2], d[2:4]
+    if not h.isdigit():
+        return ""
+    hh = int(h)
+    mm = int(m) if m.isdigit() else 0
+    return f"{hh:02d}:{mm:02d}:00"
 
 
 # --------------------------------------------------------------------
@@ -123,6 +156,21 @@ def _memo(db, id_ticket: int, field: str) -> str:
             (int(id_ticket),),
         )
         return ((r.get(field) if r else "") or "").strip()
+    except Exception:
+        return ""
+
+
+def _heure(db, id_ticket: int, field: str) -> str:
+    """SELECT isolé (clé + champ) -> évite la troncature du dernier
+    caractère du bridge sur les rubriques 'Heure' en SELECT multi-
+    colonnes (ex: '08:00' renvoyé '08:0')."""
+    try:
+        r = db.query_one(
+            f"SELECT IDTK_Liste, {field} FROM TK_DemandeResa "
+            f"WHERE IDTK_Liste = ?",
+            (int(id_ticket),),
+        )
+        return _heure_to_hhmm(r.get(field) if r else "")
     except Exception:
         return ""
 
@@ -339,13 +387,13 @@ def load(id_ticket: int) -> dict:
         "ville_arr": (r.get("Ville_Arr") or "").strip(),
         "jour_dep": date_only_to_iso(r.get("Jour_Dep")),
         "jour_arr": date_only_to_iso(r.get("Jour_Arr")),
-        "heure_dep": _heure_to_hhmm(r.get("Heure_Dep")),
-        "heure_arr": _heure_to_hhmm(r.get("Heure_Arr")),
+        "heure_dep": _heure(db, id_ticket, "Heure_Dep"),
+        "heure_arr": _heure(db, id_ticket, "Heure_Arr"),
         "ar": ar,
         "jourr_dep": date_only_to_iso(r.get("JourR_Dep")),
         "jourr_arr": date_only_to_iso(r.get("JourR_Arr")),
-        "heurer_dep": _heure_to_hhmm(r.get("HeureR_Dep")),
-        "heurer_arr": _heure_to_hhmm(r.get("HeureR_Arr")),
+        "heurer_dep": _heure(db, id_ticket, "HeureR_Dep"),
+        "heurer_arr": _heure(db, id_ticket, "HeureR_Arr"),
         "benef_id": str(benef_id) if benef_id else "",
         "benef_nom": _nom_complet(sal.get(benef_id, {})) if benef_id else "",
         "beneficiaires": beneficiaires,
