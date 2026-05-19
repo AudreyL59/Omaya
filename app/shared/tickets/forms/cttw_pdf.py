@@ -232,6 +232,89 @@ def _strip_floating_anchors(doc):
     return len(to_remove)
 
 
+# Ancre paraphe salarié : clone de l'ancre du paraphe gérant
+# (footer1.xml rId1 : posH 5760000, posV 8640000, 360000x360000),
+# décalée à gauche pour être « à côté » de celle du gérant.
+_PARAPHE_SAL_RUN = (
+    '<w:r><w:drawing>'
+    '<wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/'
+    '2006/wordprocessingDrawing" relativeHeight="3" simplePos="0" '
+    'behindDoc="0" locked="0" layoutInCell="0" hidden="0" '
+    'allowOverlap="1">'
+    '<wp:simplePos x="0" y="0"/>'
+    '<wp:positionH relativeFrom="margin"><wp:posOffset>5220000'
+    '</wp:posOffset></wp:positionH>'
+    '<wp:positionV relativeFrom="margin"><wp:posOffset>8640000'
+    '</wp:posOffset></wp:positionV>'
+    '<wp:extent cx="360000" cy="360000"/>'
+    '<wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>'
+    '<wp:docPr id="990" name="ParapheSalarie"/>'
+    '<wp:cNvGraphicFramePr/>'
+    '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/'
+    '2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/'
+    'drawingml/2006/picture">'
+    '<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/'
+    '2006/picture"><pic:nvPicPr>'
+    '<pic:cNvPr id="990" name="ParapheSalarie"/><pic:cNvPicPr/>'
+    '</pic:nvPicPr><pic:blipFill>'
+    '<a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/'
+    '2006/relationships" r:embed="__RID__" cstate="none"/><a:stretch/>'
+    '</pic:blipFill><pic:spPr><a:xfrm><a:ext cx="360000" cy="360000"/>'
+    '</a:xfrm><a:prstGeom prst="rect"/></pic:spPr></pic:pic>'
+    '</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>'
+)
+
+
+def _inject_salarie_paraphe_footer(docx_path: str, paraphe: bytes) -> None:
+    """Ajoute le paraphe du salarié dans footer1.xml (3ᵉ image ancrée,
+    à gauche de celle du gérant). Chirurgie directe du zip docx :
+    python-docx ne gère pas les images ancrées (wp:anchor)."""
+    import re
+    import shutil
+    import zipfile
+
+    ext = "png" if paraphe[:4] == b"\x89PNG" else "jpg"
+    media_name = f"word/media/parapheSal.{ext}"
+    rels_name = "word/_rels/footer1.xml.rels"
+    footer_name = "word/footer1.xml"
+
+    zin = zipfile.ZipFile(docx_path, "r")
+    names = zin.namelist()
+    if footer_name not in names or rels_name not in names:
+        zin.close()
+        return
+
+    rels = zin.read(rels_name).decode("utf-8", "ignore")
+    nums = [int(n) for n in re.findall(r'Id="rId(\d+)"', rels)]
+    new_rid = f"rId{(max(nums) + 1) if nums else 1}"
+    new_rel = (
+        f'<Relationship Id="{new_rid}" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+        'relationships/image" '
+        f'Target="media/parapheSal.{ext}"/>'
+    )
+    rels = rels.replace("</Relationships>", new_rel + "</Relationships>")
+
+    footer = zin.read(footer_name).decode("utf-8", "ignore")
+    run = _PARAPHE_SAL_RUN.replace("__RID__", new_rid)
+    # insère le run juste avant la fin du 1er paragraphe (celui qui
+    # contient déjà les ancres logo + paraphe gérant)
+    footer = footer.replace("</w:p>", run + "</w:p>", 1)
+
+    tmp_path = docx_path + ".tmp"
+    zout = zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED)
+    for item in zin.infolist():
+        if item.filename in (footer_name, rels_name):
+            continue
+        zout.writestr(item, zin.read(item.filename))
+    zout.writestr(footer_name, footer)
+    zout.writestr(rels_name, rels)
+    zout.writestr(media_name, paraphe)
+    zout.close()
+    zin.close()
+    shutil.move(tmp_path, docx_path)
+
+
 # ---------------------------------------------------------------
 # Conversion docx -> PDF (LibreOffice headless)
 # ---------------------------------------------------------------
@@ -412,6 +495,7 @@ def regenerate_signed_pdf(
 
     sign = _image_or_fallback(id_ticket, "Signature", "CttWSignature")
     lu_app = _image_or_fallback(id_ticket, "luApp", "CttWLuApp")
+    paraphe = _memo_bytes(id_ticket, "paraphe")
     photo = _memo_bytes(id_ticket, "PhotoSalarié")
 
     # ContenuValidation (pages validées + code SMS)
@@ -441,6 +525,14 @@ def regenerate_signed_pdf(
     if lu_app:
         _replace_token_with_image(doc, "S_MENTION", lu_app, 16)
     doc.save(docx_path)
+
+    # Paraphe du salarié dans le pied de page, à côté du gérant
+    # (footer1.xml -> rendu 1x/page nativement, pas de duplication).
+    if paraphe:
+        try:
+            _inject_salarie_paraphe_footer(docx_path, paraphe)
+        except Exception:
+            pass
 
     pdf_contrat = _docx_to_pdf(docx_path, tmp)
     recap_pdf = _build_recap_pdf(
