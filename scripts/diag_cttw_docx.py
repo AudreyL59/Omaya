@@ -70,6 +70,17 @@ def main(id_ticket: int):
               f"<w:lastRenderedPageBreak>={xml.count('lastRenderedPageBreak')}  "
               f"<w:br w:type=\"page\">={xml.count('w:type=&quot;page&quot;')}")
 
+    # Dump complet footer1.xml + 1er anchor du corps (placement paraphe)
+    if "word/footer1.xml" in names:
+        print("\n##### word/footer1.xml (BRUT) #####")
+        print(z.read("word/footer1.xml").decode("utf-8", "ignore"))
+    docxml = z.read("word/document.xml").decode("utf-8", "ignore")
+    i = docxml.find("<wp:anchor")
+    if i >= 0:
+        j = docxml.find("</wp:anchor>", i)
+        print("\n##### 1er <wp:anchor> du corps (extrait) #####")
+        print(docxml[i:j + 12][:2500])
+
     analyse("word/document.xml")
     for n in names:
         if re.match(r"word/footer\d+\.xml$", n):
