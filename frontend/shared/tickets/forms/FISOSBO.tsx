@@ -279,24 +279,75 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
                     className="mt-1 w-full min-h-[70px] px-2 py-1 border border-c-line-strong rounded-md text-sm resize-none"
                   />
                 </label>
-                <button
-                  onClick={async () => {
-                    const r = await post({
-                      action: 'incident_save',
-                      ...incident,
-                    })
-                    if (r) {
-                      window.alert('Incident enregistré.')
-                      setIncident(null)
-                    }
-                  }}
-                  disabled={saving}
-                  className="w-full px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50"
-                >
-                  Enregistrer l'incident
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      const r = await post({
+                        action: 'incident_save',
+                        ...incident,
+                      })
+                      if (r) {
+                        window.alert('Incident enregistré.')
+                        setIncident(null)
+                        reload()
+                      }
+                    }}
+                    disabled={saving}
+                    className="flex-1 px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50"
+                  >
+                    Enregistrer l'incident
+                  </button>
+                  <button
+                    onClick={() => setIncident(null)}
+                    className="px-3 py-2 rounded-lg border border-c-line-strong text-sm text-c-ink hover:bg-c-surface-soft"
+                  >
+                    Annuler
+                  </button>
+                </div>
               </div>
             )}
+
+            <div className="border border-c-line rounded-lg overflow-auto max-h-56">
+              <table className="w-full text-sm">
+                <thead className="bg-c-surface-soft text-c-ink-soft text-left sticky top-0">
+                  <tr>
+                    <th className="px-2 py-2 w-36">Début</th>
+                    <th className="px-2 py-2 w-36">Fin</th>
+                    <th className="px-2 py-2">Commentaire</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.incidents || []).length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-2 py-3 text-center text-c-ink-faint">
+                        Aucun incident.
+                      </td>
+                    </tr>
+                  ) : (
+                    (data.incidents || []).map((it: any) => (
+                      <tr
+                        key={it.id_incident}
+                        onClick={() =>
+                          setIncident({
+                            id_incident: Number(it.id_incident),
+                            debut: (it.debut || '').replace(' ', 'T').slice(0, 16),
+                            fin: (it.fin || '').replace(' ', 'T').slice(0, 16),
+                            commentaire: it.commentaire || '',
+                          })
+                        }
+                        className="border-t border-c-line cursor-pointer hover:bg-c-surface-soft"
+                      >
+                        <td className="px-2 py-1.5">{it.debut || '—'}</td>
+                        <td className="px-2 py-1.5">{it.fin || '—'}</td>
+                        <td className="px-2 py-1.5 truncate max-w-[260px]">
+                          {it.commentaire}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

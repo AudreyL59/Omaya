@@ -84,6 +84,28 @@ def _types() -> list[dict]:
         return []
 
 
+def _incidents() -> list[dict]:
+    """Table_incidentCALL : journal GLOBAL des incidents (non rattaché
+    au ticket — requête WinDev = tous les incidentCall non supprimés)."""
+    try:
+        db = get_connection("adv")
+        out = []
+        for r in db.query(
+            "SELECT IDincidentCall, DateDEBUT, DateFIN, commentaire "
+            "FROM incidentCall WHERE ModifELEM NOT LIKE '%suppr%' "
+            "ORDER BY DateDEBUT DESC"
+        ):
+            out.append({
+                "id_incident": str(_clean_id(_to_int(r.get("IDincidentCall")))),
+                "debut": _windev_to_iso(r.get("DateDEBUT")),
+                "fin": _windev_to_iso(r.get("DateFIN")),
+                "commentaire": (r.get("commentaire") or "").strip(),
+            })
+        return out
+    except Exception:
+        return []
+
+
 def _partenaires() -> list[dict]:
     try:
         db = get_connection("adv")
@@ -246,6 +268,7 @@ def load(id_ticket: int) -> dict:
         out["contrats"] = _chercher_contrat(ref)
     else:
         out["contrats"] = []
+    out["incidents"] = _incidents() if mode["pbcall"] else []
     return out
 
 
@@ -427,15 +450,17 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             )
         except Exception as e:
             return {"ok": False, "error": f"Réattribution : {e}"}
-        # AjoutHistoriqueAttribution (best-effort)
+        # AjoutHistoriqueAttribution : TOUJOURS dans SFR_histoAttrCtt
+        # (table centrale ; TypeCtt = préfixe partenaire). Best-effort.
         try:
             adv.query(
-                f"""INSERT INTO {pfx}_histoAttrCtt
-                (idHisto, TypeCtt, IDcontrat, NUM, OPSAISIE, DATE,
-                 VendeurOld, VendeurNew, ModifOP, ModifDate, ModifELEM)
-                VALUES (?, '', ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
-                (int(now), int(id_contrat), num, int(user_id), now,
-                 int(old_vendeur), int(new_vendeur), int(user_id), now),
+                """INSERT INTO SFR_histoAttrCtt
+                (idHisto, DATE, TypeCtt, IDcontrat, NUM, VendeurOld,
+                 VendeurNew, OPSAISIE, ModifOP, ModifDate, ModifELEM)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+                (int(now), now, pfx, int(id_contrat), num,
+                 int(old_vendeur), int(new_vendeur), int(user_id),
+                 int(user_id), now),
             )
         except Exception:
             pass
