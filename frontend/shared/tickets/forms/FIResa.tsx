@@ -13,7 +13,7 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
   const [saving, setSaving] = useState(false)
   const [pick, setPick] = useState<'' | 'main' | 'supp'>('')
   const [busyFile, setBusyFile] = useState('')
-  const [selFile, setSelFile] = useState('')
+  const [selFiles, setSelFiles] = useState<string[]>([])
   const [selBenef, setSelBenef] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -370,6 +370,24 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
             <table className="w-full text-sm">
               <thead className="bg-c-surface-soft text-c-ink-soft text-left">
                 <tr>
+                  <th className="px-3 py-2 w-8 text-center">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-c-brand cursor-pointer"
+                      checked={
+                        (data.fichiers || []).length > 0 &&
+                        selFiles.length === (data.fichiers || []).length
+                      }
+                      onChange={(e) =>
+                        setSelFiles(
+                          e.target.checked
+                            ? (data.fichiers || []).map((f: any) => f.nom)
+                            : [],
+                        )
+                      }
+                      title="Tout sélectionner"
+                    />
+                  </th>
                   <th className="px-3 py-2">Nom Fichier</th>
                   <th className="px-3 py-2 w-20">Taille</th>
                   <th className="px-3 py-2 w-40">Date</th>
@@ -379,85 +397,111 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
               <tbody>
                 {(data.fichiers || []).length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-3 py-4 text-center text-c-ink-faint">
+                    <td colSpan={5} className="px-3 py-4 text-center text-c-ink-faint">
                       Aucune pièce jointe.
                     </td>
                   </tr>
                 ) : (
-                  (data.fichiers || []).map((f: any) => (
-                    <tr
-                      key={f.nom}
-                      onClick={() => setSelFile(f.nom)}
-                      className={
-                        'border-t border-c-line cursor-pointer ' +
-                        (selFile === f.nom
-                          ? 'bg-c-brand-soft'
-                          : 'hover:bg-c-surface-soft')
-                      }
-                    >
-                      <td className="px-3 py-2 text-c-ink">
-                        <span className="flex items-center gap-1">
-                          {busyFile === f.nom ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <FileText className="w-3.5 h-3.5 shrink-0" />
-                          )}
-                          {f.nom}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">{f.taille}</td>
-                      <td className="px-3 py-2">{f.date}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openFile(f.nom)
-                            }}
-                            disabled={busyFile === f.nom}
-                            title="Télécharger / ouvrir"
-                            className="text-c-ink-faint hover:text-c-brand"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (!window.confirm(`Supprimer ${f.nom} ?`)) return
-                              post({
-                                action: 'delete_pj',
-                                nom_fichier: f.nom,
-                              }).then((r: any) => {
-                                if (r) {
-                                  if (selFile === f.nom) setSelFile('')
-                                  reload()
-                                }
-                              })
-                            }}
-                            disabled={saving}
-                            title="Supprimer"
-                            className="text-c-ink-faint hover:text-red-600"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  (data.fichiers || []).map((f: any) => {
+                    const checked = selFiles.includes(f.nom)
+                    const toggle = () =>
+                      setSelFiles((prev) =>
+                        prev.includes(f.nom)
+                          ? prev.filter((n) => n !== f.nom)
+                          : [...prev, f.nom],
+                      )
+                    return (
+                      <tr
+                        key={f.nom}
+                        onClick={toggle}
+                        className={
+                          'border-t border-c-line cursor-pointer ' +
+                          (checked
+                            ? 'bg-c-brand-soft'
+                            : 'hover:bg-c-surface-soft')
+                        }
+                      >
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={toggle}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-4 h-4 accent-c-brand cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-c-ink">
+                          <span className="flex items-center gap-1">
+                            {busyFile === f.nom ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <FileText className="w-3.5 h-3.5 shrink-0" />
+                            )}
+                            {f.nom}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">{f.taille}</td>
+                        <td className="px-3 py-2">{f.date}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openFile(f.nom)
+                              }}
+                              disabled={busyFile === f.nom}
+                              title="Télécharger / ouvrir"
+                              className="text-c-ink-faint hover:text-c-brand"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (!window.confirm(`Supprimer ${f.nom} ?`))
+                                  return
+                                post({
+                                  action: 'delete_pj',
+                                  nom_fichier: f.nom,
+                                }).then((r: any) => {
+                                  if (r) {
+                                    setSelFiles((prev) =>
+                                      prev.filter((n) => n !== f.nom),
+                                    )
+                                    reload()
+                                  }
+                                })
+                              }}
+                              disabled={saving}
+                              title="Supprimer"
+                              className="text-c-ink-faint hover:text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Boutons SMS (cf. WinDev) — agissent sur la PJ sélectionnée */}
+          {/* Boutons SMS (cf. WinDev) — sur les PJ cochées */}
           <div className="mt-2 space-y-1.5">
+            <p className="text-[11px] text-c-ink-faint">
+              {selFiles.length > 0
+                ? `${selFiles.length} pièce(s) jointe(s) sélectionnée(s)`
+                : 'Coche une ou plusieurs pièces jointes ci-dessus.'}
+            </p>
             <button
               onClick={() => {
-                if (!selFile) {
-                  window.alert('Sélectionne d’abord une pièce jointe.')
+                if (selFiles.length === 0) {
+                  window.alert('Coche au moins une pièce jointe.')
                   return
                 }
-                post({ action: 'sms', nom_fichier: selFile }).then(
+                post({ action: 'sms', nom_fichiers: selFiles }).then(
                   (r: any) =>
                     r &&
                     window.alert(
@@ -474,8 +518,8 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
             </button>
             <button
               onClick={() => {
-                if (!selFile) {
-                  window.alert('Sélectionne d’abord une pièce jointe.')
+                if (selFiles.length === 0) {
+                  window.alert('Coche au moins une pièce jointe.')
                   return
                 }
                 if (!selBenef) {
@@ -484,7 +528,7 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                 }
                 post({
                   action: 'sms',
-                  nom_fichier: selFile,
+                  nom_fichiers: selFiles,
                   id_salarie: selBenef,
                 }).then(
                   (r: any) =>
@@ -499,7 +543,7 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
               className="flex items-center gap-2 text-sm text-c-ink hover:text-c-brand disabled:opacity-50"
             >
               <Send className="w-4 h-4 text-c-brand" />
-              Envoyer le lien de cette PJ par SMS
+              Envoyer le lien de ces PJ au bénéficiaire sélectionné
             </button>
           </div>
         </div>

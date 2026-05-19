@@ -501,12 +501,13 @@ def load(id_ticket: int) -> dict:
     }
 
 
-def _sms_text(id_ticket: int, d: dict, fichier: str) -> str:
-    """cf. envoyerSMS() WinDev."""
+def _sms_text(id_ticket: int, d: dict, fichiers: list[str]) -> str:
+    """cf. envoyerSMS() WinDev — étendu : un lien par PJ sélectionnée."""
     id_type = _to_int(d.get("id_type_resa"))
     ar = bool(d.get("ar"))
     t = "OMAYA - Service réservation\n"
-    t += "Une PJ a été ajoutée pour votre réservation "
+    plur = "Des PJ ont été ajoutées" if len(fichiers) > 1 else "Une PJ a été ajoutée"
+    t += f"{plur} pour votre réservation "
     if id_type == HEBERGEMENT:
         t += "d'herbergement "
         t += f"du {d.get('jour_dep', '')} au {d.get('jour_arr', '')}"
@@ -520,8 +521,9 @@ def _sms_text(id_ticket: int, d: dict, fichier: str) -> str:
             t += f"retour le {d.get('jourr_dep', '')} à {d.get('heurer_dep', '')}\n"
     elif id_type == SALLE:
         t += f"de salle de réunion à {d.get('ville_dep', '')} le {d.get('jour_dep', '')}\n"
-    url = f"{DOCS_URL.rstrip('/')}/DocTicket/{int(id_ticket)}/{fichier}"
-    t += "\n" + urllib.parse.quote(url, safe=":/")
+    for f in fichiers:
+        url = f"{DOCS_URL.rstrip('/')}/DocTicket/{int(id_ticket)}/{f}"
+        t += "\n" + urllib.parse.quote(url, safe=":/")
     t += "\nCdt."
     return t
 
@@ -593,12 +595,20 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         #  - « de cette PJ » : id_salarie présent -> ce bénéficiaire seul
         # Dans les deux cas envoyerSMS() notifie aussi le demandeur
         # (si mobile différent).
-        nom = str(payload.get("nom_fichier") or "").strip()
-        if not nom:
-            return {"ok": False, "error": "Sélectionne une PJ"}
+        fichiers = [
+            str(f).strip()
+            for f in (payload.get("nom_fichiers") or [])
+            if str(f).strip()
+        ]
+        if not fichiers:
+            nom = str(payload.get("nom_fichier") or "").strip()
+            if nom:
+                fichiers = [nom]
+        if not fichiers:
+            return {"ok": False, "error": "Sélectionne au moins une PJ"}
         cible = str(payload.get("id_salarie") or "").strip()
         d = load(int(id_ticket))
-        texte = _sms_text(int(id_ticket), d, nom)
+        texte = _sms_text(int(id_ticket), d, fichiers)
         envois = []
         mob_dem = (d.get("mobile_demandeur") or "").replace(".", "").strip()
         seen: set[str] = set()
