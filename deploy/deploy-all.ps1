@@ -14,13 +14,15 @@
 #   -SkipVendeur   : ne builde pas frontend\vendeur
 #   -SkipAdm       : ne builde pas frontend\adm
 #   -SkipPull      : pas de git pull (utile en dev local)
+#   -SkipPip       : pas de pip install -r requirements.txt
 
 param(
     [switch]$SkipApi,
     [switch]$SkipWorker,
     [switch]$SkipVendeur,
     [switch]$SkipAdm,
-    [switch]$SkipPull
+    [switch]$SkipPull,
+    [switch]$SkipPip
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,6 +59,25 @@ try {
         git pull --rebase
     } else {
         Write-Host "[1-2/5] git pull skip" -ForegroundColor DarkGray
+    }
+
+    # --- 2b. Dependances Python ----------------------------------------
+    Write-Host ""
+    if (-not $SkipPip) {
+        Write-Host "[2b/5] pip install -r requirements.txt..." -ForegroundColor Cyan
+        $PythonExe = Join-Path $ProjectRoot "venv\Scripts\python.exe"
+        if (Test-Path $PythonExe) {
+            & $PythonExe -m pip install -q -r (Join-Path $ProjectRoot "requirements.txt")
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Dependances a jour" -ForegroundColor Green
+            } else {
+                Write-Host "  /!\\ pip install a echoue (exit $LASTEXITCODE)" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "  venv introuvable ($PythonExe), skip" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[2b/5] pip install skip" -ForegroundColor DarkGray
     }
 
     # --- 3. Restart services -------------------------------------------
