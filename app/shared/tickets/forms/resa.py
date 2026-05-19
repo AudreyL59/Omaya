@@ -14,6 +14,8 @@ suppression). Lien SMS : DOCS_URL + DocTicket/<idTicket>/<fichier>.
 
 import ftplib
 import io
+import os
+import unicodedata
 import urllib.parse
 
 from app.core.config import (
@@ -441,16 +443,23 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         return {"ok": True}
 
     if action == "sms":
-        # « Envoyer le lien (de cette PJ) par SMS à tous les bénéficiaires »
+        # Deux boutons WinDev :
+        #  - « à tous les bénéficiaires » : id_salarie absent -> tous
+        #  - « de cette PJ » : id_salarie présent -> ce bénéficiaire seul
+        # Dans les deux cas envoyerSMS() notifie aussi le demandeur
+        # (si mobile différent).
         nom = str(payload.get("nom_fichier") or "").strip()
         if not nom:
             return {"ok": False, "error": "Sélectionne une PJ"}
+        cible = str(payload.get("id_salarie") or "").strip()
         d = load(int(id_ticket))
         texte = _sms_text(int(id_ticket), d, nom)
         envois = []
         mob_dem = (d.get("mobile_demandeur") or "").replace(".", "").strip()
         seen: set[str] = set()
         for b in d.get("beneficiaires", []):
+            if cible and str(b.get("id_salarie")) != cible:
+                continue
             gsm = (b.get("mobile") or "").replace(".", "").strip()
             if gsm and gsm not in seen:
                 seen.add(gsm)
@@ -489,11 +498,29 @@ def get_file(id_ticket: int, name: str) -> tuple[bytes, str]:
     return data, _mime_for(name)
 
 
+def _sanitize_filename(filename: str) -> str:
+    """cf. WinDev btn Ajouter : espaces -> '_', sans accents ni
+    ponctuation/espaces, extension conservée."""
+    base, ext = os.path.splitext(filename or "")
+    base = base.replace(" ", "_")
+    base = "".join(
+        c for c in unicodedata.normalize("NFKD", base)
+        if not unicodedata.combining(c)
+    )
+    base = "".join(c for c in base if c.isalnum() or c in ("_", "-"))
+    ext = "".join(
+        c for c in unicodedata.normalize("NFKD", ext)
+        if not unicodedata.combining(c)
+    )
+    ext = "".join(c for c in ext if c.isalnum() or c == ".")
+    return (base or "fichier") + ext
+
+
 def upload_file(id_ticket: int, filename: str, content: bytes) -> dict:
     """Ajout d'une PJ sur le FTP (crée le dossier du ticket au besoin)."""
     if not filename or not content:
         return {"ok": False, "error": "Fichier vide"}
-    safe = filename.replace("/", "_").replace("\\", "_").strip()
+    safe = _sanitize_filename(filename)
     try:
         ftp = _ftp_connect()
         try:
