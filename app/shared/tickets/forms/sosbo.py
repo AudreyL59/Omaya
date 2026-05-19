@@ -32,6 +32,28 @@ ETAT_BS_CALL_EN_COURS = 37  # cf. « Modifier l'état du BS »
 TYPE_DEM_DESACTIVATION = 39  # TK_Liste.IDTK_TypeDemande (Tk Désactiv. Code)
 
 
+def _histo_etat_table(part: str, type_: str = "") -> str | None:
+    """cf. ajouteHistoContrat() : table d'historique d'état selon le
+    partenaire (SFR/OEN ont 2 tables selon Type ; Type="" -> variante
+    *CttSFR/*CttOEN). Pas d'historique pour PRO/GEP/OHM."""
+    p = (part or "").upper()
+    if p == "ENI":
+        return "ENI_histoEtatCtt"
+    if p == "IAG":
+        return "IAG_histoEtatCtt"
+    if p == "TLC":
+        return "TLC_histoEtatCtt"
+    if p == "VAL":
+        return "VAL_histoEtatCtt"
+    if p == "STR":
+        return "STR_histoEtatCtt"
+    if p == "SFR":
+        return "SFR_histoEtatCtt" if type_ == "Vend" else "SFR_histoEtatCttSFR"
+    if p == "OEN":
+        return "OEN_histoEtatCtt" if type_ == "Vend" else "OEN_histoEtatCttOEN"
+    return None
+
+
 # --------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------
@@ -483,18 +505,23 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             )
         except Exception as e:
             return {"ok": False, "error": f"Changement d'état : {e}"}
-        # ajouteHistoContrat (best-effort)
-        try:
-            adv.query(
-                f"""INSERT INTO {pfx}_histoEtatCtt
-                (idHisto, IDcontrat, OPSAISIE, DATE, OLD_etat, NEW_etat,
-                 ModifOP, ModifDate, ModifELEM)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
-                (int(now), int(id_contrat), int(user_id), now,
-                 int(old_etat), ETAT_BS_CALL_EN_COURS, int(user_id), now),
-            )
-        except Exception:
-            pass
+        # ajouteHistoContrat(Part, idctt, EtatOld, 37, "", "") :
+        # Type="" -> variante *CttSFR / *CttOEN. Best-effort.
+        histo_tbl = _histo_etat_table(pfx, "")
+        if histo_tbl:
+            try:
+                adv.query(
+                    f"""INSERT INTO {histo_tbl}
+                    (idHisto, IDcontrat, OPSAISIE, DATE, OLD_etat,
+                     NEW_etat, DATEPAIEMENT, ModifOP, ModifDate,
+                     ModifELEM)
+                    VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 'new')""",
+                    (int(now), int(id_contrat), int(user_id), now,
+                     int(old_etat), ETAT_BS_CALL_EN_COURS,
+                     int(user_id), now),
+                )
+            except Exception:
+                pass
         maj_op_traitement_ticket(int(id_ticket), int(user_id))
         return {"ok": True}
 
