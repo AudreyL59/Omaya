@@ -162,19 +162,40 @@ def _replace_token_with_image(doc, token: str, img: bytes, height_mm: float):
 
 
 def _add_paraphe_footer(doc, img: bytes):
-    """Ajoute le paraphe dans le pied de page (aligné à droite),
-    sur toutes les sections (cf. InserePiedPage WinDev)."""
+    """Ajoute le paraphe dans le pied de page (aligné à droite).
+
+    /!\\ Les sections « liées au précédent » partagent le MÊME
+    footerN.xml : itérer toutes les sections et appeler add_paragraph()
+    insère le paraphe autant de fois qu'il y a de sections dans ce
+    pied unique -> logo en double/triple sur chaque page.
+    On insère donc une seule fois par pied de page DISTINCT (on saute
+    les pieds liés, qui héritent automatiquement du paraphe ajouté au
+    pied propriétaire)."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.shared import Mm
 
+    seen: set[int] = set()
     for section in doc.sections:
-        footer = section.footer
-        para = footer.add_paragraph()
-        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        try:
-            para.add_run().add_picture(io.BytesIO(img), width=Mm(12))
-        except Exception:
-            pass
+        for footer in (
+            section.footer,
+            section.first_page_footer,
+            section.even_page_footer,
+        ):
+            try:
+                if footer is None or footer.is_linked_to_previous:
+                    continue
+                key = id(footer._element)
+            except Exception:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            para = footer.add_paragraph()
+            para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            try:
+                para.add_run().add_picture(io.BytesIO(img), width=Mm(12))
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------
