@@ -13,7 +13,15 @@ import asyncio
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
@@ -644,5 +652,25 @@ def get_tickets_router(droit_field: str) -> APIRouter:
                 "Content-Disposition": f'inline; filename="{name}"'
             },
         )
+
+    @router.post("/{id_ticket}/form/upload")
+    async def upload_ticket_form_file(
+        id_ticket: str,
+        file: UploadFile = File(...),
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Ajoute une PJ au ticket (FTP). Disponible si le handler du
+        type implémente upload_file()."""
+        _id_type, handler = _handler_for(id_ticket)
+        if handler is None or not hasattr(handler, "upload_file"):
+            raise HTTPException(400, "Pas d'ajout de PJ pour ce type")
+        content = await file.read()
+        try:
+            res = handler.upload_file(
+                int(id_ticket), file.filename or "fichier", content
+            )
+        except Exception as e:
+            raise HTTPException(500, f"Erreur upload : {e}")
+        return res
 
     return router

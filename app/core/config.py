@@ -47,6 +47,8 @@ FTP_PASSWORD = os.getenv("FTP_PASSWORD", "")
 FTP_PHOTO_DPAE_PATH = os.getenv("FTP_PHOTO_DPAE_PATH", "/OMAYA/PhotoDPAE")
 # Dossier des contrats signés (par salarié) sur le FTP
 FTP_GESTION_RH_PATH = os.getenv("FTP_GESTION_RH_PATH", "/OMAYA/gestionRH")
+# Dossier des PJ de tickets (réservations, etc.) : <base>/<idTicket>/
+FTP_DOC_TICKET_PATH = os.getenv("FTP_DOC_TICKET_PATH", "/OMAYA/DocTicket")
 
 # LibreOffice (conversion docx -> PDF, headless)
 SOFFICE_BIN = os.getenv(
