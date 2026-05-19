@@ -20,6 +20,7 @@ from . import (
     dpae,
     fourniture,
     resa,
+    sosbo,
 )
 
 # IDTK_TypeDemande → module handler
@@ -30,6 +31,7 @@ FORM_HANDLERS: dict[int, object] = {
     4: cttw,          # Contrat W - Signature
     9: resa,          # Réservation
     10: avance,       # Demande d'avance
+    11: sosbo,        # SOS BO
     21: dpae,         # DPAE à venir (même formulaire)
     40: cttw_demande,  # Contrat W - Demande
 }
