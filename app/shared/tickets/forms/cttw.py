@@ -143,7 +143,9 @@ def load(id_ticket: int) -> dict:
     id_da = _clean_id(_to_int(r.get("idDA")))
     contrat_valide = bool(r.get("contratValidé"))
     contrat_signe = bool(r.get("contratSigné"))
-    plan = 2 if (contrat_valide and contrat_signe) else 1
+    # cf. code init WinDev : Plan 2 dès que validé (le PDF signé n'est
+    # régénéré QUE si en plus signé).
+    plan = 2 if contrat_valide else 1
 
     base = {
         "found": True,
@@ -166,9 +168,9 @@ def load(id_ticket: int) -> dict:
         base["mutuelles"] = _list_mutuelles()
         base["pdf_non_signe_url"] = PDF_NON_SIGNE_URL.format(id=id_ticket)
     else:
-        # Plan 2 : le PDF signé est régénéré à la demande via
-        # l'endpoint /form/print (cf. print_pdf ci-dessous).
-        base["has_signed_pdf"] = True
+        # Plan 2 : le PDF signé n'est régénéré (endpoint /form/print)
+        # QUE si le contrat est signé. Sinon : en attente de signature.
+        base["has_signed_pdf"] = contrat_signe
 
     return base
 

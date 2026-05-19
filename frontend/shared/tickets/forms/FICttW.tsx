@@ -111,10 +111,14 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
               title="Contrat signé"
               className="w-full h-[640px]"
             />
+          ) : !data.has_signed_pdf ? (
+            <span className="p-6">
+              Contrat <strong>validé</strong>, en attente de la signature
+              du salarié sur l'appli Omaya.
+            </span>
           ) : (
             <span className="p-6">
-              Contrat <strong>validé et signé</strong> le{' '}
-              {data.date_signature || '—'}.
+              Contrat <strong>signé</strong> le {data.date_signature || '—'}.
               <br />
               Impossible de régénérer le PDF signé (voir logs serveur :
               LibreOffice / images de signature).
