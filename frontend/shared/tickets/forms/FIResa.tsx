@@ -93,12 +93,15 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await r.json().catch(() => null)
       if (!r.ok || j?.ok === false) {
-        window.alert(`Upload échoué : ${j?.detail || j?.error || r.status}`)
+        window.alert(
+          `Upload échoué (HTTP ${r.status}) : ` +
+            `${j?.detail || j?.error || 'réponse inattendue'}`,
+        )
         return
       }
       reload()
-    } catch {
-      window.alert('Erreur réseau.')
+    } catch (err) {
+      window.alert(`Erreur réseau : ${String((err as any)?.message || err)}`)
     } finally {
       setBusyFile('')
     }

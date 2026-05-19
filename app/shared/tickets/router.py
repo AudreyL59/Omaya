@@ -665,12 +665,25 @@ def get_tickets_router(droit_field: str) -> APIRouter:
         if handler is None or not hasattr(handler, "upload_file"):
             raise HTTPException(400, "Pas d'ajout de PJ pour ce type")
         content = await file.read()
+        print(
+            f"[tickets/form/upload] ticket={id_ticket} type={_id_type} "
+            f"name={file.filename!r} size={len(content)}",
+            flush=True,
+        )
         try:
             res = handler.upload_file(
                 int(id_ticket), file.filename or "fichier", content
             )
         except Exception as e:
+            import traceback
+
+            print(
+                f"[tickets/form/upload] ticket={id_ticket} ERREUR:\n"
+                f"{traceback.format_exc()}",
+                flush=True,
+            )
             raise HTTPException(500, f"Erreur upload : {e}")
+        print(f"[tickets/form/upload] ticket={id_ticket} -> {res}", flush=True)
         return res
 
     return router
