@@ -132,27 +132,33 @@ def _iter_paragraphs(doc):
                 continue
 
 
-def _replace_token_with_image(doc, token: str, img: bytes, width_mm: float):
-    """Remplace chaque occurrence (paragraphe contenant `token`) par
-    l'image. Le placeholder est un run isolé en pratique ; sinon on
-    nettoie le paragraphe et on insère l'image.
+def _replace_token_with_image(doc, token: str, img: bytes, height_mm: float):
+    """Remplace le `token` par l'image, EN PLACE dans le run qui le
+    contient, sans toucher au reste du paragraphe (préserve l'espace
+    réservé et donc la pagination — sinon les ~125 images ancrées
+    logo/paraphe se désalignent et s'empilent).
+
+    L'image est dimensionnée par sa HAUTEUR (la largeur suit le ratio)
+    pour rester dans la zone de signature réservée.
     """
     from docx.shared import Mm
 
     for p in _iter_paragraphs(doc):
         if token not in p.text:
             continue
-        # Vide les runs, garde le 1er pour porter l'image
-        for r in p.runs:
-            r.text = ""
-        if p.runs:
-            run = p.runs[0]
-        else:
-            run = p.add_run()
-        try:
-            run.add_picture(io.BytesIO(img), width=Mm(width_mm))
-        except Exception:
-            run.text = ""
+        for run in list(p.runs):
+            if token not in run.text:
+                continue
+            before, _, after = run.text.partition(token)
+            run.text = before
+            try:
+                run.add_picture(io.BytesIO(img), height=Mm(height_mm))
+            except Exception:
+                pass
+            if after:
+                # remet le texte qui suivait le token
+                tail = p.add_run(after)
+                tail.font.size = run.font.size
 
 
 def _add_paraphe_footer(doc, img: bytes):
@@ -372,9 +378,9 @@ def regenerate_signed_pdf(
 
     doc = Document(docx_path)
     if sign:
-        _replace_token_with_image(doc, "S_SIGN", sign, 45)
+        _replace_token_with_image(doc, "S_SIGN", sign, 18)
     if lu_app:
-        _replace_token_with_image(doc, "S_MENTION", lu_app, 70)
+        _replace_token_with_image(doc, "S_MENTION", lu_app, 16)
     if paraphe:
         _add_paraphe_footer(doc, paraphe)
     doc.save(docx_path)
