@@ -107,9 +107,9 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
   if (data.plan === 2) {
     return (
       <div className="flex gap-4 h-full">
-        <div className="flex-1 min-h-[520px] border border-c-line rounded-lg bg-c-surface-soft flex items-center justify-center text-center text-c-ink-faint text-sm overflow-hidden">
+        <div className="flex-1 min-h-[520px] border border-c-line rounded-lg bg-c-surface-soft flex flex-col text-center text-c-ink-faint text-sm overflow-hidden">
           {pdfLoading ? (
-            <span className="flex items-center gap-2">
+            <span className="flex-1 flex items-center justify-center gap-2">
               <Loader2 className="w-5 h-5 animate-spin" />
               Régénération du contrat signé…
             </span>
@@ -117,25 +117,22 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
             <iframe
               src={signedPdfUrl}
               title="Contrat signé"
-              className="w-full h-[640px]"
+              className="w-full flex-1 border-0"
             />
           ) : !data.has_signed_pdf ? (
-            <span className="p-6">
+            <span className="flex-1 flex items-center justify-center p-6">
               Contrat <strong>validé</strong>, en attente de la signature
               du salarié sur l'appli Omaya.
             </span>
           ) : (
-            <span className="p-6">
+            <span className="flex-1 flex flex-col items-center justify-center p-6">
               Contrat <strong>signé</strong> le {data.date_signature || '—'}.
               <br />
               Impossible de régénérer le PDF signé.
               {pdfError && (
-                <>
-                  <br />
-                  <span className="text-red-600 text-xs break-all">
-                    {pdfError}
-                  </span>
-                </>
+                <span className="text-red-600 text-xs break-all mt-1">
+                  {pdfError}
+                </span>
               )}
             </span>
           )}

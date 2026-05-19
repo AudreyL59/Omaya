@@ -977,18 +977,20 @@ function TicketContenuModal({
             </div>
 
             {/* Colonne droite — Détail du ticket (fenêtre interne FI_*) */}
-            <div className="flex-1 min-w-0 overflow-y-auto p-6">
-              <h3 className="text-sm font-semibold text-c-ink mb-4">
+            <div className="flex-1 min-w-0 overflow-y-auto p-6 flex flex-col">
+              <h3 className="text-sm font-semibold text-c-ink mb-4 shrink-0">
                 Détail du ticket
               </h3>
               {(() => {
                 const FI = FI_COMPONENTS[detail.id_type_demande]
                 return FI ? (
-                  <FI
-                    apiBase={apiBase}
-                    getToken={getToken}
-                    idTicket={detail.id_ticket}
-                  />
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <FI
+                      apiBase={apiBase}
+                      getToken={getToken}
+                      idTicket={detail.id_ticket}
+                    />
+                  </div>
                 ) : (
                   <div className="h-full flex items-center justify-center text-c-ink-faint text-sm text-center">
                     Formulaire spécifique au type «&nbsp;
