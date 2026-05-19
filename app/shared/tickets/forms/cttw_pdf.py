@@ -198,6 +198,40 @@ def _add_paraphe_footer(doc, img: bytes):
                 pass
 
 
+def _strip_floating_anchors(doc):
+    """Supprime du CORPS toutes les images flottantes (`<wp:anchor>`).
+
+    Le moteur d'état WinDev tamponne le logo + le paraphe en BAS de
+    CHAQUE page sous forme d'images ancrées dans le corps (toutes à la
+    même position : posOffset V identique, relativeFrom=margin). WinDev
+    paginant différemment de LibreOffice, ces ancres se regroupent sur
+    les pages denses -> logo en double/triple en bas à gauche.
+
+    Le vrai pied de page Word (footer1.xml) porte déjà le logo + le
+    paraphe + le n° de page : il se répète proprement une fois par
+    page. On supprime donc les ancres redondantes du corps et on laisse
+    le pied de page faire le travail. Les images `<wp:inline>` (tampons
+    de signature dans le contenu) et les balises S_SIGN/S_MENTION ne
+    sont pas touchées.
+    """
+    from docx.oxml.ns import qn
+
+    body = doc.element.body
+    to_remove = []
+    for drawing in body.iter(qn("w:drawing")):
+        if drawing.find(qn("wp:anchor")) is not None:
+            to_remove.append(drawing)
+    for drawing in to_remove:
+        parent = drawing.getparent()  # le <w:r>
+        if parent is not None:
+            gp = parent.getparent()
+            if gp is not None:
+                gp.remove(parent)
+            else:
+                parent.remove(drawing)
+    return len(to_remove)
+
+
 # ---------------------------------------------------------------
 # Conversion docx -> PDF (LibreOffice headless)
 # ---------------------------------------------------------------
@@ -378,7 +412,6 @@ def regenerate_signed_pdf(
 
     sign = _image_or_fallback(id_ticket, "Signature", "CttWSignature")
     lu_app = _image_or_fallback(id_ticket, "luApp", "CttWLuApp")
-    paraphe = _memo_bytes(id_ticket, "paraphe")
     photo = _memo_bytes(id_ticket, "PhotoSalarié")
 
     # ContenuValidation (pages validées + code SMS)
@@ -398,12 +431,15 @@ def regenerate_signed_pdf(
         f.write(docx_raw)
 
     doc = Document(docx_path)
+    # Supprime les logos/paraphes ancrés par page dans le corps
+    # (dupliqués par la repagination LibreOffice). Le pied de page
+    # Word (footer1.xml) porte déjà logo + paraphe + n° de page et se
+    # répète proprement une fois par page -> on ne réajoute rien.
+    _strip_floating_anchors(doc)
     if sign:
         _replace_token_with_image(doc, "S_SIGN", sign, 18)
     if lu_app:
         _replace_token_with_image(doc, "S_MENTION", lu_app, 16)
-    if paraphe:
-        _add_paraphe_footer(doc, paraphe)
     doc.save(docx_path)
 
     pdf_contrat = _docx_to_pdf(docx_path, tmp)
