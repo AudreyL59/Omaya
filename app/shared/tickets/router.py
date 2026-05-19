@@ -602,6 +602,14 @@ def get_tickets_router(droit_field: str) -> APIRouter:
         try:
             pdf = handler.print_pdf(int(id_ticket), {"id_ligne": id_ligne})
         except Exception as e:
+            import traceback
+
+            tb = traceback.format_exc()
+            print(
+                f"[tickets/form/print] ticket={id_ticket} "
+                f"type={_id_type} ERREUR:\n{tb}",
+                flush=True,
+            )
             raise HTTPException(500, f"Erreur génération PDF : {e}")
         return Response(
             content=pdf,

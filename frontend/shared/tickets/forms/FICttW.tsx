@@ -11,23 +11,31 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
   const [pickDA, setPickDA] = useState(false)
   const [signedPdfUrl, setSignedPdfUrl] = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState('')
 
   // Plan 2 : régénère + charge le PDF signé (lourd : docx+soffice+fusion)
   useEffect(() => {
     if (!data || data.plan !== 2 || !data.has_signed_pdf) return
     let revoked = ''
     setPdfLoading(true)
+    setPdfError('')
     fetch(`${apiBase}/tickets/${idTicket}/form/print`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then(async (r) => {
-        if (!r.ok) throw new Error(String(r.status))
+        if (!r.ok) {
+          const e = await r.json().catch(() => null)
+          throw new Error(e?.detail || `HTTP ${r.status}`)
+        }
         const blob = await r.blob()
         const u = URL.createObjectURL(blob)
         revoked = u
         setSignedPdfUrl(u)
       })
-      .catch(() => setSignedPdfUrl(''))
+      .catch((err) => {
+        setSignedPdfUrl('')
+        setPdfError(String(err?.message || err))
+      })
       .finally(() => setPdfLoading(false))
     return () => {
       if (revoked) URL.revokeObjectURL(revoked)
@@ -120,8 +128,15 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
             <span className="p-6">
               Contrat <strong>signé</strong> le {data.date_signature || '—'}.
               <br />
-              Impossible de régénérer le PDF signé (voir logs serveur :
-              LibreOffice / images de signature).
+              Impossible de régénérer le PDF signé.
+              {pdfError && (
+                <>
+                  <br />
+                  <span className="text-red-600 text-xs break-all">
+                    {pdfError}
+                  </span>
+                </>
+              )}
             </span>
           )}
         </div>
