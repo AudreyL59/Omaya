@@ -8,6 +8,7 @@ import type { ComponentType } from 'react'
 
 import FICartePro from './FICartePro'
 import FICttW from './FICttW'
+import FICttWDemande from './FICttWDemande'
 import FIDPAE from './FIDPAE'
 import FIFourniture from './FIFourniture'
 
@@ -23,4 +24,5 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '3': FIDPAE,       // DPAE
   '4': FICttW,       // Contrat W - Signature
   '21': FIDPAE,      // DPAE à venir (même formulaire)
+  '40': FICttWDemande, // Contrat W - Demande
 }
