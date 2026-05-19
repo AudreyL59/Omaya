@@ -15,6 +15,7 @@ suppression). Lien SMS : DOCS_URL + DocTicket/<idTicket>/<fichier>.
 import ftplib
 import io
 import os
+import re
 import unicodedata
 import urllib.parse
 
@@ -191,6 +192,49 @@ def _ftp_connect() -> ftplib.FTP:
     return ftp
 
 
+_MSDOS_RE = re.compile(
+    r"^(\d{2})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})\s*(AM|PM)\s+"
+    r"(<DIR>|\d+)\s+(.+?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _parse_list_line(ln: str) -> dict | None:
+    """Parse une ligne LIST. Gère le format MS-DOS (FTP Windows IIS)
+    et le format Unix 'ls -l'. Retourne None pour les dossiers."""
+    ln = ln.rstrip("\r\n")
+    if not ln.strip():
+        return None
+
+    m = _MSDOS_RE.match(ln)
+    if m:
+        mm, dd, yy, hh, mi, ap, size, name = m.groups()
+        if size == "<DIR>":
+            return None
+        h = int(hh) % 12 + (12 if ap.upper() == "PM" else 0)
+        yyi = int(yy)
+        year = 2000 + yyi if yyi < 70 else 1900 + yyi
+        return {
+            "nom": name,
+            "taille": size,
+            "date": f"{dd}/{mm}/{year}",
+            "heure": f"{h:02d}:{mi}",
+        }
+
+    # Unix 'ls -l'
+    if ln[0] == "d":
+        return None
+    parts = ln.split(maxsplit=8)
+    if len(parts) >= 9 and (ln[0] in "-l"):
+        return {
+            "nom": parts[8],
+            "taille": parts[4],
+            "date": " ".join(parts[5:8]),
+            "heure": "",
+        }
+    return None
+
+
 def _list_files(id_ticket: int) -> list[dict]:
     """Liste les PJ. MLSD (normalisé, indépendant de l'OS du serveur
     FTP) en priorité ; repli NLST (noms) + SIZE/MDTM si MLSD absent.
@@ -204,7 +248,7 @@ def _list_files(id_ticket: int) -> list[dict]:
     try:
         d = _ftp_dir(id_ticket)
 
-        # 1. MLSD (RFC 3659)
+        # 1. MLSD (RFC 3659) — peu de serveurs Windows le supportent
         try:
             for name, facts in ftp.mlsd(d):
                 if name in (".", ".."):
@@ -228,7 +272,20 @@ def _list_files(id_ticket: int) -> list[dict]:
         except Exception:
             out = []
 
-        # 2. Repli NLST (noms seuls) + SIZE/MDTM par fichier
+        # 2. LIST + parsing MS-DOS (FTP Windows IIS) ou Unix (ls -l)
+        try:
+            lines: list[str] = []
+            ftp.retrlines(f"LIST {d}", lines.append)
+        except Exception:
+            lines = []
+        for ln in lines:
+            parsed = _parse_list_line(ln)
+            if parsed:
+                out.append(parsed)
+        if out:
+            return out
+
+        # 3. Repli NLST (noms seuls) + SIZE/MDTM par fichier
         try:
             names = ftp.nlst(d)
         except Exception:
