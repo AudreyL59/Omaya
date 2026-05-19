@@ -192,6 +192,10 @@ def _ftp_connect() -> ftplib.FTP:
 
 
 def _list_files(id_ticket: int) -> list[dict]:
+    """Liste les PJ. MLSD (normalisé, indépendant de l'OS du serveur
+    FTP) en priorité ; repli NLST (noms) + SIZE/MDTM si MLSD absent.
+    L'ancien parsing 'ls -l' Unix échouait sur un FTP Windows (format
+    MS-DOS) -> liste toujours vide."""
     out: list[dict] = []
     try:
         ftp = _ftp_connect()
@@ -199,23 +203,59 @@ def _list_files(id_ticket: int) -> list[dict]:
         return out
     try:
         d = _ftp_dir(id_ticket)
-        lines: list[str] = []
+
+        # 1. MLSD (RFC 3659)
         try:
-            ftp.retrlines(f"LIST {d}", lines.append)
+            for name, facts in ftp.mlsd(d):
+                if name in (".", ".."):
+                    continue
+                if facts.get("type") in ("dir", "cdir", "pdir"):
+                    continue
+                m = facts.get("modify", "")
+                date = ""
+                heure = ""
+                if len(m) >= 8:
+                    date = f"{m[6:8]}/{m[4:6]}/{m[0:4]}"
+                if len(m) >= 12:
+                    heure = f"{m[8:10]}:{m[10:12]}"
+                out.append({
+                    "nom": name,
+                    "taille": facts.get("size", ""),
+                    "date": date,
+                    "heure": heure,
+                })
+            return out
+        except Exception:
+            out = []
+
+        # 2. Repli NLST (noms seuls) + SIZE/MDTM par fichier
+        try:
+            names = ftp.nlst(d)
         except Exception:
             return out
-        for ln in lines:
-            parts = ln.split(maxsplit=8)
-            if len(parts) < 9 or ln[0] == "d":
+        for p in names:
+            name = p.rstrip("/").split("/")[-1]
+            if name in ("", ".", ".."):
                 continue
-            taille = parts[4]
-            date = " ".join(parts[5:8])
-            nom = parts[8]
+            taille = ""
+            date = ""
+            heure = ""
+            try:
+                taille = str(ftp.size(f"{d}/{name}") or "")
+            except Exception:
+                pass
+            try:
+                resp = ftp.sendcmd(f"MDTM {d}/{name}")  # '213 YYYYMMDDHHMMSS'
+                ts = resp.split()[-1]
+                if len(ts) >= 8:
+                    date = f"{ts[6:8]}/{ts[4:6]}/{ts[0:4]}"
+                if len(ts) >= 12:
+                    heure = f"{ts[8:10]}:{ts[10:12]}"
+            except Exception:
+                pass
             out.append({
-                "nom": nom,
-                "taille": taille,
-                "date": date,
-                "heure": "",
+                "nom": name, "taille": taille,
+                "date": date, "heure": heure,
             })
     finally:
         try:
