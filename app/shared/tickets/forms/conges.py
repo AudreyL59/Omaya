@@ -201,16 +201,104 @@ def _periode_text(periode_conges: str, deb: date | None, fin: date | None) -> st
     return f" pour le {df}{suf}"
 
 
+def _poste_lib(id_salarie: int) -> str:
+    """Fonction = '<Catégorie> - <Lib_Poste>' via salarie_embauche +
+    TypePoste (base rh)."""
+    if not id_salarie:
+        return ""
+    try:
+        rh = get_connection("rh")
+        e = rh.query_one(
+            "SELECT IDSalarie, IdTypePoste FROM salarie_embauche "
+            "WHERE IDSalarie = ?",
+            (int(id_salarie),),
+        )
+        idp = _to_int(e.get("IdTypePoste")) if e else 0
+        if not idp:
+            return ""
+        t = rh.query_one(
+            "SELECT IdTypePoste, Catégorie, Lib_Poste FROM TypePoste "
+            "WHERE IdTypePoste = ?",
+            (int(idp),),
+        )
+        if not t:
+            return ""
+        cat = (t.get("Catégorie") or "").strip()
+        lib = (t.get("Lib_Poste") or "").strip()
+        return f"{cat} - {lib}" if (cat and lib) else (lib or cat)
+    except Exception:
+        return ""
+
+
+def _service_lib(id_salarie: int) -> str:
+    """Service = 1ʳᵉ organigramme du salarié (salarie_organigramme +
+    organigramme.Lib_ORGA, base rh)."""
+    if not id_salarie:
+        return ""
+    try:
+        rh = get_connection("rh")
+        so = rh.query_one(
+            "SELECT IDSalarie, idorganigramme FROM salarie_organigramme "
+            "WHERE IDSalarie = ?",
+            (int(id_salarie),),
+        )
+        ido = _to_int(so.get("idorganigramme")) if so else 0
+        if not ido:
+            return ""
+        o = rh.query_one(
+            "SELECT idorganigramme, Lib_ORGA FROM organigramme "
+            "WHERE idorganigramme = ?",
+            (int(ido),),
+        )
+        return (o.get("Lib_ORGA") or "").strip() if o else ""
+    except Exception:
+        return ""
+
+
+def _responsable_nom(id_ticket: int, fallback_user_id: int) -> str:
+    """TK_Liste.OPDEST -> salarié, sinon l'utilisateur courant."""
+    try:
+        tk = get_connection("ticket").query_one(
+            "SELECT IDTK_Liste, OPDEST FROM TK_Liste WHERE IDTK_Liste = ?",
+            (int(id_ticket),),
+        )
+        op = _clean_id(_to_int(tk.get("OPDEST"))) if tk else 0
+    except Exception:
+        op = 0
+    sid = op or _clean_id(_to_int(fallback_user_id))
+    return _nom_complet(load_salaries_minimal({sid}).get(sid, {})) if sid else ""
+
+
+def _fmt_windev_dt(s) -> str:
+    """WinDev compact AAAAMMJJHHMMSS[mmm] -> 'JJ/MM/AAAA HH:MM:SS'."""
+    d = "".join(c for c in str(s or "") if c.isdigit())
+    if len(d) >= 14:
+        return f"{d[6:8]}/{d[4:6]}/{d[0:4]} {d[8:10]}:{d[10:12]}:{d[12:14]}"
+    if len(d) >= 8:
+        return f"{d[6:8]}/{d[4:6]}/{d[0:4]}"
+    return ""
+
+
+def _fmt_iso_date(iso: str) -> str:
+    if not iso or len(iso) < 10:
+        return ""
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}"
+
+
 # --------------------------------------------------------------------
 # PDF récapitulatif (équivalent EtatDemandeCongé)
 # --------------------------------------------------------------------
 
 def _build_pdf(
-    id_ticket: int, salarie_nom: str, type_conges: str,
-    type_absence_lib: str, periode_conges: str, date_debut: str,
-    date_fin: str, motif: str, signature_resp_bytes: bytes | None,
-    signature_demandeur_url: str,
+    salarie_nom: str, fonction: str, service: str, responsable: str,
+    type_conges: str, date_debut: str, date_fin: str, motif: str,
+    date_fait_salarie: str, signature_demandeur_url: str,
+    date_fait_resp: str, signature_resp_bytes: bytes | None,
 ) -> bytes:
+    """Reproduit le gabarit EtatDemandeCongé (PDF de référence) :
+    titre, bandeau noir « Détails de la demande », champs avec
+    soulignement, blocs Motifs, signature salarié, bandeau noir
+    « Décision du responsable : Accordé », signature responsable."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.lib.utils import ImageReader
@@ -219,60 +307,90 @@ def _build_pdf(
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
+
+    # Header : EXOSPHERE + titre
     c.setFont("Helvetica-Bold", 16)
-    c.drawCentredString(w / 2, h - 25 * mm, "Demande de congés")
-    y = h - 40 * mm
+    c.drawString(25 * mm, h - 22 * mm, "EXOSPHERE")
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(w / 2, h - 22 * mm, "Demande de congé")
 
-    def line(label: str, val: str):
-        nonlocal y
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(25 * mm, y, label)
+    def band(y_mm: float, label: str):
+        c.setFillColorRGB(0, 0, 0)
+        c.rect(20 * mm, y_mm * mm - 5, (w - 40 * mm), 8 * mm, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawCentredString(w / 2, y_mm * mm - 1, label)
+        c.setFillColorRGB(0, 0, 0)
+
+    band(h / mm - 35, "Détails de la demande")
+
+    def field(y_mm: float, label: str, val: str):
         c.setFont("Helvetica", 10)
-        c.drawString(80 * mm, y, val or "—")
-        y -= 7 * mm
+        c.drawRightString(60 * mm, y_mm * mm, label)
+        c.setFont("Helvetica", 10)
+        c.drawString(63 * mm, y_mm * mm, val or "")
+        c.setLineWidth(0.4)
+        c.line(63 * mm, y_mm * mm - 1.5, w - 25 * mm, y_mm * mm - 1.5)
 
-    line("Salarié :", salarie_nom)
-    line("Type de congé :", type_conges)
-    line("Absence (Omaya) :", type_absence_lib)
-    line("Période :", periode_conges)
-    line("Du :", date_debut)
-    line("Au :", date_fin)
-    y -= 3 * mm
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(25 * mm, y, "Motif :")
-    y -= 6 * mm
+    yhdr = h / mm - 48
+    field(yhdr, "Nom de l'employé :", salarie_nom)
+    field(yhdr - 8, "Fonction :", fonction)
+    field(yhdr - 16, "Service :", service)
+    field(yhdr - 24, "Responsable :", responsable)
+
+    # Type de congé + dates
+    y2 = yhdr - 44
+    field(y2, "Type de congé :", type_conges)
     c.setFont("Helvetica", 10)
-    for ln in (motif or "").splitlines() or [""]:
-        c.drawString(25 * mm, y, ln[:110])
-        y -= 5 * mm
+    range_txt = f"Du {_fmt_iso_date(date_debut)} au {_fmt_iso_date(date_fin)}"
+    c.drawString(63 * mm, (y2 - 8) * mm, range_txt)
+    c.line(63 * mm, (y2 - 8) * mm - 1.5, w - 25 * mm, (y2 - 8) * mm - 1.5)
 
-    # Signatures
-    y_sig = 55 * mm
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(25 * mm, y_sig + 30 * mm, "Signature du demandeur")
-    c.drawString(110 * mm, y_sig + 30 * mm, "Signature du responsable")
+    # Motifs ou commentaires
+    y3 = y2 - 22
+    c.setFont("Helvetica", 10)
+    c.drawString(20 * mm, y3 * mm, "Motifs ou commentaires :")
+    y_motif = y3 - 4
+    for ln in (motif or "").splitlines()[:5]:
+        c.drawString(20 * mm, y_motif * mm, ln[:120])
+        y_motif -= 5
+    c.setLineWidth(0.4)
+    c.line(20 * mm, (y3 - 25) * mm, w - 20 * mm, (y3 - 25) * mm)
+
+    # Signature salarié
+    y_sig1 = y3 - 30
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawString(25 * mm, y_sig1 * mm, f"Fait le {date_fait_salarie}")
+    c.drawRightString(w - 30 * mm, y_sig1 * mm, "Signature du salarié")
     if signature_demandeur_url:
         try:
             b64 = signature_demandeur_url.split(",", 1)[-1]
             img = ImageReader(io.BytesIO(base64.b64decode(b64)))
             c.drawImage(
-                img, 25 * mm, y_sig, 70 * mm, 25 * mm,
-                preserveAspectRatio=True, mask="auto",
-            )
-        except Exception:
-            pass
-    if signature_resp_bytes:
-        try:
-            img = ImageReader(io.BytesIO(signature_resp_bytes))
-            c.drawImage(
-                img, 110 * mm, y_sig, 70 * mm, 25 * mm,
+                img, w - 80 * mm, (y_sig1 - 30) * mm, 55 * mm, 22 * mm,
                 preserveAspectRatio=True, mask="auto",
             )
         except Exception:
             pass
 
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(w / 2, 15 * mm, f"Ticket {id_ticket}")
+    # Bandeau décision
+    band(y_sig1 - 38, "Décision du responsable : Accordé")
+
+    # Signature responsable
+    y_sig2 = y_sig1 - 46
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawString(25 * mm, y_sig2 * mm, f"Fait le {date_fait_resp}")
+    c.drawRightString(w - 30 * mm, y_sig2 * mm, "Signature du responsable")
+    if signature_resp_bytes:
+        try:
+            img = ImageReader(io.BytesIO(signature_resp_bytes))
+            c.drawImage(
+                img, w - 80 * mm, (y_sig2 - 30) * mm, 55 * mm, 22 * mm,
+                preserveAspectRatio=True, mask="auto",
+            )
+        except Exception:
+            pass
+
     c.save()
     return buf.getvalue()
 
@@ -393,19 +511,28 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         ),
     )
 
-    # 2. PDF récap + upload FTP dossier salarié
-    type_abs_lib = ""
-    for t in _types_absence():
-        if t["id"] == int(id_type_abs):
-            type_abs_lib = t["lib"]
-            break
+    # 2. PDF récap + upload FTP dossier salarié (gabarit EtatDemandeCongé)
     sig_dem = _signature_img_url(int(id_ticket), "SignatureDemandeur")
+    salarie_nom = _nom_complet(_salarie_info(id_salarie))
+    fonction = _poste_lib(id_salarie)
+    service = _service_lib(id_salarie)
+    responsable = _responsable_nom(int(id_ticket), int(user_id))
+    # Date « Fait le » du salarié = création du ticket (TK_Liste.DATECREA)
+    date_fait_sal = ""
+    try:
+        tkl = get_connection("ticket").query_one(
+            "SELECT IDTK_Liste, DATECREA FROM TK_Liste WHERE IDTK_Liste = ?",
+            (int(id_ticket),),
+        )
+        date_fait_sal = _fmt_windev_dt(tkl.get("DATECREA")) if tkl else ""
+    except Exception:
+        pass
+    date_fait_resp = _fmt_windev_dt(now)
     try:
         pdf = _build_pdf(
-            int(id_ticket),
-            _nom_complet(_salarie_info(id_salarie)),
-            type_conges, type_abs_lib, periode_conges,
-            date_debut, date_fin, motif, sig_bytes, sig_dem,
+            salarie_nom.upper(), fonction, service, responsable,
+            type_conges, date_debut, date_fin, motif,
+            date_fait_sal, sig_dem, date_fait_resp, sig_bytes,
         )
         from .cttw_pdf import ftp_upload
 
