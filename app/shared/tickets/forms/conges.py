@@ -255,6 +255,57 @@ def _service_lib(id_salarie: int) -> str:
         return ""
 
 
+def _societe_info(id_salarie: int) -> dict:
+    """RaisonSociale + LOGO (mémo binaire) de la société du salarié,
+    via salarie_embauche.IdSte -> societe (base rh). Le LOGO est lu en
+    SELECT isolé (clé + mémo binaire) pour éviter le bug bridge JSON."""
+    if not id_salarie:
+        return {"name": "", "logo": None}
+    rh = get_connection("rh")
+    id_ste = 0
+    try:
+        e = rh.query_one(
+            "SELECT IDSalarie, IdSte FROM salarie_embauche "
+            "WHERE IDSalarie = ?",
+            (int(id_salarie),),
+        )
+        id_ste = _to_int(e.get("IdSte")) if e else 0
+    except Exception:
+        return {"name": "", "logo": None}
+    if not id_ste:
+        return {"name": "", "logo": None}
+    name = ""
+    try:
+        s = rh.query_one(
+            "SELECT IdSte, RaisonSociale FROM societe WHERE IdSte = ?",
+            (int(id_ste),),
+        )
+        name = (s.get("RaisonSociale") or "").strip() if s else ""
+    except Exception:
+        pass
+    logo_bytes: bytes | None = None
+    try:
+        sl = rh.query_one(
+            "SELECT IdSte, LOGO FROM societe WHERE IdSte = ?",
+            (int(id_ste),),
+        )
+        v = sl.get("LOGO") if sl else None
+        if v:
+            if isinstance(v, bytes):
+                logo_bytes = v
+            else:
+                s = str(v).strip()
+                if s.startswith("data:"):
+                    s = s.split(",", 1)[1]
+                try:
+                    logo_bytes = base64.b64decode(s)
+                except Exception:
+                    logo_bytes = None
+    except Exception:
+        pass
+    return {"name": name, "logo": logo_bytes}
+
+
 def _responsable_nom(id_ticket: int, fallback_user_id: int) -> str:
     """TK_Liste.OPDEST -> salarié, sinon l'utilisateur courant."""
     try:
@@ -294,6 +345,7 @@ def _build_pdf(
     type_conges: str, date_debut: str, date_fin: str, motif: str,
     date_fait_salarie: str, signature_demandeur_url: str,
     date_fait_resp: str, signature_resp_bytes: bytes | None,
+    societe_nom: str = "", societe_logo: bytes | None = None,
 ) -> bytes:
     """Reproduit le gabarit EtatDemandeCongé (PDF de référence) :
     titre, bandeau noir « Détails de la demande », champs avec
@@ -308,11 +360,24 @@ def _build_pdf(
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
 
-    # Header : EXOSPHERE + titre
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(25 * mm, h - 22 * mm, "EXOSPHERE")
+    # Header : logo + nom société (societe.LOGO + RaisonSociale) + titre
+    from reportlab.lib.utils import ImageReader  # noqa: F811  (déjà importé)
+
+    head_y = h - 18 * mm
+    if societe_logo:
+        try:
+            c.drawImage(
+                ImageReader(io.BytesIO(societe_logo)),
+                25 * mm, head_y - 8 * mm, 16 * mm, 16 * mm,
+                preserveAspectRatio=True, mask="auto",
+            )
+        except Exception:
+            pass
+    if societe_nom:
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(45 * mm, head_y, societe_nom.upper())
     c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(w / 2, h - 22 * mm, "Demande de congé")
+    c.drawCentredString(w / 2, head_y, "Demande de congé")
 
     def band(y_mm: float, label: str):
         c.setFillColorRGB(0, 0, 0)
@@ -517,6 +582,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
     fonction = _poste_lib(id_salarie)
     service = _service_lib(id_salarie)
     responsable = _responsable_nom(int(id_ticket), int(user_id))
+    societe = _societe_info(id_salarie)
     # Date « Fait le » du salarié = création du ticket (TK_Liste.DATECREA)
     date_fait_sal = ""
     try:
@@ -533,6 +599,8 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             salarie_nom.upper(), fonction, service, responsable,
             type_conges, date_debut, date_fin, motif,
             date_fait_sal, sig_dem, date_fait_resp, sig_bytes,
+            societe_nom=societe.get("name") or "",
+            societe_logo=societe.get("logo"),
         )
         from .cttw_pdf import ftp_upload
 
