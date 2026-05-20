@@ -4,7 +4,7 @@ Transposition de la fenêtre interne WinDev FI_RDVTech.
 
 Affiche INFOS CLIENT + INFOS CONTRAT (lecture, depuis client/SFR_contrat/
 SFR_produit/SFR_Cluster — base adv) à partir de l'IDcontrat stocké
-dans TK_RetourRdvTechFIBRE (base ticket).
+dans TK_RetourRdvTechFIBRE (base ticket_bo).
 
 Bouton « Je valide ce retour » :
   - met à jour SFR_contrat.IdSFR_StatutRDV
@@ -172,7 +172,7 @@ def _contrat_info(id_contrat: int) -> dict:
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket")
+    db = get_connection("ticket_bo")
     r = db.query_one(
         """SELECT IDTK_Liste, IDTK_RetourRdvTechFIBRE, IDcontrat,
             IdFIBRE_StatutRDV
@@ -218,8 +218,9 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
     info_cplt = str(payload.get("info_cplt") or "")
     new_date_rdv = payload.get("new_date_rdv")  # ISO ou "clear" pour vider
 
+    bo_db = get_connection("ticket_bo")
     tk_db = get_connection("ticket")
-    r = tk_db.query_one(
+    r = bo_db.query_one(
         "SELECT IDTK_Liste, IDcontrat FROM TK_RetourRdvTechFIBRE "
         "WHERE IDTK_Liste = ?",
         (int(id_ticket),),
@@ -284,7 +285,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
     # Persistance TK_RetourRdvTechFIBRE (traçabilité)
     try:
-        tk_db.query(
+        bo_db.query(
             """UPDATE TK_RetourRdvTechFIBRE SET
                 IdFIBRE_StatutRDV = ?, InfoCplt = ?, ModifDate = ?,
                 ModifOP = ?, ModifELEM = 'modif'

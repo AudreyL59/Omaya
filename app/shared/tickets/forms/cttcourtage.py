@@ -8,8 +8,8 @@ Même architecture que FI_CttW :
     « Renvoyer en signature », validation finale.
 
 Spécificités vs CttW :
-  - TK_DemandeCttCourtage en base **ticket** (vs ticket_rh) — pas de
-    `idDA`, le gérant est dans `idDistrib`.
+  - TK_DemandeCttCourtage en base **ticket_bo** (vs ticket_rh pour CttW)
+    — pas de `idDA`, le gérant est dans `idDistrib`.
   - docx tokens `S_SIGN_DISTRIB` / `S_MENTION_DISTRIB`.
   - URL signature suffixes `CttCourtageSignature` / `CttCourtageLuApp`.
   - URL PDF non signé : `TempCttCourtage/<id>-CttCourtage.pdf`.
@@ -38,7 +38,7 @@ PDF_NON_SIGNE_URL = "https://interne.omaya.fr/TempCttCourtage/{id}-CttCourtage.p
 # Paramètres réutilisation de regenerate_signed_pdf (cf. cttw_pdf)
 _PDF_KWARGS = dict(
     table="TK_DemandeCttCourtage",
-    db_key="ticket",
+    db_key="ticket_bo",
     token_sign="S_SIGN_DISTRIB",
     token_mention="S_MENTION_DISTRIB",
     sign_suffix="CttCourtageSignature",
@@ -170,7 +170,7 @@ def _resp_orga_gsm(id_salarie: int) -> str:
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket")
+    db = get_connection("ticket_bo")
     r = db.query_one(
         """SELECT IDTK_Liste, IDdemandeContratW, IDSalarie, idDistrib,
             IDsociete_docCourtage, contratGénéré, contratValidé,
@@ -221,7 +221,7 @@ def print_pdf(id_ticket: int, payload: dict) -> bytes:
     paramétré pour TK_DemandeCttCourtage."""
     from .cttw_pdf import regenerate_signed_pdf
 
-    db = get_connection("ticket")
+    db = get_connection("ticket_bo")
     r = db.query_one(
         """SELECT IDTK_Liste, IDSalarie, idDistrib, datesignature
         FROM TK_DemandeCttCourtage WHERE IDTK_Liste = ?""",
@@ -243,13 +243,14 @@ def print_pdf(id_ticket: int, payload: dict) -> bytes:
 def save(id_ticket: int, payload: dict, user_id: int) -> dict:
     action = str(payload.get("action") or "valider")
     now = _now_windev()
-    db = get_connection("ticket")
+    # TK_DemandeCttCourtage = base ticket_bo ; TK_Liste = base ticket
+    bo = get_connection("ticket_bo")
 
     if action == "da":
         id_da = str(payload.get("id_da") or "")
         if not id_da.isdigit():
             return {"ok": False, "error": "Gérant invalide"}
-        db.query(
+        bo.query(
             """UPDATE TK_DemandeCttCourtage SET idDistrib = ?, ModifDate = ?,
                 ModifOP = ?, ModifELEM = 'modif'
             WHERE IDTK_Liste = ?""",
@@ -259,7 +260,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
     if action == "valider":
         # « Valider le contrat de courtage / Attestation pour signature »
-        cur = db.query_one(
+        cur = bo.query_one(
             """SELECT IDSalarie, idDistrib, IDsociete_docCourtage
             FROM TK_DemandeCttCourtage WHERE IDTK_Liste = ?""",
             (int(id_ticket),),
@@ -270,7 +271,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         id_distrib = _clean_id(_to_int(cur.get("idDistrib")))
         id_societe_doc = _to_int(cur.get("IDsociete_docCourtage"))
 
-        db.query(
+        bo.query(
             """UPDATE TK_DemandeCttCourtage SET
                 contratValidé = 1, contratSigné = 0, contratAnnul = 0,
                 datesignature = '', ContenuValidation = '',
@@ -279,7 +280,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             WHERE IDTK_Liste = ?""",
             (now, int(user_id), int(id_ticket)),
         )
-        db.query(
+        get_connection("ticket").query(
             """UPDATE TK_Liste
             SET IDTK_Statut = 22, ModifDate = ?, ModifElem = 'modif'
             WHERE IDTK_Liste = ?""",
@@ -341,7 +342,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         from .cttw_pdf import ftp_upload, regenerate_signed_pdf
 
         cloturer = bool(payload.get("cloturer"))
-        r = db.query_one(
+        r = bo.query_one(
             """SELECT IDTK_Liste, IDdemandeContratW, IDSalarie, idDistrib,
                 IDsociete_docCourtage, datesignature
             FROM TK_DemandeCttCourtage WHERE IDTK_Liste = ?""",
@@ -468,7 +469,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                         int(user_id), now,
                     ),
                 )
-                db.query(
+                bo.query(
                     """UPDATE TK_DemandeCttCourtage SET
                         IDsociete_docCourtage = ?, ModifDate = ?,
                         ModifOP = ?, ModifELEM = 'modif'
@@ -547,7 +548,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                     pass
 
         if cloturer:
-            db.query(
+            get_connection("ticket").query(
                 """UPDATE TK_Liste SET Cloturée = 1, DateCloture = ?,
                     modification = 1, opModif = ?, idModif = 0,
                     TypeModif = 'TKSTATUT', ModifDate = ?, ModifOP = ?,
@@ -567,7 +568,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         pb_mention = bool(payload.get("pb_mention"))
         if not (pb_sign or pb_par or pb_mention):
             return {"ok": False, "error": "Coche au moins un problème"}
-        cur = db.query_one(
+        cur = bo.query_one(
             "SELECT IDSalarie, idDistrib FROM TK_DemandeCttCourtage "
             "WHERE IDTK_Liste = ?",
             (int(id_ticket),),
@@ -592,7 +593,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             sets.append("luApp = ''")
             elems.append(" - la mention 'Lu et approuvé'")
         sets += ["ModifDate = ?", "ModifOP = ?", "ModifELEM = 'modif'"]
-        db.query(
+        bo.query(
             f"UPDATE TK_DemandeCttCourtage SET {', '.join(sets)} "
             f"WHERE IDTK_Liste = ?",
             (now, int(user_id), int(id_ticket)),
@@ -605,7 +606,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             statut = 10
         else:
             statut = 9
-        db.query(
+        get_connection("ticket").query(
             """UPDATE TK_Liste SET
                 IDTK_Statut = ?, modification = 1, opModif = ?, idModif = 0,
                 TypeModif = 'TKSTATUT', ModifDate = ?, ModifOP = ?,
@@ -633,7 +634,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
     if action == "relance_sms":
         # « Relance SMS » au gérant (Plan 2 avant signature)
-        cur = db.query_one(
+        cur = bo.query_one(
             """SELECT idDistrib, IDsociete_docCourtage
             FROM TK_DemandeCttCourtage WHERE IDTK_Liste = ?""",
             (int(id_ticket),),
