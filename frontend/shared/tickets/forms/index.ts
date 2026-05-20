@@ -8,6 +8,7 @@ import type { ComponentType } from 'react'
 
 import FIAvance from './FIAvance'
 import FICartePro from './FICartePro'
+import FIConges from './FIConges'
 import FICttW from './FICttW'
 import FICttWDemande from './FICttWDemande'
 import FIDPAE from './FIDPAE'
@@ -29,6 +30,7 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '9': FIResa,       // Réservation
   '10': FIAvance,    // Demande d'avance
   '11': FISOSBO,     // SOS BO
+  '13': FIConges,    // Congés
   '21': FIDPAE,      // DPAE à venir (même formulaire)
   '40': FICttWDemande, // Contrat W - Demande
 }

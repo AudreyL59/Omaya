@@ -15,6 +15,7 @@ Ordre d'implémentation = ordre du switch WinDev (Fen_TicketContenu).
 from . import (
     avance,
     cartepro,
+    conges,
     cttw,
     cttw_demande,
     dpae,
@@ -32,6 +33,7 @@ FORM_HANDLERS: dict[int, object] = {
     9: resa,          # Réservation
     10: avance,       # Demande d'avance
     11: sosbo,        # SOS BO
+    13: conges,       # Congés
     21: dpae,         # DPAE à venir (même formulaire)
     40: cttw_demande,  # Contrat W - Demande
 }
