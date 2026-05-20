@@ -16,6 +16,7 @@ from . import (
     avance,
     cartepro,
     conges,
+    cttcourtage,
     cttw,
     cttw_demande,
     dpae,
@@ -39,5 +40,6 @@ FORM_HANDLERS: dict[int, object] = {
     17: sosju,        # SOS Juridique
     19: rdvtech,      # Retour RDV Tech FIBRE
     21: dpae,         # DPAE à venir (même formulaire)
+    23: cttcourtage,  # Contrat de Courtage / Attestation
     40: cttw_demande,  # Contrat W - Demande
 }

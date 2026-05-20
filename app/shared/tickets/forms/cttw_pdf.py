@@ -40,11 +40,17 @@ CREATE_NO_WINDOW = 0x08000000
 # binaire casse le JSON du bridge).
 # ---------------------------------------------------------------
 
-def _memo_bytes(id_ticket: int, field: str) -> bytes | None:
+def _memo_bytes(
+    id_ticket: int,
+    field: str,
+    *,
+    table: str = "TK_DemandeCttW",
+    db_key: str = "ticket_rh",
+) -> bytes | None:
     try:
-        db = get_connection("ticket_rh")
+        db = get_connection(db_key)
         r = db.query_one(
-            f"SELECT IDTK_Liste, {field} FROM TK_DemandeCttW "
+            f"SELECT IDTK_Liste, {field} FROM {table} "
             f"WHERE IDTK_Liste = ?",
             (int(id_ticket),),
         )
@@ -94,9 +100,16 @@ def _http_image(url: str) -> bytes | None:
         return None
 
 
-def _image_or_fallback(id_ticket: int, field: str, suffix: str) -> bytes | None:
+def _image_or_fallback(
+    id_ticket: int,
+    field: str,
+    suffix: str,
+    *,
+    table: str = "TK_DemandeCttW",
+    db_key: str = "ticket_rh",
+) -> bytes | None:
     """Mémo binaire `field` sinon HTTP rest.omaya.fr puis sos.rest."""
-    img = _memo_bytes(id_ticket, field)
+    img = _memo_bytes(id_ticket, field, table=table, db_key=db_key)
     if img:
         return img
     for base in (CTTW_SIGN_URL, CTTW_SIGN_URL_FALLBACK):
@@ -484,32 +497,53 @@ def regenerate_signed_pdf(
     salarie_nom: str,
     da_nom: str,
     date_sign: str,
+    *,
+    table: str = "TK_DemandeCttW",
+    db_key: str = "ticket_rh",
+    token_sign: str = "S_SIGN",
+    token_mention: str = "S_MENTION",
+    sign_suffix: str = "CttWSignature",
+    luapp_suffix: str = "CttWLuApp",
+    tmp_prefix: str = "cttw_",
 ) -> bytes:
-    """Régénère le PDF signé complet (contrat + signatures + récap)."""
+    """Régénère le PDF signé complet (contrat + signatures + récap).
+
+    Paramétrable pour réutilisation par FI_CttCourtage (type 23) :
+    table=TK_DemandeCttCourtage, db_key=ticket, tokens S_*_DISTRIB,
+    suffixes CttCourtageSignature/LuApp.
+    """
     from docx import Document
     from pypdf import PdfReader, PdfWriter
 
-    docx_raw = _memo_bytes(id_ticket, "Contenu")
+    docx_raw = _memo_bytes(id_ticket, "Contenu", table=table, db_key=db_key)
     if not docx_raw:
         raise ValueError("Contrat (Contenu) introuvable ou vide")
 
-    sign = _image_or_fallback(id_ticket, "Signature", "CttWSignature")
-    lu_app = _image_or_fallback(id_ticket, "luApp", "CttWLuApp")
-    paraphe = _memo_bytes(id_ticket, "paraphe")
-    photo = _memo_bytes(id_ticket, "PhotoSalarié")
+    sign = _image_or_fallback(
+        id_ticket, "Signature", sign_suffix, table=table, db_key=db_key
+    )
+    lu_app = _image_or_fallback(
+        id_ticket, "luApp", luapp_suffix, table=table, db_key=db_key
+    )
+    paraphe = _memo_bytes(
+        id_ticket, "paraphe", table=table, db_key=db_key
+    )
+    photo = _memo_bytes(
+        id_ticket, "PhotoSalarié", table=table, db_key=db_key
+    )
 
     # ContenuValidation (pages validées + code SMS)
-    db = get_connection("ticket_rh")
+    db = get_connection(db_key)
     cv = db.query_one(
-        "SELECT IDTK_Liste, ContenuValidation FROM TK_DemandeCttW "
-        "WHERE IDTK_Liste = ?",
+        f"SELECT IDTK_Liste, ContenuValidation FROM {table} "
+        f"WHERE IDTK_Liste = ?",
         (int(id_ticket),),
     )
     pages, code_sms = parse_contenu_validation(
         (cv.get("ContenuValidation") if cv else "") or ""
     )
 
-    tmp = tempfile.mkdtemp(prefix=f"cttw_{id_ticket}_")
+    tmp = tempfile.mkdtemp(prefix=f"{tmp_prefix}{id_ticket}_")
     docx_path = os.path.join(tmp, f"{id_ticket}.docx")
     with open(docx_path, "wb") as f:
         f.write(docx_raw)
@@ -521,9 +555,9 @@ def regenerate_signed_pdf(
     # répète proprement une fois par page -> on ne réajoute rien.
     _strip_floating_anchors(doc)
     if sign:
-        _replace_token_with_image(doc, "S_SIGN", sign, 18)
+        _replace_token_with_image(doc, token_sign, sign, 18)
     if lu_app:
-        _replace_token_with_image(doc, "S_MENTION", lu_app, 16)
+        _replace_token_with_image(doc, token_mention, lu_app, 16)
     doc.save(docx_path)
 
     # Paraphe du salarié dans le pied de page, à côté du gérant
