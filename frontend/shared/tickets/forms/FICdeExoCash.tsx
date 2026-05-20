@@ -79,7 +79,8 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
   const montant = Number(data.montant_global || 0)
   const soldeInsuffisant = montant > solde
 
-  const fmt = (n: number) => `${(n || 0).toFixed(2)} €`
+  // ExoCash = monnaie virtuelle interne (unité EC, pas €)
+  const fmt = (n: number) => `${(n || 0).toFixed(2)} EC`
 
   const valider = async () => {
     if (
