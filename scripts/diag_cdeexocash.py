@@ -49,15 +49,28 @@ def main(id_ticket: int):
 
     print("\n=== Test _panier_lignes (fonction complète) ===")
     try:
-        from app.shared.tickets.forms.cdeexocash import _panier_lignes
+        from app.shared.tickets.forms import cdeexocash as _mod
 
-        lignes = _panier_lignes(int(id_ticket))
+        print("  module file :", _mod.__file__)
+        print("  has CATEG_POUR :", hasattr(_mod, "CATEG_POUR"),
+              getattr(_mod, "CATEG_POUR", None))
+        lignes = _mod._panier_lignes(int(id_ticket))
         for ln in lignes:
             print(" ", ln)
     except Exception as e:
         import traceback
 
         print("ERR _panier_lignes:", repr(e))
+        traceback.print_exc()
+
+    # Sanity check : appel direct de _lots_catalogue avec l'ID trouvé
+    print("\n=== Test _lots_catalogue direct ===")
+    try:
+        cat = _mod._lots_catalogue(set(ids))
+        print("  retour :", cat)
+    except Exception as e:
+        import traceback
+        print("ERR _lots_catalogue:", repr(e))
         traceback.print_exc()
 
 

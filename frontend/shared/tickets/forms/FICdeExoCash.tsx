@@ -223,7 +223,8 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
                 <option value={0}>— Ajouter un lot —</option>
                 {lotsDispos.map((l) => (
                   <option key={l.id} value={l.id}>
-                    {l.libfam} / {l.marque} / {l.liblot} — {fmt(l.montant)}
+                    {l.libfam} / {l.marque} / {l.liblot}
+                    {l.pour ? ` (${l.pour})` : ''} — {fmt(l.montant)}
                     {l.stock > 0 ? ` (stock ${l.stock})` : ' (rupture)'}
                   </option>
                 ))}
@@ -245,7 +246,7 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
                 <th className="px-2 py-2">Famille</th>
                 <th className="px-2 py-2">Marque</th>
                 <th className="px-2 py-2">Lot</th>
-                <th className="px-2 py-2">Catégorie</th>
+                <th className="px-2 py-2">Pour</th>
                 <th className="px-2 py-2 w-24 text-right">Montant U</th>
                 <th className="px-2 py-2 w-16 text-center">Qté</th>
                 <th className="px-2 py-2 w-16 text-center">Sur Cde</th>
@@ -283,7 +284,7 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
                       <td className="px-2 py-1.5">{l.libfam}</td>
                       <td className="px-2 py-1.5">{l.marque}</td>
                       <td className="px-2 py-1.5">{l.liblot}</td>
-                      <td className="px-2 py-1.5">{l.categ}</td>
+                      <td className="px-2 py-1.5">{l.pour}</td>
                       <td className="px-2 py-1.5 text-right">
                         {fmt(l.montant_unitaire)}
                       </td>

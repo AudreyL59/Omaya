@@ -31,6 +31,9 @@ from ..service import (
 STATUT_COMMANDE_VALIDEE = 29  # TK_Liste.IDTK_Statut après validation
 TYPE_OP_LIVRET_DEBIT_EXOCASH = 3  # cf. salarie_Livret.IDTypeOperationLivret
 
+# ExoCashLot.Catégorie (enum 1 octet)
+CATEG_POUR = {1: "Femme", 2: "Homme", 3: "H/F"}
+
 
 # --------------------------------------------------------------------
 # Helpers cross-DB
@@ -58,29 +61,35 @@ def _lots_catalogue(ids: set[int] | None = None) -> dict[int, dict]:
     except Exception:
         pass
     try:
-        for r in db.query(
+        rows = db.query(
             "SELECT IDExoCashLot, IDExoCashFamilleLot, Marque, LibLot, "
             "Catégorie, Montant, MontantSolde, EnSolde, Stock, SurCommande "
             "FROM ExoCashLot" + where
-        ):
+        )
+    except Exception:
+        rows = []
+    for r in rows or []:
+        try:
             idl = _clean_id(_to_int(r.get("IDExoCashLot")))
             if not idl:
                 continue
+            categ = _to_int(r.get("Catégorie"))
             out[idl] = {
                 "id": idl,
                 "id_famille": _to_int(r.get("IDExoCashFamilleLot")),
                 "libfam": fams.get(_to_int(r.get("IDExoCashFamilleLot")), ""),
-                "marque": (r.get("Marque") or "").strip(),
-                "liblot": (r.get("LibLot") or "").strip(),
-                "categ": (r.get("Catégorie") or "").strip(),
+                "marque": str(r.get("Marque") or "").strip(),
+                "liblot": str(r.get("LibLot") or "").strip(),
+                "categ": categ,
+                "pour": CATEG_POUR.get(categ, ""),
                 "montant": float(r.get("Montant") or 0),
                 "montant_solde": float(r.get("MontantSolde") or 0),
                 "en_solde": bool(r.get("EnSolde")),
                 "stock": _to_int(r.get("Stock")),
                 "sur_commande": bool(r.get("SurCommande")),
             }
-    except Exception:
-        pass
+        except Exception:
+            continue
     return out
 
 
@@ -112,7 +121,8 @@ def _panier_lignes(id_ticket: int) -> list[dict]:
         l["libfam"] = info.get("libfam", "")
         l["marque"] = info.get("marque", "")
         l["liblot"] = info.get("liblot", "")
-        l["categ"] = info.get("categ", "")
+        l["categ"] = info.get("categ", 0)
+        l["pour"] = info.get("pour", "")
         l["stock"] = info.get("stock", 0)
         l["sur_commande"] = info.get("sur_commande", False)
         l["montant_total"] = l["montant_unitaire"] * l["qte"]
