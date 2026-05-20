@@ -13,6 +13,7 @@ import FICttW from './FICttW'
 import FICttWDemande from './FICttWDemande'
 import FIDPAE from './FIDPAE'
 import FIFourniture from './FIFourniture'
+import FIRDVTech from './FIRDVTech'
 import FIResa from './FIResa'
 import FISOSBO from './FISOSBO'
 import FISOSJU from './FISOSJU'
@@ -33,6 +34,7 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '11': FISOSBO,     // SOS BO
   '13': FIConges,    // Congés
   '17': FISOSJU,     // SOS Juridique
+  '19': FIRDVTech,   // Retour RDV Tech FIBRE
   '21': FIDPAE,      // DPAE à venir (même formulaire)
   '40': FICttWDemande, // Contrat W - Demande
 }

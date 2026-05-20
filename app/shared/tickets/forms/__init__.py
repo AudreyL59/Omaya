@@ -20,6 +20,7 @@ from . import (
     cttw_demande,
     dpae,
     fourniture,
+    rdvtech,
     resa,
     sosbo,
     sosju,
@@ -36,6 +37,7 @@ FORM_HANDLERS: dict[int, object] = {
     11: sosbo,        # SOS BO
     13: conges,       # Congés
     17: sosju,        # SOS Juridique
+    19: rdvtech,      # Retour RDV Tech FIBRE
     21: dpae,         # DPAE à venir (même formulaire)
     40: cttw_demande,  # Contrat W - Demande
 }
