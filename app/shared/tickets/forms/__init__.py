@@ -15,6 +15,7 @@ Ordre d'implémentation = ordre du switch WinDev (Fen_TicketContenu).
 from . import (
     avance,
     cartepro,
+    cdeexocash,
     conges,
     cttcourtage,
     cttw,
@@ -41,5 +42,6 @@ FORM_HANDLERS: dict[int, object] = {
     19: rdvtech,      # Retour RDV Tech FIBRE
     21: dpae,         # DPAE à venir (même formulaire)
     23: cttcourtage,  # Contrat de Courtage / Attestation
+    24: cdeexocash,   # Commande ExoCash
     40: cttw_demande,  # Contrat W - Demande
 }

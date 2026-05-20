@@ -8,6 +8,7 @@ import type { ComponentType } from 'react'
 
 import FIAvance from './FIAvance'
 import FICartePro from './FICartePro'
+import FICdeExoCash from './FICdeExoCash'
 import FIConges from './FIConges'
 import FICttCourtage from './FICttCourtage'
 import FICttW from './FICttW'
@@ -40,5 +41,6 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '19': FIRDVTech,   // Retour RDV Tech FIBRE
   '21': FIDPAE,      // DPAE à venir (même formulaire)
   '23': FICttCourtage, // Contrat de Courtage / Attestation
+  '24': FICdeExoCash,  // Commande ExoCash
   '40': FICttWDemande, // Contrat W - Demande
 }
