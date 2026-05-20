@@ -15,6 +15,7 @@ import FIDPAE from './FIDPAE'
 import FIFourniture from './FIFourniture'
 import FIResa from './FIResa'
 import FISOSBO from './FISOSBO'
+import FISOSJU from './FISOSJU'
 
 export interface FIProps {
   apiBase: string
@@ -31,6 +32,7 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '10': FIAvance,    // Demande d'avance
   '11': FISOSBO,     // SOS BO
   '13': FIConges,    // Congés
+  '17': FISOSJU,     // SOS Juridique
   '21': FIDPAE,      // DPAE à venir (même formulaire)
   '40': FICttWDemande, // Contrat W - Demande
 }
