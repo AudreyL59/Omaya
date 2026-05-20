@@ -327,16 +327,23 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
     if action == "valider_signe":
         # « Ce contrat de courtage / Attestation est valide » : régénère
-        # le PDF signé, upload FTP dossier salarié, SMS + mail, clôture.
-        from app.core.config import FTP_GESTION_RH_PATH
+        # le PDF signé, upload FTP dossier salarié, **mail juristes**,
+        # upsert societe_docCourtage (base rh, RECU=1), si !testAttest
+        # SMS + mail au salarié (avec CC Resp Orga si parent 4/14),
+        # clôture optionnelle.
+        from app.core.config import (
+            FTP_GESTION_RH_PATH,
+            MAIL_JURISTE_1,
+            MAIL_RESP_JURISTE,
+        )
         from app.shared.notifications.mail import envoi_mail_rh
 
         from .cttw_pdf import ftp_upload, regenerate_signed_pdf
 
         cloturer = bool(payload.get("cloturer"))
         r = db.query_one(
-            """SELECT IDTK_Liste, IDSalarie, idDistrib, IDsociete_docCourtage,
-                datesignature
+            """SELECT IDTK_Liste, IDdemandeContratW, IDSalarie, idDistrib,
+                IDsociete_docCourtage, datesignature
             FROM TK_DemandeCttCourtage WHERE IDTK_Liste = ?""",
             (int(id_ticket),),
         )
@@ -344,9 +351,9 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             return {"ok": False, "error": "Contrat introuvable"}
         id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
         id_distrib = _clean_id(_to_int(r.get("idDistrib")))
-        info_doc = _doc_courtage_info(
-            _to_int(r.get("IDsociete_docCourtage"))
-        )
+        id_societe_doc = _to_int(r.get("IDsociete_docCourtage"))
+        id_demande = _to_int(r.get("IDdemandeContratW"))
+        info_doc = _doc_courtage_info(id_societe_doc)
         salarie_nom = _salaire_nom(id_salarie)
 
         try:
@@ -355,11 +362,11 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                 date_only_to_iso(r.get("datesignature")) or "",
                 **_PDF_KWARGS,
             )
-            # Nom de fichier signé (cf. WinDev)
             if info_doc["test_attest"]:
                 fname = (
-                    f"{id_ticket}_{info_doc['lib_document'].replace(' ', '_')}"
-                    "_Signé.pdf"
+                    f"{id_ticket}_"
+                    f"{(info_doc['lib_document'] or 'Document').replace(' ', '_')}"
+                    f"_Signé.pdf"
                 )
             elif info_doc["lib_groupe"]:
                 fname = (
@@ -375,35 +382,169 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         except Exception as e:
             return {"ok": False, "error": f"Génération/upload PDF : {e}"}
 
-        # SMS + mail au salarié
-        sms_result = ""
-        gsm = _gsm_salarie(id_salarie)
-        mail = _mail_salarie(id_salarie)
-        if gsm:
-            doc_lib = info_doc["lib_document"] or "contrat de courtage"
-            txt = (
-                f"Votre {doc_lib} est disponible sur votre espace salarié "
-                f"(intranet ou appli Omaya).\n"
-                f"Une copie est envoyée sur votre email : {mail}"
-            )
-            try:
-                sms_result = envoi_sms(txt, gsm, "", salarie_nom)
-            except Exception as e:
-                sms_result = f"SMS non envoyé : {e}"
-        if mail:
-            doc_lib = info_doc["lib_document"] or "Contrat de Courtage"
+        # 1. Mail aux juristes (cf. WinDev MyEmail1)
+        raison_sociale = ""
+        try:
+            rh = get_connection("rh")
+            # idDistrib peut être un IdSte (cf. WinDev). À défaut, on
+            # tente IdSte du salarié via salarie_embauche.
+            if id_distrib:
+                s = rh.query_one(
+                    "SELECT IdSte, RaisonSociale FROM societe WHERE IdSte = ?",
+                    (int(id_distrib),),
+                )
+                raison_sociale = (s.get("RaisonSociale") or "").strip() if s else ""
+            if not raison_sociale and id_salarie:
+                e = rh.query_one(
+                    "SELECT IDSalarie, IdSte FROM salarie_embauche "
+                    "WHERE IDSalarie = ?",
+                    (int(id_salarie),),
+                )
+                id_ste = _to_int(e.get("IdSte")) if e else 0
+                if id_ste:
+                    s = rh.query_one(
+                        "SELECT IdSte, RaisonSociale FROM societe "
+                        "WHERE IdSte = ?",
+                        (int(id_ste),),
+                    )
+                    raison_sociale = (s.get("RaisonSociale") or "").strip() if s else ""
+        except Exception:
+            pass
+
+        juristes = [m for m in (MAIL_RESP_JURISTE, MAIL_JURISTE_1) if m]
+        if juristes:
+            doc_lib = info_doc["lib_document"] or "Contrat de courtage"
             html = (
-                f"<p>Bonjour,</p><p>Voici votre {doc_lib} signé.</p>"
-                "<p>Cdt</p><p>Service RH</p>"
+                "<font face='arial' style='font-size:10pt;'>"
+                "<p>Bonjour,</p>"
+                f"<p>Le document {doc_lib} a été validé "
+                f"pour la société {raison_sociale}.</p>"
+                "<br/>---Cdt.<br/>"
+                "<p><i>PS : Ceci est un mail automatique, "
+                "ne pas répondre. Merci.</i></p></font>"
             )
-            cci = [c for c in (_mail_salarie(id_distrib), "intranet@omaya.fr") if c]
             try:
+                # CC bo@exosphere.fr ajouté aux destinataires
+                # (envoi_mail_rh n'expose pas Cc séparément)
                 envoi_mail_rh(
-                    f"{doc_lib} signé", html, [mail], cci,
-                    "intranet@omaya.fr", [(fname, pdf)],
+                    f"Validation {doc_lib} - {raison_sociale}",
+                    html, juristes + ["bo@exosphere.fr"],
+                    ["intranet@omaya.fr"],  # cci
+                    "intranet@omaya.fr",
                 )
             except Exception:
                 pass
+
+        # 2. Upsert societe_docCourtage (base rh)
+        try:
+            rh = get_connection("rh")
+            target = id_societe_doc
+            existing = None
+            if target:
+                existing = rh.query_one(
+                    "SELECT IDsociete_docCourtage FROM societe_docCourtage "
+                    "WHERE IDsociete_docCourtage = ?",
+                    (int(target),),
+                )
+            if existing:
+                rh.query(
+                    """UPDATE societe_docCourtage SET RECU = 1,
+                        RECUDATE = ?, NomCttSigné = ?, ModifOP = ?,
+                        ModifDate = ?, ModifELEM = 'modif'
+                    WHERE IDsociete_docCourtage = ?""",
+                    (now, fname, int(user_id), now, int(target)),
+                )
+            else:
+                new_id = int(now)
+                rh.query(
+                    """INSERT INTO societe_docCourtage
+                    (IDsociete_docCourtage, IDSalarie, idDistrib,
+                     DATE_Edition, RECU, RECUDATE, NomCttSigné,
+                     ModifOP, ModifDate, ModifELEM)
+                    VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 'new')""",
+                    (
+                        new_id, int(id_salarie), int(id_distrib),
+                        str(id_demande), now, fname,
+                        int(user_id), now,
+                    ),
+                )
+                db.query(
+                    """UPDATE TK_DemandeCttCourtage SET
+                        IDsociete_docCourtage = ?, ModifDate = ?,
+                        ModifOP = ?, ModifELEM = 'modif'
+                    WHERE IDTK_Liste = ?""",
+                    (new_id, now, int(user_id), int(id_ticket)),
+                )
+        except Exception as e:
+            return {"ok": False, "error": f"societe_docCourtage : {e}"}
+
+        # 3. Si !testAttest : SMS + mail au salarié avec PJ
+        sms_result = ""
+        if not info_doc["test_attest"]:
+            gsm = _gsm_salarie(id_salarie)
+            mail = _mail_salarie(id_salarie)
+            if gsm:
+                txt = (
+                    "Votre contrat de courtage est disponible sur votre "
+                    "espace salarié (intranet ou appli Omaya).\n"
+                    f"Une copie est envoyee sur votre email : {mail}"
+                )
+                try:
+                    sms_result = envoi_sms(txt, gsm, "", salarie_nom)
+                except Exception as e:
+                    sms_result = f"SMS non envoyé : {e}"
+            if mail:
+                html = (
+                    "<font face='arial' style='font-size:10pt;'>"
+                    "<p>Bonjour,</p>"
+                    "<p>Voici votre contrat de courtage signé.</p>"
+                    "<p>Cdt</p><p>Service RH</p></font>"
+                )
+                cci = [
+                    c for c in (_mail_salarie(id_distrib), "intranet@omaya.fr")
+                    if c
+                ]
+                # CC Resp Orga si parent in (4, 14)
+                dests = [mail]
+                resp_gsm_skip = _resp_orga_gsm(id_salarie)  # noqa: F841
+                # On ne récupère pas le mail du Resp via _resp_orga_gsm
+                # mais on ajoute son mail si on peut. Best-effort minimal :
+                try:
+                    rh = get_connection("rh")
+                    so = rh.query_one(
+                        "SELECT IDSalarie, idorganigramme "
+                        "FROM salarie_organigramme WHERE IDSalarie = ?",
+                        (int(id_salarie),),
+                    )
+                    ido = _to_int(so.get("idorganigramme")) if so else 0
+                    if ido:
+                        o = rh.query_one(
+                            "SELECT idorganigramme, PARENT_ID "
+                            "FROM organigramme WHERE idorganigramme = ?",
+                            (int(ido),),
+                        )
+                        parent = _to_int(o.get("PARENT_ID")) if o else 0
+                        if parent in (4, 14):
+                            rr = rh.query(
+                                "SELECT IDSalarie FROM salarie_organigramme "
+                                f"WHERE idorganigramme = {int(parent)} "
+                                f"AND IsResp = 1"
+                            )
+                            for row in rr or []:
+                                sid = _clean_id(_to_int(row.get("IDSalarie")))
+                                m_resp = _mail_salarie(sid)
+                                if m_resp:
+                                    dests.append(m_resp)
+                                    break
+                except Exception:
+                    pass
+                try:
+                    envoi_mail_rh(
+                        "Contrat de courtage Signé", html, dests, cci,
+                        "intranet@omaya.fr", [(fname, pdf)],
+                    )
+                except Exception:
+                    pass
 
         if cloturer:
             db.query(
@@ -472,7 +613,8 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             WHERE IDTK_Liste = ?""",
             (statut, int(user_id), now, int(user_id), int(id_ticket)),
         )
-        ajout_histo_tk(int(id_ticket), statut, int(user_id))
+        # cf. WinDev : AjoutHistoTK(..., 7, ...) toujours sur refus
+        ajout_histo_tk(int(id_ticket), 7, int(user_id))
 
         sms_result = ""
         gsm_da = _gsm_salarie(id_distrib)
@@ -488,5 +630,36 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                 sms_result = f"SMS non envoyé : {e}"
         maj_op_traitement_ticket(int(id_ticket), int(user_id))
         return {"ok": True, "closed": True, "sms_result": sms_result}
+
+    if action == "relance_sms":
+        # « Relance SMS » au gérant (Plan 2 avant signature)
+        cur = db.query_one(
+            """SELECT idDistrib, IDsociete_docCourtage
+            FROM TK_DemandeCttCourtage WHERE IDTK_Liste = ?""",
+            (int(id_ticket),),
+        )
+        if not cur:
+            return {"ok": False, "error": "Contrat introuvable"}
+        id_distrib = _clean_id(_to_int(cur.get("idDistrib")))
+        info_doc = _doc_courtage_info(_to_int(cur.get("IDsociete_docCourtage")))
+        gsm_da = _gsm_salarie(id_distrib)
+        if not gsm_da:
+            return {"ok": False, "error": "Pas de mobile pour le gérant"}
+        if info_doc["test_attest"]:
+            txt = (
+                f"Votre {info_doc['lib_document']} est disponible à la "
+                "signature sur l'appli Omayapp, dispo sur Android et IOS."
+            )
+        else:
+            txt = (
+                "Le contrat de courtage est disponible à la signature "
+                "sur l'appli Omayapp, dispo sur Android et IOS."
+            )
+        txt += " Merci faire la signature rapidement."
+        try:
+            res = envoi_sms(txt, gsm_da, "", "OMAYA-Info")
+        except Exception as e:
+            res = f"erreur : {e}"
+        return {"ok": True, "sms_result": res}
 
     return {"ok": False, "error": "Action non disponible"}

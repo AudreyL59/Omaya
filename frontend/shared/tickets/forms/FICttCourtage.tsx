@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, UserPlus } from 'lucide-react'
+import { Loader2, Send, UserPlus } from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
@@ -143,6 +143,34 @@ export default function FICttCourtage({ apiBase, getToken, idTicket }: FIProps) 
           )}
         </div>
         <div className="w-72 shrink-0 space-y-2 text-sm">
+          <button
+            onClick={async () => {
+              const r = await fetch(
+                `${apiBase}/tickets/${idTicket}/form`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${getToken()}`,
+                  },
+                  body: JSON.stringify({ action: 'relance_sms' }),
+                },
+              )
+              const j = await r.json().catch(() => null)
+              if (!r.ok) {
+                window.alert(`Erreur : ${j?.detail || r.status}`)
+                return
+              }
+              window.alert(
+                'Relance SMS : ' + (j?.sms_result || 'envoyée'),
+              )
+            }}
+            disabled={saving || !data.has_signed_pdf ? false : false}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong text-c-ink text-sm hover:bg-c-brand-soft disabled:opacity-50"
+          >
+            <Send className="w-4 h-4 text-c-brand" />
+            Relance SMS
+          </button>
           <Info label="Salarié" value={data.salarie_nom} />
           <Info label="Gérant" value={data.da_nom} />
           <Info label="Document" value={data.lib_document} />
