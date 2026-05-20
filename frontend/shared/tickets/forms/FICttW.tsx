@@ -159,12 +159,13 @@ export default function FICttW({ apiBase, getToken, idTicket, onClose }: FIProps
                 )
               )
                 return
-              await post({
+              const ok = await post({
                 action: 'refuser',
                 pb_sign: !!data.pb_sign,
                 pb_paraphe: !!data.pb_paraphe,
                 pb_mention: !!data.pb_mention,
               })
+              if (ok) onClose?.()
             }}
             disabled={saving || (!data.pb_sign && !data.pb_paraphe && !data.pb_mention)}
             className="w-full px-3 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-semibold hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
