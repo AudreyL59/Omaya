@@ -4,7 +4,7 @@ import { Loader2, Save, UserPlus } from 'lucide-react'
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
 
-export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
+export default function FICttW({ apiBase, getToken, idTicket, onClose }: FIProps) {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -185,10 +185,12 @@ export default function FICttW({ apiBase, getToken, idTicket }: FIProps) {
                 'Souhaitez-vous clôturer le ticket ?',
               )
               const ok = await post({ action: 'valider_signe', cloturer })
-              if (ok)
+              if (ok) {
                 window.alert(
                   'Contrat déposé dans le dossier salarié et envoyé par mail.',
                 )
+                onClose?.()
+              }
             }}
             disabled={saving}
             className="w-full px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"

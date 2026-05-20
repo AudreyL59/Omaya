@@ -8,7 +8,7 @@ import SearchPicker, { type PickerItem } from './SearchPicker'
 // Architecture identique à FI_CttW :
 //   Plan 1 : aperçu PDF non signé + Choisir le gérant + Valider
 //   Plan 2 : aperçu PDF signé régénéré + refus / validation finale
-export default function FICttCourtage({ apiBase, getToken, idTicket }: FIProps) {
+export default function FICttCourtage({ apiBase, getToken, idTicket, onClose }: FIProps) {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -215,10 +215,12 @@ export default function FICttCourtage({ apiBase, getToken, idTicket }: FIProps) 
                 'Souhaitez-vous clôturer le ticket ?',
               )
               const ok = await post({ action: 'valider_signe', cloturer })
-              if (ok)
+              if (ok) {
                 window.alert(
                   `${docLabel} déposé dans le dossier salarié et envoyé par mail.`,
                 )
+                onClose?.()
+              }
             }}
             disabled={saving}
             className="w-full px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"

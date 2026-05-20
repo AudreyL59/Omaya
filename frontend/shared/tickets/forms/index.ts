@@ -23,6 +23,8 @@ export interface FIProps {
   apiBase: string
   getToken: () => string | null
   idTicket: string
+  /** Ferme la popup « Détail du ticket » (cf. WinDev Ferme()). */
+  onClose?: () => void
 }
 
 export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {

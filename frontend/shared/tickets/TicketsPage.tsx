@@ -989,6 +989,7 @@ function TicketContenuModal({
                       apiBase={apiBase}
                       getToken={getToken}
                       idTicket={detail.id_ticket}
+                      onClose={onClose}
                     />
                   </div>
                 ) : (
