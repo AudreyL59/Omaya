@@ -317,7 +317,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             return {"ok": False, "error": f"del_lot : {e}"}
         return {"ok": True}
 
-    # --- panier : MAJ Qté / NumSuivi ---
+    # --- panier : MAJ Qté / NumSuivi (cf. HModifie WinDev, ModifElem='new') ---
     if action == "update_lot":
         id_panier = _to_int(payload.get("id_panier"))
         if not id_panier:
@@ -327,7 +327,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         try:
             rh.query(
                 """UPDATE TK_CdeExoCashLot SET Qté = ?, NumSuivi = ?,
-                    ModifOp = ?, ModifDate = ?, ModifElem = 'modif'
+                    ModifOp = ?, ModifDate = ?, ModifElem = 'new'
                 WHERE IDTK_CdeExoCashLot = ?""",
                 (qte, num_suivi, int(user_id), now, int(id_panier)),
             )

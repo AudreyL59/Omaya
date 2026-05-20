@@ -251,7 +251,7 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
                 <th className="px-2 py-2 w-16 text-center">Qté</th>
                 <th className="px-2 py-2 w-16 text-center">Sur Cde</th>
                 <th className="px-2 py-2 w-24 text-right">Total</th>
-                {validee && <th className="px-2 py-2 w-32">N° Suivi</th>}
+                <th className="px-2 py-2 w-32">N° Suivi</th>
                 {!validee && <th className="px-2 py-2 w-8" />}
               </tr>
             </thead>
@@ -259,7 +259,7 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
               {panier.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={validee ? 9 : 9}
+                    colSpan={validee ? 9 : 10}
                     className="px-2 py-4 text-center text-c-ink-faint"
                   >
                     Panier vide.
@@ -313,18 +313,19 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
                       <td className="px-2 py-1.5 text-right font-semibold">
                         {fmt(l.montant_total)}
                       </td>
-                      {validee && (
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="text"
-                            value={l.num_suivi || ''}
-                            onChange={(e) =>
-                              updateLotQte(l.id_panier, l.qte, e.target.value)
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="text"
+                          defaultValue={l.num_suivi || ''}
+                          onBlur={(e) => {
+                            const v = e.target.value
+                            if (v !== (l.num_suivi || '')) {
+                              updateLotQte(l.id_panier, l.qte, v)
                             }
-                            className="w-full px-1 py-0.5 border border-c-line-strong rounded text-xs"
-                          />
-                        </td>
-                      )}
+                          }}
+                          className="w-full px-1 py-0.5 border border-c-line-strong rounded text-xs"
+                        />
+                      </td>
                       {!validee && (
                         <td className="px-2 py-1.5">
                           <button
