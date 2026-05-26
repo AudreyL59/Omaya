@@ -23,6 +23,7 @@ from . import (
     cttw_demande,
     dpae,
     fourniture,
+    mutuelle,
     rdvtech,
     resa,
     sosbo,
@@ -45,5 +46,6 @@ FORM_HANDLERS: dict[int, object] = {
     23: cttcourtage,  # Contrat de Courtage / Attestation
     24: cdeexocash,   # Commande ExoCash
     25: attexocash,   # Attribution ExoCash
+    27: mutuelle,     # Demande Mutuelle
     40: cttw_demande,  # Contrat W - Demande
 }
