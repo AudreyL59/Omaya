@@ -25,6 +25,7 @@ import FIRDVTech from './FIRDVTech'
 import FIResa from './FIResa'
 import FISOSBO from './FISOSBO'
 import FISOSJU from './FISOSJU'
+import FIUlease from './FIUlease'
 
 export interface FIProps {
   apiBase: string
@@ -55,5 +56,6 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '30': FIDPAEDistrib, // Intégration Nouveau Distrib
   '31': FIDocDistrib,  // Réclamation Documents
   '33': FIFactureDR,   // Facture BO
+  '34': FIUlease,      // Signature Doc ULEASE
   '40': FICttWDemande, // Contrat W - Demande
 }
