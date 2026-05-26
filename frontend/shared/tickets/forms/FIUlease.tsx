@@ -182,7 +182,10 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
                 pb_paraphe: !!data.pb_paraphe,
                 pb_mention: !!data.pb_mention,
               })
-              if (ok) onClose?.()
+              if (ok) {
+                showToast('Document renvoyé en signature. Le DA a été notifié.', 'success')
+                onClose?.()
+              }
             }}
             disabled={saving || (!data.pb_sign && !data.pb_paraphe && !data.pb_mention)}
             className="w-full px-3 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-semibold hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
