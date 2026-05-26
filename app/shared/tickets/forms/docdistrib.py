@@ -312,7 +312,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                 "Merci de vous rendre sur l'intranet ou sur l'appli mobile "
                 "Omayapp pour renvoyer ce document.\nCdt"
             )
-            sms_result = envoi_sms(texte, gsm, "OMAYA-Info", "DocDistrib")
+            sms_result = envoi_sms(texte, gsm, "", "OMAYA-Info")
         return {"ok": True, "sms_result": sms_result, "cloture": True}
 
     # --- Relance SMS ---
@@ -325,7 +325,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             "Merci de vous rendre sur l'intranet ou sur l'appli mobile "
             "Omayapp pour envoyer ce document.\nCdt"
         )
-        res = envoi_sms(texte, gsm, "OMAYA-Info", "DocDistrib")
+        res = envoi_sms(texte, gsm, "", "OMAYA-Info")
         return {"ok": True, "sms_result": res}
 
     return {"ok": False, "error": "Action non disponible"}
