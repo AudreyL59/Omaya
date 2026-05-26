@@ -110,8 +110,6 @@ export default function FIFactDistrib({
   }
 
   const suivi: any[] = data.suivi_adm || []
-  const fmt = (n: number) =>
-    `${(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} €`
   const fmtDate = (iso: string) => {
     if (!iso) return ''
     const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
