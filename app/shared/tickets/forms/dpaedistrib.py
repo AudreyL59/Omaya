@@ -173,6 +173,31 @@ def _partenaires_map() -> dict[int, str]:
     }
 
 
+def _partenaires_portail() -> list[dict]:
+    """Combo « Choisir un partenaire » : partenaires ayant un portail
+    partenaire actif. Cross-DB : PortailPartenaire (base recrutement) →
+    Lib_Partenaire (base adv). Le JOIN WinDev n'est pas faisable via le
+    bridge (bases différentes)."""
+    try:
+        rows = get_connection("recrutement").query(
+            "SELECT IDPartenaire FROM PortailPartenaire "
+            "WHERE ModifElem NOT LIKE '%suppr%' AND IsActif = 1"
+        )
+    except Exception:
+        return []
+    ids = {_to_int(r.get("IDPartenaire")) for r in rows or []}
+    ids = {i for i in ids if i}
+    if not ids:
+        return []
+    parts = _partenaires_map()
+    out = [
+        {"id": str(i), "lib": parts.get(i, "")}
+        for i in ids if parts.get(i)
+    ]
+    out.sort(key=lambda p: p["lib"])
+    return out
+
+
 def _demandes_code(id_ticket: int) -> list[dict]:
     """Demandes de code vendeur liées à ce ticket (TK_DemandeCodeVendeur
     base ticket_bo) + libellé partenaire (adv) + statut (ticket)."""
@@ -247,6 +272,7 @@ def load(id_ticket: int) -> dict:
         "equipe_label": _equipe_label(id_orga),
         "documents": _documents(id_ticket),
         "demandes_code": _demandes_code(id_ticket),
+        "partenaires": _partenaires_portail(),
     }
 
 

@@ -27,6 +27,7 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
   const [produits, setProduits] = useState<boolean[]>([])
   const [idEquipe, setIdEquipe] = useState('')
   const [equipeLabel, setEquipeLabel] = useState('')
+  const [idPartenaire, setIdPartenaire] = useState('')
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -121,6 +122,7 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
 
   const documents: any[] = data.documents || []
   const demandesCode: any[] = data.demandes_code || []
+  const partenaires: any[] = data.partenaires || []
   const noms: string[] = (data.produits || []).map((p: any) => p.nom)
   const fmtDate = (iso: string) => {
     if (!iso) return ''
@@ -251,19 +253,25 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
         </button>
       </div>
 
-      {/* Partenaire + Générer code (TODO) */}
-      <div className="border-t border-c-line pt-3 opacity-60">
+      {/* Partenaire + Générer code (bouton Générer = TODO) */}
+      <div className="border-t border-c-line pt-3">
         <div className="flex items-center gap-2">
           <select
-            disabled
-            className="flex-1 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-c-surface-soft"
+            value={idPartenaire}
+            onChange={(e) => setIdPartenaire(e.target.value)}
+            className="flex-1 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-white"
           >
-            <option>--- Choisir un partenaire ---</option>
+            <option value="">--- Choisir un partenaire ---</option>
+            {partenaires.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.lib}
+              </option>
+            ))}
           </select>
           <button
             disabled
-            title="À venir"
-            className="px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold cursor-not-allowed"
+            title="À venir (génération du ticket Demande de Code, type 38)"
+            className="px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold opacity-50 cursor-not-allowed"
           >
             Générer Tk Demande de Code
           </button>
