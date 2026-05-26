@@ -33,6 +33,7 @@ from . import (
     sosbo,
     sosju,
     ulease,
+    ulease_pv,
 )
 
 # IDTK_TypeDemande → module handler
@@ -58,5 +59,6 @@ FORM_HANDLERS: dict[int, object] = {
     31: docdistrib,   # Réclamation Documents (FI_DocDistrib)
     33: facturedr,    # Facture BO (FI_FactureDR)
     34: ulease,       # Signature Doc ULEASE (FI_DocUlease)
+    35: ulease_pv,    # PV Liv/Rest ULEASE (FI_UleasePVLivRest)
     40: cttw_demande,  # Contrat W - Demande
 }

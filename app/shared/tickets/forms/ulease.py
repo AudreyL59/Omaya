@@ -76,18 +76,15 @@ def _id_vehicule(id_pc: int) -> int:
     plusieurs bases ; 0 si introuvable."""
     if not id_pc:
         return 0
-    for k in ("rh", "divers", "adv", "ticket_rh"):
-        try:
-            r = get_connection(k).query_one(
-                "SELECT IDvehiculePC, IDvehicule FROM vehicule_Conducteur "
-                "WHERE IDvehiculePC = ?",
-                (int(id_pc),),
-            )
-            if r and _to_int(r.get("IDvehicule")):
-                return _clean_id(_to_int(r.get("IDvehicule")))
-        except Exception:
-            continue
-    return 0
+    try:
+        r = get_connection("ulease").query_one(
+            "SELECT IDvehiculePC, IDvehicule FROM vehicule_Conducteur "
+            "WHERE IDvehiculePC = ?",
+            (int(id_pc),),
+        )
+        return _clean_id(_to_int(r.get("IDvehicule"))) if r else 0
+    except Exception:
+        return 0
 
 
 # --------------------------------------------------------------------
