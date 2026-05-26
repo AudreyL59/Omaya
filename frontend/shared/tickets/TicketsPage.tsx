@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
+import { DialogHost } from '../ui/dialog'
 import { FI_COMPONENTS } from './forms'
 import type {
   SalarieItem,
@@ -501,6 +502,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
 
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4 p-4">
+      <DialogHost />
       {/* Sidebar — style WinDev : services en bandes pleines, types en lignes blanches */}
       <aside className="w-64 shrink-0 bg-transparent overflow-y-auto flex flex-col">
         {/* En-tête "Tickets" avec icône */}

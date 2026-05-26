@@ -3,6 +3,7 @@ import { Loader2, RefreshCw, UserPlus } from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_DocUlease (type 34) — Signature Doc ULEASE (même principe que CttW).
 export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIProps) {
@@ -77,13 +78,13 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return false
       }
       reload()
       return true
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return false
     } finally {
       setSaving(false)
@@ -166,9 +167,13 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
           <button
             onClick={async () => {
               if (
-                !window.confirm(
-                  'Vous êtes sur le point de refuser ce document.\nSouhaitez-vous continuer ?',
-                )
+                !(await showConfirm({
+                  title: 'Renvoyer en signature',
+                  message:
+                    'Vous êtes sur le point de refuser ce document.\nSouhaitez-vous continuer ?',
+                  variant: 'danger',
+                  confirmLabel: 'Refuser',
+                }))
               )
                 return
               const ok = await post({
@@ -188,16 +193,23 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
           <button
             onClick={async () => {
               if (
-                !window.confirm(
-                  'Valider ce document ? Il sera déposé dans le dossier et '
+                !(await showConfirm({
+                  title: 'Valider le document',
+                  message:
+                    'Valider ce document ? Il sera déposé dans le dossier et '
                     + 'envoyé par mail au salarié.',
-                )
+                  confirmLabel: 'Valider',
+                }))
               )
                 return
-              const cloturer = window.confirm('Souhaitez-vous clôturer le ticket ?')
+              const cloturer = await showConfirm({
+                message: 'Souhaitez-vous clôturer le ticket ?',
+                confirmLabel: 'Clôturer',
+                cancelLabel: 'Non',
+              })
               const ok = await post({ action: 'valider_signe', cloturer })
               if (ok) {
-                window.alert('Document déposé et envoyé par mail au salarié.')
+                showToast('Document déposé et envoyé par mail au salarié.', 'success')
                 onClose?.()
               }
             }}
@@ -247,13 +259,16 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
         <button
           onClick={async () => {
             if (
-              !window.confirm(
-                'Vous êtes sur le point de valider ce document.\nSouhaitez-vous continuer ?',
-              )
+              !(await showConfirm({
+                title: 'Valider pour signature',
+                message:
+                  'Vous êtes sur le point de valider ce document.\nSouhaitez-vous continuer ?',
+                confirmLabel: 'Valider',
+              }))
             )
               return
             const ok = await post({ action: 'valider' })
-            if (ok) window.alert('Document validé. Le DA a été notifié par SMS.')
+            if (ok) showToast('Document validé. Le DA a été notifié par SMS.', 'success')
           }}
           disabled={saving}
           className="w-full px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
