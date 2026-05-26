@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 import struct
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -752,6 +753,84 @@ def iso_to_date_only(v) -> str:
     """ISO 'YYYY-MM-DD' (ou vide) → AAAAMMJJ pour rubrique HFSQL 'Date'."""
     s = "".join(c for c in str(v or "") if c.isdigit())
     return s[:8] if len(s) >= 8 else ""
+
+
+_RTF_TOKEN = re.compile(
+    r"\\([a-z]{1,32})(-?\d{1,10})?[ ]?|\\'([0-9a-fA-F]{2})|\\([^a-z])|([{}])"
+    r"|[\r\n]+|(.)",
+    re.IGNORECASE,
+)
+_RTF_DESTINATIONS = {
+    "fonttbl", "colortbl", "stylesheet", "generator", "info", "pict",
+    "object", "themedata", "colorschememapping", "latentstyles",
+    "datastore", "nonshppict",
+}
+_RTF_SPECIALS = {
+    "par": "\n", "sect": "\n", "line": "\n", "tab": "\t",
+    "emdash": "—", "endash": "–", "lquote": "‘",
+    "rquote": "’", "ldblquote": "“", "rdblquote": "”",
+    "bullet": "•",
+}
+
+
+def rtf_to_text(text: str) -> str:
+    """Extrait le texte brut d'un mémo « texte enrichi » WinDev (RTF).
+
+    Les mémos saisis via un champ RichEdit WinDev sont stockés en RTF
+    (`{\\rtf1\\ansi...}`). Renvoie la chaîne telle quelle si ce n'est pas
+    du RTF (mémos texte simples). Décode les `\\'XX` en cp1252.
+    """
+    if not text:
+        return ""
+    if "\\rtf" not in text[:20]:
+        return text.strip()
+    stack: list[tuple[int, bool]] = []
+    ignorable = False
+    ucskip = 1
+    curskip = 0
+    out: list[str] = []
+    for m in _RTF_TOKEN.finditer(text):
+        word, arg, hexa, char, brace, tchar = m.groups()
+        if brace:
+            if brace == "{":
+                stack.append((ucskip, ignorable))
+            elif stack:
+                ucskip, ignorable = stack.pop()
+        elif char:
+            if char == "~":
+                out.append(" ")
+            elif char in "{}\\":
+                out.append(char)
+            elif char == "*":
+                ignorable = True
+        elif word:
+            if word in _RTF_DESTINATIONS:
+                ignorable = True
+            elif ignorable:
+                continue
+            elif word in _RTF_SPECIALS:
+                out.append(_RTF_SPECIALS[word])
+            elif word == "uc":
+                ucskip = int(arg) if arg else 1
+            elif word == "u":
+                c = int(arg or 0)
+                if c < 0:
+                    c += 65536
+                out.append(chr(c))
+                curskip = ucskip
+        elif hexa:
+            if not ignorable:
+                if curskip > 0:
+                    curskip -= 1
+                else:
+                    out.append(bytes([int(hexa, 16)]).decode("cp1252", "replace"))
+        elif tchar:
+            if not ignorable:
+                if curskip > 0:
+                    curskip -= 1
+                else:
+                    out.append(tchar)
+    return "".join(out).strip()
 
 
 def ajout_histo_tk(id_ticket: int, id_statut: int, id_cial: int) -> None:

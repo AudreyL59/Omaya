@@ -15,6 +15,7 @@ import FICttCourtage from './FICttCourtage'
 import FICttW from './FICttW'
 import FICttWDemande from './FICttWDemande'
 import FIDPAE from './FIDPAE'
+import FIFactDistrib from './FIFactDistrib'
 import FIFourniture from './FIFourniture'
 import FIMutuelle from './FIMutuelle'
 import FIRDVTech from './FIRDVTech'
@@ -46,5 +47,6 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '24': FICdeExoCash,  // Commande ExoCash
   '25': FIAttExoCash,  // Attribution ExoCash
   '27': FIMutuelle,    // Demande Mutuelle
+  '28': FIFactDistrib, // Facturation Distrib
   '40': FICttWDemande, // Contrat W - Demande
 }
