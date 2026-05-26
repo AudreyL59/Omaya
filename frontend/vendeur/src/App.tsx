@@ -11,6 +11,7 @@ import ClustersPage from '@/pages/ClustersPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import TicketsPage from '@shared/tickets/TicketsPage'
+import { DialogHost } from '@shared/ui/dialog'
 import { getToken } from '@/api'
 
 const VENDEUR_API = '/api/vendeur'
@@ -24,6 +25,7 @@ const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
 function App() {
   return (
     <BrowserRouter basename={BASENAME}>
+      <DialogHost />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 

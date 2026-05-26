@@ -15,6 +15,7 @@ import TicketsPage from '@shared/tickets/TicketsPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { getToken } from '@/api'
+import { DialogHost } from '@shared/ui/dialog'
 
 const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
 const ADM_API = '/api/adm'
@@ -22,6 +23,7 @@ const ADM_API = '/api/adm'
 function App() {
   return (
     <BrowserRouter basename={BASENAME}>
+      <DialogHost />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
 

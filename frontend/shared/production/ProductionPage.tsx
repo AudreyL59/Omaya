@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import NouvelleExtractionModal from '@shared/production/NouvelleExtractionModal'
+import { showConfirm } from '../ui/dialog'
 
 interface ProductionJob {
   id_job: string
@@ -145,7 +146,7 @@ export default function ProductionPage({ apiBase, detailBase = '/production' }: 
   }, [hasActive])
 
   const handleDelete = async (idJob: string) => {
-    if (!window.confirm('Supprimer cette extraction ?')) return
+    if (!(await showConfirm({ message: 'Supprimer cette extraction ?', variant: 'danger', confirmLabel: 'Supprimer' }))) return
     await fetch(`${apiBase}/production/jobs/${idJob}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${getToken()}` },

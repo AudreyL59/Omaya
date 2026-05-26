@@ -17,6 +17,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { getToken, getStoredUser } from '@/api'
+import { showConfirm } from '@shared/ui/dialog'
 
 interface AgendaRDV {
   id_evenement: string
@@ -817,9 +818,9 @@ function StatuerModal({
 
     const selected = statuts.find((s) => s.id_categorie === idCategorie)
     if (
-      !window.confirm(
-        `Vous êtes sur le point de statuer ce RDV en ${selected?.lib_categorie}.\nVoulez-vous continuer ?`
-      )
+      !(await showConfirm({
+        message: `Vous êtes sur le point de statuer ce RDV en ${selected?.lib_categorie}.\nVoulez-vous continuer ?`,
+      }))
     )
       return
 
@@ -1016,9 +1017,10 @@ function ConvocJoButton({
 
   const handleClick = async () => {
     if (
-      !window.confirm(
-        'Convoquer ce candidat en JO ?\n\nCela créera un ticket DPAE (service RH) et enverra les instructions au candidat.'
-      )
+      !(await showConfirm({
+        message:
+          'Convoquer ce candidat en JO ?\n\nCela créera un ticket DPAE (service RH) et enverra les instructions au candidat.',
+      }))
     )
       return
 

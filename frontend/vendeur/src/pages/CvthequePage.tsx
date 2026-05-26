@@ -17,6 +17,7 @@ import {
   Copy,
 } from 'lucide-react'
 import { getToken, getStoredUser } from '@/api'
+import { showConfirm, showToast } from '@shared/ui/dialog'
 
 // --- Types ---------------------------------------------------------------
 
@@ -507,7 +508,7 @@ function SearchPopup({
   const handleSubmit = () => {
     const body: any = { mode }
     if (mode === 'cp') {
-      if (!selectedCommune) return alert('Choisis une ville et un CP')
+      if (!selectedCommune) { showToast('Choisis une ville et un CP', 'error'); return }
       body.latitude = selectedCommune.latitude
       body.longitude = selectedCommune.longitude
       body.rayon_km = rayon
@@ -1100,7 +1101,7 @@ function FicheContent({
       }
     } catch (e) {
       console.error(e)
-      alert("Erreur lors de l'ajout")
+      showToast("Erreur lors de l'ajout", 'error')
     } finally {
       setSaving(false)
     }
@@ -1108,7 +1109,7 @@ function FicheContent({
 
   const handleQuickSave = async (newStatut: number, autoObser: string) => {
     if (!fiche.id_communes_france) {
-      alert('Merci de choisir une ville valide')
+      showToast('Merci de choisir une ville valide', 'error')
       return
     }
     setSaving(true)
@@ -1161,7 +1162,7 @@ function FicheContent({
       })
     } catch (e) {
       console.error(e)
-      alert('Erreur lors du changement de statut')
+      showToast('Erreur lors du changement de statut', 'error')
     } finally {
       setSaving(false)
     }
@@ -1169,7 +1170,7 @@ function FicheContent({
 
   const handleSave = async (confirmStatut6 = false) => {
     if (!fiche.id_communes_france) {
-      alert('Merci de choisir une ville valide')
+      showToast('Merci de choisir une ville valide', 'error')
       return
     }
     setSaving(true)
@@ -1208,9 +1209,10 @@ function FicheContent({
       const body = await res.json()
       if (body.need_confirm_statut6) {
         if (
-          window.confirm(
-            "Vous êtes sur le point de statuer ce RDV en 'Entretien planifié' sans passer par la prise de RDV. Voulez-vous continuer ?"
-          )
+          await showConfirm({
+            message:
+              "Vous êtes sur le point de statuer ce RDV en 'Entretien planifié' sans passer par la prise de RDV. Voulez-vous continuer ?",
+          })
         ) {
           return handleSave(true)
         }
@@ -1237,7 +1239,7 @@ function FicheContent({
       })
     } catch (e) {
       console.error(e)
-      alert("Erreur lors de l'enregistrement")
+      showToast("Erreur lors de l'enregistrement", 'error')
     } finally {
       setSaving(false)
     }
@@ -1470,8 +1472,8 @@ function FicheContent({
               <button
                 key={b.label}
                 disabled={saving}
-                onClick={() => {
-                  if (!window.confirm('Voulez-vous statuer ce CV ?')) return
+                onClick={async () => {
+                  if (!(await showConfirm({ message: 'Voulez-vous statuer ce CV ?' }))) return
                   setNouveauStatut(b.statut)
                   if (b.auto_obser) setSaisirObser(b.auto_obser)
                   setTimeout(() => handleQuickSave(b.statut, b.auto_obser || ''), 0)
@@ -1901,7 +1903,7 @@ function PriseRdvModal({
     if (typeEntretien === 'Visio' && !idSalon) return setError('Salon visio requis')
 
     const when = `${dateRdv} à ${heureRdv} avec ${recruteurName}`
-    if (!window.confirm(`Voulez-vous planifier ce RDV ?\n\n${when}`)) return
+    if (!(await showConfirm({ message: `Voulez-vous planifier ce RDV ?\n\n${when}` }))) return
 
     setSubmitting(true)
     try {
