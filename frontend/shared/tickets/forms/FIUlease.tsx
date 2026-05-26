@@ -184,7 +184,7 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
               })
               if (ok) {
                 showToast('Document renvoyé en signature. Le DA a été notifié.', 'success')
-                onClose?.()
+                setTimeout(() => onClose?.(), 1500)
               }
             }}
             disabled={saving || (!data.pb_sign && !data.pb_paraphe && !data.pb_mention)}
@@ -213,7 +213,7 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
               const ok = await post({ action: 'valider_signe', cloturer })
               if (ok) {
                 showToast('Document déposé et envoyé par mail au salarié.', 'success')
-                onClose?.()
+                setTimeout(() => onClose?.(), 1500)
               }
             }}
             disabled={saving}
