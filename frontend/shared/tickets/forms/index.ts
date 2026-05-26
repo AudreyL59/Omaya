@@ -14,6 +14,7 @@ import FIConges from './FIConges'
 import FICttCourtage from './FICttCourtage'
 import FICttW from './FICttW'
 import FICttWDemande from './FICttWDemande'
+import FIDocDistrib from './FIDocDistrib'
 import FIDPAE from './FIDPAE'
 import FIDPAEDistrib from './FIDPAEDistrib'
 import FIFactDistrib from './FIFactDistrib'
@@ -51,5 +52,6 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '28': FIFactDistrib, // Facturation Distrib
   '29': FIDPAEDistrib, // Nouveau Vendeur Distrib
   '30': FIDPAEDistrib, // Intégration Nouveau Distrib
+  '31': FIDocDistrib,  // Réclamation Documents
   '40': FICttWDemande, // Contrat W - Demande
 }

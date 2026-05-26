@@ -21,6 +21,7 @@ from . import (
     cttcourtage,
     cttw,
     cttw_demande,
+    docdistrib,
     dpae,
     dpaedistrib,
     factdistrib,
@@ -52,5 +53,6 @@ FORM_HANDLERS: dict[int, object] = {
     28: factdistrib,  # Facturation Distrib
     29: dpaedistrib,  # Nouveau Vendeur Distrib (FI_DPAEDistrib)
     30: dpaedistrib,  # Intégration Nouveau Distrib (FI_DPAEDistrib)
+    31: docdistrib,   # Réclamation Documents (FI_DocDistrib)
     40: cttw_demande,  # Contrat W - Demande
 }
