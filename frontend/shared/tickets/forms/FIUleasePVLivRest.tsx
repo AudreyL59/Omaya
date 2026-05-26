@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Star, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Loader2, Star, Trash2, ZoomIn } from 'lucide-react'
 
 import type { FIProps } from './index'
 import { showConfirm, showToast } from '../../ui/dialog'
@@ -17,6 +18,7 @@ export default function FIUleasePVLivRest({
   const [imgModele, setImgModele] = useState('')
   const [imgFournie, setImgFournie] = useState('')
   const [imgLoading, setImgLoading] = useState(false)
+  const [zoomSrc, setZoomSrc] = useState('')
   const [pdfUrl, setPdfUrl] = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
 
@@ -321,7 +323,18 @@ export default function FIUleasePVLivRest({
                   <div>
                     <div className="text-xs text-c-ink-soft mb-1">Photo à fournir (modèle)</div>
                     {imgModele ? (
-                      <img src={imgModele} alt="modèle" className="w-full rounded-lg border border-c-line object-contain max-h-56" />
+                      <div className="relative group">
+                        <img
+                          src={imgModele}
+                          alt="modèle"
+                          onClick={() => setZoomSrc(imgModele)}
+                          title="Cliquer pour agrandir / zoomer"
+                          className="w-full rounded-lg border border-c-line object-contain max-h-56 cursor-zoom-in"
+                        />
+                        <span className="absolute top-1 right-1 bg-black/50 text-white rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <ZoomIn className="w-4 h-4" />
+                        </span>
+                      </div>
                     ) : (
                       <div className="text-xs text-c-ink-faint">—</div>
                     )}
@@ -329,7 +342,18 @@ export default function FIUleasePVLivRest({
                   <div>
                     <div className="text-xs text-c-ink-soft mb-1">Photo fournie</div>
                     {imgFournie ? (
-                      <img src={imgFournie} alt="fournie" className="w-full rounded-lg border border-c-line object-contain max-h-56" />
+                      <div className="relative group">
+                        <img
+                          src={imgFournie}
+                          alt="fournie"
+                          onClick={() => setZoomSrc(imgFournie)}
+                          title="Cliquer pour agrandir / zoomer"
+                          className="w-full rounded-lg border border-c-line object-contain max-h-56 cursor-zoom-in"
+                        />
+                        <span className="absolute top-1 right-1 bg-black/50 text-white rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <ZoomIn className="w-4 h-4" />
+                        </span>
+                      </div>
                     ) : (
                       <div className="text-xs text-amber-600">Aucune / non recevable</div>
                     )}
@@ -384,6 +408,108 @@ export default function FIUleasePVLivRest({
       >
         Passer à l'étape suivante
       </button>
+
+      {zoomSrc && <PhotoZoom src={zoomSrc} onClose={() => setZoomSrc('')} />}
     </div>
+  )
+}
+
+// Visionneuse plein écran : molette = zoom, glisser = déplacer, double-clic
+// ou « Réinit. » = recadrer, Échap / clic sur le fond = fermer.
+function PhotoZoom({ src, onClose }: { src: string; onClose: () => void }) {
+  const [scale, setScale] = useState(1)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const drag = useRef<{ x: number; y: number } | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const reset = () => {
+    setScale(1)
+    setPos({ x: 0, y: 0 })
+  }
+  const zoomBy = (f: number) =>
+    setScale((s) => Math.min(6, Math.max(1, +(s + f).toFixed(2))))
+
+  const btn: React.CSSProperties = {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    border: 'none',
+    background: 'rgba(255,255,255,0.15)',
+    color: '#fff',
+    fontSize: 16,
+    cursor: 'pointer',
+  }
+
+  return createPortal(
+    <div
+      onClick={onClose}
+      onMouseMove={(e) => {
+        if (!drag.current) return
+        setPos({ x: e.clientX - drag.current.x, y: e.clientY - drag.current.y })
+      }}
+      onMouseUp={() => {
+        drag.current = null
+        setDragging(false)
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2147483646,
+        background: 'rgba(0,0,0,0.88)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ position: 'absolute', top: 14, right: 18, display: 'flex', gap: 8 }}
+      >
+        <button style={btn} onClick={() => zoomBy(0.5)} title="Zoomer">+</button>
+        <button style={btn} onClick={() => zoomBy(-0.5)} title="Dézoomer">−</button>
+        <button style={{ ...btn, width: 'auto', padding: '0 10px', fontSize: 13 }} onClick={reset}>
+          Réinit.
+        </button>
+        <button style={btn} onClick={onClose} title="Fermer (Échap)">✕</button>
+      </div>
+      <img
+        src={src}
+        alt="zoom"
+        draggable={false}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={reset}
+        onWheel={(e) =>
+          setScale((s) =>
+            Math.min(6, Math.max(1, +(s - e.deltaY * 0.0015 * s).toFixed(3))),
+          )
+        }
+        onMouseDown={(e) => {
+          if (scale <= 1) return
+          e.preventDefault()
+          drag.current = { x: e.clientX - pos.x, y: e.clientY - pos.y }
+          setDragging(true)
+        }}
+        style={{
+          maxWidth: '92vw',
+          maxHeight: '92vh',
+          objectFit: 'contain',
+          transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
+          transformOrigin: 'center center',
+          transition: dragging ? 'none' : 'transform 0.08s ease-out',
+          cursor: scale > 1 ? (dragging ? 'grabbing' : 'grab') : 'zoom-in',
+          userSelect: 'none',
+        }}
+      />
+    </div>,
+    document.body,
   )
 }
