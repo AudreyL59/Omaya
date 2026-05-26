@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_FactDistrib (type 28) — Facturation Distrib.
 export default function FIFactDistrib({
@@ -57,12 +58,12 @@ export default function FIFactDistrib({
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -76,12 +77,12 @@ export default function FIFactDistrib({
         { headers: { Authorization: `Bearer ${getToken()}` } },
       )
       if (!resp.ok) {
-        window.alert(`Fichier introuvable : ${nom}`)
+        showToast(`Fichier introuvable : ${nom}`, 'error')
         return null
       }
       return await resp.blob()
     } catch {
-      window.alert('Erreur réseau (fichier).')
+      showToast('Erreur réseau (fichier).', 'error')
       return null
     }
   }
@@ -122,12 +123,12 @@ export default function FIFactDistrib({
     const r = await post({
       action: 'enregistrer', montant, date_virement: dateVirement,
     })
-    if (r) window.alert('Informations enregistrées')
+    if (r) showToast('Informations enregistrées', 'success')
   }
 
   const ouvrirFacture = async () => {
     if (!data.fic_facture) {
-      window.alert('Aucune facture.')
+      showToast('Aucune facture.', 'error')
       return
     }
     const blob = await fetchBlob(data.fic_facture)
@@ -152,28 +153,32 @@ export default function FIFactDistrib({
           return
         }
       }
-      window.alert('Aucune image dans le presse-papier.')
+      showToast('Aucune image dans le presse-papier.', 'error')
     } catch {
-      window.alert(
+      showToast(
         'Impossible de lire le presse-papier. Utilisez « Choisir un fichier » ' +
           'ou collez (Ctrl+V) dans la zone d\'aperçu.',
+        'error',
       )
     }
   }
 
   const chargerPreuve = async () => {
     if (!dateVirement) {
-      window.alert('La date de virement est obligatoire.')
+      showToast('La date de virement est obligatoire.', 'error')
       return
     }
     if (!preuveFile) {
-      window.alert('Sélectionnez ou collez une preuve de virement.')
+      showToast('Sélectionnez ou collez une preuve de virement.', 'error')
       return
     }
     if (
-      !window.confirm(
-        'Charger la preuve de virement clôturera le ticket. Continuer ?',
-      )
+      !(await showConfirm({
+        message:
+          'Charger la preuve de virement clôturera le ticket. Continuer ?',
+        variant: 'danger',
+        confirmLabel: 'Clôturer',
+      }))
     )
       return
     // 1. Enregistre montant + date avant l'upload (cf. SaveTicket WinDev)
@@ -193,13 +198,13 @@ export default function FIFactDistrib({
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok || j?.ok === false) {
-        window.alert(`Erreur : ${j?.error || j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.error || j?.detail || resp.status}`, 'error')
         return
       }
-      window.alert('Preuve chargée, ticket clôturé.')
-      onClose?.()
+      showToast('Preuve chargée, ticket clôturé.', 'success')
+      setTimeout(() => onClose?.(), 1500)
     } catch {
-      window.alert('Erreur réseau (upload).')
+      showToast('Erreur réseau (upload).', 'error')
     } finally {
       setSaving(false)
     }
@@ -211,7 +216,7 @@ export default function FIFactDistrib({
     if (r) {
       setMemo('')
       setData((d: any) => ({ ...d, suivi_adm: r.suivi_adm || d.suivi_adm }))
-      if (r.mail_result) window.alert(r.mail_result)
+      if (r.mail_result) showToast(r.mail_result, 'success')
     }
   }
 

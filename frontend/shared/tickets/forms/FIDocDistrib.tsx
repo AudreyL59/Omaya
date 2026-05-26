@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_DocDistrib (type 31) — Réclamation Documents distributeur.
 export default function FIDocDistrib({
@@ -47,12 +48,12 @@ export default function FIDocDistrib({
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok || j?.ok === false) {
-        window.alert(`Erreur : ${j?.error || j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.error || j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -67,13 +68,13 @@ export default function FIDocDistrib({
         { headers: { Authorization: `Bearer ${getToken()}` } },
       )
       if (!resp.ok) {
-        window.alert('Document introuvable.')
+        showToast('Document introuvable.', 'error')
         return
       }
       const blob = await resp.blob()
       window.open(URL.createObjectURL(blob), '_blank')
     } catch {
-      window.alert('Erreur réseau (document).')
+      showToast('Erreur réseau (document).', 'error')
     }
   }
 
@@ -94,40 +95,49 @@ export default function FIDocDistrib({
 
   const conforme = async () => {
     if (!data.a_fichier) {
-      window.alert('Aucun document fourni à valider.')
+      showToast('Aucun document fourni à valider.', 'success')
       return
     }
     if (
-      !window.confirm(
-        `Valider le document « ${data.lib_doc} » ?\n` +
+      !(await showConfirm({
+        message:
+          `Valider le document « ${data.lib_doc} » ?\n` +
           'Il sera classé et le ticket clôturé.',
-      )
+        variant: 'danger',
+        confirmLabel: 'Valider',
+      }))
     )
       return
     const r = await post({ action: 'conforme' })
     if (r) {
-      window.alert('Document validé. ' + (r.mail_result || ''))
-      onClose?.()
+      showToast('Document validé. ' + (r.mail_result || ''), 'success')
+      setTimeout(() => onClose?.(), 1500)
     }
   }
 
   const nonConforme = async () => {
     if (!motif.trim()) {
-      window.alert('Merci de saisir un motif de refus.')
+      showToast('Merci de saisir un motif de refus.', 'error')
       return
     }
-    if (!window.confirm('Refuser ce document ? Le gérant recevra un SMS.'))
+    if (
+      !(await showConfirm({
+        message: 'Refuser ce document ? Le gérant recevra un SMS.',
+        variant: 'danger',
+        confirmLabel: 'Refuser',
+      }))
+    )
       return
     const r = await post({ action: 'non_conforme', motif_refus: motif })
     if (r) {
-      window.alert('Document refusé. SMS : ' + (r.sms_result || 'envoyé'))
-      onClose?.()
+      showToast('Document refusé. SMS : ' + (r.sms_result || 'envoyé'), 'success')
+      setTimeout(() => onClose?.(), 1500)
     }
   }
 
   const relanceSms = async () => {
     const r = await post({ action: 'relance_sms' })
-    if (r) window.alert('SMS de relance : ' + (r.sms_result || 'envoyé'))
+    if (r) showToast('SMS de relance : ' + (r.sms_result || 'envoyé'), 'success')
   }
 
   return (

@@ -3,6 +3,7 @@ import { Loader2, Send, UserPlus } from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_CttCourtage (type 23) — Contrat de Courtage / Attestation.
 // Architecture identique à FI_CttW :
@@ -78,13 +79,13 @@ export default function FICttCourtage({ apiBase, getToken, idTicket, onClose }: 
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return false
       }
       reload()
       return true
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return false
     } finally {
       setSaving(false)
@@ -158,11 +159,12 @@ export default function FICttCourtage({ apiBase, getToken, idTicket, onClose }: 
               )
               const j = await r.json().catch(() => null)
               if (!r.ok) {
-                window.alert(`Erreur : ${j?.detail || r.status}`)
+                showToast(`Erreur : ${j?.detail || r.status}`, 'error')
                 return
               }
-              window.alert(
+              showToast(
                 'Relance SMS : ' + (j?.sms_result || 'envoyée'),
+                'success',
               )
             }}
             disabled={saving || !data.has_signed_pdf ? false : false}
@@ -185,9 +187,11 @@ export default function FICttCourtage({ apiBase, getToken, idTicket, onClose }: 
           <button
             onClick={async () => {
               if (
-                !window.confirm(
-                  `Vous êtes sur le point de refuser ce ${docLabel.toLowerCase()}.\nContinuer ?`,
-                )
+                !(await showConfirm({
+                  message: `Vous êtes sur le point de refuser ce ${docLabel.toLowerCase()}.\nContinuer ?`,
+                  confirmLabel: 'Refuser',
+                  variant: 'danger',
+                }))
               )
                 return
               const ok = await post({
@@ -206,21 +210,25 @@ export default function FICttCourtage({ apiBase, getToken, idTicket, onClose }: 
           <button
             onClick={async () => {
               if (
-                !window.confirm(
-                  `Valider ce ${docLabel.toLowerCase()} ? Il sera déposé dans le `
-                  + 'dossier salarié et envoyé par mail au salarié.',
-                )
+                !(await showConfirm({
+                  message:
+                    `Valider ce ${docLabel.toLowerCase()} ? Il sera déposé dans le `
+                    + 'dossier salarié et envoyé par mail au salarié.',
+                }))
               )
                 return
-              const cloturer = window.confirm(
-                'Souhaitez-vous clôturer le ticket ?',
-              )
+              const cloturer = await showConfirm({
+                message: 'Souhaitez-vous clôturer le ticket ?',
+                confirmLabel: 'Clôturer',
+                variant: 'danger',
+              })
               const ok = await post({ action: 'valider_signe', cloturer })
               if (ok) {
-                window.alert(
+                showToast(
                   `${docLabel} déposé dans le dossier salarié et envoyé par mail.`,
+                  'success',
                 )
-                onClose?.()
+                setTimeout(() => onClose?.(), 1500)
               }
             }}
             disabled={saving}
@@ -271,15 +279,16 @@ export default function FICttCourtage({ apiBase, getToken, idTicket, onClose }: 
         <button
           onClick={async () => {
             if (
-              !window.confirm(
-                `Vous êtes sur le point de valider ce ${docLabel.toLowerCase()}.\nContinuer ?`,
-              )
+              !(await showConfirm({
+                message: `Vous êtes sur le point de valider ce ${docLabel.toLowerCase()}.\nContinuer ?`,
+              }))
             )
               return
             const ok = await post({ action: 'valider' })
             if (ok)
-              window.alert(
+              showToast(
                 `${docLabel} validé. Le gérant a été notifié par SMS.`,
+                'success',
               )
           }}
           disabled={saving}

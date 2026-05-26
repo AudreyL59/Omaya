@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Loader2, Save, Trash2, User, X } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_AttExoCash (type 25) — Attribution ExoCash.
 // Crédite le livret EC d'un salarié (Gain Challenge / Prime / Cde Boutique).
@@ -58,12 +59,12 @@ export default function FIAttExoCash({
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -99,14 +100,15 @@ export default function FIAttExoCash({
 
   const valider = async () => {
     if (montant <= 0) {
-      window.alert('Le montant EC doit être supérieur à 0.')
+      showToast('Le montant EC doit être supérieur à 0.', 'error')
       return
     }
     if (
-      !window.confirm(
-        `Attribuer ${montant} EC à ${data.salarie_nom || 'ce salarié'} ?\n` +
+      !(await showConfirm({
+        message:
+          `Attribuer ${montant} EC à ${data.salarie_nom || 'ce salarié'} ?\n` +
           'Le livret ExoCash du salarié sera crédité.',
-      )
+      }))
     )
       return
     const r = await post({
@@ -117,16 +119,19 @@ export default function FIAttExoCash({
       id_challenge: typeOp === TYPE_OP_GAIN_CHALLENGE ? idChallenge : '',
     })
     if (r) {
-      window.alert('Attribution validée. SMS : ' + (r.sms_result || 'envoyé'))
+      showToast('Attribution validée. SMS : ' + (r.sms_result || 'envoyé'), 'success')
       reload()
     }
   }
 
   const cloturer = async () => {
     if (
-      !window.confirm(
-        'Vous êtes sur le point de clôturer le ticket.\nVoulez-vous continuer ?',
-      )
+      !(await showConfirm({
+        message:
+          'Vous êtes sur le point de clôturer le ticket.\nVoulez-vous continuer ?',
+        variant: 'danger',
+        confirmLabel: 'Clôturer',
+      }))
     )
       return
     const r = await post({ action: 'cloturer' })

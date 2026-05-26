@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_CdeExoCash (type 24) — Commande ExoCash.
 const TRANSPORTEURS = ['COLISSIMO', 'DPD', 'CHRONOPOST']
@@ -44,12 +45,12 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -84,16 +85,17 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
 
   const valider = async () => {
     if (
-      !window.confirm(
-        'Vous êtes sur le point de valider la commande.\n' +
+      !(await showConfirm({
+        message:
+          'Vous êtes sur le point de valider la commande.\n' +
           'Les stocks et le livret ExoCash du salarié seront mis à jour.\n' +
           'Continuer ?',
-      )
+      }))
     )
       return
     const r = await post({ action: 'valider' })
     if (r) {
-      window.alert('Commande validée. SMS au salarié : ' + (r.sms_result || 'envoyé'))
+      showToast('Commande validée. SMS au salarié : ' + (r.sms_result || 'envoyé'), 'success')
       reload()
     }
   }
@@ -113,7 +115,7 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
   }
 
   const delLot = async (idPanier: string) => {
-    if (!window.confirm('Supprimer ce lot du panier ?')) return
+    if (!(await showConfirm({ message: 'Supprimer ce lot du panier ?', variant: 'danger', confirmLabel: 'Supprimer' }))) return
     const r = await post({ action: 'del_lot', id_panier: idPanier })
     if (r) reload()
   }
@@ -142,7 +144,7 @@ export default function FICdeExoCash({ apiBase, getToken, idTicket }: FIProps) {
   }
 
   const delEnvoi = async (idEnvoi: string) => {
-    if (!window.confirm('Supprimer ce suivi ?')) return
+    if (!(await showConfirm({ message: 'Supprimer ce suivi ?', variant: 'danger', confirmLabel: 'Supprimer' }))) return
     const r = await post({ action: 'del_envoi', id_envoi: idEnvoi })
     if (r) reload()
   }

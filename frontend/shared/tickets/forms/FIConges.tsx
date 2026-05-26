@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eraser, Loader2, Save } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showToast } from '../../ui/dialog'
 
 // FI_Congés (type 13) — Demande de congés (avec signature manuscrite).
 export default function FIConges({ apiBase, getToken, idTicket }: FIProps) {
@@ -50,12 +51,12 @@ export default function FIConges({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -79,7 +80,7 @@ export default function FIConges({ apiBase, getToken, idTicket }: FIProps) {
 
   const valider = async () => {
     if (!signatureB64) {
-      window.alert('Signe avant de valider.')
+      showToast('Signe avant de valider.', 'error')
       return
     }
     const r = await post({
@@ -94,7 +95,7 @@ export default function FIConges({ apiBase, getToken, idTicket }: FIProps) {
       signature_b64: signatureB64,
     })
     if (r) {
-      window.alert('Demande de congés validée. Ticket terminé.')
+      showToast('Demande de congés validée. Ticket terminé.', 'success')
       reload()
     }
   }

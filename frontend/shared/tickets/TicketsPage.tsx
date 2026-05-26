@@ -34,7 +34,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-import { DialogHost } from '../ui/dialog'
+import { DialogHost, showConfirm, showToast } from '../ui/dialog'
 import { FI_COMPONENTS } from './forms'
 import type {
   SalarieItem,
@@ -375,9 +375,10 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       ? 'Clôturer'
       : allStatuts.find((s) => s.id_statut === idStatut)?.lib_statut || ''
     if (
-      !window.confirm(
-        `Vous êtes sur le point de statuer la sélection en « ${libStatut} ».\nVoulez-vous continuer ?`,
-      )
+      !(await showConfirm({
+        message: `Vous êtes sur le point de statuer la sélection en « ${libStatut} ».\nVoulez-vous continuer ?`,
+        confirmLabel: 'Statuer',
+      }))
     )
       return
     try {
@@ -395,14 +396,14 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       setShowStatuerPopup(false)
       setSelected(new Set())
       setReloadNonce((n) => n + 1)
     } catch {
-      window.alert('Erreur réseau lors du changement de statut.')
+      showToast('Erreur réseau lors du changement de statut.', 'error')
     }
   }
 
@@ -411,9 +412,11 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
     const ids = Array.from(selected)
     if (ids.length === 0) return
     if (
-      !window.confirm(
-        'Vous êtes sur le point de supprimer cette sélection de ticket.\nVoulez-vous continuer ?',
-      )
+      !(await showConfirm({
+        message: 'Vous êtes sur le point de supprimer cette sélection de ticket.\nVoulez-vous continuer ?',
+        variant: 'danger',
+        confirmLabel: 'Supprimer',
+      }))
     )
       return
     try {
@@ -427,13 +430,13 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       setSelected(new Set())
       setReloadNonce((n) => n + 1)
     } catch {
-      window.alert('Erreur réseau lors de la suppression.')
+      showToast('Erreur réseau lors de la suppression.', 'error')
     }
   }
 
@@ -449,7 +452,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       const d = (await resp.json()) as TicketDetail
@@ -457,7 +460,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       // Le passage statut→2 modifie la liste : on resynchronise.
       setReloadNonce((n) => n + 1)
     } catch {
-      window.alert('Erreur réseau (ouverture du ticket).')
+      showToast('Erreur réseau (ouverture du ticket).', 'error')
     } finally {
       setLoadingDetail(false)
     }
@@ -484,7 +487,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       const res = await resp.json()
@@ -496,7 +499,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
         openTicket(detail.id_ticket)
       }
     } catch {
-      window.alert('Erreur réseau lors de l’enregistrement.')
+      showToast('Erreur réseau lors de l’enregistrement.', 'error')
     }
   }
 

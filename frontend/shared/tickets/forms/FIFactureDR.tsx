@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_FactureDR (type 33) — Facture BO (demande de facture / remboursement).
 export default function FIFactureDR({
@@ -63,12 +64,12 @@ export default function FIFactureDR({
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok || j?.ok === false) {
-        window.alert(`Erreur : ${j?.error || j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.error || j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -83,13 +84,13 @@ export default function FIFactureDR({
         { headers: { Authorization: `Bearer ${getToken()}` } },
       )
       if (!resp.ok) {
-        window.alert('Document introuvable.')
+        showToast('Document introuvable.', 'error')
         return
       }
       const blob = await resp.blob()
       window.open(URL.createObjectURL(blob), '_blank')
     } catch {
-      window.alert('Erreur réseau (document).')
+      showToast('Erreur réseau (document).', 'error')
     }
   }
 
@@ -105,13 +106,13 @@ export default function FIFactureDR({
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok || j?.ok === false) {
-        window.alert(`Erreur : ${j?.error || j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.error || j?.detail || resp.status}`, 'error')
         return
       }
-      window.alert('Preuve de virement chargée.')
+      showToast('Preuve de virement chargée.', 'success')
       reload()
     } catch {
-      window.alert('Erreur réseau (upload).')
+      showToast('Erreur réseau (upload).', 'error')
     } finally {
       setSaving(false)
     }
@@ -138,10 +139,11 @@ export default function FIFactureDR({
 
   const transferer = async () => {
     if (
-      !window.confirm(
-        'Vous êtes sur le point de transférer cette facture dans le module ' +
+      !(await showConfirm({
+        message:
+          'Vous êtes sur le point de transférer cette facture dans le module ' +
           'de suivi des factures. Continuer ?',
-      )
+      }))
     )
       return
     const r = await post({
@@ -151,7 +153,7 @@ export default function FIFactureDR({
       id_ste: idSte, mode_paiement: modePaiement,
     })
     if (r) {
-      window.alert('Facture transférée dans le module factures.')
+      showToast('Facture transférée dans le module factures.', 'success')
       reload()
     }
   }

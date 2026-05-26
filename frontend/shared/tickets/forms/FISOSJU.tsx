@@ -3,6 +3,7 @@ import { Loader2, Pencil, Save } from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
+import { showToast } from '../../ui/dialog'
 
 // FI_SOSJU (type 17) — SOS Juridique.
 // UI pilotée par TK_TypeSOS_JU.TypeForm :
@@ -48,12 +49,12 @@ export default function FISOSJU({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -101,7 +102,7 @@ export default function FISOSJU({ apiBase, getToken, idTicket }: FIProps) {
       descriptif: data.descriptif,
     })
     if (r) {
-      window.alert('Modifications enregistrées.')
+      showToast('Modifications enregistrées.', 'success')
       reload()
     }
   }

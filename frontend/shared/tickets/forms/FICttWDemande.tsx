@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Download, FileText, Loader2, Save } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showToast } from '../../ui/dialog'
 
 // FI_CttW_Demande (type 40) — Contrat W : Demande.
 // Gauche « Documents Fournis » : casier (lecture) + infos mutuelle
@@ -45,13 +46,13 @@ export default function FICttWDemande({ apiBase, getToken, idTicket }: FIProps) 
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return false
       }
       reload()
       return true
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return false
     } finally {
       setSaving(false)
@@ -68,13 +69,13 @@ export default function FICttWDemande({ apiBase, getToken, idTicket }: FIProps) 
       )
       if (!r.ok) {
         const e = await r.json().catch(() => null)
-        window.alert(`Document indisponible : ${e?.detail || r.status}`)
+        showToast(`Document indisponible : ${e?.detail || r.status}`, 'error')
         return
       }
       const blob = await r.blob()
       window.open(URL.createObjectURL(blob), '_blank', 'noopener')
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
     } finally {
       setOpeningDoc('')
     }

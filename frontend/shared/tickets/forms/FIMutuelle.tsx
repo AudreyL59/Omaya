@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showToast } from '../../ui/dialog'
 
 // FI_Mutuelle (type 27) — Demande Mutuelle.
 export default function FIMutuelle({ apiBase, getToken, idTicket }: FIProps) {
@@ -54,12 +55,12 @@ export default function FIMutuelle({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -73,12 +74,12 @@ export default function FIMutuelle({ apiBase, getToken, idTicket }: FIProps) {
         { headers: { Authorization: `Bearer ${getToken()}` } },
       )
       if (!resp.ok) {
-        window.alert(`Fichier introuvable : ${nom}`)
+        showToast(`Fichier introuvable : ${nom}`, 'error')
         return null
       }
       return await resp.blob()
     } catch {
-      window.alert('Erreur réseau (fichier).')
+      showToast('Erreur réseau (fichier).', 'error')
       return null
     }
   }
@@ -112,7 +113,7 @@ export default function FIMutuelle({ apiBase, getToken, idTicket }: FIProps) {
       demande_affiliation: affiliation,
       demande_affiliation_date: affiliationDate,
     })
-    if (r) window.alert('Informations enregistrées')
+    if (r) showToast('Informations enregistrées', 'success')
   }
 
   const ajouterObser = async () => {
@@ -134,7 +135,7 @@ export default function FIMutuelle({ apiBase, getToken, idTicket }: FIProps) {
 
   const telechargerSelection = async () => {
     if (!selected.length) {
-      window.alert('Cochez au moins un document.')
+      showToast('Cochez au moins un document.', 'error')
       return
     }
     for (const p of selected) {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Save } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showToast } from '../../ui/dialog'
 
 interface LigneFourniture {
   id: string
@@ -74,12 +75,12 @@ export default function FIFourniture({ apiBase, getToken, idTicket }: FIProps) {
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       reload()
     } catch {
-      window.alert('Erreur réseau lors de l’enregistrement.')
+      showToast('Erreur réseau lors de l’enregistrement.', 'error')
     } finally {
       setSaving(false)
     }

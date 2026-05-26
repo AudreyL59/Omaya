@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Loader2 } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_RDVTech (type 19) — Retour RDV Tech FIBRE.
 // Lecture INFOS CLIENT + CONTRAT, choix d'un statut RDV (+ Info Cplt),
@@ -44,12 +45,12 @@ export default function FIRDVTech({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -77,14 +78,15 @@ export default function FIRDVTech({ apiBase, getToken, idTicket }: FIProps) {
 
   const valider = async () => {
     if (!data.id_statut_rdv_choisi) {
-      window.alert('Choisis un statut RDV.')
+      showToast('Choisis un statut RDV.', 'error')
       return
     }
     if (
-      !window.confirm(
-        'Vous êtes sur le point de valider ce retour RDV technicien.\n' +
+      !(await showConfirm({
+        message:
+          'Vous êtes sur le point de valider ce retour RDV technicien.\n' +
           'Le ticket sera clôturé. Continuer ?',
-      )
+      }))
     )
       return
     const payload: any = {
@@ -97,7 +99,7 @@ export default function FIRDVTech({ apiBase, getToken, idTicket }: FIProps) {
     }
     const r = await post(payload)
     if (r) {
-      window.alert('Retour validé. Ticket terminé.')
+      showToast('Retour validé. Ticket terminé.', 'success')
       reload()
     }
   }

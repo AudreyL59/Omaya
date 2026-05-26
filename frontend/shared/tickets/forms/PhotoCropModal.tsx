@@ -3,6 +3,7 @@ import Cropper from 'react-easy-crop'
 import { Loader2, RotateCw, X } from 'lucide-react'
 
 import { getCroppedDataUrl, type PixelCrop } from './cropImage'
+import { showToast } from '../../ui/dialog'
 
 // Éditeur de recadrage/rotation (remplace l'EditeurDImages WinDev).
 // Renvoie l'image recadrée en data URL JPEG via onValidate.
@@ -35,7 +36,7 @@ export default function PhotoCropModal({
       const url = await getCroppedDataUrl(src, areaPx, rotation)
       onValidate(url)
     } catch {
-      window.alert('Erreur lors du recadrage de l’image.')
+      showToast('Erreur lors du recadrage de l’image.', 'error')
     } finally {
       setBusy(false)
     }

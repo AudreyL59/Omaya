@@ -3,6 +3,7 @@ import { Loader2, Save, UserPlus, Search, Send } from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_SOSBO (type 11) — SOS BO (multi-mode selon type de problème).
 type Mode = {
@@ -66,12 +67,12 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -107,7 +108,7 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
       id_type: data.id_type,
       ref: data.ref,
       info_cplt: data.info_cplt,
-    }).then((r) => r && window.alert('Contenu du ticket enregistré.'))
+    }).then((r) => r && showToast('Contenu du ticket enregistré.', 'success'))
 
   const rechercher = async () => {
     const r = await post({ action: 'search_contrat', ref: data.ref })
@@ -197,7 +198,7 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
             <button
               onClick={async () => {
                 if (!data._id_partenaire) {
-                  window.alert('Choisis un partenaire.')
+                  showToast('Choisis un partenaire.', 'success')
                   return
                 }
                 const r = await post({
@@ -205,9 +206,10 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
                   id_partenaire: data._id_partenaire,
                 })
                 if (r)
-                  window.alert(
+                  showToast(
                     'Ticket de désactivation créé (n° ' +
                       (r.id_nouveau_ticket || '?') + ').',
+                    'success',
                   )
               }}
               disabled={saving}
@@ -287,7 +289,7 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
                         ...incident,
                       })
                       if (r) {
-                        window.alert('Incident enregistré.')
+                        showToast('Incident enregistré.', 'success')
                         setIncident(null)
                         reload()
                       }
@@ -406,14 +408,15 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
               <button
                 onClick={async () => {
                   if (!selRow) {
-                    window.alert('Sélectionne un contrat.')
+                    showToast('Sélectionne un contrat.', 'success')
                     return
                   }
                   if (
-                    !window.confirm(
-                      `Réattribuer le contrat n° ${selRow.n_contrat} à ` +
+                    !(await showConfirm({
+                      message:
+                        `Réattribuer le contrat n° ${selRow.n_contrat} à ` +
                         `${data.benef_nom} ?`,
-                    )
+                    }))
                   )
                     return
                   const r = await post({
@@ -425,7 +428,7 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
                     benef_id: data.benef_id,
                   })
                   if (r) {
-                    window.alert('Changement de vendeur effectué.')
+                    showToast('Changement de vendeur effectué.', 'success')
                     rechercher()
                   }
                 }}
@@ -439,14 +442,15 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
               <button
                 onClick={async () => {
                   if (!selRow) {
-                    window.alert('Sélectionne un contrat.')
+                    showToast('Sélectionne un contrat.', 'success')
                     return
                   }
                   if (
-                    !window.confirm(
-                      `Remettre le contrat n° ${selRow.n_contrat} en ` +
+                    !(await showConfirm({
+                      message:
+                        `Remettre le contrat n° ${selRow.n_contrat} en ` +
                         'BS CALL - En cours de traitement opérateur ?',
-                    )
+                    }))
                   )
                     return
                   const r = await post({
@@ -456,7 +460,7 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
                     id_etat_old: selRow.id_etat,
                   })
                   if (r) {
-                    window.alert("Changement d'état effectué.")
+                    showToast("Changement d'état effectué.", 'success')
                     rechercher()
                   }
                 }}
@@ -492,8 +496,9 @@ export default function FISOSBO({ apiBase, getToken, idTicket }: FIProps) {
               benef_nom: data.benef_nom,
             })
             if (r)
-              window.alert(
+              showToast(
                 'SMS demandeur : ' + (r.sms_result || 'envoyé'),
+                'success',
               )
           }}
           disabled={saving}

@@ -3,6 +3,7 @@ import { Crop, Download, Loader2, Printer, Save, Upload } from 'lucide-react'
 
 import type { FIProps } from './index'
 import PhotoCropModal from './PhotoCropModal'
+import { showToast } from '../../ui/dialog'
 
 interface LigneCartePro {
   id: string
@@ -85,12 +86,12 @@ export default function FICartePro({ apiBase, getToken, idTicket }: FIProps) {
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       reload()
     } catch {
-      window.alert('Erreur réseau lors de l’enregistrement.')
+      showToast('Erreur réseau lors de l’enregistrement.', 'error')
     } finally {
       setSaving(false)
     }
@@ -114,13 +115,13 @@ export default function FICartePro({ apiBase, getToken, idTicket }: FIProps) {
       )
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       const blob = await resp.blob()
       window.open(URL.createObjectURL(blob), '_blank')
     } catch {
-      window.alert('Erreur réseau lors de l’impression.')
+      showToast('Erreur réseau lors de l’impression.', 'error')
     } finally {
       setPrinting(false)
     }

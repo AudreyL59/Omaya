@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, Save, Upload, UserRound } from 'lucide-react'
 
 import type { FIProps } from './index'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_Avance (type 10) — Demande d'avance sur salaire.
 export default function FIAvance({ apiBase, getToken, idTicket }: FIProps) {
@@ -42,12 +43,12 @@ export default function FIAvance({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -66,15 +67,16 @@ export default function FIAvance({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await r.json().catch(() => null)
       if (!r.ok || j?.ok === false) {
-        window.alert(
+        showToast(
           `Upload échoué (HTTP ${r.status}) : ` +
             `${j?.detail || j?.error || 'réponse inattendue'}`,
+          'error',
         )
         return
       }
       reload()
     } catch (err) {
-      window.alert(`Erreur réseau : ${String((err as any)?.message || err)}`)
+      showToast(`Erreur réseau : ${String((err as any)?.message || err)}`, 'error')
     } finally {
       setUploading(false)
     }
@@ -97,16 +99,17 @@ export default function FIAvance({ apiBase, getToken, idTicket }: FIProps) {
 
   const validerVirement = async () => {
     if (!data.mois_paiement) {
-      window.alert('Le mois de paiement est obligatoire.')
+      showToast('Le mois de paiement est obligatoire.', 'error')
       return
     }
     if (!data.has_preuve) {
       if (
-        !window.confirm(
-          "Vous n'avez pas ajouté de preuve de virement.\n" +
+        !(await showConfirm({
+          message:
+            "Vous n'avez pas ajouté de preuve de virement.\n" +
             'Celle-ci est IMPORTANTE pour le suivi du virement !\n' +
             'Poursuivre la validation sans la preuve ?',
-        )
+        }))
       )
         return
     }
@@ -117,7 +120,7 @@ export default function FIAvance({ apiBase, getToken, idTicket }: FIProps) {
       date_virement: data.date_virement,
     })
     if (r) {
-      window.alert('Virement validé. Ticket terminé.')
+      showToast('Virement validé. Ticket terminé.', 'success')
       reload()
     }
   }

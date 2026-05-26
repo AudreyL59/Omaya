@@ -3,6 +3,7 @@ import { FileText, Loader2, Save, UserPlus, Users } from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
+import { showToast } from '../../ui/dialog'
 
 type Form = Record<string, any>
 
@@ -30,7 +31,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
       )
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       const blob = await resp.blob()
@@ -40,7 +41,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
       })
       setDocMime(blob.type || '')
     } catch {
-      window.alert('Erreur réseau lors du chargement du document.')
+      showToast('Erreur réseau lors du chargement du document.', 'error')
     } finally {
       setDocLoading(false)
     }
@@ -79,12 +80,12 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
       })
       if (!resp.ok) {
         const e = await resp.json().catch(() => null)
-        window.alert(`Erreur : ${e?.detail || resp.status}`)
+        showToast(`Erreur : ${e?.detail || resp.status}`, 'error')
         return
       }
       reload()
     } catch {
-      window.alert('Erreur réseau lors de l’enregistrement.')
+      showToast('Erreur réseau lors de l’enregistrement.', 'error')
     } finally {
       setSaving(false)
     }

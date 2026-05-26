@@ -5,6 +5,7 @@ import {
 
 import type { FIProps } from './index'
 import SearchPicker from './SearchPicker'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_DPAEDistrib (types 29 Nouveau Vendeur Distrib + 30 Intégration Distrib).
 export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) {
@@ -76,12 +77,12 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -95,13 +96,13 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
         { headers: { Authorization: `Bearer ${getToken()}` } },
       )
       if (!resp.ok) {
-        window.alert('Document introuvable.')
+        showToast('Document introuvable.', 'error')
         return
       }
       const blob = await resp.blob()
       window.open(URL.createObjectURL(blob), '_blank')
     } catch {
-      window.alert('Erreur réseau (document).')
+      showToast('Erreur réseau (document).', 'error')
     }
   }
 
@@ -137,21 +138,24 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
       date_naiss: dateNaiss, adresse, cp, ville, gsm, mail,
       produits, id_equipe: idEquipe,
     })
-    if (r) window.alert('Informations enregistrées')
+    if (r) showToast('Informations enregistrées', 'success')
   }
 
   const docNonConforme = async (idDoc: string) => {
     if (
-      !window.confirm(
-        'Vous êtes sur le point de supprimer ce document pour non-conformité.\n' +
+      !(await showConfirm({
+        message:
+          'Vous êtes sur le point de supprimer ce document pour non-conformité.\n' +
           'Le candidat recevra un SMS. Continuer ?',
-      )
+        confirmLabel: 'Supprimer',
+        variant: 'danger',
+      }))
     )
       return
     const r = await post({ action: 'doc_non_conforme', id_doc: idDoc })
     if (r) {
       setData((d: any) => ({ ...d, documents: r.documents || d.documents }))
-      if (r.sms_result) window.alert('SMS : ' + r.sms_result)
+      if (r.sms_result) showToast('SMS : ' + r.sms_result, 'success')
     }
   }
 

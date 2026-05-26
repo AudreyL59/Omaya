@@ -5,6 +5,7 @@ import {
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
+import { showConfirm, showToast } from '../../ui/dialog'
 
 // FI_Resa (type 9) — Réservation (hébergement / transport / salle).
 export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
@@ -48,12 +49,12 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await resp.json().catch(() => null)
       if (!resp.ok) {
-        window.alert(`Erreur : ${j?.detail || resp.status}`)
+        showToast(`Erreur : ${j?.detail || resp.status}`, 'error')
         return null
       }
       return j?.data ?? j ?? {}
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
       return null
     } finally {
       setSaving(false)
@@ -69,13 +70,13 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
       )
       if (!r.ok) {
         const e = await r.json().catch(() => null)
-        window.alert(`Document indisponible : ${e?.detail || r.status}`)
+        showToast(`Document indisponible : ${e?.detail || r.status}`, 'error')
         return
       }
       const blob = await r.blob()
       window.open(URL.createObjectURL(blob), '_blank', 'noopener')
     } catch {
-      window.alert('Erreur réseau.')
+      showToast('Erreur réseau.', 'error')
     } finally {
       setBusyFile('')
     }
@@ -93,15 +94,16 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
       })
       const j = await r.json().catch(() => null)
       if (!r.ok || j?.ok === false) {
-        window.alert(
+        showToast(
           `Upload échoué (HTTP ${r.status}) : ` +
             `${j?.detail || j?.error || 'réponse inattendue'}`,
+          'error',
         )
         return
       }
       reload()
     } catch (err) {
-      window.alert(`Erreur réseau : ${String((err as any)?.message || err)}`)
+      showToast(`Erreur réseau : ${String((err as any)?.message || err)}`, 'error')
     } finally {
       setBusyFile('')
     }
@@ -456,9 +458,15 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                               <Download className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation()
-                                if (!window.confirm(`Supprimer ${f.nom} ?`))
+                                if (
+                                  !(await showConfirm({
+                                    message: `Supprimer ${f.nom} ?`,
+                                    variant: 'danger',
+                                    confirmLabel: 'Supprimer',
+                                  }))
+                                )
                                   return
                                 post({
                                   action: 'delete_pj',
@@ -498,15 +506,16 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
             <button
               onClick={() => {
                 if (selFiles.length === 0) {
-                  window.alert('Coche au moins une pièce jointe.')
+                  showToast('Coche au moins une pièce jointe.', 'error')
                   return
                 }
                 post({ action: 'sms', nom_fichiers: selFiles }).then(
                   (r: any) =>
                     r &&
-                    window.alert(
+                    showToast(
                       'SMS envoyé :\n' +
                         ((r.envois || []).join('\n') || 'OK'),
+                      'success',
                     ),
                 )
               }}
@@ -519,11 +528,11 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
             <button
               onClick={() => {
                 if (selFiles.length === 0) {
-                  window.alert('Coche au moins une pièce jointe.')
+                  showToast('Coche au moins une pièce jointe.', 'error')
                   return
                 }
                 if (!selBenef) {
-                  window.alert('Sélectionne un bénéficiaire dans la liste.')
+                  showToast('Sélectionne un bénéficiaire dans la liste.', 'success')
                   return
                 }
                 post({
@@ -533,9 +542,10 @@ export default function FIResa({ apiBase, getToken, idTicket }: FIProps) {
                 }).then(
                   (r: any) =>
                     r &&
-                    window.alert(
+                    showToast(
                       'SMS envoyé :\n' +
                         ((r.envois || []).join('\n') || 'OK'),
+                      'success',
                     ),
                 )
               }}
