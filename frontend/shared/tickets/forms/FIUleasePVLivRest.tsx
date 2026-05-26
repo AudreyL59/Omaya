@@ -180,7 +180,10 @@ export default function FIUleasePVLivRest({
       return
     }
     const r = await post({ action: 'save_obs', observations: obs })
-    if (r) setPlan(2)
+    if (!r) return
+    // pré-charge le cache des photos côté serveur (PDF rapide ensuite)
+    await post({ action: 'prepare' })
+    setPlan(2)
   }
 
   const nbNotees = photos.filter((p) => p.note > 0).length

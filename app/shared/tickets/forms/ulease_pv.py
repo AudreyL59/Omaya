@@ -21,8 +21,9 @@ l'IDTK_Liste (cf. code WinDev). Photos = mémos binaires.
 
 import base64
 import io
+import os
+import tempfile
 
-from app.core.config import FTP_HOST, FTP_PASSWORD, FTP_USER
 from app.core.database import get_connection
 
 from ..service import (
@@ -52,6 +53,48 @@ def _memo_img(db_key: str, table: str, key_field: str, key_value: int,
         return v if isinstance(v, bytes) else base64.b64decode(v)
     except Exception:
         return None
+
+
+# --------------------------------------------------------------------
+# Cache disque des photos (perf) : la lecture d'un mémo binaire via le
+# bridge HFSQL est lente (~1.5 s/photo de 2.5 Mo). On extrait chaque
+# photo UNE fois (réduite Pillow) sur le disque serveur ; le PDF et les
+# ré-affichages lisent ensuite le cache local. Le cache se remplit
+# naturellement quand l'opérateur affiche les photos pour les noter.
+# --------------------------------------------------------------------
+
+def _cache_dir(id_ticket: int) -> str:
+    d = os.path.join(tempfile.gettempdir(), "omaya_pv_cache", str(int(id_ticket)))
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _photo_cached(id_ticket: int, id_photo: int) -> str | None:
+    """Chemin de la photo (réduite) en cache disque. L'extrait du mémo
+    binaire (bridge) si absente. None si pas de photo."""
+    path = os.path.join(_cache_dir(id_ticket), f"{int(id_photo)}.jpg")
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        return path
+    data = _memo_img("ticket_rh", "TK_DemandeSignPV_Photo",
+                     "IDTK_DemandeSignPV_Photo", int(id_photo), "Photo")
+    small = _shrink_image(data)
+    if not small:
+        return None
+    try:
+        with open(path, "wb") as f:
+            f.write(small)
+    except Exception:
+        return None
+    return path
+
+
+def _photo_cache_invalide(id_ticket: int, id_photo: int) -> None:
+    try:
+        path = os.path.join(_cache_dir(id_ticket), f"{int(id_photo)}.jpg")
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------
@@ -119,20 +162,6 @@ def _infos_pc(id_pc: int) -> dict:
     return out
 
 
-def _lib_photo(id_type_photo: int) -> str:
-    if not id_type_photo:
-        return ""
-    try:
-        r = get_connection("ulease").query_one(
-            "SELECT IDTypeCapacite_Photo, LibPhoto FROM TypeCapacite_Photo "
-            "WHERE IDTypeCapacite_Photo = ?",
-            (int(id_type_photo),),
-        )
-        return ((r.get("LibPhoto") if r else "") or "").strip()
-    except Exception:
-        return ""
-
-
 def _photos(id_ticket: int) -> list[dict]:
     """Photos du PV (TK_DemandeSignPV_Photo, ticket_rh). Le binaire n'est
     pas chargé (flag a_photo) — accès via get_file."""
@@ -145,8 +174,25 @@ def _photos(id_ticket: int) -> list[dict]:
         )
     except Exception:
         return []
+    rows = rows or []
+    # Libellés en UNE requête (sinon 1 requête bridge par photo = très lent)
+    ids_type = {_to_int(r.get("IDTypeCapacite_Photo")) for r in rows}
+    ids_type = {i for i in ids_type if i}
+    libs: dict[int, str] = {}
+    if ids_type:
+        try:
+            for t in get_connection("ulease").query(
+                "SELECT IDTypeCapacite_Photo, LibPhoto FROM TypeCapacite_Photo "
+                "WHERE IDTypeCapacite_Photo IN ("
+                + ",".join(str(i) for i in ids_type) + ")"
+            ):
+                libs[_to_int(t.get("IDTypeCapacite_Photo"))] = (
+                    t.get("LibPhoto") or ""
+                ).strip()
+        except Exception:
+            pass
     out = []
-    for r in rows or []:
+    for r in rows:
         idp = _clean_id(_to_int(r.get("IDTK_DemandeSignPV_Photo")))
         if not idp:
             continue
@@ -154,7 +200,7 @@ def _photos(id_ticket: int) -> list[dict]:
         out.append({
             "id": str(idp),
             "id_type_photo": id_type,
-            "lib_photo": _lib_photo(id_type),
+            "lib_photo": libs.get(id_type, ""),
             "note": _to_int(r.get("NoteEtat")),
         })
     out.sort(key=lambda p: p["lib_photo"])
@@ -251,6 +297,14 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             )
         except Exception as e:
             return {"ok": False, "error": f"del_photo : {e}"}
+        _photo_cache_invalide(int(id_ticket), int(id_photo))
+        return {"ok": True}
+
+    # --- Pré-chargement du cache photos (avant génération PDF) ---
+    if action == "prepare":
+        for p in _photos(id_ticket):
+            if p["note"] > 0:
+                _photo_cached(int(id_ticket), int(p["id"]))
         return {"ok": True}
 
     # --- Sauvegarde de l'observation (avant génération PDF) ---
@@ -401,8 +455,15 @@ def get_file(id_ticket: int, name: str) -> tuple[bytes, str]:
     'm<id>' (photo modèle, TypeCapacite_Photo)."""
     kind, _, raw = name.partition(":") if ":" in name else (name[:1], "", name[1:])
     if kind == "f":
-        data = _memo_img("ticket_rh", "TK_DemandeSignPV_Photo",
-                         "IDTK_DemandeSignPV_Photo", _to_int(raw), "Photo")
+        # photo fournie : sert (et alimente) le cache disque réduit
+        path = _photo_cached(int(id_ticket), _to_int(raw))
+        if path:
+            try:
+                with open(path, "rb") as fh:
+                    return fh.read(), "image/jpeg"
+            except Exception:
+                pass
+        data = None
     elif kind == "m":
         data = _memo_img("ulease", "TypeCapacite_Photo",
                          "IDTypeCapacite_Photo", _to_int(raw), "Photo")
@@ -554,9 +615,16 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
         c.drawString(cx, y, f"{p['lib_photo'][:42]}")
         c.setFont("Helvetica", 7.5)
         c.drawRightString(cx + col_w - 4 * mm, y, f"{p['note']}/5")
-        data = _memo_img("ticket_rh", "TK_DemandeSignPV_Photo",
-                         "IDTK_DemandeSignPV_Photo", int(p["id"]), "Photo")
-        ir = reader(data, shrink=True)
+        # lecture depuis le cache disque (déjà réduit) -> rapide
+        path = _photo_cached(int(id_ticket), int(p["id"]))
+        data = None
+        if path:
+            try:
+                with open(path, "rb") as fh:
+                    data = fh.read()
+            except Exception:
+                data = None
+        ir = reader(data, shrink=False)
         if ir:
             try:
                 c.drawImage(ir, cx, y - ph_h - 2 * mm, width=col_w - 6 * mm,
