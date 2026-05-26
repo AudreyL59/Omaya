@@ -6,6 +6,7 @@
 
 import type { ComponentType } from 'react'
 
+import FIAttExoCash from './FIAttExoCash'
 import FIAvance from './FIAvance'
 import FICartePro from './FICartePro'
 import FICdeExoCash from './FICdeExoCash'
@@ -42,5 +43,6 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '21': FIDPAE,      // DPAE à venir (même formulaire)
   '23': FICttCourtage, // Contrat de Courtage / Attestation
   '24': FICdeExoCash,  // Commande ExoCash
+  '25': FIAttExoCash,  // Attribution ExoCash
   '40': FICttWDemande, // Contrat W - Demande
 }
