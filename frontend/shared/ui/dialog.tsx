@@ -1,13 +1,12 @@
-// Système de dialogue charté (couleurs --c-brand → vert ADM / emerald Vendeur).
-//
-// Remplace window.alert / window.confirm par :
+// Système de dialogue charté (couleurs --color-c-brand → vert ADM / emerald
+// Vendeur). Remplace window.alert / window.confirm par :
 //   - showToast(message, variant?)  → notification coin écran (auto-dismiss)
 //   - showConfirm({ message, ... }) → Promise<boolean> (modale centrée)
 //
-// Monter <DialogHost /> UNE fois dans la page (cf. TicketsPage). Le contenu
-// est rendu via un portail sur document.body pour rester au-dessus de tout
-// (hors stacking context des modales/layout).
-import { useSyncExternalStore } from 'react'
+// Monter <DialogHost /> UNE fois dans la page (cf. TicketsPage). Rendu via
+// un portail sur document.body. Les couleurs de marque sont lues au runtime
+// (var CSS de thème) et appliquées en inline pour être garanties visibles.
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 
@@ -29,27 +28,14 @@ interface ConfirmReq {
   resolve: (v: boolean) => void
 }
 
-// --- store singleton (pub/sub via useSyncExternalStore) ---
+// --- store singleton (pub/sub) ---
 let _toasts: Toast[] = []
 let _confirm: ConfirmReq | null = null
-let _version = 0
 const _listeners = new Set<() => void>()
 let _seq = 1
 
 function _emit() {
-  _version++
   _listeners.forEach((l) => l())
-}
-
-function _subscribe(cb: () => void) {
-  _listeners.add(cb)
-  return () => {
-    _listeners.delete(cb)
-  }
-}
-
-function _getSnapshot() {
-  return _version
 }
 
 export function showToast(
@@ -86,71 +72,191 @@ function _closeConfirm(value: boolean) {
   c?.resolve(value)
 }
 
+function _brandColor(): string {
+  if (typeof document === 'undefined') return '#17494E'
+  const v = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-c-brand')
+    .trim()
+  return v || '#17494E'
+}
+
 // --- composant hôte (toasts + modale de confirmation) ---
 export function DialogHost() {
-  useSyncExternalStore(_subscribe, _getSnapshot, _getSnapshot)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [confirm, setConfirm] = useState<ConfirmReq | null>(null)
+
+  useEffect(() => {
+    const sync = () => {
+      setToasts([..._toasts])
+      setConfirm(_confirm)
+    }
+    _listeners.add(sync)
+    sync()
+    return () => {
+      _listeners.delete(sync)
+    }
+  }, [])
+
   if (typeof document === 'undefined') return null
+  const brand = _brandColor()
 
   return createPortal(
     <>
       {/* Toasts (coin haut-droit) */}
-      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
-        {_toasts.map((t) => (
-          <ToastCard key={t.id} toast={t} />
-        ))}
+      <div
+        style={{
+          position: 'fixed',
+          top: 16,
+          right: 16,
+          zIndex: 2147483647,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          pointerEvents: 'none',
+        }}
+      >
+        {toasts.map((t) => {
+          const bg =
+            t.variant === 'error'
+              ? '#dc2626'
+              : t.variant === 'info'
+                ? '#ffffff'
+                : brand
+          const fg = t.variant === 'info' ? '#1e293b' : '#ffffff'
+          return (
+            <div
+              key={t.id}
+              style={{
+                pointerEvents: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 16px',
+                borderRadius: 10,
+                boxShadow: '0 10px 25px rgba(0,0,0,.18)',
+                fontSize: 14,
+                fontWeight: 500,
+                maxWidth: 360,
+                background: bg,
+                color: fg,
+                border: t.variant === 'info' ? '1px solid #e5e7eb' : 'none',
+              }}
+            >
+              {t.variant === 'error' ? (
+                <XCircle className="w-4 h-4 shrink-0" />
+              ) : t.variant === 'info' ? (
+                <Info className="w-4 h-4 shrink-0" style={{ color: brand }} />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              )}
+              <span style={{ whiteSpace: 'pre-line' }}>{t.message}</span>
+            </div>
+          )
+        })}
       </div>
 
       {/* Modale de confirmation */}
-      {_confirm && (
+      {confirm && (
         <>
           <div
-            className="fixed inset-0 z-[9998] bg-black/40"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2147483646,
+              background: 'rgba(0,0,0,.4)',
+            }}
             onClick={() => _closeConfirm(false)}
           />
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] w-[min(92vw,28rem)] bg-white rounded-2xl shadow-xl border border-c-line p-5"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 2147483647,
+              width: 'min(92vw, 28rem)',
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 20px 50px rgba(0,0,0,.25)',
+              border: '1px solid #e5e7eb',
+              padding: 20,
+            }}
           >
-            <div className="flex items-start gap-3">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
               <span
-                className={
-                  'shrink-0 mt-0.5 ' +
-                  (_confirm.variant === 'danger' ? 'text-red-600' : 'text-c-brand')
-                }
+                style={{
+                  flexShrink: 0,
+                  marginTop: 2,
+                  color: confirm.variant === 'danger' ? '#dc2626' : brand,
+                }}
               >
-                {_confirm.variant === 'danger' ? (
+                {confirm.variant === 'danger' ? (
                   <AlertTriangle className="w-6 h-6" />
                 ) : (
                   <Info className="w-6 h-6" />
                 )}
               </span>
-              <div className="flex-1 min-w-0">
-                {_confirm.title && (
-                  <h3 className="text-sm font-semibold text-c-ink mb-1">
-                    {_confirm.title}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {confirm.title && (
+                  <h3
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#1e293b',
+                      marginBottom: 4,
+                    }}
+                  >
+                    {confirm.title}
                   </h3>
                 )}
-                <p className="text-sm text-c-ink-soft whitespace-pre-line">
-                  {_confirm.message}
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: '#475569',
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  {confirm.message}
                 </p>
               </div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+            <div
+              style={{
+                marginTop: 16,
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}
+            >
               <button
                 onClick={() => _closeConfirm(false)}
-                className="px-3 py-2 rounded-lg border border-c-line-strong text-sm text-c-ink hover:bg-c-surface-soft transition-colors"
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #cbd5e1',
+                  fontSize: 14,
+                  background: '#fff',
+                  cursor: 'pointer',
+                }}
               >
-                {_confirm.cancelLabel || 'Annuler'}
+                {confirm.cancelLabel || 'Annuler'}
               </button>
               <button
                 onClick={() => _closeConfirm(true)}
-                className={
-                  'px-3 py-2 rounded-lg text-white text-sm font-semibold hover:brightness-110 transition-all ' +
-                  (_confirm.variant === 'danger' ? 'bg-red-600' : 'bg-c-brand')
-                }
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: confirm.variant === 'danger' ? '#dc2626' : brand,
+                }}
               >
-                {_confirm.confirmLabel || 'Confirmer'}
+                {confirm.confirmLabel || 'Confirmer'}
               </button>
             </div>
           </div>
@@ -158,33 +264,5 @@ export function DialogHost() {
       )}
     </>,
     document.body,
-  )
-}
-
-function ToastCard({ toast }: { toast: Toast }) {
-  const base =
-    'pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium max-w-sm'
-  if (toast.variant === 'error') {
-    return (
-      <div className={base + ' bg-red-600 text-white'}>
-        <XCircle className="w-4 h-4 shrink-0" />
-        <span className="whitespace-pre-line">{toast.message}</span>
-      </div>
-    )
-  }
-  if (toast.variant === 'info') {
-    return (
-      <div className={base + ' bg-white border border-c-line text-c-ink'}>
-        <Info className="w-4 h-4 shrink-0 text-c-brand" />
-        <span className="whitespace-pre-line">{toast.message}</span>
-      </div>
-    )
-  }
-  // success
-  return (
-    <div className={base + ' bg-c-brand text-white'}>
-      <CheckCircle2 className="w-4 h-4 shrink-0" />
-      <span className="whitespace-pre-line">{toast.message}</span>
-    </div>
   )
 }
