@@ -164,12 +164,13 @@ def _infos_pc(id_pc: int) -> dict:
 
 def _photos(id_ticket: int) -> list[dict]:
     """Photos du PV (TK_DemandeSignPV_Photo, ticket_rh). Le binaire n'est
-    pas chargé (flag a_photo) — accès via get_file."""
+    pas chargé (flag a_photo) — accès via get_file. DatePhoto = « Prise le »
+    et OpPhoto = « par » (opérateur, ID salarié) pour le PDF."""
     try:
         rows = get_connection("ticket_rh").query(
-            "SELECT IDTK_DemandeSignPV_Photo, IDTypeCapacite_Photo, NoteEtat "
-            "FROM TK_DemandeSignPV_Photo WHERE IDdemandeSignUleaseAuto = ? "
-            "AND ModifElem <> 'suppr'",
+            "SELECT IDTK_DemandeSignPV_Photo, IDTypeCapacite_Photo, NoteEtat, "
+            "DatePhoto, OpPhoto FROM TK_DemandeSignPV_Photo "
+            "WHERE IDdemandeSignUleaseAuto = ? AND ModifElem <> 'suppr'",
             (int(id_ticket),),
         )
     except Exception:
@@ -191,6 +192,18 @@ def _photos(id_ticket: int) -> list[dict]:
                 ).strip()
         except Exception:
             pass
+    # Noms des opérateurs (= salariés) en UNE requête batch
+    ids_op = {_clean_id(_to_int(r.get("OpPhoto"))) for r in rows}
+    ids_op = {i for i in ids_op if i}
+    ops = load_salaries_minimal(ids_op) if ids_op else {}
+
+    def _op_nom(i: int) -> str:
+        info = ops.get(i, {})
+        p = (info.get("prenom") or "")
+        return (
+            f"{info.get('nom', '')} {p[:1].upper() + p[1:].lower() if p else ''}"
+        ).strip()
+
     out = []
     for r in rows:
         idp = _clean_id(_to_int(r.get("IDTK_DemandeSignPV_Photo")))
@@ -202,9 +215,36 @@ def _photos(id_ticket: int) -> list[dict]:
             "id_type_photo": id_type,
             "lib_photo": libs.get(id_type, ""),
             "note": _to_int(r.get("NoteEtat")),
+            "date_photo": _fmt_dt(r.get("DatePhoto")),
+            "op_nom": _op_nom(_clean_id(_to_int(r.get("OpPhoto")))),
         })
     out.sort(key=lambda p: p["lib_photo"])
     return out
+
+
+def _fmt_dt(v: object) -> str:
+    """Date HFSQL/ISO → « JJ/MM/AAAA HH:MM » (ou « JJ/MM/AAAA »)."""
+    s = str(v or "").strip()
+    if not s:
+        return ""
+    if "T" in s or "-" in s:
+        from datetime import datetime
+        s2 = s.replace("T", " ").split(".")[0]
+        try:
+            if len(s2) >= 19:
+                return datetime.strptime(s2[:19], "%Y-%m-%d %H:%M:%S").strftime(
+                    "%d/%m/%Y %H:%M"
+                )
+            return datetime.strptime(s2[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            return s
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if len(digits) >= 12:
+        return (f"{digits[6:8]}/{digits[4:6]}/{digits[0:4]} "
+                f"{digits[8:10]}:{digits[10:12]}")
+    if len(digits) >= 8:
+        return f"{digits[6:8]}/{digits[4:6]}/{digits[0:4]}"
+    return s
 
 
 # --------------------------------------------------------------------
@@ -539,8 +579,13 @@ def _shrink_image(data: bytes | None, max_px: int = 1000,
 
 
 def _generate_pv_pdf(id_ticket: int) -> bytes:
-    """PDF récap du PV : société, véhicule, conducteur, photos notées,
-    observation, signatures. Images réduites (Pillow) pour la taille."""
+    """PDF du PV (modèle WinDev EtatUleasePVLivRest) : une photo par page
+    avec libellé / note / prise le / opérateur, en-tête véhicule courant,
+    pied de page société (logo + raison + adresse + Siren + paraphe + n°
+    de page). Dernière page = récap (nb photos, moyenne, observation,
+    signatures + photo salarié). Images réduites (Pillow) pour la taille."""
+    from datetime import datetime
+
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.lib.utils import ImageReader
@@ -559,9 +604,17 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
     infos = _infos_pc(id_pc)
     ste = _societe_salarie(infos["id_salarie"])
 
+    is_liv = "livraison" in (d["lib_pv"] or "").lower()
+    titre_doc = "PV de livraison" if is_liv else "PV de restitution"
+    veh_line = (
+        f"{(d['conducteur'] or '').upper()} : {d['vehicule']}"
+    ).strip(" :")
+    date_doc = datetime.now().strftime("%d/%m/%Y")
+
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     W, H = A4
+    ML = 18 * mm  # marge gauche/droite
 
     def reader(data, shrink=True):
         d2 = _shrink_image(data) if shrink else data
@@ -570,119 +623,152 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
         except Exception:
             return None
 
-    y = H - 18 * mm
-    # En-tête société
-    g = reader(ste["guimmick"], shrink=True)
-    if g:
+    def reader_path(path):
         try:
-            c.drawImage(g, 18 * mm, y - 12 * mm, width=32 * mm, height=16 * mm,
-                        preserveAspectRatio=True, mask="auto")
+            with open(path, "rb") as fh:
+                return ImageReader(io.BytesIO(fh.read()))
         except Exception:
-            pass
-    c.setFont("Helvetica-Bold", 11)
-    c.drawRightString(W - 18 * mm, y, ste["raison"] or "")
-    c.setFont("Helvetica", 8)
-    c.drawRightString(W - 18 * mm, y - 5 * mm, ste["adresse"])
-    c.drawRightString(W - 18 * mm, y - 9 * mm,
-                      f"{ste['cp']} {ste['ville']}".strip())
-    if ste["siren"]:
-        c.drawRightString(W - 18 * mm, y - 13 * mm, f"Siren : {ste['siren']}")
-    y -= 22 * mm
+            return None
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawCentredString(W / 2, y, d["lib_pv"])
-    y -= 8 * mm
-    c.setFont("Helvetica", 10)
-    c.drawString(18 * mm, y, f"Contrat : {d['titre_contrat']}")
-    y -= 5 * mm
-    c.drawString(18 * mm, y, f"Véhicule : {d['vehicule']}")
-    y -= 5 * mm
-    c.drawString(18 * mm, y, f"Conducteur : {d['conducteur']}")
-    y -= 9 * mm
-
-    # Grille photos (2 colonnes)
-    col_w = (W - 36 * mm) / 2
-    ph_h = 42 * mm
-    cols = [18 * mm, 18 * mm + col_w]
-    col = 0
+    # Photos réellement présentes (cache disque rempli) + note
+    photos = []
     for p in d["photos"]:
-        if col == 0 and y < 60 * mm:
-            c.showPage()
-            y = H - 18 * mm
-        cx = cols[col]
-        c.setFont("Helvetica-Bold", 7.5)
-        note = "★" * p["note"] + "☆" * (5 - p["note"])
-        c.drawString(cx, y, f"{p['lib_photo'][:42]}")
-        c.setFont("Helvetica", 7.5)
-        c.drawRightString(cx + col_w - 4 * mm, y, f"{p['note']}/5")
-        # lecture depuis le cache disque (déjà réduit) -> rapide
         path = _photo_cached(int(id_ticket), int(p["id"]))
-        data = None
         if path:
+            photos.append((p, path))
+    nb = len(photos)
+    moyenne = (sum(p["note"] for p, _ in photos) / nb) if nb else 0.0
+    total_pages = nb + 1
+
+    # Paraphe (répété en pied de page) + logo société, lus une fois
+    logo = reader(ste["guimmick"], shrink=True)
+    paraphe = reader(
+        _memo_img("ticket_rh", "TK_DemandeSignPVUlease", "IDTK_Liste",
+                  int(id_ticket), "paraphe"),
+        shrink=True,
+    )
+
+    def footer(page_no: int) -> None:
+        if logo:
             try:
-                with open(path, "rb") as fh:
-                    data = fh.read()
-            except Exception:
-                data = None
-        ir = reader(data, shrink=False)
-        if ir:
-            try:
-                c.drawImage(ir, cx, y - ph_h - 2 * mm, width=col_w - 6 * mm,
-                            height=ph_h, preserveAspectRatio=True, mask="auto")
+                c.drawImage(logo, ML, 6 * mm, width=18 * mm, height=14 * mm,
+                            preserveAspectRatio=True, mask="auto")
             except Exception:
                 pass
-        else:
-            c.setFont("Helvetica-Oblique", 7)
-            c.drawString(cx, y - 6 * mm, "(photo non recevable)")
-        col += 1
-        if col == 2:
-            col = 0
-            y -= ph_h + 9 * mm
-    if col == 1:
-        y -= ph_h + 9 * mm
-
-    # Observations
-    if d["observations"]:
-        if y < 45 * mm:
-            c.showPage()
-            y = H - 18 * mm
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(18 * mm, y, "Observation générale :")
-        y -= 5 * mm
-        c.setFont("Helvetica", 9)
-        for line in (d["observations"].splitlines() or [""]):
-            c.drawString(20 * mm, y, line[:115])
-            y -= 4.5 * mm
-        y -= 4 * mm
-
-    # Signatures (nouvelle page si peu de place)
-    if y < 45 * mm:
-        c.showPage()
-        y = H - 18 * mm
-    sigs = [
-        ("Signature", "Signature", 45 * mm, 22 * mm),
-        ("Paraphe", "paraphe", 30 * mm, 18 * mm),
-        ("Lu et approuvé", "luApp", 55 * mm, 18 * mm),
-        ("Photo salarié", "PhotoSalarié", 28 * mm, 28 * mm),
-    ]
-    sx = 18 * mm
-    for label, field, w, h in sigs:
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(W / 2, 14 * mm, ste["raison"] or "")
+        c.drawCentredString(
+            W / 2, 10.5 * mm,
+            f"{ste['adresse']} {ste['cp']} {ste['ville']}".strip(),
+        )
+        if ste["siren"]:
+            c.drawCentredString(W / 2, 7 * mm, f"Siren : {ste['siren']}")
+        if paraphe:
+            try:
+                c.drawImage(paraphe, W - 58 * mm, 6 * mm, width=16 * mm,
+                            height=10 * mm, preserveAspectRatio=True,
+                            mask="auto")
+            except Exception:
+                pass
         c.setFont("Helvetica", 8)
-        c.drawString(sx, y, label)
+        c.drawRightString(W - ML, 15 * mm, f"{page_no}/{total_pages}")
+
+    # --- Pages photos (une par photo) ---
+    page_no = 0
+    for idx, (p, path) in enumerate(photos):
+        page_no += 1
+        if idx == 0:
+            c.setFont("Helvetica-Bold", 18)
+            c.drawCentredString(W / 2, H - 22 * mm, titre_doc)
+            c.setFont("Helvetica", 9)
+            c.drawRightString(W - ML, H - 20 * mm, date_doc)
+            y = H - 36 * mm
+        else:
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(ML, H - 18 * mm, veh_line)
+            y = H - 30 * mm
+        c.setFont("Helvetica", 9.5)
+        c.drawString(ML, y, f"Lib Photo :   {p['lib_photo']}")
+        c.drawRightString(W - ML, y, f"Note donnée :   {p['note']} / 5")
+        y -= 6 * mm
+        meta = f"Prise le :   {p.get('date_photo', '')}"
+        if p.get("op_nom"):
+            meta += f"        par :   {p['op_nom']}"
+        c.drawString(ML, y, meta)
+        y -= 5 * mm
+        # Photo : occupe la place restante jusqu'au pied de page
+        box_top = y
+        box_bottom = 24 * mm
+        ir = reader_path(path)
+        if ir:
+            try:
+                c.drawImage(ir, ML, box_bottom, width=W - 2 * ML,
+                            height=box_top - box_bottom,
+                            preserveAspectRatio=True, mask="auto")
+            except Exception:
+                pass
+        footer(page_no)
+        c.showPage()
+
+    # --- Page récapitulative ---
+    page_no += 1
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(ML, H - 18 * mm, veh_line)
+    y = H - 32 * mm
+    c.setFont("Helvetica", 10)
+    c.drawString(ML, y, f"Nombre de Photos :    {nb}")
+    y -= 7 * mm
+    moy_str = f"{moyenne:.2f}".replace(".", ",")
+    c.drawString(ML, y, f"Moyenne globale :    {moy_str} / 5")
+    y -= 10 * mm
+    c.drawString(ML, y, "Observation :")
+    y -= 3 * mm
+    box_h = 70 * mm
+    box_w = W - 2 * ML
+    box_bottom = y - box_h
+    c.roundRect(ML, box_bottom, box_w, box_h, 4 * mm)
+    # Texte de l'observation (retour à la ligne simple)
+    c.setFont("Helvetica", 9)
+    ty = y - 6 * mm
+    max_chars = 110
+    for raw in (d["observations"] or "").splitlines():
+        chunk = raw
+        while chunk:
+            c.drawString(ML + 3 * mm, ty, chunk[:max_chars])
+            chunk = chunk[max_chars:]
+            ty -= 4.5 * mm
+            if ty < box_bottom + 3 * mm:
+                break
+        if not raw:
+            ty -= 4.5 * mm
+        if ty < box_bottom + 3 * mm:
+            break
+    # Signatures (empilées à gauche) + photo salarié (à droite)
+    sy = box_bottom - 8 * mm
+    for field in ("Signature", "paraphe", "luApp"):
         data = _memo_img("ticket_rh", "TK_DemandeSignPVUlease", "IDTK_Liste",
                          int(id_ticket), field)
         ir = reader(data, shrink=True)
         if ir:
             try:
-                c.drawImage(ir, sx, y - h - 2 * mm, width=w, height=h,
+                c.drawImage(ir, ML, sy - 18 * mm, width=55 * mm, height=18 * mm,
                             preserveAspectRatio=True, mask="auto")
             except Exception:
                 pass
-        sx += w + 6 * mm
-        if sx > W - 30 * mm:
-            sx = 18 * mm
-            y -= 34 * mm
-
+            sy -= 22 * mm
+    photo_sal = reader(
+        _memo_img("ticket_rh", "TK_DemandeSignPVUlease", "IDTK_Liste",
+                  int(id_ticket), "PhotoSalarié"),
+        shrink=True,
+    )
+    if photo_sal:
+        try:
+            c.drawImage(photo_sal, W - ML - 32 * mm, box_bottom - 38 * mm,
+                        width=32 * mm, height=32 * mm,
+                        preserveAspectRatio=True, mask="auto")
+        except Exception:
+            pass
+    footer(page_no)
     c.showPage()
     c.save()
     return buf.getvalue()
