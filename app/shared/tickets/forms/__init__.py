@@ -22,6 +22,7 @@ from . import (
     cttw,
     cttw_demande,
     dpae,
+    dpaedistrib,
     factdistrib,
     fourniture,
     mutuelle,
@@ -49,5 +50,7 @@ FORM_HANDLERS: dict[int, object] = {
     25: attexocash,   # Attribution ExoCash
     27: mutuelle,     # Demande Mutuelle
     28: factdistrib,  # Facturation Distrib
+    29: dpaedistrib,  # Nouveau Vendeur Distrib (FI_DPAEDistrib)
+    30: dpaedistrib,  # Intégration Nouveau Distrib (FI_DPAEDistrib)
     40: cttw_demande,  # Contrat W - Demande
 }
