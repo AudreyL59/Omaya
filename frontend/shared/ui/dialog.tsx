@@ -4,11 +4,12 @@
 //   - showToast(message, variant?)  → notification coin écran (auto-dismiss)
 //   - showConfirm({ message, ... }) → Promise<boolean> (modale centrée)
 //
-// Monter <DialogHost /> UNE fois dans la page (cf. TicketsPage).
-import { useEffect, useState } from 'react'
-import {
-  AlertTriangle, CheckCircle2, Info, XCircle,
-} from 'lucide-react'
+// Monter <DialogHost /> UNE fois dans la page (cf. TicketsPage). Le contenu
+// est rendu via un portail sur document.body pour rester au-dessus de tout
+// (hors stacking context des modales/layout).
+import { useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
+import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 
 export type ToastVariant = 'success' | 'info' | 'error'
 
@@ -28,20 +29,33 @@ interface ConfirmReq {
   resolve: (v: boolean) => void
 }
 
-// --- store singleton (pub/sub) ---
+// --- store singleton (pub/sub via useSyncExternalStore) ---
 let _toasts: Toast[] = []
 let _confirm: ConfirmReq | null = null
+let _version = 0
 const _listeners = new Set<() => void>()
 let _seq = 1
 
 function _emit() {
+  _version++
   _listeners.forEach((l) => l())
+}
+
+function _subscribe(cb: () => void) {
+  _listeners.add(cb)
+  return () => {
+    _listeners.delete(cb)
+  }
+}
+
+function _getSnapshot() {
+  return _version
 }
 
 export function showToast(
   message: string,
   variant: ToastVariant = 'success',
-  durationMs = 3500,
+  durationMs = 4000,
 ) {
   const id = _seq++
   _toasts = [..._toasts, { id, message, variant }]
@@ -74,19 +88,13 @@ function _closeConfirm(value: boolean) {
 
 // --- composant hôte (toasts + modale de confirmation) ---
 export function DialogHost() {
-  const [, force] = useState(0)
-  useEffect(() => {
-    const l = () => force((n) => n + 1)
-    _listeners.add(l)
-    return () => {
-      _listeners.delete(l)
-    }
-  }, [])
+  useSyncExternalStore(_subscribe, _getSnapshot, _getSnapshot)
+  if (typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <>
       {/* Toasts (coin haut-droit) */}
-      <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 pointer-events-none">
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
         {_toasts.map((t) => (
           <ToastCard key={t.id} toast={t} />
         ))}
@@ -96,13 +104,13 @@ export function DialogHost() {
       {_confirm && (
         <>
           <div
-            className="fixed inset-0 z-[200] bg-black/40"
+            className="fixed inset-0 z-[9998] bg-black/40"
             onClick={() => _closeConfirm(false)}
           />
           <div
             role="dialog"
             aria-modal="true"
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[210] w-[min(92vw,28rem)] bg-white rounded-2xl shadow-xl border border-c-line p-5"
+            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] w-[min(92vw,28rem)] bg-white rounded-2xl shadow-xl border border-c-line p-5"
           >
             <div className="flex items-start gap-3">
               <span
@@ -148,13 +156,14 @@ export function DialogHost() {
           </div>
         </>
       )}
-    </>
+    </>,
+    document.body,
   )
 }
 
 function ToastCard({ toast }: { toast: Toast }) {
   const base =
-    'pointer-events-auto flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg text-sm font-medium max-w-sm'
+    'pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium max-w-sm'
   if (toast.variant === 'error') {
     return (
       <div className={base + ' bg-red-600 text-white'}>

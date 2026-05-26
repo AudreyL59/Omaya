@@ -369,7 +369,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                 f"Une copie est envoyée sur votre email : {mail}"
             )
             try:
-                sms_result = envoi_sms(txt, gsm, "", salarie_nom)
+                sms_result = envoi_sms(txt, gsm, "", "OMAYA-Info")
             except Exception as e:
                 sms_result = f"SMS non envoyé : {e}"
         if mail:
