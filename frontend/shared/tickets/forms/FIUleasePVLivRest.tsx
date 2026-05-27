@@ -319,17 +319,17 @@ export default function FIUleasePVLivRest({
                   <Loader2 className="w-5 h-5 animate-spin text-c-ink-icon" />
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-4">
                   <div>
                     <div className="text-xs text-c-ink-soft mb-1">Photo à fournir (modèle)</div>
                     {imgModele ? (
-                      <div className="relative group">
+                      <div className="relative group inline-block">
                         <img
                           src={imgModele}
                           alt="modèle"
                           onClick={() => setZoomSrc(imgModele)}
                           title="Cliquer pour agrandir / zoomer"
-                          className="w-full rounded-lg border border-c-line object-contain max-h-56 cursor-zoom-in"
+                          className="max-h-72 rounded-lg border border-c-line object-contain cursor-zoom-in"
                         />
                         <span className="absolute top-1 right-1 bg-black/50 text-white rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                           <ZoomIn className="w-4 h-4" />
@@ -342,13 +342,13 @@ export default function FIUleasePVLivRest({
                   <div>
                     <div className="text-xs text-c-ink-soft mb-1">Photo fournie</div>
                     {imgFournie ? (
-                      <div className="relative group">
+                      <div className="relative group inline-block">
                         <img
                           src={imgFournie}
                           alt="fournie"
                           onClick={() => setZoomSrc(imgFournie)}
                           title="Cliquer pour agrandir / zoomer"
-                          className="w-full rounded-lg border border-c-line object-contain max-h-56 cursor-zoom-in"
+                          className="max-h-72 rounded-lg border border-c-line object-contain cursor-zoom-in"
                         />
                         <span className="absolute top-1 right-1 bg-black/50 text-white rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                           <ZoomIn className="w-4 h-4" />
