@@ -164,6 +164,11 @@ Pas de PK → pas d'UPSERT possible. Options :
 
 ## 9. Ordonnancement, cutover, validation
 
+- **Déploiement par site (Cas A retenu)** : HFSQL est déjà répliqué entre le
+  serveur interne et OVH (réplication HFSQL existante). On déploie donc le
+  **même exe de sync sur chaque serveur**, pointé sur son **HFSQL local → son
+  PG local** (LAN, pas de transfert de blobs via VPN). Curseur `sync.sync_control`
+  propre à chaque PG. **Aucune réplication PG↔PG nécessaire.**
 - **Cadence** : phase 1 = planificateur Windows lance l'exe toutes les 15–30 min
   (ou service WinDev). Pré-bascule : resserrer.
 - **Cutover (big-bang)** :
