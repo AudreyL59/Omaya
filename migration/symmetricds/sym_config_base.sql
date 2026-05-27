@@ -6,6 +6,9 @@
 --  Politique de conflit globale : le plus recent gagne (modif_date).
 -- ============================================================================
 
+-- Les tables sym_* sont dans le schema "symmetricds" (cf. currentSchema).
+SET search_path TO symmetricds, public;
+
 -- 1 seul groupe de noeuds (multi-maitre symetrique). Le lien erp->erp pousse
 -- vers les AUTRES noeuds du groupe (anti-boucle gere par SymmetricDS).
 INSERT INTO sym_node_group (node_group_id, description)

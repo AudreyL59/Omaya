@@ -47,6 +47,9 @@ def main() -> None:
         "--  A appliquer apres sym_config_base.sql sur le noeud 'interne'.",
         "-- ============================================================",
         "",
+        "-- Tables sym_* dans le schema dedie (cf. currentSchema).",
+        "SET search_path TO symmetricds, public;",
+        "",
     ]
     no_modif, no_pk, n_blob = [], [], 0
     for schema, pg_table in order:

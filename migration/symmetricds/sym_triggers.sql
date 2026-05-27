@@ -3,6 +3,9 @@
 --  A appliquer apres sym_config_base.sql sur le noeud 'interne'.
 -- ============================================================
 
+-- Tables sym_* dans le schema dedie (cf. currentSchema).
+SET search_path TO symmetricds, public;
+
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial', 'adv', 'pgt_agenda_commercial', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp);
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial', 'erp2erp', 100, current_timestamp, current_timestamp);
 
