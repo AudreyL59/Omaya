@@ -1,0 +1,4 @@
+# Dependances des OUTILS de migration (hors application FastAPI).
+#   pip install -r migration/requirements.txt
+openpyxl         # lecture des descriptifs .xlsx (generate_schema.py)
+psycopg2-binary  # application du schema sur PostgreSQL (apply_schema.py)
