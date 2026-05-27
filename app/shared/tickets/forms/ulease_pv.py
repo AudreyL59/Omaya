@@ -570,7 +570,17 @@ def _shrink_image(data: bytes | None, max_px: int = 1000,
         from PIL import Image
 
         im = Image.open(io.BytesIO(data))
-        if im.mode not in ("RGB", "L"):
+        # Aplatir la transparence sur fond BLANC : convert('RGB') seul la
+        # poserait sur du NOIR → signatures/paraphes/logo sur fond noir
+        # dans le PDF. (Les photos JPEG sans alpha ne sont pas concernées.)
+        if im.mode in ("RGBA", "LA") or (
+            im.mode == "P" and "transparency" in im.info
+        ):
+            im = im.convert("RGBA")
+            bg = Image.new("RGB", im.size, (255, 255, 255))
+            bg.paste(im, mask=im.split()[-1])
+            im = bg
+        elif im.mode not in ("RGB", "L"):
             im = im.convert("RGB")
         im.thumbnail((max_px, max_px))
         out = io.BytesIO()
