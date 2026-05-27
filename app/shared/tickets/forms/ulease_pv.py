@@ -21,6 +21,7 @@ l'IDTK_Liste (cf. code WinDev). Photos = mémos binaires.
 
 import base64
 import io
+import math
 import os
 import tempfile
 
@@ -685,6 +686,36 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
         c.setFont("Helvetica", 8)
         c.drawRightString(W - ML, 15 * mm, f"{page_no}/{total_pages}")
 
+    def draw_stars(right_x: float, y_base: float, note: int) -> float:
+        """Dessine 5 étoiles vectorielles alignées à droite (bord droit =
+        right_x). `note` remplies (ambre), le reste en contour gris.
+        Retourne le bord gauche du groupe (pour poser le libellé)."""
+        R = 1.5 * mm
+        gap = 1.0 * mm
+        step = 2 * R + gap
+        left_x = right_x - (10 * R + 4 * gap)
+        cy = y_base + 1.0 * mm
+        for i in range(5):
+            cx = left_x + R + i * step
+            path = c.beginPath()
+            for k in range(10):
+                ang = math.pi / 2 + k * math.pi / 5
+                rad = R if k % 2 == 0 else R * 0.4
+                px, py = cx + rad * math.cos(ang), cy + rad * math.sin(ang)
+                path.moveTo(px, py) if k == 0 else path.lineTo(px, py)
+            path.close()
+            if i < note:
+                c.setFillColorRGB(0.98, 0.74, 0.18)
+                c.setStrokeColorRGB(0.90, 0.62, 0.05)
+                c.drawPath(path, fill=1, stroke=1)
+            else:
+                c.setFillColorRGB(1, 1, 1)
+                c.setStrokeColorRGB(0.75, 0.75, 0.78)
+                c.drawPath(path, fill=0, stroke=1)
+        c.setFillColorRGB(0, 0, 0)
+        c.setStrokeColorRGB(0, 0, 0)
+        return left_x
+
     # --- Pages photos (une par photo) ---
     page_no = 0
     for idx, (p, path) in enumerate(photos):
@@ -701,7 +732,9 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
             y = H - 30 * mm
         c.setFont("Helvetica", 9.5)
         c.drawString(ML, y, f"Lib Photo :   {p['lib_photo']}")
-        c.drawRightString(W - ML, y, f"Note donnée :   {p['note']} / 5")
+        star_left = draw_stars(W - ML, y, p["note"])
+        c.setFont("Helvetica", 9.5)
+        c.drawRightString(star_left - 2.5 * mm, y, "Note donnée :")
         y -= 6 * mm
         meta = f"Prise le :   {p.get('date_photo', '')}"
         if p.get("op_nom"):
