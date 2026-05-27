@@ -212,7 +212,9 @@ def _photos(id_ticket: int) -> list[dict]:
         id_type = _to_int(r.get("IDTypeCapacite_Photo"))
         out.append({
             "id": str(idp),
-            "id_type_photo": id_type,
+            # id_type_photo à 17 chiffres > 2^53 → exposé en str sinon
+            # JavaScript perd en précision (cf. feedback_ids_8octets_string)
+            "id_type_photo": str(id_type),
             "lib_photo": libs.get(id_type, ""),
             "note": _to_int(r.get("NoteEtat")),
             "date_photo": _fmt_dt(r.get("DatePhoto")),
