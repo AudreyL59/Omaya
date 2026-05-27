@@ -21,6 +21,9 @@ export default function FIUleasePVLivRest({
   const [zoomSrc, setZoomSrc] = useState('')
   const [pdfUrl, setPdfUrl] = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [progressMs, setProgressMs] = useState(22000)
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -194,7 +197,7 @@ export default function FIUleasePVLivRest({
   // ---- Plan 2 : aperçu PDF + validation ----
   if (plan === 2) {
     return (
-      <div className="flex gap-4 h-full">
+      <div className="relative flex gap-4 h-full">
         <div className="flex-1 min-h-[520px] border border-c-line rounded-lg bg-c-surface-soft flex flex-col overflow-hidden">
           {pdfLoading ? (
             <span className="flex-1 flex items-center justify-center gap-2 text-c-ink-faint text-sm">
@@ -235,18 +238,51 @@ export default function FIUleasePVLivRest({
                 confirmLabel: 'Clôturer',
                 cancelLabel: 'Non',
               })
+              // Jauge d'attente : montée lente vers 92 % pendant le
+              // traitement (PDF + FTP + SMS + mail), puis 100 % à la fin.
+              setProgressMs(22000)
+              setValidating(true)
+              setProgress(6)
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => setProgress(92)),
+              )
               const r = await post({ action: 'valider_signe', cloturer })
               if (r) {
+                setProgressMs(500)
+                setProgress(100)
                 showToast('PV déposé et envoyé au salarié.', 'success')
                 setTimeout(() => onClose?.(), 1500)
+              } else {
+                setValidating(false)
+                setProgress(0)
               }
             }}
-            disabled={saving || pdfLoading}
+            disabled={saving || pdfLoading || validating}
             className="w-full px-3 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50"
           >
             Ce document est valide
           </button>
         </div>
+
+        {validating && (
+          <div className="absolute inset-0 z-20 bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-c-brand" />
+            <div className="text-sm text-c-ink-soft text-center px-8 leading-relaxed">
+              Validation en cours…
+              <br />
+              Dépôt du document dans le dossier véhicule, envoi au salarié (SMS + e-mail).
+            </div>
+            <div className="w-72 h-2.5 rounded-full bg-c-line overflow-hidden">
+              <div
+                className="h-full rounded-full bg-c-brand"
+                style={{ width: `${progress}%`, transition: `width ${progressMs}ms ease-out` }}
+              />
+            </div>
+            <div className="text-xs text-c-ink-faint">
+              Merci de patienter, ne fermez pas la fenêtre.
+            </div>
+          </div>
+        )}
       </div>
     )
   }
