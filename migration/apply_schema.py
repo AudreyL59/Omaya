@@ -9,7 +9,7 @@ Connexion : arguments CLI ou variables d'env (utiles dans .env) :
 Usage :
     python migration/apply_schema.py                 # depuis .env / defauts
     python migration/apply_schema.py --host 192.168.1.50 --dbname erp_db \
-        --user postgres --password ****
+        --user erp_user --password ****
     python migration/apply_schema.py --reset         # DROP SCHEMA avant (re-apply propre)
     python migration/apply_schema.py --dry-run       # liste sans executer
 
@@ -34,7 +34,7 @@ def main() -> None:
     ap.add_argument("--host", default=os.getenv("PG_HOST", "localhost"))
     ap.add_argument("--port", default=os.getenv("PG_PORT", "5432"))
     ap.add_argument("--dbname", default=os.getenv("PG_DBNAME", "erp_db"))
-    ap.add_argument("--user", default=os.getenv("PG_USER", "postgres"))
+    ap.add_argument("--user", default=os.getenv("PG_USER", "erp_user"))
     ap.add_argument("--password", default=os.getenv("PG_PASSWORD", ""))
     ap.add_argument("--input", default=str(Path(__file__).parent / "schema"))
     ap.add_argument("--reset", action="store_true",
