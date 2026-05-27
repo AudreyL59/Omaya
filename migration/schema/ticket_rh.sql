@@ -2,7 +2,7 @@ CREATE SCHEMA IF NOT EXISTS ticket_rh;
 
 
 CREATE TABLE ticket_rh.pgt_tk_cde_exo_cash (
-    id_tk_cde_exo_cash_auto  bigint  NOT NULL,  -- IDTK_CdeExoCashAuto
+    id_tk_cde_exo_cash_auto  bigint NOT NULL,  -- IDTK_CdeExoCashAuto
     id_tk_liste              bigint,  -- IDTK_Liste
     id_tk_cde_exo_cash       bigint,  -- IDTK_CdeExoCash
     id_salarie               bigint,  -- IDSalarie
@@ -30,7 +30,7 @@ CREATE TABLE ticket_rh.pgt_tk_cde_exo_cash_envoi (
     date_envoi                     date,  -- dateEnvoi
     modif_elem                     varchar(5),  -- ModifElem
     num_suivi                      varchar(50),  -- NumSuivi
-    id_tk_cde_exo_cash_envoi       bigint  NOT NULL,  -- IDTK_CdeExoCashEnvoi
+    id_tk_cde_exo_cash_envoi       bigint NOT NULL,  -- IDTK_CdeExoCashEnvoi
     transporteur                   varchar(50),  -- Transporteur
     adresse_livraison              text,  -- AdresseLivraison
     CONSTRAINT pk_pgt_tk_cde_exo_cash_envoi PRIMARY KEY (id_tk_cde_exo_cash_envoi),
@@ -42,7 +42,7 @@ CREATE INDEX ix_pgt_tk_cde_exo_cash_envoi_modif_date ON ticket_rh.pgt_tk_cde_exo
 
 CREATE TABLE ticket_rh.pgt_tk_cde_exo_cash_lot (
     id_tk_cde_exo_cash_lot_auto  bigint,  -- IDTK_CdeExoCashLotAuto
-    id_tk_cde_exo_cash_lot       bigint  NOT NULL,  -- IDTK_CdeExoCashLot
+    id_tk_cde_exo_cash_lot       bigint NOT NULL,  -- IDTK_CdeExoCashLot
     id_tk_cde_exo_cash           bigint,  -- IDTK_CdeExoCash
     id_tk_liste                  bigint,  -- IDTK_Liste
     id_exo_cash_lot              bigint,  -- IDExoCashLot
@@ -63,7 +63,7 @@ CREATE INDEX ix_pgt_tk_cde_exo_cash_lot_modif_date ON ticket_rh.pgt_tk_cde_exo_c
 CREATE TABLE ticket_rh.pgt_tk_demande_att_exo_cash (
     id_tk_demande_att_exo_cash_auto  bigint,  -- IDTk_DemandeAttExoCashAuto
     id_tk_liste                      bigint,  -- IDTK_Liste
-    id_tk_demande_att_exo_cash       bigint  NOT NULL,  -- IDTk_DemandeAttExoCash
+    id_tk_demande_att_exo_cash       bigint NOT NULL,  -- IDTk_DemandeAttExoCash
     id_salarie                       bigint,  -- IDSalarie
     montant_ec                       numeric(19,4),  -- MontantEC
     info_attribution                 text,  -- InfoAttribution
@@ -78,7 +78,7 @@ CREATE INDEX ix_pgt_tk_demande_att_exo_cash_id_salarie ON ticket_rh.pgt_tk_deman
 CREATE INDEX ix_pgt_tk_demande_att_exo_cash_modif_date ON ticket_rh.pgt_tk_demande_att_exo_cash (modif_date);
 
 CREATE TABLE ticket_rh.pgt_tk_demande_conges (
-    id_tk_demande_conges       bigint  NOT NULL,  -- IDTK_DemandeCongés
+    id_tk_demande_conges       bigint NOT NULL,  -- IDTK_DemandeCongés
     id_tk_liste                bigint,  -- IDTK_Liste
     modif_date                 timestamp,  -- ModifDate
     modif_elem                 varchar(5),  -- ModifELEM
@@ -106,7 +106,7 @@ CREATE INDEX ix_pgt_tk_demande_conges_id_type_absence ON ticket_rh.pgt_tk_demand
 CREATE TABLE ticket_rh.pgt_tk_demande_ctt_w (
     i_ddoc_rhedit              bigint,  -- IDdocRHEDIT
     idorganigramme             bigint,  -- idorganigramme
-    i_ddemande_contrat_w       bigint  NOT NULL,  -- IDdemandeContratW
+    i_ddemande_contrat_w       bigint NOT NULL,  -- IDdemandeContratW
     contenu                    bytea,  -- Contenu
     id_salarie                 bigint,  -- IDSalarie
     contrat_genere             boolean,  -- contratGénéré
@@ -141,7 +141,7 @@ CREATE INDEX ix_pgt_tk_demande_ctt_w_modif_date ON ticket_rh.pgt_tk_demande_ctt_
 CREATE INDEX ix_pgt_tk_demande_ctt_w_id_tk_liste ON ticket_rh.pgt_tk_demande_ctt_w (id_tk_liste);
 
 CREATE TABLE ticket_rh.pgt_tk_demandecttw_doc (
-    id_tk_demande_ctt_w_doc  bigint  NOT NULL,  -- IDTk_DemandeCttW_Doc
+    id_tk_demande_ctt_w_doc  bigint NOT NULL,  -- IDTk_DemandeCttW_Doc
     i_ddemande_contrat_w     bigint,  -- IDdemandeContratW
     id_tk_liste              bigint,  -- IDTK_Liste
     type_doc                 varchar(50),  -- TypeDoc
@@ -158,7 +158,7 @@ CREATE INDEX ix_pgt_tk_demandecttw_doc_modif_date ON ticket_rh.pgt_tk_demandectt
 
 CREATE TABLE ticket_rh.pgt_tk_demande_mutuelle (
     id_tk_demande_mutuelle_auto  bigint,  -- IDTK_DemandeMutuelleAuto
-    id_tk_demande_mutuelle       bigint  NOT NULL,  -- IDTK_DemandeMutuelle
+    id_tk_demande_mutuelle       bigint NOT NULL,  -- IDTK_DemandeMutuelle
     id_tk_liste                  bigint,  -- IDTK_Liste
     id_salarie                   bigint,  -- IDSalarie
     demande_affiliation          boolean,  -- DemandeAffiliation
@@ -175,7 +175,7 @@ CREATE INDEX ix_pgt_tk_demande_mutuelle_id_salarie ON ticket_rh.pgt_tk_demande_m
 CREATE INDEX ix_pgt_tk_demande_mutuelle_modif_date ON ticket_rh.pgt_tk_demande_mutuelle (modif_date);
 
 CREATE TABLE ticket_rh.pgt_tk_demande_mutuelle_fic (
-    id_tk_demande_mutuelle_fic  bigint  NOT NULL,  -- IDTK_DemandeMutuelle_FIC
+    id_tk_demande_mutuelle_fic  bigint NOT NULL,  -- IDTK_DemandeMutuelle_FIC
     id_tk_demande_mutuelle      bigint,  -- IDTK_DemandeMutuelle
     id_tk_liste                 bigint,  -- IDTK_Liste
     chemin_fic                  varchar(50),  -- CheminFic
@@ -190,7 +190,7 @@ CREATE INDEX ix_pgt_tk_demande_mutuelle_fic_id_tk_liste ON ticket_rh.pgt_tk_dema
 CREATE INDEX ix_pgt_tk_demande_mutuelle_fic_modif_date ON ticket_rh.pgt_tk_demande_mutuelle_fic (modif_date);
 
 CREATE TABLE ticket_rh.pgt_tk_demandesignpv_photo (
-    id_tk_demande_sign_pv_photo  bigint  NOT NULL,  -- IDTK_DemandeSignPV_Photo
+    id_tk_demande_sign_pv_photo  bigint NOT NULL,  -- IDTK_DemandeSignPV_Photo
     i_ddemande_sign_ulease_auto  bigint,  -- IDdemandeSignUleaseAuto
     id_type_capacite_photo       bigint,  -- IDTypeCapacite_Photo
     photo                        bytea,  -- Photo
@@ -208,7 +208,7 @@ CREATE INDEX ix_pgt_tk_demandesignpv_photo_modif_date ON ticket_rh.pgt_tk_demand
 
 CREATE TABLE ticket_rh.pgt_tk_demande_sign_pv_ulease (
     i_ddemande_sign_pv_ulease_auto  bigint,  -- IDdemandeSignPVUleaseAuto
-    i_ddemande_sign_pv_ulease       bigint  NOT NULL,  -- IDdemandeSignPVUlease
+    i_ddemande_sign_pv_ulease       bigint NOT NULL,  -- IDdemandeSignPVUlease
     id_tk_liste                     bigint,  -- IDTK_Liste
     idorganigramme                  bigint,  -- idorganigramme
     id_salarie_ulease               bigint,  -- IDSalarie_Ulease
@@ -245,7 +245,7 @@ CREATE INDEX ix_pgt_tk_demande_sign_pv_ulease_modif_date ON ticket_rh.pgt_tk_dem
 
 CREATE TABLE ticket_rh.pgt_tk_demande_sign_ulease (
     i_ddemande_sign_ulease_auto  bigint,  -- IDdemandeSignUleaseAuto
-    i_ddemande_sign_ulease       bigint  NOT NULL,  -- IDdemandeSignUlease
+    i_ddemande_sign_ulease       bigint NOT NULL,  -- IDdemandeSignUlease
     id_tk_liste                  bigint,  -- IDTK_Liste
     idorganigramme               bigint,  -- idorganigramme
     id_salarie_ulease            bigint,  -- IDSalarie_Ulease
@@ -282,7 +282,7 @@ CREATE INDEX ix_pgt_tk_demande_sign_ulease_contrat_signe ON ticket_rh.pgt_tk_dem
 CREATE INDEX ix_pgt_tk_demande_sign_ulease_modif_date ON ticket_rh.pgt_tk_demande_sign_ulease (modif_date);
 
 CREATE TABLE ticket_rh.pgt_tk_demande_sortie_rh (
-    id_tk_demande_sortie_rh       bigint  NOT NULL,  -- IDTK_DemandeSortieRH
+    id_tk_demande_sortie_rh       bigint NOT NULL,  -- IDTK_DemandeSortieRH
     type_sortie                   varchar(20),  -- TypeSortie
     id_salarie                    bigint,  -- IDSalarie
     id_tk_liste                   bigint,  -- IDTK_Liste
@@ -301,7 +301,7 @@ CREATE INDEX ix_pgt_tk_demande_sortie_rh_modif_date ON ticket_rh.pgt_tk_demande_
 
 CREATE TABLE ticket_rh.pgt_tk_demande_sos_ju (
     id_tk_demande_sos_ju_auto  bigint,  -- IDTK_DemandeSOS_JUAuto
-    id_tk_demande_sos_ju       bigint  NOT NULL,  -- IDTK_DemandeSOS_JU
+    id_tk_demande_sos_ju       bigint NOT NULL,  -- IDTK_DemandeSOS_JU
     id_tk_liste                bigint,  -- IDTK_Liste
     id_tk_type_sos_ju          bigint,  -- IDTK_TypeSOS_JU
     id_elem                    bigint,  -- IdElem
@@ -319,7 +319,7 @@ CREATE INDEX ix_pgt_tk_demande_sos_ju_modif_date ON ticket_rh.pgt_tk_demande_sos
 
 CREATE TABLE ticket_rh.pgt_tk_type_sos_ju (
     id_tk_type_sos_ju_auto  bigint,  -- IDTK_TypeSOS_JUAuto
-    id_tk_type_sos_ju       bigint  NOT NULL,  -- IDTK_TypeSOS_JU
+    id_tk_type_sos_ju       bigint NOT NULL,  -- IDTK_TypeSOS_JU
     lib_type_sos            varchar(50),  -- Lib_TypeSos
     type_form               varchar(15),  -- TypeForm
     modif_op                bigint,  -- ModifOP

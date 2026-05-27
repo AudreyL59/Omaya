@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS divers;
 
 CREATE TABLE divers.pgt_challenge_evenement (
     id_challenge_evenement_auto  bigint,  -- IDChallengeEvenementAuto
-    id_challenge_evenement       bigint  NOT NULL,  -- IDChallengeEvenement
+    id_challenge_evenement       bigint NOT NULL,  -- IDChallengeEvenement
     libelle                      varchar(50),  -- Libellé
     description                  text,  -- DESCRIPTION
     date_debut                   date,  -- DateDébut
@@ -30,7 +30,7 @@ CREATE INDEX ix_pgt_challenge_evenement_date_fin ON divers.pgt_challenge_eveneme
 CREATE INDEX ix_pgt_challenge_evenement_modif_date ON divers.pgt_challenge_evenement (modif_date);
 
 CREATE TABLE divers.pgt_challenge_gagnants_lots_casinos (
-    id_challenge_gagnants_lots_casinos  bigint  NOT NULL,  -- IDChallengeGagnantsLotsCasinos
+    id_challenge_gagnants_lots_casinos  bigint NOT NULL,  -- IDChallengeGagnantsLotsCasinos
     id_challenge                        bigint,  -- IDChallenge
     id_salarie                          bigint,  -- IDSalarie
     jour_signature                      date,  -- JourSignature
@@ -51,7 +51,7 @@ CREATE INDEX ix_pgt_challenge_gagnants_lots_casinos_id_challenge_lots_casino ON 
 CREATE INDEX ix_pgt_challenge_gagnants_lots_casinos_modif_date ON divers.pgt_challenge_gagnants_lots_casinos (modif_date);
 
 CREATE TABLE divers.pgt_challenge_lots_casino (
-    id_challenge_lots_casino  bigint  NOT NULL,  -- IDChallengeLotsCasino
+    id_challenge_lots_casino  bigint NOT NULL,  -- IDChallengeLotsCasino
     id_challenge              bigint,  -- IDChallenge
     categorie                 smallint,  -- Catégorie
     libelle                   text,  -- Libellé
@@ -68,7 +68,7 @@ CREATE INDEX ix_pgt_challenge_lots_casino_modif_date ON divers.pgt_challenge_lot
 
 CREATE TABLE divers.pgt_commande (
     id_commande_auto  bigint,  -- IDCommandeAuto
-    id_commande       bigint  NOT NULL,  -- IDCommande
+    id_commande       bigint NOT NULL,  -- IDCommande
     date_achat        date,  -- DateAchat
     ope_achat         bigint,  -- OpéAchat
     num_commande      varchar(50),  -- NumCommande
@@ -90,7 +90,7 @@ CREATE INDEX ix_pgt_commande_id_ste ON divers.pgt_commande (id_ste);
 
 CREATE TABLE divers.pgt_commande_facture (
     id_commande_facture_auto  bigint,  -- IDCommande_factureAuto
-    id_commande_facture       bigint  NOT NULL,  -- IDCommande_facture
+    id_commande_facture       bigint NOT NULL,  -- IDCommande_facture
     id_commande               bigint,  -- IDCommande
     date_ajout                timestamp,  -- DateAjout
     montant_ttc               numeric(19,4),  -- MontantTTC
@@ -105,7 +105,7 @@ CREATE INDEX ix_pgt_commande_facture_id_commande ON divers.pgt_commande_facture 
 CREATE INDEX ix_pgt_commande_facture_modif_date ON divers.pgt_commande_facture (modif_date);
 
 CREATE TABLE divers.pgt_communes_france (
-    id_communes_france               bigint  NOT NULL,  -- IDCommunesFrance
+    id_communes_france               bigint NOT NULL,  -- IDCommunesFrance
     code_commune                     varchar(5),  -- CodeCommune
     code_postal                      varchar(5),  -- CodePostal
     nom_ville                        varchar(50),  -- NomVille
@@ -130,7 +130,7 @@ CREATE INDEX ix_pgt_communes_france_modif_date ON divers.pgt_communes_france (mo
 CREATE INDEX ix_pgt_communes_france_code_pays ON divers.pgt_communes_france (code_pays);
 
 CREATE TABLE divers.pgt_compteur_coopt (
-    id_compteur_coopt  bigint  NOT NULL,  -- IDCompteurCoopt
+    id_compteur_coopt  bigint NOT NULL,  -- IDCompteurCoopt
     id_challenge       bigint,  -- IDChallenge
     objectif           integer,  -- objectif
     objectif_atteint   boolean,  -- objectifAtteint
@@ -152,7 +152,7 @@ CREATE INDEX ix_pgt_compteur_coopt_i_dcvtheque ON divers.pgt_compteur_coopt (i_d
 CREATE INDEX ix_pgt_compteur_coopt_modif_date ON divers.pgt_compteur_coopt (modif_date);
 
 CREATE TABLE divers.pgt_couleurs_stc (
-    i_dcouleurs_stc  bigint  NOT NULL,  -- IDcouleursSTC
+    i_dcouleurs_stc  bigint NOT NULL,  -- IDcouleursSTC
     mois             integer,  -- Mois
     couleur1_r       integer,  -- Couleur1_R
     couleur1_v       integer,  -- Couleur1_V
@@ -169,7 +169,7 @@ CREATE INDEX ix_pgt_couleurs_stc_mois ON divers.pgt_couleurs_stc (mois);
 CREATE INDEX ix_pgt_couleurs_stc_modif_date ON divers.pgt_couleurs_stc (modif_date);
 
 CREATE TABLE divers.pgt_dialoguedest (
-    id_dialogue_dest  bigint  NOT NULL,  -- IDDialogueDEST
+    id_dialogue_dest  bigint NOT NULL,  -- IDDialogueDEST
     id_dialogues      bigint,  -- IDDialogues
     dest_ope          bigint,  -- Dest_Opé
     dest_orga         bigint,  -- Dest_Orga
@@ -187,7 +187,7 @@ CREATE TABLE divers.pgt_dialoguehisto (
     id_dialogue_statut  bigint,  -- IDDialogueStatut
     modif_date          timestamp,  -- ModifDate
     modif_op            bigint,  -- ModifOp
-    modif_elem          varchar(5),  -- ModifElem
+    modif_elem          varchar(5)  -- ModifElem
 );
 CREATE INDEX ix_pgt_dialoguehisto_id_dialogues ON divers.pgt_dialoguehisto (id_dialogues);
 CREATE INDEX ix_pgt_dialoguehisto_id_dialogue_statut ON divers.pgt_dialoguehisto (id_dialogue_statut);
@@ -200,7 +200,7 @@ CREATE TABLE divers.pgt_dialoguelu (
     date_lecture    timestamp,  -- DateLecture
     modif_date      timestamp,  -- ModifDate
     modif_op        bigint,  -- ModifOp
-    modif_elem      varchar(5),  -- ModifElem
+    modif_elem      varchar(5)  -- ModifElem
 );
 CREATE INDEX ix_pgt_dialoguelu_id_dialogues ON divers.pgt_dialoguelu (id_dialogues);
 CREATE INDEX ix_pgt_dialoguelu_id_salarie ON divers.pgt_dialoguelu (id_salarie);
@@ -214,13 +214,13 @@ CREATE TABLE divers.pgt_dialoguemsg (
     expediteur           bigint,  -- Expéditeur
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOp
-    modif_elem           varchar(5),  -- ModifElem
+    modif_elem           varchar(5)  -- ModifElem
 );
 CREATE INDEX ix_pgt_dialoguemsg_id_dialogues ON divers.pgt_dialoguemsg (id_dialogues);
 CREATE INDEX ix_pgt_dialoguemsg_modif_date ON divers.pgt_dialoguemsg (modif_date);
 
 CREATE TABLE divers.pgt_emoticone (
-    i_demoticone  bigint  NOT NULL,  -- IDemoticone
+    i_demoticone  bigint NOT NULL,  -- IDemoticone
     emoji         text,  -- emoji
     modif_date    timestamp,  -- ModifDate
     modif_op      bigint,  -- ModifOp
@@ -231,7 +231,7 @@ CREATE INDEX ix_pgt_emoticone_modif_date ON divers.pgt_emoticone (modif_date);
 
 CREATE TABLE divers.pgt_exo_cash_famille_lot (
     id_exo_cash_famille_lot_auto  bigint,  -- IDExoCashFamilleLotAuto
-    id_exo_cash_famille_lot       bigint  NOT NULL,  -- IDExoCashFamilleLot
+    id_exo_cash_famille_lot       bigint NOT NULL,  -- IDExoCashFamilleLot
     lib_famille_lot               varchar(50),  -- LibFamilleLot
     icone                         bytea,  -- Icone
     modif_date                    timestamp,  -- ModifDate
@@ -244,7 +244,7 @@ CREATE INDEX ix_pgt_exo_cash_famille_lot_modif_date ON divers.pgt_exo_cash_famil
 
 CREATE TABLE divers.pgt_exo_cash_lot (
     id_exo_cash_lot_auto     bigint,  -- IDExoCashLotAuto
-    id_exo_cash_lot          bigint  NOT NULL,  -- IDExoCashLot
+    id_exo_cash_lot          bigint NOT NULL,  -- IDExoCashLot
     id_exo_cash_famille_lot  bigint,  -- IDExoCashFamilleLot
     marque                   varchar(25),  -- Marque
     lib_lot                  varchar(50),  -- LibLot
@@ -271,7 +271,7 @@ CREATE INDEX ix_pgt_exo_cash_lot_id_exo_cash_famille_lot ON divers.pgt_exo_cash_
 CREATE INDEX ix_pgt_exo_cash_lot_modif_date ON divers.pgt_exo_cash_lot (modif_date);
 
 CREATE TABLE divers.pgt_exo_cash_lot_histo_stock (
-    id_exo_cash_lot_histo_stock  bigint  NOT NULL,  -- IDExoCashLotHistoStock
+    id_exo_cash_lot_histo_stock  bigint NOT NULL,  -- IDExoCashLotHistoStock
     id_exo_cash_lot              bigint,  -- IDExoCashLot
     date_histo                   timestamp,  -- dateHisto
     ope_crea                     bigint,  -- OpéCrea
@@ -287,7 +287,7 @@ CREATE INDEX ix_pgt_exo_cash_lot_histo_stock_id_tk_liste ON divers.pgt_exo_cash_
 CREATE INDEX ix_pgt_exo_cash_lot_histo_stock_modif_date ON divers.pgt_exo_cash_lot_histo_stock (modif_date);
 
 CREATE TABLE divers.pgt_feuille_pointe (
-    id_feuille_pointe   bigint  NOT NULL,  -- IDFeuillePointe
+    id_feuille_pointe   bigint NOT NULL,  -- IDFeuillePointe
     id_communes_france  bigint,  -- IDCommunesFrance
     id_salarie          bigint,  -- IDSalarie
     date                date,  -- Date
@@ -303,7 +303,7 @@ CREATE INDEX ix_pgt_feuille_pointe_modif_date ON divers.pgt_feuille_pointe (modi
 
 CREATE TABLE divers.pgt_feuille_pointe_pointage (
     id_feuille_pointe_pointage  bigint,  -- IDFeuillePointePointage
-    id_pointage                 smallint  NOT NULL,  -- IdPointage
+    id_pointage                 smallint NOT NULL,  -- IdPointage
     type_pointage               varchar(50),  -- TypePointage
     icone                       bytea,  -- Icone
     car                         varchar(5),  -- Car
@@ -317,7 +317,7 @@ CREATE TABLE divers.pgt_feuille_pointe_pointage (
 CREATE INDEX ix_pgt_feuille_pointe_pointage_modif_date ON divers.pgt_feuille_pointe_pointage (modif_date);
 
 CREATE TABLE divers.pgt_feuille_pointe_porte (
-    id_feuille_pointe_porte  bigint  NOT NULL,  -- IDFeuillePointePorte
+    id_feuille_pointe_porte  bigint NOT NULL,  -- IDFeuillePointePorte
     id_feuille_pointe_rue    bigint,  -- IDFeuillePointeRue
     id_feuille_pointe        bigint,  -- IDFeuillePointe
     num_porte                varchar(10),  -- NumPorte
@@ -335,7 +335,7 @@ CREATE INDEX ix_pgt_feuille_pointe_porte_id_feuille_pointe ON divers.pgt_feuille
 CREATE INDEX ix_pgt_feuille_pointe_porte_modif_date ON divers.pgt_feuille_pointe_porte (modif_date);
 
 CREATE TABLE divers.pgt_feuille_pointe_portehisto (
-    id_feuille_pointe_porte_histo  bigint  NOT NULL,  -- IDFeuillePointePorteHisto
+    id_feuille_pointe_porte_histo  bigint NOT NULL,  -- IDFeuillePointePorteHisto
     id_feuille_pointe_porte        bigint,  -- IDFeuillePointePorte
     pointage                       smallint,  -- Pointage
     datecrea                       timestamp,  -- Datecrea
@@ -348,7 +348,7 @@ CREATE INDEX ix_pgt_feuille_pointe_portehisto_id_feuille_pointe_porte ON divers.
 CREATE INDEX ix_pgt_feuille_pointe_portehisto_modif_date ON divers.pgt_feuille_pointe_portehisto (modif_date);
 
 CREATE TABLE divers.pgt_feuille_pointe_rue (
-    id_feuille_pointe_rue  bigint  NOT NULL,  -- IDFeuillePointeRue
+    id_feuille_pointe_rue  bigint NOT NULL,  -- IDFeuillePointeRue
     id_feuille_pointe      bigint,  -- IDFeuillePointe
     nom_rue                text,  -- NomRue
     date_crea              timestamp,  -- DateCrea
@@ -361,7 +361,7 @@ CREATE INDEX ix_pgt_feuille_pointe_rue_id_feuille_pointe ON divers.pgt_feuille_p
 CREATE INDEX ix_pgt_feuille_pointe_rue_modif_date ON divers.pgt_feuille_pointe_rue (modif_date);
 
 CREATE TABLE divers.pgt_histo_animation (
-    id_histo_animation  bigint  NOT NULL,  -- IDHistoAnimation
+    id_histo_animation  bigint NOT NULL,  -- IDHistoAnimation
     code_animation      varchar(50),  -- CodeAnimation
     date_envoi_sms      date,  -- DateEnvoiSMS
     datecrea            timestamp,  -- Datecrea
@@ -373,7 +373,7 @@ CREATE TABLE divers.pgt_histo_animation (
 CREATE INDEX ix_pgt_histo_animation_modif_date ON divers.pgt_histo_animation (modif_date);
 
 CREATE TABLE divers.pgt_histo_sms (
-    id_histo_sms    bigint  NOT NULL,  -- IDHistoSMS
+    id_histo_sms    bigint NOT NULL,  -- IDHistoSMS
     id_message      varchar(50),  -- IdMessage
     date_envoi      timestamp,  -- dateEnvoi
     destinataire    varchar(15),  -- Destinataire
@@ -397,7 +397,7 @@ CREATE TABLE divers.pgt_histo_sms (
 CREATE INDEX ix_pgt_histo_sms_modif_date ON divers.pgt_histo_sms (modif_date);
 
 CREATE TABLE divers.pgt_identifiant_push (
-    id_identifiant_push               bigint  NOT NULL,  -- IDIdentifiantPush
+    id_identifiant_push               bigint NOT NULL,  -- IDIdentifiantPush
     identifiant_service               varchar(256),  -- IdentifiantService
     type_service                      smallint,  -- TypeService
     id_salarie                        bigint,  -- IDSalarie
@@ -412,7 +412,7 @@ CREATE INDEX ix_pgt_identifiant_push_id_salarie ON divers.pgt_identifiant_push (
 CREATE INDEX ix_pgt_identifiant_push_modif_date ON divers.pgt_identifiant_push (modif_date);
 
 CREATE TABLE divers.pgt_info_exo_new (
-    id_info_exo_new  bigint  NOT NULL,  -- IDInfoExoNew
+    id_info_exo_new  bigint NOT NULL,  -- IDInfoExoNew
     date_jour        date,  -- DateJour
     contenu_info     text,  -- ContenuInfo
     modif_date       timestamp,  -- ModifDate
@@ -425,14 +425,14 @@ CREATE INDEX ix_pgt_info_exo_new_modif_date ON divers.pgt_info_exo_new (modif_da
 
 CREATE TABLE divers.pgt_liste_scanner (
     i_dliste_scanner  bigint,  -- IDlisteScanner
-    nom_reel          varchar(50)  NOT NULL,  -- NomReel
+    nom_reel          varchar(50) NOT NULL,  -- NomReel
     nom_affiche       varchar(50),  -- NomAffiché
     CONSTRAINT pk_pgt_liste_scanner PRIMARY KEY (nom_reel),
     CONSTRAINT uq_pgt_liste_scanner_auto UNIQUE (i_dliste_scanner)
 );
 
 CREATE TABLE divers.pgt_logconnexion (
-    i_dlogconnexion  bigint  NOT NULL,  -- IDlogconnexion
+    i_dlogconnexion  bigint NOT NULL,  -- IDlogconnexion
     date             date,  -- DATE
     heure            time,  -- Heure
     ip               varchar(20),  -- IP
@@ -457,14 +457,14 @@ CREATE TABLE divers.pgt_notificationpush (
     titre_notif           varchar(50),  -- TitreNotif
     modif_date            timestamp,  -- ModifDate
     modif_op              bigint,  -- ModifOp
-    modif_elem            varchar(5),  -- ModifElem
+    modif_elem            varchar(5)  -- ModifElem
 );
 CREATE INDEX ix_pgt_notificationpush_id_salarie ON divers.pgt_notificationpush (id_salarie);
 CREATE INDEX ix_pgt_notificationpush_modif_date ON divers.pgt_notificationpush (modif_date);
 
 CREATE TABLE divers.pgt_parc_it (
     i_dparc_it_auto     bigint,  -- IDparcITAuto
-    i_dparc_it          bigint  NOT NULL,  -- IDparcIT
+    i_dparc_it          bigint NOT NULL,  -- IDparcIT
     num_serie           text,  -- NumSerie
     imei                varchar(50),  -- IMEI
     uuid                text,  -- UUID
@@ -494,7 +494,7 @@ CREATE INDEX ix_pgt_parc_it_id_responsable ON divers.pgt_parc_it (id_responsable
 CREATE INDEX ix_pgt_parc_it_modif_date ON divers.pgt_parc_it (modif_date);
 
 CREATE TABLE divers.pgt_parc_it_partenaire (
-    i_dparc_it_partenaire  bigint  NOT NULL,  -- IDparcIT_Partenaire
+    i_dparc_it_partenaire  bigint NOT NULL,  -- IDparcIT_Partenaire
     id_partenaire          bigint,  -- IDPartenaire
     i_dparc_it             bigint,  -- IDparcIT
     uuid                   text,  -- UUID
@@ -517,7 +517,7 @@ CREATE INDEX ix_pgt_parc_it_partenaire_modif_date ON divers.pgt_parc_it_partenai
 
 CREATE TABLE divers.pgt_parc_itgps (
     i_dparc_itgps_auto  bigint,  -- IDparcITGPSAuto
-    i_dparc_itgps       bigint  NOT NULL,  -- IDparcITGPS
+    i_dparc_itgps       bigint NOT NULL,  -- IDparcITGPS
     i_dparc_it          bigint,  -- IDparcIT
     latitude_deg        double precision,  -- latitude_deg
     longitude_deg       double precision,  -- longitude_deg
@@ -536,7 +536,7 @@ CREATE INDEX ix_pgt_parc_itgps_modif_date ON divers.pgt_parc_itgps (modif_date);
 
 CREATE TABLE divers.pgt_parc_it_perception (
     i_dparc_it_perception_auto  bigint,  -- IDparcITPerceptionAuto
-    i_dparc_it_perception       bigint  NOT NULL,  -- IDparcITPerception
+    i_dparc_it_perception       bigint NOT NULL,  -- IDparcITPerception
     i_dparc_it                  bigint,  -- IDparcIT
     id_salarie                  bigint,  -- IDSalarie
     date_perception             date,  -- DatePerception
@@ -557,7 +557,7 @@ CREATE INDEX ix_pgt_parc_it_perception_modif_date ON divers.pgt_parc_it_percepti
 
 CREATE TABLE divers.pgt_parc_it_perception_resp (
     i_dparc_it_perception_auto  bigint,  -- IDparcITPerceptionAuto
-    i_dparc_it_perception       bigint  NOT NULL,  -- IDparcITPerception
+    i_dparc_it_perception       bigint NOT NULL,  -- IDparcITPerception
     i_dparc_it                  bigint,  -- IDparcIT
     id_salarie                  bigint,  -- IDSalarie
     date_perception             date,  -- DatePerception
@@ -578,7 +578,7 @@ CREATE INDEX ix_pgt_parc_it_perception_resp_modif_date ON divers.pgt_parc_it_per
 
 CREATE TABLE divers.pgt_parc_it_reparation (
     i_dparc_it_reparation_auto  bigint,  -- IDparcITRéparationAuto
-    i_dparc_it_reparation       bigint  NOT NULL,  -- IDparcITRéparation
+    i_dparc_it_reparation       bigint NOT NULL,  -- IDparcITRéparation
     i_dparc_it                  bigint,  -- IDparcIT
     date_reparation             date,  -- dateRéparation
     type_rep                    varchar(50),  -- TypeRép
@@ -594,7 +594,7 @@ CREATE INDEX ix_pgt_parc_it_reparation_i_dparc_it ON divers.pgt_parc_it_reparati
 CREATE INDEX ix_pgt_parc_it_reparation_modif_date ON divers.pgt_parc_it_reparation (modif_date);
 
 CREATE TABLE divers.pgt_podium_mois (
-    id_podium_mois  bigint  NOT NULL,  -- IDPodiumMois
+    id_podium_mois  bigint NOT NULL,  -- IDPodiumMois
     mois            integer,  -- Mois
     annee           varchar(50),  -- Année
     id_podium_type  bigint,  -- IDPodiumType
@@ -609,7 +609,7 @@ CREATE INDEX ix_pgt_podium_mois_id_podium_type ON divers.pgt_podium_mois (id_pod
 CREATE INDEX ix_pgt_podium_mois_modif_date ON divers.pgt_podium_mois (modif_date);
 
 CREATE TABLE divers.pgt_podium_type (
-    id_podium_type   bigint  NOT NULL,  -- IDPodiumType
+    id_podium_type   bigint NOT NULL,  -- IDPodiumType
     lib_podium_type  varchar(50),  -- LibPodiumType
     lib_court        varchar(30),  -- LibCourt
     prod_groupe      boolean,  -- ProdGroupe
@@ -626,7 +626,7 @@ CREATE INDEX ix_pgt_podium_type_modif_date ON divers.pgt_podium_type (modif_date
 
 CREATE TABLE divers.pgt_podium_type_part_option (
     id_podium_type_part_option  bigint,  -- IDPodiumTypePartOption
-    lib_option_vente            varchar(20)  NOT NULL,  -- LibOptionVente
+    lib_option_vente            varchar(20) NOT NULL,  -- LibOptionVente
     prefixe_bdd                 varchar(5),  -- PréfixeBDD
     description                 text,  -- Description
     modif_date                  timestamp,  -- ModifDate
@@ -640,7 +640,7 @@ CREATE INDEX ix_pgt_podium_type_part_option_modif_date ON divers.pgt_podium_type
 
 CREATE TABLE divers.pgt_podium_type_prod (
     id_podium_type_prod  bigint,  -- IDPodiumTypeProd
-    lib_type_prod        varchar(10)  NOT NULL,  -- LibTypeProd
+    lib_type_prod        varchar(10) NOT NULL,  -- LibTypeProd
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOp
     modif_elem           varchar(5),  -- ModifElem
@@ -650,7 +650,7 @@ CREATE TABLE divers.pgt_podium_type_prod (
 CREATE INDEX ix_pgt_podium_type_prod_modif_date ON divers.pgt_podium_type_prod (modif_date);
 
 CREATE TABLE divers.pgt_podium_vendeur (
-    id_podium_vendeur  bigint  NOT NULL,  -- IDPodiumVendeur
+    id_podium_vendeur  bigint NOT NULL,  -- IDPodiumVendeur
     id_podium_type     bigint,  -- IDPodiumType
     date_jour          date,  -- DateJour
     id_salarie         bigint,  -- IDSalarie
@@ -667,7 +667,7 @@ CREATE INDEX ix_pgt_podium_vendeur_id_salarie ON divers.pgt_podium_vendeur (id_s
 CREATE INDEX ix_pgt_podium_vendeur_modif_date ON divers.pgt_podium_vendeur (modif_date);
 
 CREATE TABLE divers.pgt_podium_vendeur_part (
-    id_podium_vendeur_part  bigint  NOT NULL,  -- IDPodiumVendeurPart
+    id_podium_vendeur_part  bigint NOT NULL,  -- IDPodiumVendeurPart
     id_podium_type_part     bigint,  -- IDPodiumTypePart
     id_podium_vendeur       bigint,  -- IDPodiumVendeur
     prefixe_bdd             varchar(5),  -- PréfixeBDD
@@ -685,7 +685,7 @@ CREATE INDEX ix_pgt_podium_vendeur_part_prefixe_bdd ON divers.pgt_podium_vendeur
 CREATE INDEX ix_pgt_podium_vendeur_part_modif_date ON divers.pgt_podium_vendeur_part (modif_date);
 
 CREATE TABLE divers.pgt_process (
-    id_process      bigint  NOT NULL,  -- IDProcess
+    id_process      bigint NOT NULL,  -- IDProcess
     service         varchar(5),  -- Service
     titre           text,  -- Titre
     mots_cles       text,  -- MotsClés
@@ -704,7 +704,7 @@ CREATE INDEX ix_pgt_process_mots_cles ON divers.pgt_process (mots_cles);
 CREATE INDEX ix_pgt_process_modif_date ON divers.pgt_process (modif_date);
 
 CREATE TABLE divers.pgt_process_droit (
-    id_process_droit  bigint  NOT NULL,  -- IDProcessDroit
+    id_process_droit  bigint NOT NULL,  -- IDProcessDroit
     id_process        bigint,  -- IDProcess
     id_salarie        bigint,  -- IDSalarie
     type_profil       varchar(10),  -- TypeProfil
@@ -721,7 +721,7 @@ CREATE INDEX ix_pgt_process_droit_id_ste ON divers.pgt_process_droit (id_ste);
 CREATE INDEX ix_pgt_process_droit_modif_date ON divers.pgt_process_droit (modif_date);
 
 CREATE TABLE divers.pgt_process_fichier (
-    id_process_fichier  bigint  NOT NULL,  -- IDProcessFichier
+    id_process_fichier  bigint NOT NULL,  -- IDProcessFichier
     id_process          bigint,  -- IDProcess
     titre               text,  -- Titre
     date_crea           timestamp,  -- DateCrea
@@ -741,7 +741,7 @@ CREATE INDEX ix_pgt_process_fichier_extension ON divers.pgt_process_fichier (ext
 CREATE INDEX ix_pgt_process_fichier_modif_date ON divers.pgt_process_fichier (modif_date);
 
 CREATE TABLE divers.pgt_productionextractionjob (
-    id_production_extraction_job  bigint  NOT NULL,  -- IDProductionExtractionJob
+    id_production_extraction_job  bigint NOT NULL,  -- IDProductionExtractionJob
     id_salarie_user               bigint,  -- IDSalarieUser
     datecrea                      timestamp,  -- Datecrea
     date_debut_trait              timestamp,  -- DateDebutTrait
@@ -774,13 +774,13 @@ CREATE TABLE divers.pgt_prog_evo_objectifs (
     champ_libre            boolean,  -- ChampLibre
     modif_date             timestamp,  -- ModifDate
     modif_op               bigint,  -- ModifOp
-    modif_elem             varchar(5),  -- ModifElem
+    modif_elem             varchar(5)  -- ModifElem
 );
 CREATE INDEX ix_pgt_prog_evo_objectifs_modif_date ON divers.pgt_prog_evo_objectifs (modif_date);
 
 CREATE TABLE divers.pgt_smsanimation (
     id_sms_animation  bigint,  -- IDSmsAnimation
-    type_sms          varchar(50)  NOT NULL,  -- TypeSMS
+    type_sms          varchar(50) NOT NULL,  -- TypeSMS
     liste_num_staff   text,  -- ListeNumStaff
     is_actif          boolean,  -- IsActif
     CONSTRAINT pk_pgt_smsanimation PRIMARY KEY (type_sms),
@@ -788,7 +788,7 @@ CREATE TABLE divers.pgt_smsanimation (
 );
 
 CREATE TABLE divers.pgt_smsanimation_orgadest (
-    id_sms_animation_orga_dest  bigint  NOT NULL,  -- IDSmsAnimation_OrgaDest
+    id_sms_animation_orga_dest  bigint NOT NULL,  -- IDSmsAnimation_OrgaDest
     idorganigramme              bigint,  -- idorganigramme
     anim_code                   text,  -- AnimCode
     du                          date,  -- DU
@@ -803,7 +803,7 @@ CREATE INDEX ix_pgt_smsanimation_orgadest_idorganigramme ON divers.pgt_smsanimat
 CREATE INDEX ix_pgt_smsanimation_orgadest_modif_date ON divers.pgt_smsanimation_orgadest (modif_date);
 
 CREATE TABLE divers.pgt_sms_animation_orga_periode (
-    id_sms_animation_orga  bigint  NOT NULL,  -- IDSmsAnimation_Orga
+    id_sms_animation_orga  bigint NOT NULL,  -- IDSmsAnimation_Orga
     type                   varchar(20),  -- Type
     idorganigramme         bigint,  -- idorganigramme
     is_actif               boolean,  -- IsActif
@@ -819,7 +819,7 @@ CREATE INDEX ix_pgt_sms_animation_orga_periode_idorganigramme ON divers.pgt_sms_
 CREATE INDEX ix_pgt_sms_animation_orga_periode_modif_date ON divers.pgt_sms_animation_orga_periode (modif_date);
 
 CREATE TABLE divers.pgt_smsanimation_regleenvoi (
-    id_sms_animation_regle_envoi  bigint  NOT NULL,  -- IDSmsAnimation_RegleEnvoi
+    id_sms_animation_regle_envoi  bigint NOT NULL,  -- IDSmsAnimation_RegleEnvoi
     type_sms                      varchar(50),  -- TypeSMS
     code_animation                varchar(50),  -- CodeAnimation
     texte_sms                     text,  -- TexteSMS
@@ -843,7 +843,7 @@ CREATE INDEX ix_pgt_smsanimation_regleenvoi_modif_date ON divers.pgt_smsanimatio
 
 CREATE TABLE divers.pgt_suivi_projet (
     i_dsuivi_projet_auto       bigint,  -- IDsuiviProjetAuto
-    i_dsuivi_projet            bigint  NOT NULL,  -- IDsuiviProjet
+    i_dsuivi_projet            bigint NOT NULL,  -- IDsuiviProjet
     id_type_tache              smallint,  -- IDTypeTache
     element                    varchar(50),  -- Element
     id_suivi_projet_etiquette  bigint,  -- IDSuiviProjet_Etiquette
@@ -863,7 +863,7 @@ CREATE INDEX ix_pgt_suivi_projet_id_parent ON divers.pgt_suivi_projet (id_parent
 CREATE INDEX ix_pgt_suivi_projet_modif_date ON divers.pgt_suivi_projet (modif_date);
 
 CREATE TABLE divers.pgt_suivi_projet_comment (
-    i_dsuivi_projet_comment  bigint  NOT NULL,  -- IDsuiviProjet_Comment
+    i_dsuivi_projet_comment  bigint NOT NULL,  -- IDsuiviProjet_Comment
     i_dsuivi_projet          bigint,  -- IDsuiviProjet
     id_salarie               bigint,  -- IDSalarie
     id_projet                bigint,  -- IDProjet
@@ -882,7 +882,7 @@ CREATE INDEX ix_pgt_suivi_projet_comment_modif_date ON divers.pgt_suivi_projet_c
 
 CREATE TABLE divers.pgt_suivi_projet_etiquette (
     id_suivi_projet_etiquette_auto  bigint,  -- IDSuiviProjet_EtiquetteAuto
-    id_suivi_projet_etiquette       bigint  NOT NULL,  -- IDSuiviProjet_Etiquette
+    id_suivi_projet_etiquette       bigint NOT NULL,  -- IDSuiviProjet_Etiquette
     lib_etiquette                   varchar(50),  -- LibEtiquette
     i_dsuivi_projet                 bigint,  -- IDsuiviProjet
     couleur                         integer,  -- Couleur
@@ -896,7 +896,7 @@ CREATE INDEX ix_pgt_suivi_projet_etiquette_i_dsuivi_projet ON divers.pgt_suivi_p
 CREATE INDEX ix_pgt_suivi_projet_etiquette_modif_date ON divers.pgt_suivi_projet_etiquette (modif_date);
 
 CREATE TABLE divers.pgt_suivi_projet_ope (
-    i_dsuivi_projet_ope  bigint  NOT NULL,  -- IDsuiviProjet_Opé
+    i_dsuivi_projet_ope  bigint NOT NULL,  -- IDsuiviProjet_Opé
     i_dsuivi_projet      bigint,  -- IDsuiviProjet
     id_salarie           bigint,  -- IDSalarie
     modif_date           timestamp,  -- ModifDate
@@ -910,7 +910,7 @@ CREATE INDEX ix_pgt_suivi_projet_ope_modif_date ON divers.pgt_suivi_projet_ope (
 
 CREATE TABLE divers.pgt_suivi_ticket_call (
     id_suivi_ticket_call  bigint,  -- IDSuiviTicketCall
-    type_call             varchar(5)  NOT NULL,  -- TypeCall
+    type_call             varchar(5) NOT NULL,  -- TypeCall
     id_encours            text,  -- IdEncours
     id_appel_en_cours     text,  -- IdAppelEnCours
     der_modif             timestamp,  -- DerModif
@@ -919,7 +919,7 @@ CREATE TABLE divers.pgt_suivi_ticket_call (
 );
 
 CREATE TABLE divers.pgt_tache_it (
-    id_tache_it        bigint  NOT NULL,  -- IDTacheIT
+    id_tache_it        bigint NOT NULL,  -- IDTacheIT
     i_dsuivi_projet    bigint,  -- IDsuiviProjet
     id_type_tache      smallint,  -- IDTypeTache
     conf               varchar(50),  -- Conf
@@ -948,7 +948,7 @@ CREATE INDEX ix_pgt_tache_it_id_type_statut ON divers.pgt_tache_it (id_type_stat
 CREATE INDEX ix_pgt_tache_it_id_dialogues ON divers.pgt_tache_it (id_dialogues);
 
 CREATE TABLE divers.pgt_tache_it_fichiers (
-    id_tache_it_fichiers  bigint  NOT NULL,  -- IDTacheIT_Fichiers
+    id_tache_it_fichiers  bigint NOT NULL,  -- IDTacheIT_Fichiers
     id_tache_it           bigint,  -- IDTacheIT
     nom_fichier           text,  -- NomFichier
     taille_fic            bigint,  -- TailleFic
@@ -962,7 +962,7 @@ CREATE INDEX ix_pgt_tache_it_fichiers_modif_date ON divers.pgt_tache_it_fichiers
 
 CREATE TABLE divers.pgt_tache_it_planning (
     id_tache_it_planning_auto  bigint,  -- IDTacheIT_PlanningAuto
-    id_tache_it_planning       bigint  NOT NULL,  -- IDTacheIT_Planning
+    id_tache_it_planning       bigint NOT NULL,  -- IDTacheIT_Planning
     id_tache_it                bigint,  -- IDTacheIT
     id_salarie                 bigint,  -- IDSalarie
     date_debut                 timestamp,  -- DateDébut
@@ -981,7 +981,7 @@ CREATE INDEX ix_pgt_tache_it_planning_date_debut ON divers.pgt_tache_it_planning
 CREATE INDEX ix_pgt_tache_it_planning_modif_date ON divers.pgt_tache_it_planning (modif_date);
 
 CREATE TABLE divers.pgt_tache_it_recurrence (
-    id_tache_it_recurrence  bigint  NOT NULL,  -- IDTacheITRecurrence
+    id_tache_it_recurrence  bigint NOT NULL,  -- IDTacheITRecurrence
     id_tache_it             bigint,  -- IDTacheIT
     op_crea                 bigint,  -- OPCREA
     datecrea                timestamp,  -- Datecrea
@@ -999,7 +999,7 @@ CREATE INDEX ix_pgt_tache_it_recurrence_modif_date ON divers.pgt_tache_it_recurr
 
 CREATE TABLE divers.pgt_type_statut (
     id_type_statut_auto  bigint,  -- IDTypeStatutAuto
-    id_type_statut       smallint  NOT NULL,  -- IDTypeStatut
+    id_type_statut       smallint NOT NULL,  -- IDTypeStatut
     lib_statut           varchar(30),  -- Lib_Statut
     couleur_statut       integer,  -- CouleurStatut
     ordre_affichage      smallint,  -- OrdreAffichage
@@ -1013,7 +1013,7 @@ CREATE INDEX ix_pgt_type_statut_modif_date ON divers.pgt_type_statut (modif_date
 
 CREATE TABLE divers.pgt_type_tache (
     id_type_tache_auto  bigint,  -- IDTypeTacheAuto
-    id_type_tache       smallint  NOT NULL,  -- IDTypeTache
+    id_type_tache       smallint NOT NULL,  -- IDTypeTache
     lib_tache           varchar(50),  -- Lib_Tache
     couleur_tache       integer,  -- CouleurTache
     ordre_affichage     smallint,  -- OrdreAffichage
@@ -1027,7 +1027,7 @@ CREATE INDEX ix_pgt_type_tache_modif_date ON divers.pgt_type_tache (modif_date);
 
 CREATE TABLE divers.pgt_uuid_connexion (
     id_uuid_connexion_auto  bigint,  -- IDUUID_connexionAuto
-    id_salarie              bigint  NOT NULL,  -- IDSalarie
+    id_salarie              bigint NOT NULL,  -- IDSalarie
     id_uuid_connexion       varchar(64),  -- IDUUID_connexion
     CONSTRAINT pk_pgt_uuid_connexion PRIMARY KEY (id_salarie),
     CONSTRAINT uq_pgt_uuid_connexion_auto UNIQUE (id_uuid_connexion_auto)

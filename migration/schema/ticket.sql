@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS ticket;
 
 CREATE TABLE ticket.pgt_tk_histo (
     id_tk_histo_auto  bigint,  -- IDTK_HistoAuto
-    id_tk_histo       bigint  NOT NULL,  -- IDTK_Histo
+    id_tk_histo       bigint NOT NULL,  -- IDTK_Histo
     id_tk_liste       bigint,  -- IDTK_Liste
     operateur         bigint,  -- operateur
     date_histo        timestamp,  -- dateHisto
@@ -20,7 +20,7 @@ CREATE INDEX ix_pgt_tk_histo_id_tk_statut ON ticket.pgt_tk_histo (id_tk_statut);
 CREATE INDEX ix_pgt_tk_histo_modif_date ON ticket.pgt_tk_histo (modif_date);
 
 CREATE TABLE ticket.pgt_tk_liste (
-    id_tk_liste             bigint  NOT NULL,  -- IDTK_Liste
+    id_tk_liste             bigint NOT NULL,  -- IDTK_Liste
     date_crea               timestamp,  -- DATECREA
     op_crea                 bigint,  -- OPCREA
     service                 varchar(5),  -- Service
@@ -53,7 +53,7 @@ CREATE INDEX ix_pgt_tk_liste_modif_date ON ticket.pgt_tk_liste (modif_date);
 CREATE INDEX ix_pgt_tk_liste_op_dest ON ticket.pgt_tk_liste (op_dest);
 
 CREATE TABLE ticket.pgt_tk_service_organigramme (
-    id_tk_service_organigramme  bigint  NOT NULL,  -- IDTK_ServiceOrganigramme
+    id_tk_service_organigramme  bigint NOT NULL,  -- IDTK_ServiceOrganigramme
     service                     varchar(5),  -- Service
     idorganigramme              bigint,  -- idorganigramme
     modif_date                  timestamp,  -- ModifDate
@@ -65,7 +65,7 @@ CREATE INDEX ix_pgt_tk_service_organigramme_modif_date ON ticket.pgt_tk_service_
 
 CREATE TABLE ticket.pgt_tk_statut (
     id_tk_statut_auto  bigint,  -- IDTK_StatutAuto
-    id_tk_statut       bigint  NOT NULL,  -- IDTK_Statut
+    id_tk_statut       bigint NOT NULL,  -- IDTK_Statut
     lib_statut         varchar(30),  -- Lib_Statut
     modif_date         timestamp,  -- ModifDate
     modif_op           bigint,  -- ModifOP
@@ -76,7 +76,7 @@ CREATE TABLE ticket.pgt_tk_statut (
 CREATE INDEX ix_pgt_tk_statut_modif_date ON ticket.pgt_tk_statut (modif_date);
 
 CREATE TABLE ticket.pgt_tk_type_demande (
-    id_tk_type_demande       bigint  NOT NULL,  -- IDTK_TypeDemande
+    id_tk_type_demande       bigint NOT NULL,  -- IDTK_TypeDemande
     service                  varchar(5),  -- Service
     lib_type_demande         text,  -- Lib_TypeDemande
     modif_date               timestamp,  -- ModifDate

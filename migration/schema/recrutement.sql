@@ -2,7 +2,7 @@ CREATE SCHEMA IF NOT EXISTS recrutement;
 
 
 CREATE TABLE recrutement.pgt_agenda_categorie (
-    id_agenda_categorie       bigint  NOT NULL,  -- IDAgendaCatégorie
+    id_agenda_categorie       bigint NOT NULL,  -- IDAgendaCatégorie
     lib_categorie             text,  -- Lib_Catégorie
     couleur_r                 integer,  -- CouleurR
     couleur_v                 integer,  -- CouleurV
@@ -23,7 +23,7 @@ CREATE TABLE recrutement.pgt_agenda_evenement (
     id_cv_suivi               bigint,  -- IDCvSuivi
     id_tk_liste               bigint,  -- IDTK_Liste
     id_salarie                bigint,  -- IDSalarie
-    id_agenda_evenement       bigint  NOT NULL,  -- IDAgendaEvénement
+    id_agenda_evenement       bigint NOT NULL,  -- IDAgendaEvénement
     titre                     text,  -- Titre
     contenu                   text,  -- Contenu
     date_debut                timestamp,  -- DateDébut
@@ -56,7 +56,7 @@ CREATE INDEX ix_pgt_agenda_evenement_i_dprevision_recrut ON recrutement.pgt_agen
 
 CREATE TABLE recrutement.pgt_annuaire (
     i_dcv_lieu_rdv                    bigint,  -- IDcvLieuRdv
-    i_dannuaire                       bigint  NOT NULL,  -- IDannuaire
+    i_dannuaire                       bigint NOT NULL,  -- IDannuaire
     i_dannuaire_auto                  bigint,  -- IDannuaireAuto
     intitule                          text,  -- Intitulé
     detail                            text,  -- Détail
@@ -93,7 +93,7 @@ CREATE INDEX ix_pgt_annuaire_id_communes_france ON recrutement.pgt_annuaire (id_
 
 CREATE TABLE recrutement.pgt_cv_annonceur (
     id_cv_annonceur_auto  bigint,  -- IDCvAnnonceurAuto
-    id_cv_annonceur       bigint  NOT NULL,  -- IDCvAnnonceur
+    id_cv_annonceur       bigint NOT NULL,  -- IDCvAnnonceur
     lib_annonceur         varchar(50),  -- Lib_Annonceur
     logo                  bytea,  -- Logo
     is_actif              boolean,  -- IsActif
@@ -109,7 +109,7 @@ CREATE INDEX ix_pgt_cv_annonceur_modif_date ON recrutement.pgt_cv_annonceur (mod
 
 CREATE TABLE recrutement.pgt_cv_lieu_rdv (
     id_cv_lieu_rdv_auto  bigint,  -- IDCvLieuRdvAuto
-    i_dcv_lieu_rdv       bigint  NOT NULL,  -- IDcvLieuRdv
+    i_dcv_lieu_rdv       bigint NOT NULL,  -- IDcvLieuRdv
     lib_lieu             varchar(50),  -- Lib_Lieu
     adresse1             text,  -- ADRESSE1
     adresse2             text,  -- ADRESSE2
@@ -130,7 +130,7 @@ CREATE INDEX ix_pgt_cv_lieu_rdv_modif_date ON recrutement.pgt_cv_lieu_rdv (modif
 
 CREATE TABLE recrutement.pgt_cvposte (
     id_cv_poste_auto  bigint,  -- IDCvPosteAuto
-    i_dcvposte        bigint  NOT NULL,  -- IDcvposte
+    i_dcvposte        bigint NOT NULL,  -- IDcvposte
     lib_poste         varchar(30),  -- Lib_Poste
     is_actif          boolean,  -- IsActif
     modif_date        timestamp,  -- ModifDate
@@ -144,7 +144,7 @@ CREATE INDEX ix_pgt_cvposte_modif_date ON recrutement.pgt_cvposte (modif_date);
 
 CREATE TABLE recrutement.pgt_cv_source (
     id_cv_source_auto  bigint,  -- IDCvSourceAuto
-    i_dcvsource        bigint  NOT NULL,  -- IDcvsource
+    i_dcvsource        bigint NOT NULL,  -- IDcvsource
     lib_source         varchar(30),  -- Lib_Source
     is_actif           boolean,  -- IsActif
     modif_date         timestamp,  -- ModifDate
@@ -158,7 +158,7 @@ CREATE INDEX ix_pgt_cv_source_modif_date ON recrutement.pgt_cv_source (modif_dat
 
 CREATE TABLE recrutement.pgt_cvstatut (
     id_cv_statut_auto  bigint,  -- IDCvStatutAuto
-    id_cv_statut       bigint  NOT NULL,  -- IdCvStatut
+    id_cv_statut       bigint NOT NULL,  -- IdCvStatut
     lib_statut         varchar(30),  -- LibStatut
     icone              bytea,  -- Icone
     modif_date         timestamp,  -- ModifDate
@@ -170,7 +170,7 @@ CREATE TABLE recrutement.pgt_cvstatut (
 CREATE INDEX ix_pgt_cvstatut_modif_date ON recrutement.pgt_cvstatut (modif_date);
 
 CREATE TABLE recrutement.pgt_cvsuivi (
-    id_cv_suivi                                          bigint  NOT NULL,  -- IDCvSuivi
+    id_cv_suivi                                          bigint NOT NULL,  -- IDCvSuivi
     i_dcvtheque                                          bigint,  -- IDcvtheque
     datecrea                                             timestamp,  -- Datecrea
     op_crea                                              bigint,  -- OPCREA
@@ -190,7 +190,7 @@ CREATE INDEX ix_pgt_cvsuivi_modif_date ON recrutement.pgt_cvsuivi (modif_date);
 
 CREATE TABLE recrutement.pgt_cvtheque (
     i_dcvtheque_auto    bigint,  -- IDcvthequeAuto
-    i_dcvtheque         bigint  NOT NULL,  -- IDcvtheque
+    i_dcvtheque         bigint NOT NULL,  -- IDcvtheque
     origine             smallint,  -- Origine
     nom                 text,  -- NOM
     pays                text,  -- PAYS
@@ -257,7 +257,7 @@ CREATE TABLE recrutement.pgt_cvtheque_temporaire (
     gsm                 text,  -- GSM
     observ              text,  -- OBSERV
     modif_elem          varchar(5),  -- ModifELEM
-    i_dcvtheque_auto    bigint  NOT NULL,  -- IDcvthequeAuto
+    i_dcvtheque_auto    bigint NOT NULL,  -- IDcvthequeAuto
     id_communes_france  bigint,  -- IDCommunesFrance
     cp                  varchar(5),  -- CP
     ville               text,  -- VILLE
@@ -279,7 +279,7 @@ CREATE INDEX ix_pgt_cvtheque_temporaire_id_communes_france ON recrutement.pgt_cv
 
 CREATE TABLE recrutement.pgt_mail_refus_rh (
     id_mail_refus_rh     bigint,  -- IDMailRefusRH
-    id_agenda_evenement  bigint  NOT NULL,  -- IDAgendaEvénement
+    id_agenda_evenement  bigint NOT NULL,  -- IDAgendaEvénement
     date_envoi           timestamp,  -- dateEnvoi
     contenu_mail         text,  -- ContenuMail
     mail_dest            text,  -- MailDest
@@ -291,7 +291,7 @@ CREATE TABLE recrutement.pgt_mails_rh_cv (
     srv_entrant     text,  -- Srv_entrant
     num_port        integer,  -- NumPort
     type_srv        varchar(10),  -- TYPE_Srv
-    adr_mail_rh     text  NOT NULL,  -- AdrMailRH
+    adr_mail_rh     text NOT NULL,  -- AdrMailRH
     mdp             text,  -- MDP
     modif_op        bigint,  -- ModifOP
     modif_date      timestamp,  -- ModifDate
@@ -310,7 +310,7 @@ CREATE INDEX ix_pgt_mails_rh_cv_id_cv_poste ON recrutement.pgt_mails_rh_cv (id_c
 
 CREATE TABLE recrutement.pgt_portail_partenaire (
     i_dportail_partenaire_auto  bigint,  -- IDportailPartenaireAuto
-    i_dportail_partenaire       bigint  NOT NULL,  -- IDportailPartenaire
+    i_dportail_partenaire       bigint NOT NULL,  -- IDportailPartenaire
     id_partenaire               bigint,  -- IDPartenaire
     lien_portail                text,  -- LienPortail
     login                       text,  -- LOGIN
@@ -332,7 +332,7 @@ CREATE INDEX ix_pgt_portail_partenaire_modif_date ON recrutement.pgt_portail_par
 CREATE TABLE recrutement.pgt_prev_recrut (
     i_dcv_lieu_rdv            bigint,  -- IDcvLieuRdv
     i_dprev_recrut_etat       bigint,  -- IDprevRecrutEtat
-    i_dprevision_recrut       bigint  NOT NULL,  -- IDprevisionRecrut
+    i_dprevision_recrut       bigint NOT NULL,  -- IDprevisionRecrut
     idorganigramme            bigint,  -- idorganigramme
     date_debut                date,  -- DateDébut
     date_fin                  date,  -- DateFin
@@ -371,7 +371,7 @@ CREATE INDEX ix_pgt_prev_recrut_id_communes_france ON recrutement.pgt_prev_recru
 
 CREATE TABLE recrutement.pgt_prev_recrut_etat (
     i_dprev_recrut_etat_auto  bigint,  -- IDprevRecrutEtatAuto
-    i_dprev_recrut_etat       bigint  NOT NULL,  -- IDprevRecrutEtat
+    i_dprev_recrut_etat       bigint NOT NULL,  -- IDprevRecrutEtat
     lib_etat                  text,  -- Lib_Etat
     contenu_mail              text,  -- ContenuMail
     modif_date                timestamp,  -- ModifDate
@@ -385,7 +385,7 @@ CREATE INDEX ix_pgt_prev_recrut_etat_modif_date ON recrutement.pgt_prev_recrut_e
 
 CREATE TABLE recrutement.pgt_salon_visio (
     id_salon_visio_auto  bigint,  -- IDSalonVisioAuto
-    id_salon_visio       bigint  NOT NULL,  -- IDSalonVisio
+    id_salon_visio       bigint NOT NULL,  -- IDSalonVisio
     id_salarie           bigint,  -- IDSalarie
     id_type_salon_visio  bigint,  -- IDTypeSalonVisio
     lien_salon           text,  -- LienSalon
@@ -403,7 +403,7 @@ CREATE INDEX ix_pgt_salon_visio_modif_date ON recrutement.pgt_salon_visio (modif
 
 CREATE TABLE recrutement.pgt_type_salon_visio (
     id_type_salon_visio_auto  bigint,  -- IDTypeSalonVisioAuto
-    id_type_salon_visio       bigint  NOT NULL,  -- IDTypeSalonVisio
+    id_type_salon_visio       bigint NOT NULL,  -- IDTypeSalonVisio
     lib_salon                 varchar(30),  -- Lib_Salon
     is_actif                  boolean,  -- IsActif
     modif_date                timestamp,  -- ModifDate

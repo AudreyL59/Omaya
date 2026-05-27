@@ -2,7 +2,7 @@ CREATE SCHEMA IF NOT EXISTS ticket_bo;
 
 
 CREATE TABLE ticket_bo.pgt_tk_call (
-    i_dtk_call                bigint  NOT NULL,  -- IDtk_Call
+    i_dtk_call                bigint NOT NULL,  -- IDtk_Call
     id_tk_liste               bigint,  -- IDTK_Liste
     id_salarie                bigint,  -- IDSalarie
     nom_client                text,  -- NomClient
@@ -48,7 +48,7 @@ CREATE INDEX ix_pgt_tk_call_appel_en_cours ON ticket_bo.pgt_tk_call (appel_en_co
 CREATE INDEX ix_pgt_tk_call_i_dclient ON ticket_bo.pgt_tk_call (i_dclient);
 
 CREATE TABLE ticket_bo.pgt_tk_call_panier (
-    id_tk_call_panier           bigint  NOT NULL,  -- IDTK_Call_Panier
+    id_tk_call_panier           bigint NOT NULL,  -- IDTK_Call_Panier
     i_dtk_call                  bigint,  -- IDtk_Call
     id_tk_liste                 bigint,  -- IDTK_Liste
     i_dproduit                  integer,  -- IDproduit
@@ -96,7 +96,7 @@ CREATE INDEX ix_pgt_tk_call_panier_num_bs ON ticket_bo.pgt_tk_call_panier (num_b
 CREATE INDEX ix_pgt_tk_call_panier_modif_date ON ticket_bo.pgt_tk_call_panier (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr (
-    i_dtk_call                bigint  NOT NULL,  -- IDtk_Call
+    i_dtk_call                bigint NOT NULL,  -- IDtk_Call
     id_tk_liste               bigint,  -- IDTK_Liste
     id_salarie                bigint,  -- IDSalarie
     nom_client                text,  -- NomClient
@@ -157,7 +157,7 @@ CREATE TABLE ticket_bo.pgt_tk_call_sfr_panier (
     modif_elem                  varchar(5),  -- ModifELEM
     test_eligibilite            bytea,  -- TestEligibilité
     motif_annulation            text,  -- MotifAnnulation
-    id_tk_call_sfr_panier       bigint  NOT NULL,  -- IDTK_CallSFR_Panier
+    id_tk_call_sfr_panier       bigint NOT NULL,  -- IDTK_CallSFR_Panier
     statut_prod                 smallint,  -- StatutProd
     id_tk_call_sfr_panier_auto  bigint,  -- IDTK_CallSFR_PanierAuto
     num_date_saisie             timestamp,  -- Num_DateSaisie
@@ -174,7 +174,7 @@ CREATE INDEX ix_pgt_tk_call_sfr_panier_type ON ticket_bo.pgt_tk_call_sfr_panier 
 CREATE INDEX ix_pgt_tk_call_sfr_panier_modif_date ON ticket_bo.pgt_tk_call_sfr_panier (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr_ret_ko (
-    id_tk_call_sfr_ret_racc  bigint  NOT NULL,  -- IDTK_CallSFR_RetRacc
+    id_tk_call_sfr_ret_racc  bigint NOT NULL,  -- IDTK_CallSFR_RetRacc
     id_tk_liste              bigint,  -- IDTK_Liste
     i_dcontrat               bigint,  -- IDcontrat
     ope_traitement           bigint,  -- OpéTraitement
@@ -189,7 +189,7 @@ CREATE INDEX ix_pgt_tk_call_sfr_ret_ko_ope_traitement ON ticket_bo.pgt_tk_call_s
 CREATE INDEX ix_pgt_tk_call_sfr_ret_ko_modif_date ON ticket_bo.pgt_tk_call_sfr_ret_ko (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr_ret_racc (
-    id_tk_call_sfr_ret_racc  bigint  NOT NULL,  -- IDTK_CallSFR_RetRacc
+    id_tk_call_sfr_ret_racc  bigint NOT NULL,  -- IDTK_CallSFR_RetRacc
     id_tk_liste              bigint,  -- IDTK_Liste
     i_dcontrat               bigint,  -- IDcontrat
     id_etat_call_ret         smallint,  -- IDEtatCallRet
@@ -207,7 +207,7 @@ CREATE INDEX ix_pgt_tk_call_sfr_ret_racc_ope_traitement ON ticket_bo.pgt_tk_call
 CREATE INDEX ix_pgt_tk_call_sfr_ret_racc_modif_date ON ticket_bo.pgt_tk_call_sfr_ret_racc (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr_ret_rdv_tech (
-    id_tk_call_sfr_ret_rdv_tech  bigint  NOT NULL,  -- IDTK_CallSFR_RetRDVTech
+    id_tk_call_sfr_ret_rdv_tech  bigint NOT NULL,  -- IDTK_CallSFR_RetRDVTech
     id_tk_liste                  bigint,  -- IDTK_Liste
     i_dcontrat                   bigint,  -- IDcontrat
     nouvelle_date_rdv            date,  -- NouvelleDateRDV
@@ -225,7 +225,7 @@ CREATE INDEX ix_pgt_tk_call_sfr_ret_rdv_tech_ope_traitement ON ticket_bo.pgt_tk_
 CREATE INDEX ix_pgt_tk_call_sfr_ret_rdv_tech_modif_date ON ticket_bo.pgt_tk_call_sfr_ret_rdv_tech (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr_ret_vente_add (
-    id_tk_call_sfr_ret_vente_add  bigint  NOT NULL,  -- IDTK_CallSFR_RetVenteADD
+    id_tk_call_sfr_ret_vente_add  bigint NOT NULL,  -- IDTK_CallSFR_RetVenteADD
     id_tk_liste                   bigint,  -- IDTK_Liste
     i_dcontrat                    bigint,  -- IDcontrat
     num_bs                        text,  -- NumBS
@@ -246,13 +246,13 @@ CREATE TABLE ticket_bo.pgt_tk_callsfr_typeanomalie (
     lib_type_anomalie             text,  -- LibTypeAnomalie
     modif_date                    timestamp,  -- ModifDate
     modif_op                      bigint,  -- ModifOP
-    modif_elem                    varchar(5),  -- ModifELEM
+    modif_elem                    varchar(5)  -- ModifELEM
 );
 CREATE INDEX ix_pgt_tk_callsfr_typeanomalie_modif_date ON ticket_bo.pgt_tk_callsfr_typeanomalie (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_demande_avance (
     id_tk_demande_avance_auto  bigint,  -- IDTK_DemandeAvanceAuto
-    id_tk_demande_avance       bigint  NOT NULL,  -- IDTK_DemandeAvance
+    id_tk_demande_avance       bigint NOT NULL,  -- IDTK_DemandeAvance
     id_tk_liste                bigint,  -- IDTK_Liste
     beneficiaire               bigint,  -- Bénéficiaire
     montant                    numeric(19,4),  -- Montant
@@ -271,7 +271,7 @@ CREATE INDEX ix_pgt_tk_demande_avance_modif_date ON ticket_bo.pgt_tk_demande_ava
 
 CREATE TABLE ticket_bo.pgt_tk_demande_carte_pro (
     id_tk_demande_carte_pro_auto  bigint,  -- IDTK_DemandeCartePROAuto
-    id_tk_demande_carte_pro       bigint  NOT NULL,  -- IDTK_DemandeCartePRO
+    id_tk_demande_carte_pro       bigint NOT NULL,  -- IDTK_DemandeCartePRO
     id_tk_liste                   bigint,  -- IDTK_Liste
     id_salarie                    bigint,  -- IDSalarie
     photo                         bytea,  -- PHOTO
@@ -289,7 +289,7 @@ CREATE INDEX ix_pgt_tk_demande_carte_pro_id_salarie ON ticket_bo.pgt_tk_demande_
 CREATE INDEX ix_pgt_tk_demande_carte_pro_modif_date ON ticket_bo.pgt_tk_demande_carte_pro (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_demande_code_vendeur (
-    id_tk_demande_code_vendeur  bigint  NOT NULL,  -- IDTK_DemandeCodeVendeur
+    id_tk_demande_code_vendeur  bigint NOT NULL,  -- IDTK_DemandeCodeVendeur
     id_tk_liste                 bigint,  -- IDTK_Liste
     type_ori                    varchar(5),  -- TypeOri
     id_elem                     bigint,  -- IDElem
@@ -311,7 +311,7 @@ CREATE INDEX ix_pgt_tk_demande_code_vendeur_login ON ticket_bo.pgt_tk_demande_co
 CREATE INDEX ix_pgt_tk_demande_code_vendeur_modif_date ON ticket_bo.pgt_tk_demande_code_vendeur (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_demandecodevendeur_fichier (
-    id_tk_demande_code_vendeur_fichier  bigint  NOT NULL,  -- IDTK_DemandeCodeVendeur_Fichier
+    id_tk_demande_code_vendeur_fichier  bigint NOT NULL,  -- IDTK_DemandeCodeVendeur_Fichier
     id_tk_demande_code_vendeur          bigint,  -- IDTK_DemandeCodeVendeur
     id_tk_liste                         bigint,  -- IDTK_Liste
     lien_fichier                        text,  -- LienFichier
@@ -327,7 +327,7 @@ CREATE INDEX ix_pgt_tk_demandecodevendeur_fichier_modif_date ON ticket_bo.pgt_tk
 
 CREATE TABLE ticket_bo.pgt_tk_demande_ctt_courtage (
     i_ddemande_contrat_w_auto  bigint,  -- IDdemandeContratWAuto
-    i_ddemande_contrat_w       bigint  NOT NULL,  -- IDdemandeContratW
+    i_ddemande_contrat_w       bigint NOT NULL,  -- IDdemandeContratW
     id_tk_liste                bigint,  -- IDTK_Liste
     idorganigramme             bigint,  -- idorganigramme
     i_dsociete_doc_courtage    bigint,  -- IDsociete_docCourtage
@@ -362,7 +362,7 @@ CREATE INDEX ix_pgt_tk_demande_ctt_courtage_contrat_signe ON ticket_bo.pgt_tk_de
 CREATE INDEX ix_pgt_tk_demande_ctt_courtage_modif_date ON ticket_bo.pgt_tk_demande_ctt_courtage (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_demande_doc_distrib (
-    id_tk_demande_doc_distrib  bigint  NOT NULL,  -- IDTK_DemandeDocDistrib
+    id_tk_demande_doc_distrib  bigint NOT NULL,  -- IDTK_DemandeDocDistrib
     id_tk_liste                bigint,  -- IDTK_Liste
     id_doc_distrib             bigint,  -- IDDoc_Distrib
     lien_fichier               text,  -- LienFichier
@@ -378,7 +378,7 @@ CREATE INDEX ix_pgt_tk_demande_doc_distrib_modif_date ON ticket_bo.pgt_tk_demand
 
 CREATE TABLE ticket_bo.pgt_tk_demande_dpae_distrib (
     id_tk_demande_dpae_distrib_auto  bigint,  -- IDTK_DemandeDPAE_DistribAuto
-    id_tk_demande_dpae_distrib       bigint  NOT NULL,  -- IDTK_DemandeDPAE_Distrib
+    id_tk_demande_dpae_distrib       bigint NOT NULL,  -- IDTK_DemandeDPAE_Distrib
     id_tk_liste                      bigint,  -- IDTK_Liste
     op_crea                          bigint,  -- OPCrea
     date_crea                        timestamp,  -- dateCrea
@@ -421,7 +421,7 @@ CREATE INDEX ix_pgt_tk_demande_dpae_distrib_modif_date ON ticket_bo.pgt_tk_deman
 
 CREATE TABLE ticket_bo.pgt_tk_demande_dpae_distrib_photo (
     id_tk_demande_dpae_photo_auto  bigint,  -- IDTK_DemandeDPAEPhotoAuto
-    id_tk_demande_dpae_photo       bigint  NOT NULL,  -- IDTK_DemandeDPAEPhoto
+    id_tk_demande_dpae_photo       bigint NOT NULL,  -- IDTK_DemandeDPAEPhoto
     id_tk_demande_dpae             bigint,  -- IDTK_DemandeDPAE
     id_tk_type_photo_dpae          bigint,  -- IDTK_TypePhotoDPAE
     id_tk_liste                    bigint,  -- IDTK_Liste
@@ -444,7 +444,7 @@ CREATE INDEX ix_pgt_tk_demande_dpae_distrib_photo_modif_date ON ticket_bo.pgt_tk
 
 CREATE TABLE ticket_bo.pgt_tk_demande_envoi_tablette (
     id_tk_demande_envoi_tablette_auto  bigint,  -- IDTK_DemandeEnvoiTabletteAuto
-    id_tk_demande_envoi_tablette       bigint  NOT NULL,  -- IDTK_DemandeEnvoiTablette
+    id_tk_demande_envoi_tablette       bigint NOT NULL,  -- IDTK_DemandeEnvoiTablette
     id_tk_demande_fourniture           bigint,  -- IDTK_DemandeFourniture
     i_dparc_it                         bigint,  -- IDparcIT
     id_salarie                         bigint,  -- IDSalarie
@@ -463,7 +463,7 @@ CREATE INDEX ix_pgt_tk_demande_envoi_tablette_modif_date ON ticket_bo.pgt_tk_dem
 
 CREATE TABLE ticket_bo.pgt_tk_demande_facturation (
     id_commande                        bigint,  -- IDCommande
-    id_tk_demande_facturation_distrib  bigint  NOT NULL,  -- IDTK_DemandeFacturationDistrib
+    id_tk_demande_facturation_distrib  bigint NOT NULL,  -- IDTK_DemandeFacturationDistrib
     id_tk_liste                        bigint,  -- IDTK_Liste
     fic_facture                        text,  -- FicFacture
     fic_preuve_virement                text,  -- FicPreuveVirement
@@ -483,7 +483,7 @@ CREATE INDEX ix_pgt_tk_demande_facturation_id_tk_liste ON ticket_bo.pgt_tk_deman
 CREATE INDEX ix_pgt_tk_demande_facturation_modif_date ON ticket_bo.pgt_tk_demande_facturation (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_demande_facturation_distrib (
-    id_tk_demande_facturation_distrib  bigint  NOT NULL,  -- IDTK_DemandeFacturationDistrib
+    id_tk_demande_facturation_distrib  bigint NOT NULL,  -- IDTK_DemandeFacturationDistrib
     id_tk_liste                        bigint,  -- IDTK_Liste
     fic_facture                        text,  -- FicFacture
     fic_preuve_virement                text,  -- FicPreuveVirement
@@ -502,7 +502,7 @@ CREATE INDEX ix_pgt_tk_demande_facturation_distrib_id_ste ON ticket_bo.pgt_tk_de
 CREATE INDEX ix_pgt_tk_demande_facturation_distrib_modif_date ON ticket_bo.pgt_tk_demande_facturation_distrib (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_demande_fourniture (
-    id_tk_demande_fourniture       bigint  NOT NULL,  -- IDTK_DemandeFourniture
+    id_tk_demande_fourniture       bigint NOT NULL,  -- IDTK_DemandeFourniture
     id_tk_liste                    bigint,  -- IDTK_Liste
     qte                            integer,  -- Qté
     date_crea                      timestamp,  -- dateCrea
@@ -525,7 +525,7 @@ CREATE INDEX ix_pgt_tk_demande_fourniture_id_tk_type_commande ON ticket_bo.pgt_t
 
 CREATE TABLE ticket_bo.pgt_tk_demande_resa (
     id_tk_demande_resa_auto  bigint,  -- IDTK_DemandeResaAuto
-    id_tk_demande_resa       bigint  NOT NULL,  -- IDTK_DemandeResa
+    id_tk_demande_resa       bigint NOT NULL,  -- IDTK_DemandeResa
     id_tk_liste              bigint,  -- IDTK_Liste
     id_tk_type_resa_ss_fam   integer,  -- IDTK_TypeResaSSFam
     ville_dep                varchar(50),  -- Ville_Dep
@@ -556,7 +556,7 @@ CREATE INDEX ix_pgt_tk_demande_resa_modif_date ON ticket_bo.pgt_tk_demande_resa 
 
 CREATE TABLE ticket_bo.pgt_tk_demande_sos_bo (
     id_tk_demande_sos_bo_auto  bigint,  -- IDTK_DemandeSOS_BOAuto
-    id_tk_demande_sos_bo       bigint  NOT NULL,  -- IDTK_DemandeSOS_BO
+    id_tk_demande_sos_bo       bigint NOT NULL,  -- IDTK_DemandeSOS_BO
     id_tk_liste                bigint,  -- IDTK_Liste
     beneficiaire               bigint,  -- Bénéficiaire
     id_tk_type_sos_bo          bigint,  -- IDTK_TypeSOS_BO
@@ -575,7 +575,7 @@ CREATE INDEX ix_pgt_tk_demande_sos_bo_modif_date ON ticket_bo.pgt_tk_demande_sos
 
 CREATE TABLE ticket_bo.pgt_tk_dpae_doc_demat_distrib (
     id_tk_dpae_doc_demat_distrib_auto  bigint,  -- IDTK_DPAE_DocDemat_DistribAuto
-    id_tk_dpae_doc_demat_distrib       bigint  NOT NULL,  -- IDTK_DPAE_DocDemat_Distrib
+    id_tk_dpae_doc_demat_distrib       bigint NOT NULL,  -- IDTK_DPAE_DocDemat_Distrib
     id_tk_liste                        bigint,  -- IDTK_Liste
     type_doc                           varchar(10),  -- TypeDoc
     i_ddoc_rh                          bigint,  -- IDdocRH
@@ -607,7 +607,7 @@ CREATE INDEX ix_pgt_tk_dpae_doc_demat_distrib_id_ste ON ticket_bo.pgt_tk_dpae_do
 CREATE INDEX ix_pgt_tk_dpae_doc_demat_distrib_modif_date ON ticket_bo.pgt_tk_dpae_doc_demat_distrib (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_retour_rdv_tech_fibre (
-    id_tk_retour_rdv_tech_fibre       bigint  NOT NULL,  -- IDTK_RetourRdvTechFIBRE
+    id_tk_retour_rdv_tech_fibre       bigint NOT NULL,  -- IDTK_RetourRdvTechFIBRE
     id_tk_liste                       bigint,  -- IDTK_Liste
     i_dcontrat                        bigint,  -- IDcontrat
     num_bs                            varchar(50),  -- NumBS
@@ -626,7 +626,7 @@ CREATE INDEX ix_pgt_tk_retour_rdv_tech_fibre_modif_date ON ticket_bo.pgt_tk_reto
 
 CREATE TABLE ticket_bo.pgt_tk_type_commande (
     id_tk_type_commande_auto  bigint,  -- IDTK_TypeCommandeAuto
-    id_tk_type_commande       bigint  NOT NULL,  -- IDTK_TypeCommande
+    id_tk_type_commande       bigint NOT NULL,  -- IDTK_TypeCommande
     lib_type_bs               varchar(50),  -- LibTypeBS
     modif_date                timestamp,  -- ModifDate
     desactiver                boolean,  -- Desactiver
@@ -639,7 +639,7 @@ CREATE INDEX ix_pgt_tk_type_commande_modif_date ON ticket_bo.pgt_tk_type_command
 
 CREATE TABLE ticket_bo.pgt_tk_type_resa (
     id_tk_type_resa_auto  bigint,  -- IDTK_TypeResaAuto
-    id_tk_type_resa       integer  NOT NULL,  -- IDTK_TypeResa
+    id_tk_type_resa       integer NOT NULL,  -- IDTK_TypeResa
     lib_type_resa         varchar(50),  -- Lib_TypeResa
     modif_date            timestamp,  -- ModifDate
     modif_op              bigint,  -- ModifOP
@@ -650,7 +650,7 @@ CREATE TABLE ticket_bo.pgt_tk_type_resa (
 CREATE INDEX ix_pgt_tk_type_resa_modif_date ON ticket_bo.pgt_tk_type_resa (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_type_resa_ss_fam (
-    id_tk_type_resa_ss_fam       integer  NOT NULL,  -- IDTK_TypeResaSSFam
+    id_tk_type_resa_ss_fam       integer NOT NULL,  -- IDTK_TypeResaSSFam
     lib_type_resa_ss_fam         varchar(50),  -- Lib_TypeResaSSFam
     modif_date                   timestamp,  -- ModifDate
     modif_op                     bigint,  -- ModifOP
@@ -665,7 +665,7 @@ CREATE INDEX ix_pgt_tk_type_resa_ss_fam_modif_date ON ticket_bo.pgt_tk_type_resa
 CREATE INDEX ix_pgt_tk_type_resa_ss_fam_id_tk_type_resa ON ticket_bo.pgt_tk_type_resa_ss_fam (id_tk_type_resa);
 
 CREATE TABLE ticket_bo.pgt_tk_type_sos_bo (
-    id_tk_type_sos_bo       bigint  NOT NULL,  -- IDTK_TypeSOS_BO
+    id_tk_type_sos_bo       bigint NOT NULL,  -- IDTK_TypeSOS_BO
     lib_type_sos            varchar(50),  -- Lib_TypeSos
     modif_op                bigint,  -- ModifOP
     modif_date              timestamp,  -- ModifDate

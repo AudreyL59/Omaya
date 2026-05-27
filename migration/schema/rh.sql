@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS rh;
 
 CREATE TABLE rh.pgt_absence (
     id_absence_auto                    bigint,  -- IdAbsenceAuto
-    id_absence                         bigint  NOT NULL,  -- IdAbsence
+    id_absence                         bigint NOT NULL,  -- IdAbsence
     id_salarie                         bigint,  -- IDSalarie
     id_type_absence                    integer,  -- IDTypeAbsence
     date_debut                         date,  -- DateDEBUT
@@ -28,7 +28,7 @@ CREATE INDEX ix_pgt_absence_modif_date ON rh.pgt_absence (modif_date);
 
 CREATE TABLE rh.pgt_derogation_orga (
     id_derogation_orga_auto  bigint,  -- IDDerogationOrgaAuto
-    id_derogation_orga       bigint  NOT NULL,  -- IDDerogationOrga
+    id_derogation_orga       bigint NOT NULL,  -- IDDerogationOrga
     id_salarie               bigint,  -- IDSalarie
     idorganigramme           bigint,  -- idorganigramme
     date_debut               date,  -- DateDEBUT
@@ -44,7 +44,7 @@ CREATE INDEX ix_pgt_derogation_orga_idorganigramme ON rh.pgt_derogation_orga (id
 CREATE INDEX ix_pgt_derogation_orga_modif_date ON rh.pgt_derogation_orga (modif_date);
 
 CREATE TABLE rh.pgt_doc_distrib (
-    id_doc_distrib            bigint  NOT NULL,  -- IDDoc_Distrib
+    id_doc_distrib            bigint NOT NULL,  -- IDDoc_Distrib
     id_ste                    bigint,  -- IdSte
     id_gerant                 bigint,  -- IdGérant
     id_type_doc_distributeur  bigint,  -- IDTypeDocDistributeur
@@ -62,7 +62,7 @@ CREATE INDEX ix_pgt_doc_distrib_id_type_doc_distributeur ON rh.pgt_doc_distrib (
 CREATE INDEX ix_pgt_doc_distrib_modif_date ON rh.pgt_doc_distrib (modif_date);
 
 CREATE TABLE rh.pgt_doc_courtage (
-    i_ddoc_courtage      bigint  NOT NULL,  -- IDdocCourtage
+    i_ddoc_courtage      bigint NOT NULL,  -- IDdocCourtage
     titre                varchar(255),  -- Titre
     info_cpl             varchar(50),  -- InfoCpl
     id_groupe_operateur  bigint,  -- IDGroupeOpérateur
@@ -80,7 +80,7 @@ CREATE INDEX ix_pgt_doc_courtage_id_ste ON rh.pgt_doc_courtage (id_ste);
 CREATE INDEX ix_pgt_doc_courtage_modif_date ON rh.pgt_doc_courtage (modif_date);
 
 CREATE TABLE rh.pgt_doc_rh (
-    i_ddoc_rh              bigint  NOT NULL,  -- IDdocRH
+    i_ddoc_rh              bigint NOT NULL,  -- IDdocRH
     id_type_doc            bigint,  -- IDTypeDoc
     titre                  varchar(255),  -- Titre
     info_cpl               varchar(50),  -- InfoCpl
@@ -104,7 +104,7 @@ CREATE INDEX ix_pgt_doc_rh_modif_date ON rh.pgt_doc_rh (modif_date);
 
 CREATE TABLE rh.pgt_doc_rhtype (
     id_type_doc_auto  bigint,  -- IDTypeDocAuto
-    id_type_doc       bigint  NOT NULL,  -- IDTypeDoc
+    id_type_doc       bigint NOT NULL,  -- IDTypeDoc
     lib_type          text,  -- Lib_Type
     modif_op          bigint,  -- ModifOP
     modif_date        timestamp,  -- ModifDate
@@ -117,7 +117,7 @@ CREATE INDEX ix_pgt_doc_rhtype_modif_date ON rh.pgt_doc_rhtype (modif_date);
 
 CREATE TABLE rh.pgt_mutuelle (
     i_dmutuelle_auto  bigint,  -- IDmutuelleAuto
-    id_mutuelle       smallint  NOT NULL,  -- IdMutuelle
+    id_mutuelle       smallint NOT NULL,  -- IdMutuelle
     lib_mutuelle      varchar(50),  -- Lib_Mutuelle
     is_actif          boolean,  -- IsActif
     modif_date        timestamp,  -- ModifDate
@@ -130,7 +130,7 @@ CREATE INDEX ix_pgt_mutuelle_modif_date ON rh.pgt_mutuelle (modif_date);
 
 CREATE TABLE rh.pgt_note_frais (
     id_note_frais_auto  bigint,  -- IDNoteFraisAuto
-    id_note_frais       bigint  NOT NULL,  -- IDNoteFrais
+    id_note_frais       bigint NOT NULL,  -- IDNoteFrais
     id_salarie          bigint,  -- IDSalarie
     id_note_frais_type  bigint,  -- IDNoteFraisType
     periode_note        date,  -- PériodeNote
@@ -153,7 +153,7 @@ CREATE INDEX ix_pgt_note_frais_modif_date ON rh.pgt_note_frais (modif_date);
 
 CREATE TABLE rh.pgt_note_frais_type (
     id_note_frais_type_auto  bigint,  -- IDNoteFraisTypeAuto
-    id_note_frais_type       bigint  NOT NULL,  -- IDNoteFraisType
+    id_note_frais_type       bigint NOT NULL,  -- IDNoteFraisType
     lib_type_note_frais      varchar(50),  -- LibTypeNoteFrais
     modif_date               timestamp,  -- ModifDate
     modif_op                 bigint,  -- ModifOP
@@ -165,7 +165,7 @@ CREATE INDEX ix_pgt_note_frais_type_modif_date ON rh.pgt_note_frais_type (modif_
 
 CREATE TABLE rh.pgt_organigramme (
     id_organigramme_auto  bigint,  -- IdOrganigrammeAuto
-    idorganigramme        bigint  NOT NULL,  -- idorganigramme
+    idorganigramme        bigint NOT NULL,  -- idorganigramme
     id_parent             bigint,  -- IdPARENT
     lib_orga              text,  -- Lib_ORGA
     in_visible_podium     boolean,  -- InVisiblePODIUM
@@ -195,7 +195,7 @@ CREATE INDEX ix_pgt_organigramme_id_ste ON rh.pgt_organigramme (id_ste);
 CREATE INDEX ix_pgt_organigramme_modif_date ON rh.pgt_organigramme (modif_date);
 
 CREATE TABLE rh.pgt_profil_droit_acces (
-    id_profil_droit_acces          bigint  NOT NULL,  -- IDProfilDroitAccès
+    id_profil_droit_acces          bigint NOT NULL,  -- IDProfilDroitAccès
     id_type_droit_acces            integer,  -- IDTypeDroitAccès
     categorie                      varchar(15),  -- Catégorie
     id_type_droit_acces_categorie  varchar(19),  -- IDTypeDroitAccèsCatégorie
@@ -210,7 +210,7 @@ CREATE INDEX ix_pgt_profil_droit_acces_modif_date ON rh.pgt_profil_droit_acces (
 
 CREATE TABLE rh.pgt_salarie (
     i_dsalarie_auto    bigint,  -- IDsalarieAuto
-    id_salarie         bigint  NOT NULL,  -- IDSalarie
+    id_salarie         bigint NOT NULL,  -- IDSalarie
     civilite           smallint,  -- Civilité
     nom                text,  -- Nom
     nom_marital        text,  -- Nom_Marital
@@ -248,7 +248,7 @@ CREATE INDEX ix_pgt_salarie_modif_date ON rh.pgt_salarie (modif_date);
 
 CREATE TABLE rh.pgt_salarie_adf (
     id_salarie_adf_auto  bigint,  -- IdSalarie_ADFAuto
-    i_dsalarie_adf       bigint  NOT NULL,  -- IDsalarie_ADF
+    i_dsalarie_adf       bigint NOT NULL,  -- IDsalarie_ADF
     id_salarie           bigint,  -- IDSalarie
     date                 date,  -- Date
     horaires             varchar(7),  -- Horaires
@@ -270,7 +270,7 @@ CREATE INDEX ix_pgt_salarie_adf_id_formateur ON rh.pgt_salarie_adf (id_formateur
 CREATE INDEX ix_pgt_salarie_adf_modif_date ON rh.pgt_salarie_adf (modif_date);
 
 CREATE TABLE rh.pgt_salarie_adf_item (
-    i_dsalarie_adf_item  bigint  NOT NULL,  -- IDsalarie_ADF_Item
+    i_dsalarie_adf_item  bigint NOT NULL,  -- IDsalarie_ADF_Item
     i_dsalarie_adf       bigint,  -- IDsalarie_ADF
     id_type_adf_item     bigint,  -- IDTypeADF_Item
     note                 smallint,  -- Note
@@ -285,7 +285,7 @@ CREATE INDEX ix_pgt_salarie_adf_item_id_type_adf_item ON rh.pgt_salarie_adf_item
 CREATE INDEX ix_pgt_salarie_adf_item_modif_date ON rh.pgt_salarie_adf_item (modif_date);
 
 CREATE TABLE rh.pgt_salarie_avance (
-    i_dsalarie_avance  bigint  NOT NULL,  -- IDsalarie_avance
+    i_dsalarie_avance  bigint NOT NULL,  -- IDsalarie_avance
     id_salarie         bigint,  -- IDSalarie
     mois_salaire       date,  -- MoisSalaire
     montant            numeric(19,4),  -- Montant
@@ -305,7 +305,7 @@ CREATE INDEX ix_pgt_salarie_avance_modif_date ON rh.pgt_salarie_avance (modif_da
 
 CREATE TABLE rh.pgt_salarie_coordonnees (
     i_dsalarie_coordonnees  bigint,  -- IDsalarie_coordonnées
-    id_salarie              bigint  NOT NULL,  -- IDSalarie
+    id_salarie              bigint NOT NULL,  -- IDSalarie
     adresse1                text,  -- Adresse1
     adresse2                text,  -- Adresse2
     cp                      varchar(5),  -- CP
@@ -329,7 +329,7 @@ CREATE INDEX ix_pgt_salarie_coordonnees_modif_date ON rh.pgt_salarie_coordonnees
 
 CREATE TABLE rh.pgt_salarie_decl_presence (
     i_ddeclaratif_presence_auto  bigint,  -- IDdeclaratif_presenceAuto
-    i_ddeclaratif_presence       bigint  NOT NULL,  -- IDdeclaratif_presence
+    i_ddeclaratif_presence       bigint NOT NULL,  -- IDdeclaratif_presence
     id_salarie                   bigint,  -- IDSalarie
     date                         date,  -- Date
     presence                     boolean,  -- Presence
@@ -350,7 +350,7 @@ CREATE INDEX ix_pgt_salarie_decl_presence_modif_date ON rh.pgt_salarie_decl_pres
 
 CREATE TABLE rh.pgt_salarie_decl_production (
     i_ddeclaratif_production_auto  bigint,  -- IDdeclaratif_productionAuto
-    i_ddeclaratif_production       bigint  NOT NULL,  -- IDdeclaratif_production
+    i_ddeclaratif_production       bigint NOT NULL,  -- IDdeclaratif_production
     id_salarie                     bigint,  -- IDSalarie
     date                           date,  -- Date
     id_type_prod_dec               bigint,  -- IdTypeProdDec
@@ -368,7 +368,7 @@ CREATE INDEX ix_pgt_salarie_decl_production_id_type_prod_dec ON rh.pgt_salarie_d
 CREATE INDEX ix_pgt_salarie_decl_production_modif_date ON rh.pgt_salarie_decl_production (modif_date);
 
 CREATE TABLE rh.pgt_salarie_doc_rh (
-    i_dsalarie_doc_rh        bigint  NOT NULL,  -- IDsalarie_docRH
+    i_dsalarie_doc_rh        bigint NOT NULL,  -- IDsalarie_docRH
     i_ddoc_rhtype            bigint,  -- IDdocRHTYPE
     id_salarie               bigint,  -- IDSalarie
     id_da                    bigint,  -- ID_DA
@@ -388,7 +388,7 @@ CREATE INDEX ix_pgt_salarie_doc_rh_id_da ON rh.pgt_salarie_doc_rh (id_da);
 CREATE INDEX ix_pgt_salarie_doc_rh_modif_date ON rh.pgt_salarie_doc_rh (modif_date);
 
 CREATE TABLE rh.pgt_salarie_doc_ulease (
-    i_dsalarie_doc_ulease    bigint  NOT NULL,  -- IDsalarie_docUlease
+    i_dsalarie_doc_ulease    bigint NOT NULL,  -- IDsalarie_docUlease
     i_ddoc_ulease_type       bigint,  -- IDdocUleaseTYPE
     id_salarie               bigint,  -- IDSalarie
     id_da                    bigint,  -- ID_DA
@@ -408,7 +408,7 @@ CREATE INDEX ix_pgt_salarie_doc_ulease_id_da ON rh.pgt_salarie_doc_ulease (id_da
 CREATE INDEX ix_pgt_salarie_doc_ulease_modif_date ON rh.pgt_salarie_doc_ulease (modif_date);
 
 CREATE TABLE rh.pgt_salarie_droit_acces (
-    i_dsalarie_droit_acces          bigint  NOT NULL,  -- IDsalarie_droitAccès
+    i_dsalarie_droit_acces          bigint NOT NULL,  -- IDsalarie_droitAccès
     id_salarie                      bigint,  -- IDSalarie
     id_type_droit_acces             integer,  -- IDTypeDroitAccès
     droit_actif                     boolean,  -- DroitActif
@@ -424,7 +424,7 @@ CREATE INDEX ix_pgt_salarie_droit_acces_modif_date ON rh.pgt_salarie_droit_acces
 
 CREATE TABLE rh.pgt_salarie_embauche (
     i_dsalarie_embauche    bigint,  -- IDsalarie_embauche
-    id_salarie             bigint  NOT NULL,  -- IDSalarie
+    id_salarie             bigint NOT NULL,  -- IDSalarie
     date_debut             date,  -- DateDebut
     date_fin_per_essai     date,  -- DateFinPerEssai
     date_anciennete        date,  -- DateAncienneté
@@ -474,7 +474,7 @@ CREATE INDEX ix_pgt_salarie_embauche_i_dcvtheque ON rh.pgt_salarie_embauche (i_d
 CREATE INDEX ix_pgt_salarie_embauche_modif_date ON rh.pgt_salarie_embauche (modif_date);
 
 CREATE TABLE rh.pgt_salarie_infotbx (
-    i_dsalarie_info_tbx  bigint  NOT NULL,  -- IDsalarie_infoTbx
+    i_dsalarie_info_tbx  bigint NOT NULL,  -- IDsalarie_infoTbx
     id_salarie           bigint,  -- IDSalarie
     idorganigramme       bigint,  -- idorganigramme
     mois_salaire         date,  -- MoisSalaire
@@ -493,7 +493,7 @@ CREATE INDEX ix_pgt_salarie_infotbx_idorganigramme ON rh.pgt_salarie_infotbx (id
 CREATE INDEX ix_pgt_salarie_infotbx_modif_date ON rh.pgt_salarie_infotbx (modif_date);
 
 CREATE TABLE rh.pgt_salarie_livret (
-    i_dsalarie_livret         bigint  NOT NULL,  -- IDsalarie_Livret
+    i_dsalarie_livret         bigint NOT NULL,  -- IDsalarie_Livret
     id_salarie                bigint,  -- IDSalarie
     id_type_operation_livret  integer,  -- IDTypeOperationLivret
     id_challenge              bigint,  -- IDChallenge
@@ -515,7 +515,7 @@ CREATE INDEX ix_pgt_salarie_livret_modif_date ON rh.pgt_salarie_livret (modif_da
 
 CREATE TABLE rh.pgt_salarie_mutuelle (
     i_dsalarie_mutuelle            bigint,  -- IDsalarie_mutuelle
-    id_salarie                     bigint  NOT NULL,  -- IDSalarie
+    id_salarie                     bigint NOT NULL,  -- IDSalarie
     adhesion                       boolean,  -- Adhésion
     adhesion_date                  date,  -- AdhésionDate
     mutuelle_dossier               boolean,  -- Mutuelle_Dossier
@@ -539,7 +539,7 @@ CREATE INDEX ix_pgt_salarie_mutuelle_modif_date ON rh.pgt_salarie_mutuelle (modi
 CREATE TABLE rh.pgt_salarie_organigramme (
     id_salarie                           bigint,  -- IDSalarie
     idorganigramme                       bigint,  -- idorganigramme
-    i_dsalarie_organigramme              bigint  NOT NULL,  -- IDsalarie_organigramme
+    i_dsalarie_organigramme              bigint NOT NULL,  -- IDsalarie_organigramme
     date_debut                           date,  -- DateDébut
     date_fin                             date,  -- DateFin
     aff_actif                            boolean,  -- aff_ACTIF
@@ -559,7 +559,7 @@ CREATE INDEX ix_pgt_salarie_organigramme_modif_date ON rh.pgt_salarie_organigram
 CREATE INDEX ix_pgt_salarie_organigramme_id_ste ON rh.pgt_salarie_organigramme (id_ste);
 
 CREATE TABLE rh.pgt_salarie_part_dpae (
-    i_dsalarie_partenaire     bigint  NOT NULL,  -- IDsalarie_partenaire
+    i_dsalarie_partenaire     bigint NOT NULL,  -- IDsalarie_partenaire
     id_salarie                bigint,  -- IDSalarie
     id_partenaire             bigint,  -- IDPartenaire
     id_ste                    bigint,  -- IdSte
@@ -575,7 +575,7 @@ CREATE INDEX ix_pgt_salarie_part_dpae_id_ste ON rh.pgt_salarie_part_dpae (id_ste
 CREATE INDEX ix_pgt_salarie_part_dpae_modif_date ON rh.pgt_salarie_part_dpae (modif_date);
 
 CREATE TABLE rh.pgt_salarie_partenaire (
-    i_dsalarie_partenaire     bigint  NOT NULL,  -- IDsalarie_partenaire
+    i_dsalarie_partenaire     bigint NOT NULL,  -- IDsalarie_partenaire
     id_salarie                bigint,  -- IDSalarie
     id_partenaire             bigint,  -- IDPartenaire
     id_salarie_id_partenaire  varchar(16),  -- IDSalarieIDPartenaire
@@ -594,7 +594,7 @@ CREATE INDEX ix_pgt_salarie_partenaire_login ON rh.pgt_salarie_partenaire (login
 CREATE INDEX ix_pgt_salarie_partenaire_modif_date ON rh.pgt_salarie_partenaire (modif_date);
 
 CREATE TABLE rh.pgt_salarie_prime (
-    i_dsalarie_prime  bigint  NOT NULL,  -- IDsalarie_prime
+    i_dsalarie_prime  bigint NOT NULL,  -- IDsalarie_prime
     id_salarie        bigint,  -- IDSalarie
     mois_salaire      date,  -- MoisSalaire
     id_type_prime     integer,  -- IDTypePrime
@@ -624,13 +624,13 @@ CREATE TABLE rh.pgt_salarie_progevo (
     cloture              boolean,  -- Cloturé
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOP
-    modif_elem           varchar(5),  -- ModifELEM
+    modif_elem           varchar(5)  -- ModifELEM
 );
 CREATE INDEX ix_pgt_salarie_progevo_id_salarie ON rh.pgt_salarie_progevo (id_salarie);
 CREATE INDEX ix_pgt_salarie_progevo_modif_date ON rh.pgt_salarie_progevo (modif_date);
 
 CREATE TABLE rh.pgt_salarie_progevo_objectif (
-    i_dsalarie_prog_evo_item  bigint  NOT NULL,  -- IDsalarie_progEvo_Item
+    i_dsalarie_prog_evo_item  bigint NOT NULL,  -- IDsalarie_progEvo_Item
     i_dsalarie_prog_evo       bigint,  -- IDsalarie_progEvo
     id_prog_evo_objectifs     bigint,  -- IDProgEvo_Objectifs
     champ_libre               varchar(50),  -- ChampLibre
@@ -645,7 +645,7 @@ CREATE INDEX ix_pgt_salarie_progevo_objectif_modif_date ON rh.pgt_salarie_progev
 
 CREATE TABLE rh.pgt_salarie_sortie (
     i_dsalarie_sortie     bigint,  -- IDsalarie_sortie
-    id_salarie            bigint  NOT NULL,  -- IDSalarie
+    id_salarie            bigint NOT NULL,  -- IDSalarie
     id_type_sortie        integer,  -- IDTypeSortie
     date_sortie_demandee  timestamp,  -- DateSortieDemandée
     demandeur_sortie      bigint,  -- DemandeurSortie
@@ -672,7 +672,7 @@ CREATE INDEX ix_pgt_salarie_sortie_modif_date ON rh.pgt_salarie_sortie (modif_da
 
 CREATE TABLE rh.pgt_salarie_suivi (
     i_dsuivi_auto   bigint,  -- IDsuiviAuto
-    i_dsuivi        bigint  NOT NULL,  -- IDsuivi
+    i_dsuivi        bigint NOT NULL,  -- IDsuivi
     id_salarie      bigint,  -- IDSalarie
     type            integer,  -- TYPE
     idorganigramme  bigint,  -- idorganigramme
@@ -694,7 +694,7 @@ CREATE INDEX ix_pgt_salarie_suivi_modif_date ON rh.pgt_salarie_suivi (modif_date
 
 CREATE TABLE rh.pgt_salarie_suivi_adm (
     i_dsalarie_suivi_adm_auto  bigint,  -- IDsalarie_suiviADMAuto
-    i_dsalarie_suivi_adm       bigint  NOT NULL,  -- IDsalarie_suiviADM
+    i_dsalarie_suivi_adm       bigint NOT NULL,  -- IDsalarie_suiviADM
     id_salarie                 bigint,  -- IDSalarie
     op_crea                    bigint,  -- OPCREA
     description                text,  -- DESCRIPTION
@@ -711,7 +711,7 @@ CREATE INDEX ix_pgt_salarie_suivi_adm_modif_date ON rh.pgt_salarie_suivi_adm (mo
 
 CREATE TABLE rh.pgt_societe (
     id_societe_auto      bigint,  -- IDSociétéAuto
-    id_ste               bigint  NOT NULL,  -- IdSte
+    id_ste               bigint NOT NULL,  -- IdSte
     idorganigramme       bigint,  -- idorganigramme
     id_type_orga         integer,  -- IDTypeOrga
     raison_sociale       text,  -- RaisonSociale
@@ -758,7 +758,7 @@ CREATE INDEX ix_pgt_societe_id_gerant ON rh.pgt_societe (id_gerant);
 CREATE INDEX ix_pgt_societe_modif_date ON rh.pgt_societe (modif_date);
 
 CREATE TABLE rh.pgt_societe_doc_courtage (
-    i_dsociete_doc_courtage  bigint  NOT NULL,  -- IDsociete_docCourtage
+    i_dsociete_doc_courtage  bigint NOT NULL,  -- IDsociete_docCourtage
     id_salarie               bigint,  -- IDSalarie
     id_distrib               bigint,  -- idDistrib
     i_ddoc_courtage          bigint,  -- IDdocCourtage
@@ -780,7 +780,7 @@ CREATE INDEX ix_pgt_societe_doc_courtage_i_ddoc_courtage ON rh.pgt_societe_doc_c
 CREATE INDEX ix_pgt_societe_doc_courtage_modif_date ON rh.pgt_societe_doc_courtage (modif_date);
 
 CREATE TABLE rh.pgt_societe_formjuri (
-    i_dsociete_form_juri_auto  bigint  NOT NULL,  -- IDsociete_FormJuriAuto
+    i_dsociete_form_juri_auto  bigint NOT NULL,  -- IDsociete_FormJuriAuto
     i_dsociete_form_juri       integer,  -- IDsociete_FormJuri
     lib_form_juri              varchar(50),  -- LibFormJuri
     modif_date                 timestamp,  -- ModifDate
@@ -792,7 +792,7 @@ CREATE INDEX ix_pgt_societe_formjuri_modif_date ON rh.pgt_societe_formjuri (modi
 
 CREATE TABLE rh.pgt_type_absence (
     id_type_absence_auto  bigint,  -- IDTypeAbsenceAuto
-    id_type_absence       integer  NOT NULL,  -- IDTypeAbsence
+    id_type_absence       integer NOT NULL,  -- IDTypeAbsence
     lib_absence           text,  -- Lib_Absence
     modif_date            timestamp,  -- ModifDate
     modif_op              bigint,  -- ModifOp
@@ -803,7 +803,7 @@ CREATE TABLE rh.pgt_type_absence (
 CREATE INDEX ix_pgt_type_absence_modif_date ON rh.pgt_type_absence (modif_date);
 
 CREATE TABLE rh.pgt_type_adf_item (
-    id_type_adf_item  bigint  NOT NULL,  -- IDTypeADF_Item
+    id_type_adf_item  bigint NOT NULL,  -- IDTypeADF_Item
     lib_item          varchar(50),  -- LibItem
     ordre_affichage   smallint,  -- OrdreAffichage
     is_actif          boolean,  -- IsActif
@@ -816,7 +816,7 @@ CREATE INDEX ix_pgt_type_adf_item_modif_date ON rh.pgt_type_adf_item (modif_date
 
 CREATE TABLE rh.pgt_type_ctt_travail (
     id_type_ctt_travail  bigint,  -- IDTypeCttTravail
-    id_type_ctt          integer  NOT NULL,  -- IDTypeCtt
+    id_type_ctt          integer NOT NULL,  -- IDTypeCtt
     intitule             text,  -- Intitulé
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOp
@@ -827,7 +827,7 @@ CREATE TABLE rh.pgt_type_ctt_travail (
 CREATE INDEX ix_pgt_type_ctt_travail_modif_date ON rh.pgt_type_ctt_travail (modif_date);
 
 CREATE TABLE rh.pgt_type_doc_distributeur (
-    id_type_doc_distributeur  bigint  NOT NULL,  -- IDTypeDocDistributeur
+    id_type_doc_distributeur  bigint NOT NULL,  -- IDTypeDocDistributeur
     lib_doc                   varchar(50),  -- LibDoc
     obligatoire_dem           boolean,  -- ObligatoireDem
     afaire_signer             boolean,  -- AfaireSigner
@@ -839,7 +839,7 @@ CREATE INDEX ix_pgt_type_doc_distributeur_i_ddoc_courtage ON rh.pgt_type_doc_dis
 
 CREATE TABLE rh.pgt_type_droit_acces (
     id_type_droit_acces_auto  bigint,  -- IDTypeDroitAccèsAuto
-    id_type_droit_acces       integer  NOT NULL,  -- IDTypeDroitAccès
+    id_type_droit_acces       integer NOT NULL,  -- IDTypeDroitAccès
     lib_droit                 varchar(50),  -- Lib_Droit
     code_interne              varchar(15),  -- CodeInterne
     adm                       boolean,  -- ADM
@@ -857,7 +857,7 @@ CREATE INDEX ix_pgt_type_droit_acces_categorie ON rh.pgt_type_droit_acces (categ
 
 CREATE TABLE rh.pgt_type_horaire_travail (
     id_type_horaire_travail  bigint,  -- IDTypeHoraireTravail
-    id_type_horaire          integer  NOT NULL,  -- IDTypeHoraire
+    id_type_horaire          integer NOT NULL,  -- IDTypeHoraire
     lib_horaire              varchar(50),  -- Lib_Horaire
     modif_date               timestamp,  -- ModifDate
     modif_op                 bigint,  -- ModifOp
@@ -869,7 +869,7 @@ CREATE INDEX ix_pgt_type_horaire_travail_modif_date ON rh.pgt_type_horaire_trava
 
 CREATE TABLE rh.pgt_type_niveau_orga (
     id_type_niveau_orga_auto  bigint,  -- IDTypeNiveauOrgaAuto
-    id_type_niveau_orga       integer  NOT NULL,  -- IDTypeNiveauOrga
+    id_type_niveau_orga       integer NOT NULL,  -- IDTypeNiveauOrga
     lib_niveau                varchar(20),  -- Lib_Niveau
     type                      varchar(5),  -- Type
     modif_date                timestamp,  -- ModifDate
@@ -883,7 +883,7 @@ CREATE INDEX ix_pgt_type_niveau_orga_modif_date ON rh.pgt_type_niveau_orga (modi
 
 CREATE TABLE rh.pgt_type_operation_livret (
     id_type_operation_livret_auto  bigint,  -- IdTypeOperationLivretAuto
-    id_type_operation_livret       integer  NOT NULL,  -- IDTypeOperationLivret
+    id_type_operation_livret       integer NOT NULL,  -- IDTypeOperationLivret
     lib_opeation                   varchar(50),  -- LibOpéation
     modif_date                     timestamp,  -- ModifDate
     modif_op                       bigint,  -- ModifOp
@@ -895,7 +895,7 @@ CREATE INDEX ix_pgt_type_operation_livret_modif_date ON rh.pgt_type_operation_li
 
 CREATE TABLE rh.pgt_type_orga (
     id_type_orga_auto  bigint,  -- IDTypeOrgaAuto
-    id_type_orga       integer  NOT NULL,  -- IDTypeOrga
+    id_type_orga       integer NOT NULL,  -- IDTypeOrga
     lib                varchar(50),  -- Lib
     modif_date         timestamp,  -- ModifDate
     modif_op           bigint,  -- ModifOp
@@ -907,7 +907,7 @@ CREATE INDEX ix_pgt_type_orga_modif_date ON rh.pgt_type_orga (modif_date);
 
 CREATE TABLE rh.pgt_type_poste (
     id_type_poste_auto  bigint,  -- IDTypePosteAuto
-    id_type_poste       smallint  NOT NULL,  -- IdTypePoste
+    id_type_poste       smallint NOT NULL,  -- IdTypePoste
     lib_poste           text,  -- Lib_Poste
     categorie           varchar(15),  -- Catégorie
     modif_op            bigint,  -- ModifOP
@@ -922,7 +922,7 @@ CREATE INDEX ix_pgt_type_poste_modif_date ON rh.pgt_type_poste (modif_date);
 
 CREATE TABLE rh.pgt_typeprime (
     id_type_prime_auto  bigint,  -- IDTypePrimeAuto
-    id_type_prime       integer  NOT NULL,  -- IDTypePrime
+    id_type_prime       integer NOT NULL,  -- IDTypePrime
     lib_prime           varchar(50),  -- LibPrime
     modif_date          timestamp,  -- ModifDate
     modif_op            bigint,  -- ModifOP
@@ -934,7 +934,7 @@ CREATE INDEX ix_pgt_typeprime_modif_date ON rh.pgt_typeprime (modif_date);
 
 CREATE TABLE rh.pgt_type_produit (
     id_type_produit_auto  bigint,  -- IDTypeProduitAuto
-    id_type_produit       bigint  NOT NULL,  -- IDTypeProduit
+    id_type_produit       bigint NOT NULL,  -- IDTypeProduit
     lib                   varchar(50),  -- Lib
     logo                  bytea,  -- LOGO
     type                  varchar(5),  -- Type
@@ -948,7 +948,7 @@ CREATE INDEX ix_pgt_type_produit_type ON rh.pgt_type_produit (type);
 CREATE INDEX ix_pgt_type_produit_modif_date ON rh.pgt_type_produit (modif_date);
 
 CREATE TABLE rh.pgt_type_produit_partenaire (
-    id_type_produit_partenaire  bigint  NOT NULL,  -- IDTypeProduit_Partenaire
+    id_type_produit_partenaire  bigint NOT NULL,  -- IDTypeProduit_Partenaire
     id_type_produit             bigint,  -- IDTypeProduit
     id_partenaire               bigint,  -- IDPartenaire
     modif_date                  timestamp,  -- ModifDate
@@ -962,7 +962,7 @@ CREATE INDEX ix_pgt_type_produit_partenaire_modif_date ON rh.pgt_type_produit_pa
 
 CREATE TABLE rh.pgt_type_sortie_salarie (
     id_type_sortie_salarie  bigint,  -- IDTypeSortieSalarie
-    id_type_sortie          integer  NOT NULL,  -- IDTypeSortie
+    id_type_sortie          integer NOT NULL,  -- IDTypeSortie
     lib_sortie              varchar(30),  -- Lib_Sortie
     modif_date              timestamp,  -- ModifDate
     modif_op                bigint,  -- ModifOp

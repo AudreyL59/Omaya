@@ -3,7 +3,7 @@ CREATE SCHEMA IF NOT EXISTS adv;
 
 CREATE TABLE adv.pgt_agenda_commercial (
     id_agenda_commercial_auto       bigint,  -- IDAgendaCommercialAuto
-    id_agenda_commercial            bigint  NOT NULL,  -- IDAgendaCommercial
+    id_agenda_commercial            bigint NOT NULL,  -- IDAgendaCommercial
     id_salarie                      bigint,  -- IDSalarie
     id_agenda_commercial_categorie  integer,  -- IDAgendaCommercial_Catégorie
     id_agenda_commercial_origine    integer,  -- IDAgendaCommercial_Origine
@@ -33,7 +33,7 @@ CREATE INDEX ix_pgt_agenda_commercial_modif_date ON adv.pgt_agenda_commercial (m
 
 CREATE TABLE adv.pgt_agenda_commercial_categorie (
     id_agenda_commercial_categorie_auto  bigint,  -- IDAgendaCommercial_CatégorieAuto
-    id_agenda_commercial_categorie       integer  NOT NULL,  -- IDAgendaCommercial_Catégorie
+    id_agenda_commercial_categorie       integer NOT NULL,  -- IDAgendaCommercial_Catégorie
     lib_categorie                        text,  -- Lib_Catégorie
     couleur                              integer,  -- Couleur
     id_cv_statut                         bigint,  -- IdCvStatut
@@ -48,7 +48,7 @@ CREATE INDEX ix_pgt_agenda_commercial_categorie_modif_date ON adv.pgt_agenda_com
 
 CREATE TABLE adv.pgt_client (
     i_dclient_auto  bigint,  -- IDclientAuto
-    i_dclient       bigint  NOT NULL,  -- IDclient
+    i_dclient       bigint NOT NULL,  -- IDclient
     civilite        smallint,  -- Civilité
     nom             text,  -- NOM
     prenom          text,  -- PRENOM
@@ -85,7 +85,7 @@ CREATE INDEX ix_pgt_client_modif_date ON adv.pgt_client (modif_date);
 
 CREATE TABLE adv.pgt_eni_contrat (
     i_dcontrat_auto   bigint,  -- IDcontratAuto
-    i_dcontrat        bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat        bigint NOT NULL,  -- IDcontrat
     id_sales_force    varchar(25),  -- IDSalesForce
     i_dclient         bigint,  -- IDclient
     id_salarie        bigint,  -- IDSalarie
@@ -127,7 +127,7 @@ CREATE INDEX ix_pgt_eni_contrat_date_saisie ON adv.pgt_eni_contrat (date_saisie)
 CREATE INDEX ix_pgt_eni_contrat_modif_date ON adv.pgt_eni_contrat (modif_date);
 
 CREATE TABLE adv.pgt_eni_contrat_compteur (
-    i_dcontrat_compteur     bigint  NOT NULL,  -- IDcontratCompteur
+    i_dcontrat_compteur     bigint NOT NULL,  -- IDcontratCompteur
     i_dcontrat              bigint,  -- IDcontrat
     type_releve             varchar(10),  -- TypeRelève
     releve                  integer,  -- Relève
@@ -143,7 +143,7 @@ CREATE INDEX ix_pgt_eni_contrat_compteur_modif_date ON adv.pgt_eni_contrat_compt
 
 CREATE TABLE adv.pgt_eni_contrat_option (
     i_dcontrat_option_auto      bigint,  -- IDcontratOptionAuto
-    i_dcontrat                  bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat                  bigint NOT NULL,  -- IDcontrat
     num_bs                      text,  -- NumBS
     opt_mail                    boolean,  -- OPT_Mail
     opt_index_gaz               boolean,  -- OPT_IndexGaz
@@ -176,7 +176,7 @@ CREATE INDEX ix_pgt_eni_contrat_option_modif_date ON adv.pgt_eni_contrat_option 
 
 CREATE TABLE adv.pgt_eni_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -195,7 +195,7 @@ CREATE INDEX ix_pgt_eni_etat_contrat_modif_date ON adv.pgt_eni_etat_contrat (mod
 
 CREATE TABLE adv.pgt_eni_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -217,7 +217,7 @@ CREATE INDEX ix_pgt_eni_histo_attr_ctt_modif_date ON adv.pgt_eni_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_eni_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -237,7 +237,7 @@ CREATE INDEX ix_pgt_eni_histo_etat_ctt_modif_date ON adv.pgt_eni_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_eni_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -263,7 +263,7 @@ CREATE INDEX ix_pgt_eni_produit_modif_date ON adv.pgt_eni_produit (modif_date);
 
 CREATE TABLE adv.pgt_eni_remun (
     id_remun_auto                            bigint,  -- IDRemunAuto
-    id_remun                                 bigint  NOT NULL,  -- IDRemun
+    id_remun                                 bigint NOT NULL,  -- IDRemun
     famille                                  varchar(10),  -- FAMILLE
     ss_fam                                   varchar(10),  -- SSFAM
     val_min                                  integer,  -- val_MIN
@@ -285,7 +285,7 @@ CREATE INDEX ix_pgt_eni_remun_modif_date ON adv.pgt_eni_remun (modif_date);
 
 CREATE TABLE adv.pgt_etat_call_ret (
     id_etat_call_ret_auto  bigint,  -- IDEtatCallRetAuto
-    id_etat_call_ret       smallint  NOT NULL,  -- IDEtatCallRet
+    id_etat_call_ret       smallint NOT NULL,  -- IDEtatCallRet
     lib_etat               varchar(50),  -- LibEtat
     mots_cles              text,  -- MotsClés
     id_etat_rdv_tech       bigint,  -- IdEtatRdvTech
@@ -300,7 +300,7 @@ CREATE INDEX ix_pgt_etat_call_ret_modif_date ON adv.pgt_etat_call_ret (modif_dat
 
 CREATE TABLE adv.pgt_gep_contrat (
     i_dcontrat_auto  bigint,  -- IDcontratAuto
-    i_dcontrat       bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat       bigint NOT NULL,  -- IDcontrat
     i_dclient        bigint,  -- IDclient
     id_salarie       bigint,  -- IDSalarie
     id_ste           bigint,  -- IdSte
@@ -341,7 +341,7 @@ CREATE INDEX ix_pgt_gep_contrat_modif_date ON adv.pgt_gep_contrat (modif_date);
 
 CREATE TABLE adv.pgt_gep_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -360,7 +360,7 @@ CREATE INDEX ix_pgt_gep_etat_contrat_modif_date ON adv.pgt_gep_etat_contrat (mod
 
 CREATE TABLE adv.pgt_gep_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -382,7 +382,7 @@ CREATE INDEX ix_pgt_gep_histo_attr_ctt_modif_date ON adv.pgt_gep_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_gep_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -402,7 +402,7 @@ CREATE INDEX ix_pgt_gep_histo_etat_ctt_modif_date ON adv.pgt_gep_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_gep_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -427,7 +427,7 @@ CREATE INDEX ix_pgt_gep_produit_id_type_prod_dec ON adv.pgt_gep_produit (id_type
 CREATE INDEX ix_pgt_gep_produit_modif_date ON adv.pgt_gep_produit (modif_date);
 
 CREATE TABLE adv.pgt_groupe_operateur (
-    id_groupe_operateur  bigint  NOT NULL,  -- IDGroupeOpérateur
+    id_groupe_operateur  bigint NOT NULL,  -- IDGroupeOpérateur
     lib_groupe           varchar(50),  -- LibGroupe
     description          text,  -- Description
     logo                 bytea,  -- Logo
@@ -439,7 +439,7 @@ CREATE TABLE adv.pgt_groupe_operateur (
 CREATE INDEX ix_pgt_groupe_operateur_modif_date ON adv.pgt_groupe_operateur (modif_date);
 
 CREATE TABLE adv.pgt_groupe_operateur_partenaire (
-    id_groupe_operateur_partenaire  bigint  NOT NULL,  -- IDGroupeOpérateur_Partenaire
+    id_groupe_operateur_partenaire  bigint NOT NULL,  -- IDGroupeOpérateur_Partenaire
     id_groupe_operateur             bigint,  -- IDGroupeOpérateur
     id_partenaire                   bigint,  -- IDPartenaire
     i_dproduit                      integer,  -- IDproduit
@@ -457,7 +457,7 @@ CREATE INDEX ix_pgt_groupe_operateur_partenaire_i_dproduit ON adv.pgt_groupe_ope
 CREATE INDEX ix_pgt_groupe_operateur_partenaire_modif_date ON adv.pgt_groupe_operateur_partenaire (modif_date);
 
 CREATE TABLE adv.pgt_groupe_rem (
-    id_groupe_rem        bigint  NOT NULL,  -- IDGroupeRem
+    id_groupe_rem        bigint NOT NULL,  -- IDGroupeRem
     id_distrib           bigint,  -- idDistrib
     id_groupe_operateur  bigint,  -- IDGroupeOpérateur
     lib_groupe           varchar(50),  -- LibGroupe
@@ -481,7 +481,7 @@ CREATE INDEX ix_pgt_groupe_rem_ss_fam ON adv.pgt_groupe_rem (ss_fam);
 CREATE INDEX ix_pgt_groupe_rem_modif_date ON adv.pgt_groupe_rem (modif_date);
 
 CREATE TABLE adv.pgt_groupe_rem_tab (
-    id_groupe_rem_tab  bigint  NOT NULL,  -- IDGroupeRemTab
+    id_groupe_rem_tab  bigint NOT NULL,  -- IDGroupeRemTab
     id_groupe_rem      bigint,  -- IDGroupeRem
     id_groupe_rem_x    bigint,  -- IDGroupeRemX
     id_groupe_rem_y    bigint,  -- IDGroupeRemY
@@ -500,7 +500,7 @@ CREATE INDEX ix_pgt_groupe_rem_tab_id_groupe_rem_y ON adv.pgt_groupe_rem_tab (id
 CREATE INDEX ix_pgt_groupe_rem_tab_modif_date ON adv.pgt_groupe_rem_tab (modif_date);
 
 CREATE TABLE adv.pgt_groupe_rem_x (
-    id_groupe_rem_x  bigint  NOT NULL,  -- IDGroupeRemX
+    id_groupe_rem_x  bigint NOT NULL,  -- IDGroupeRemX
     id_groupe_rem    bigint,  -- IDGroupeRem
     lib              varchar(100),  -- Lib
     code_interne     varchar(15),  -- CodeInterne
@@ -517,7 +517,7 @@ CREATE INDEX ix_pgt_groupe_rem_x_id_groupe_rem ON adv.pgt_groupe_rem_x (id_group
 CREATE INDEX ix_pgt_groupe_rem_x_modif_date ON adv.pgt_groupe_rem_x (modif_date);
 
 CREATE TABLE adv.pgt_groupe_rem_y (
-    id_groupe_rem_y  bigint  NOT NULL,  -- IDGroupeRemY
+    id_groupe_rem_y  bigint NOT NULL,  -- IDGroupeRemY
     id_groupe_rem    bigint,  -- IDGroupeRem
     lib              varchar(100),  -- Lib
     code_interne     varchar(15),  -- CodeInterne
@@ -535,7 +535,7 @@ CREATE INDEX ix_pgt_groupe_rem_y_modif_date ON adv.pgt_groupe_rem_y (modif_date)
 
 CREATE TABLE adv.pgt_iag_contrat (
     i_dcontrat_auto  bigint,  -- IDcontratAuto
-    i_dcontrat       bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat       bigint NOT NULL,  -- IDcontrat
     i_dclient        bigint,  -- IDclient
     id_salarie       bigint,  -- IDSalarie
     id_ste           bigint,  -- IdSte
@@ -572,7 +572,7 @@ CREATE INDEX ix_pgt_iag_contrat_modif_date ON adv.pgt_iag_contrat (modif_date);
 
 CREATE TABLE adv.pgt_iag_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -591,7 +591,7 @@ CREATE INDEX ix_pgt_iag_etat_contrat_modif_date ON adv.pgt_iag_etat_contrat (mod
 
 CREATE TABLE adv.pgt_iag_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -613,7 +613,7 @@ CREATE INDEX ix_pgt_iag_histo_attr_ctt_modif_date ON adv.pgt_iag_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_iag_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -633,7 +633,7 @@ CREATE INDEX ix_pgt_iag_histo_etat_ctt_modif_date ON adv.pgt_iag_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_iag_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -659,7 +659,7 @@ CREATE INDEX ix_pgt_iag_produit_modif_date ON adv.pgt_iag_produit (modif_date);
 
 CREATE TABLE adv.pgt_iag_remun (
     id_remun_auto  bigint,  -- IDRemunAuto
-    id_remun       bigint  NOT NULL,  -- IDRemun
+    id_remun       bigint NOT NULL,  -- IDRemun
     i_dproduit     integer,  -- IDproduit
     type_vente     smallint,  -- TypeVente
     date_debut     date,  -- DateDébut
@@ -677,7 +677,7 @@ CREATE INDEX ix_pgt_iag_remun_date_debut ON adv.pgt_iag_remun (date_debut);
 CREATE INDEX ix_pgt_iag_remun_modif_date ON adv.pgt_iag_remun (modif_date);
 
 CREATE TABLE adv.pgt_importautosuivi (
-    id_import_auto_suivi  bigint  NOT NULL,  -- IDImportAutoSuivi
+    id_import_auto_suivi  bigint NOT NULL,  -- IDImportAutoSuivi
     type                  varchar(20),  -- Type
     dateimport            date,  -- Dateimport
     total                 integer,  -- Total
@@ -690,7 +690,7 @@ CREATE INDEX ix_pgt_importautosuivi_modif_date ON adv.pgt_importautosuivi (modif
 
 CREATE TABLE adv.pgt_incident_call (
     i_dincident_call_auto  bigint,  -- IDincidentCallAuto
-    i_dincident_call       bigint  NOT NULL,  -- IDincidentCall
+    i_dincident_call       bigint NOT NULL,  -- IDincidentCall
     date_debut             timestamp,  -- DateDEBUT
     date_fin               timestamp,  -- DateFIN
     commentaire            text,  -- commentaire
@@ -706,7 +706,7 @@ CREATE INDEX ix_pgt_incident_call_modif_date ON adv.pgt_incident_call (modif_dat
 
 CREATE TABLE adv.pgt_oen_contrat (
     i_dcontrat_auto   bigint,  -- IDcontratAuto
-    i_dcontrat        bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat        bigint NOT NULL,  -- IDcontrat
     id_sales_force    varchar(25),  -- IDSalesForce
     i_dclient         bigint,  -- IDclient
     id_salarie        bigint,  -- IDSalarie
@@ -751,7 +751,7 @@ CREATE INDEX ix_pgt_oen_contrat_date_saisie ON adv.pgt_oen_contrat (date_saisie)
 CREATE INDEX ix_pgt_oen_contrat_modif_date ON adv.pgt_oen_contrat (modif_date);
 
 CREATE TABLE adv.pgt_oen_contrat_compteur (
-    i_dcontrat_compteur     bigint  NOT NULL,  -- IDcontratCompteur
+    i_dcontrat_compteur     bigint NOT NULL,  -- IDcontratCompteur
     i_dcontrat              bigint,  -- IDcontrat
     type_releve             varchar(10),  -- TypeRelève
     releve                  integer,  -- Relève
@@ -767,7 +767,7 @@ CREATE INDEX ix_pgt_oen_contrat_compteur_modif_date ON adv.pgt_oen_contrat_compt
 
 CREATE TABLE adv.pgt_oen_contrat_option (
     i_dcontrat_option_auto      bigint,  -- IDcontratOptionAuto
-    i_dcontrat                  bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat                  bigint NOT NULL,  -- IDcontrat
     num_bs                      text,  -- NumBS
     opt_mail                    boolean,  -- OPT_Mail
     opt_index_gaz               boolean,  -- OPT_IndexGaz
@@ -801,7 +801,7 @@ CREATE INDEX ix_pgt_oen_contrat_option_modif_date ON adv.pgt_oen_contrat_option 
 
 CREATE TABLE adv.pgt_oen_contrat_remun (
     id_oen_contrat_remun_auto  bigint,  -- IDOEN_Contrat_RemunAuto
-    id_oen_contrat_remun       bigint  NOT NULL,  -- IDOEN_Contrat_Remun
+    id_oen_contrat_remun       bigint NOT NULL,  -- IDOEN_Contrat_Remun
     i_dcontrat                 bigint,  -- IDcontrat
     num                        varchar(25),  -- NUM
     type_rem                   varchar(15),  -- TypeRem
@@ -830,7 +830,7 @@ CREATE INDEX ix_pgt_oen_contrat_remun_modif_date ON adv.pgt_oen_contrat_remun (m
 
 CREATE TABLE adv.pgt_oen_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -849,7 +849,7 @@ CREATE INDEX ix_pgt_oen_etat_contrat_modif_date ON adv.pgt_oen_etat_contrat (mod
 
 CREATE TABLE adv.pgt_oen_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -871,7 +871,7 @@ CREATE INDEX ix_pgt_oen_histo_attr_ctt_modif_date ON adv.pgt_oen_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_oen_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -891,7 +891,7 @@ CREATE INDEX ix_pgt_oen_histo_etat_ctt_modif_date ON adv.pgt_oen_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_oen_histo_etat_ctt_oen (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -911,7 +911,7 @@ CREATE INDEX ix_pgt_oen_histo_etat_ctt_oen_modif_date ON adv.pgt_oen_histo_etat_
 
 CREATE TABLE adv.pgt_oen_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -938,7 +938,7 @@ CREATE INDEX ix_pgt_oen_produit_modif_date ON adv.pgt_oen_produit (modif_date);
 CREATE TABLE adv.pgt_partenaire (
     id_partenaire   bigint,  -- IDPartenaire
     lib_partenaire  text,  -- Lib_Partenaire
-    prefixe_bdd     text  NOT NULL,  -- PréfixeBDD
+    prefixe_bdd     text NOT NULL,  -- PréfixeBDD
     logo            bytea,  -- LOGO
     date_debut      date,  -- DateDEBUT
     date_fin        date,  -- DateFIN
@@ -959,7 +959,7 @@ CREATE INDEX ix_pgt_partenaire_modif_date ON adv.pgt_partenaire (modif_date);
 
 CREATE TABLE adv.pgt_pro_contrat (
     i_dcontrat_auto  bigint,  -- IDcontratAuto
-    i_dcontrat       bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat       bigint NOT NULL,  -- IDcontrat
     i_dclient        bigint,  -- IDclient
     id_salarie       bigint,  -- IDSalarie
     id_ste           bigint,  -- IdSte
@@ -998,7 +998,7 @@ CREATE INDEX ix_pgt_pro_contrat_modif_date ON adv.pgt_pro_contrat (modif_date);
 
 CREATE TABLE adv.pgt_pro_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -1017,7 +1017,7 @@ CREATE INDEX ix_pgt_pro_etat_contrat_modif_date ON adv.pgt_pro_etat_contrat (mod
 
 CREATE TABLE adv.pgt_pro_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -1039,7 +1039,7 @@ CREATE INDEX ix_pgt_pro_histo_attr_ctt_modif_date ON adv.pgt_pro_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_pro_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -1059,7 +1059,7 @@ CREATE INDEX ix_pgt_pro_histo_etat_ctt_modif_date ON adv.pgt_pro_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_pro_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -1085,7 +1085,7 @@ CREATE INDEX ix_pgt_pro_produit_modif_date ON adv.pgt_pro_produit (modif_date);
 
 CREATE TABLE adv.pgt_pro_remun (
     id_remun_auto  bigint,  -- IDRemunAuto
-    id_remun       bigint  NOT NULL,  -- IDRemun
+    id_remun       bigint NOT NULL,  -- IDRemun
     i_dproduit     integer,  -- IDproduit
     type_vente     smallint,  -- TypeVente
     date_debut     date,  -- DateDébut
@@ -1104,7 +1104,7 @@ CREATE INDEX ix_pgt_pro_remun_modif_date ON adv.pgt_pro_remun (modif_date);
 
 CREATE TABLE adv.pgt_sfr_cluster (
     id_sfr_cluster_auto  bigint,  -- IDSFR_ClusterAuto
-    id_sfr_cluster       bigint  NOT NULL,  -- IDSFR_Cluster
+    id_sfr_cluster       bigint NOT NULL,  -- IDSFR_Cluster
     region               varchar(20),  -- Région
     code_vad             varchar(5),  -- CodeVAD
     nom_cluster          text,  -- NomCluster
@@ -1131,13 +1131,13 @@ CREATE TABLE adv.pgt_sfr_cluster_objectif (
     nb_s1                    integer,  -- nbS1
     modif_date               timestamp,  -- ModifDate
     modif_op                 bigint,  -- ModifOp
-    modif_elem               varchar(5),  -- ModifElem
+    modif_elem               varchar(5)  -- ModifElem
 );
 CREATE INDEX ix_pgt_sfr_cluster_objectif_code_vad ON adv.pgt_sfr_cluster_objectif (code_vad);
 CREATE INDEX ix_pgt_sfr_cluster_objectif_modif_date ON adv.pgt_sfr_cluster_objectif (modif_date);
 
 CREATE TABLE adv.pgt_sfr_cluster_periode (
-    id_sfr_cluster_periode  bigint  NOT NULL,  -- IDSFR_ClusterPériode
+    id_sfr_cluster_periode  bigint NOT NULL,  -- IDSFR_ClusterPériode
     id_sfr_cluster          bigint,  -- IDSFR_Cluster
     du                      date,  -- DU
     au                      date,  -- AU
@@ -1153,7 +1153,7 @@ CREATE INDEX ix_pgt_sfr_cluster_periode_modif_date ON adv.pgt_sfr_cluster_period
 
 CREATE TABLE adv.pgt_sfr_contrat (
     i_dcontrat_auto     bigint,  -- IDcontratAuto
-    i_dcontrat          bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat          bigint NOT NULL,  -- IDcontrat
     i_dclient           bigint,  -- IDclient
     id_salarie          bigint,  -- IDSalarie
     id_ste              bigint,  -- IdSte
@@ -1242,7 +1242,7 @@ CREATE INDEX ix_pgt_sfr_contrat_modif_date ON adv.pgt_sfr_contrat (modif_date);
 
 CREATE TABLE adv.pgt_sfr_contrat_remun (
     id_sfr_contrat_remun_auto  bigint,  -- IDSFR_Contrat_RemunAuto
-    id_sfr_contrat_remun       bigint  NOT NULL,  -- IDSFR_Contrat_Remun
+    id_sfr_contrat_remun       bigint NOT NULL,  -- IDSFR_Contrat_Remun
     i_dcontrat                 bigint,  -- IDcontrat
     num                        varchar(25),  -- NUM
     type_rem                   varchar(15),  -- TypeRem
@@ -1271,7 +1271,7 @@ CREATE INDEX ix_pgt_sfr_contrat_remun_modif_date ON adv.pgt_sfr_contrat_remun (m
 
 CREATE TABLE adv.pgt_sfr_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -1290,7 +1290,7 @@ CREATE INDEX ix_pgt_sfr_etat_contrat_modif_date ON adv.pgt_sfr_etat_contrat (mod
 
 CREATE TABLE adv.pgt_sfr_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -1312,7 +1312,7 @@ CREATE INDEX ix_pgt_sfr_histo_attr_ctt_modif_date ON adv.pgt_sfr_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_sfr_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -1332,7 +1332,7 @@ CREATE INDEX ix_pgt_sfr_histo_etat_ctt_modif_date ON adv.pgt_sfr_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_sfr_histo_etat_ctt_sfr (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -1352,7 +1352,7 @@ CREATE INDEX ix_pgt_sfr_histo_etat_ctt_sfr_modif_date ON adv.pgt_sfr_histo_etat_
 
 CREATE TABLE adv.pgt_sfr_offres_provad (
     id_offres_sfr_auto  bigint,  -- IDOffres_SFRAuto
-    id_offres_sfr       bigint  NOT NULL,  -- IDOffres_SFR
+    id_offres_sfr       bigint NOT NULL,  -- IDOffres_SFR
     type                varchar(8),  -- Type
     lib_offre           varchar(50),  -- Lib_Offre
     debit_down          varchar(20),  -- DebitDown
@@ -1379,7 +1379,7 @@ CREATE INDEX ix_pgt_sfr_offres_provad_modif_date ON adv.pgt_sfr_offres_provad (m
 
 CREATE TABLE adv.pgt_sfr_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -1405,7 +1405,7 @@ CREATE INDEX ix_pgt_sfr_produit_modif_date ON adv.pgt_sfr_produit (modif_date);
 
 CREATE TABLE adv.pgt_sfr_remun (
     id_sfr_remun_auto  bigint,  -- IDSFR_RemunAuto
-    id_sfr_remun       bigint  NOT NULL,  -- IDSFR_Remun
+    id_sfr_remun       bigint NOT NULL,  -- IDSFR_Remun
     categorie          varchar(15),  -- Catégorie
     i_dproduit         integer,  -- IDproduit
     type_vente         smallint,  -- TypeVente
@@ -1431,7 +1431,7 @@ CREATE INDEX ix_pgt_sfr_remun_modif_date ON adv.pgt_sfr_remun (modif_date);
 
 CREATE TABLE adv.pgt_sfr_statut_rdv (
     id_sfr_statut_rdv_auto  bigint,  -- IdSFR_StatutRDVAuto
-    id_sfr_statut_rdv       bigint  NOT NULL,  -- IdSFR_StatutRDV
+    id_sfr_statut_rdv       bigint NOT NULL,  -- IdSFR_StatutRDV
     lib_statut              varchar(50),  -- LibStatut
     couleur_r               smallint,  -- Couleur_R
     couleur_v               smallint,  -- Couleur_V
@@ -1445,7 +1445,7 @@ CREATE TABLE adv.pgt_sfr_statut_rdv (
 CREATE INDEX ix_pgt_sfr_statut_rdv_modif_date ON adv.pgt_sfr_statut_rdv (modif_date);
 
 CREATE TABLE adv.pgt_statventes (
-    id_stat_ventes                                              bigint  NOT NULL,  -- IDStatVentes
+    id_stat_ventes                                              bigint NOT NULL,  -- IDStatVentes
     annee                                                       smallint,  -- Année
     num_sem                                                     smallint,  -- NumSem
     date_deb                                                    date,  -- DateDeb
@@ -1493,7 +1493,7 @@ CREATE INDEX ix_pgt_statventes_modif_date ON adv.pgt_statventes (modif_date);
 
 CREATE TABLE adv.pgt_str_contrat (
     i_dcontrat_auto  bigint,  -- IDcontratAuto
-    i_dcontrat       bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat       bigint NOT NULL,  -- IDcontrat
     i_dclient        bigint,  -- IDclient
     id_salarie       bigint,  -- IDSalarie
     id_ste           bigint,  -- IdSte
@@ -1531,7 +1531,7 @@ CREATE INDEX ix_pgt_str_contrat_modif_date ON adv.pgt_str_contrat (modif_date);
 
 CREATE TABLE adv.pgt_str_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -1550,7 +1550,7 @@ CREATE INDEX ix_pgt_str_etat_contrat_modif_date ON adv.pgt_str_etat_contrat (mod
 
 CREATE TABLE adv.pgt_str_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -1572,7 +1572,7 @@ CREATE INDEX ix_pgt_str_histo_attr_ctt_modif_date ON adv.pgt_str_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_str_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -1592,7 +1592,7 @@ CREATE INDEX ix_pgt_str_histo_etat_ctt_modif_date ON adv.pgt_str_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_str_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -1618,7 +1618,7 @@ CREATE INDEX ix_pgt_str_produit_modif_date ON adv.pgt_str_produit (modif_date);
 
 CREATE TABLE adv.pgt_str_remun (
     id_remun_auto  bigint,  -- IDRemunAuto
-    id_remun       bigint  NOT NULL,  -- IDRemun
+    id_remun       bigint NOT NULL,  -- IDRemun
     i_dproduit     integer,  -- IDproduit
     type_vente     smallint,  -- TypeVente
     date_debut     date,  -- DateDébut
@@ -1636,7 +1636,7 @@ CREATE INDEX ix_pgt_str_remun_date_debut ON adv.pgt_str_remun (date_debut);
 CREATE INDEX ix_pgt_str_remun_modif_date ON adv.pgt_str_remun (modif_date);
 
 CREATE TABLE adv.pgt_tdb_qualite (
-    id_tdb_qualite  bigint  NOT NULL,  -- IDTDB_Qualité
+    id_tdb_qualite  bigint NOT NULL,  -- IDTDB_Qualité
     date            date,  -- Date
     id_salarie      bigint,  -- IDSalarie
     en_ligne        boolean,  -- EnLigne
@@ -1649,7 +1649,7 @@ CREATE INDEX ix_pgt_tdb_qualite_id_salarie ON adv.pgt_tdb_qualite (id_salarie);
 CREATE INDEX ix_pgt_tdb_qualite_modif_date ON adv.pgt_tdb_qualite (modif_date);
 
 CREATE TABLE adv.pgt_tdb_qualite_contrat (
-    id_tdb_qualite_contrat  bigint  NOT NULL,  -- IDTDB_QualitéContrat
+    id_tdb_qualite_contrat  bigint NOT NULL,  -- IDTDB_QualitéContrat
     id_tdb_qualite          bigint,  -- IDTDB_Qualité
     i_dcontrat              bigint,  -- IDcontrat
     part                    varchar(4),  -- Part
@@ -1666,7 +1666,7 @@ CREATE INDEX ix_pgt_tdb_qualite_contrat_modif_date ON adv.pgt_tdb_qualite_contra
 
 CREATE TABLE adv.pgt_tlc_contrat (
     i_dcontrat_auto  bigint,  -- IDcontratAuto
-    i_dcontrat       bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat       bigint NOT NULL,  -- IDcontrat
     i_dclient        bigint,  -- IDclient
     id_salarie       bigint,  -- IDSalarie
     id_ste           bigint,  -- IdSte
@@ -1703,7 +1703,7 @@ CREATE INDEX ix_pgt_tlc_contrat_modif_date ON adv.pgt_tlc_contrat (modif_date);
 
 CREATE TABLE adv.pgt_tlc_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -1720,7 +1720,7 @@ CREATE INDEX ix_pgt_tlc_etat_contrat_modif_date ON adv.pgt_tlc_etat_contrat (mod
 
 CREATE TABLE adv.pgt_tlc_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -1742,7 +1742,7 @@ CREATE INDEX ix_pgt_tlc_histo_attr_ctt_modif_date ON adv.pgt_tlc_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_tlc_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -1762,7 +1762,7 @@ CREATE INDEX ix_pgt_tlc_histo_etat_ctt_modif_date ON adv.pgt_tlc_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_tlc_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -1788,7 +1788,7 @@ CREATE INDEX ix_pgt_tlc_produit_modif_date ON adv.pgt_tlc_produit (modif_date);
 
 CREATE TABLE adv.pgt_tlc_remun (
     id_remun_auto  bigint,  -- IDRemunAuto
-    id_remun       bigint  NOT NULL,  -- IDRemun
+    id_remun       bigint NOT NULL,  -- IDRemun
     i_dproduit     integer,  -- IDproduit
     type_vente     smallint,  -- TypeVente
     date_debut     date,  -- DateDébut
@@ -1807,7 +1807,7 @@ CREATE INDEX ix_pgt_tlc_remun_modif_date ON adv.pgt_tlc_remun (modif_date);
 
 CREATE TABLE adv.pgt_type_etat_contrat (
     id_type_etat_contrat_auto  bigint,  -- IDTypeEtatContratAuto
-    id_type_etat               smallint  NOT NULL,  -- IDTypeEtat
+    id_type_etat               smallint NOT NULL,  -- IDTypeEtat
     lib_type                   varchar(20),  -- LibType
     couleur_r                  smallint,  -- Couleur_R
     couleur_v                  smallint,  -- Couleur_V
@@ -1822,7 +1822,7 @@ CREATE INDEX ix_pgt_type_etat_contrat_modif_date ON adv.pgt_type_etat_contrat (m
 
 CREATE TABLE adv.pgt_type_prod_dec (
     id_type_prod_dec_auto       bigint,  -- IDTypeProdDecAuto
-    id_type_prod_dec            bigint  NOT NULL,  -- IdTypeProdDec
+    id_type_prod_dec            bigint NOT NULL,  -- IdTypeProdDec
     lib_type_prod_dec           varchar(20),  -- LibTypeProdDec
     prod_actif                  boolean,  -- ProdActif
     prefixe_bdd                 varchar(5),  -- PréfixeBDD
@@ -1840,7 +1840,7 @@ CREATE INDEX ix_pgt_type_prod_dec_modif_date ON adv.pgt_type_prod_dec (modif_dat
 
 CREATE TABLE adv.pgt_val_contrat (
     i_dcontrat_auto   bigint,  -- IDcontratAuto
-    i_dcontrat        bigint  NOT NULL,  -- IDcontrat
+    i_dcontrat        bigint NOT NULL,  -- IDcontrat
     i_dclient         bigint,  -- IDclient
     id_salarie        bigint,  -- IDSalarie
     id_ste            bigint,  -- IdSte
@@ -1880,7 +1880,7 @@ CREATE INDEX ix_pgt_val_contrat_modif_date ON adv.pgt_val_contrat (modif_date);
 
 CREATE TABLE adv.pgt_val_etat_contrat (
     i_detat_auto   bigint,  -- IDetatAuto
-    i_detat        integer  NOT NULL,  -- IDetat
+    i_detat        integer NOT NULL,  -- IDetat
     id_type_etat   smallint,  -- IDTypeEtat
     lib_etat       text,  -- Lib_Etat
     lib_etat_vend  text,  -- Lib_EtatVend
@@ -1899,7 +1899,7 @@ CREATE INDEX ix_pgt_val_etat_contrat_modif_date ON adv.pgt_val_etat_contrat (mod
 
 CREATE TABLE adv.pgt_val_histo_attr_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     type_ctt       varchar(20),  -- TypeCtt
     i_dcontrat     bigint,  -- IDcontrat
     num            varchar(25),  -- NUM
@@ -1921,7 +1921,7 @@ CREATE INDEX ix_pgt_val_histo_attr_ctt_modif_date ON adv.pgt_val_histo_attr_ctt 
 
 CREATE TABLE adv.pgt_val_histo_etat_ctt (
     id_histo_auto  bigint,  -- idHistoAuto
-    id_histo       bigint  NOT NULL,  -- idHisto
+    id_histo       bigint NOT NULL,  -- idHisto
     i_dcontrat     bigint,  -- IDcontrat
     op_saisie      bigint,  -- OPSAISIE
     date           timestamp,  -- DATE
@@ -1941,7 +1941,7 @@ CREATE INDEX ix_pgt_val_histo_etat_ctt_modif_date ON adv.pgt_val_histo_etat_ctt 
 
 CREATE TABLE adv.pgt_val_produit (
     i_dproduit_auto              bigint,  -- IDproduitAuto
-    i_dproduit                   integer  NOT NULL,  -- IDproduit
+    i_dproduit                   integer NOT NULL,  -- IDproduit
     lib_produit                  text,  -- Lib_produit
     prefixe_bdd                  varchar(5),  -- PréfixeBDD
     famille                      varchar(10),  -- Famille
@@ -1967,7 +1967,7 @@ CREATE INDEX ix_pgt_val_produit_modif_date ON adv.pgt_val_produit (modif_date);
 
 CREATE TABLE adv.pgt_val_remun (
     id_remun_auto  bigint,  -- IDRemunAuto
-    id_remun       bigint  NOT NULL,  -- IDRemun
+    id_remun       bigint NOT NULL,  -- IDRemun
     i_dproduit     integer,  -- IDproduit
     type_vente     smallint,  -- TypeVente
     date_debut     date,  -- DateDébut

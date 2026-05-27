@@ -2,7 +2,7 @@ CREATE SCHEMA IF NOT EXISTS ticket_dpae;
 
 
 CREATE TABLE ticket_dpae.pgt_tk_demande_dpae (
-    id_tk_demande_dpae       bigint  NOT NULL,  -- IDTK_DemandeDPAE
+    id_tk_demande_dpae       bigint NOT NULL,  -- IDTK_DemandeDPAE
     id_tk_liste              bigint,  -- IDTK_Liste
     civilite                 smallint,  -- Civilité
     op_crea                  bigint,  -- OPCrea
@@ -59,7 +59,7 @@ CREATE TABLE ticket_dpae.pgt_tk_demande_dpae_photo (
     modif_date                     timestamp,  -- ModifDate
     modif_elem                     varchar(5),  -- ModifELEM
     modif_op                       bigint,  -- ModifOP
-    id_tk_demande_dpae_photo       bigint  NOT NULL,  -- IDTK_DemandeDPAEPhoto
+    id_tk_demande_dpae_photo       bigint NOT NULL,  -- IDTK_DemandeDPAEPhoto
     photo                          bytea,  -- PHOTO
     nom_fichier                    varchar(50),  -- NomFichier
     doc_pdf                        bytea,  -- DocPDF
@@ -75,7 +75,7 @@ CREATE INDEX ix_pgt_tk_demande_dpae_photo_id_tk_liste ON ticket_dpae.pgt_tk_dema
 CREATE INDEX ix_pgt_tk_demande_dpae_photo_id_tk_type_photo_dpae ON ticket_dpae.pgt_tk_demande_dpae_photo (id_tk_type_photo_dpae);
 
 CREATE TABLE ticket_dpae.pgt_tk_demande_dpae_photo_temp (
-    id_tk_demande_dpae_photo_temp  bigint  NOT NULL,  -- IDTK_DemandeDPAEPhoto_Temp
+    id_tk_demande_dpae_photo_temp  bigint NOT NULL,  -- IDTK_DemandeDPAEPhoto_Temp
     id_tk_type_photo_dpae          bigint,  -- IDTK_TypePhotoDPAE
     id_tk_liste                    bigint,  -- IDTK_Liste
     fichier                        text,  -- Fichier
@@ -90,7 +90,7 @@ CREATE INDEX ix_pgt_tk_demande_dpae_photo_temp_modif_date ON ticket_dpae.pgt_tk_
 
 CREATE TABLE ticket_dpae.pgt_tk_dpae_doc_demat (
     id_tk_liste                bigint,  -- IDTK_Liste
-    id_tk_dpae_doc_demat       bigint  NOT NULL,  -- IDTK_DPAE_DocDemat
+    id_tk_dpae_doc_demat       bigint NOT NULL,  -- IDTK_DPAE_DocDemat
     date_signature             date,  -- DateSignature
     num_semaine                smallint,  -- NumSemaine
     nb_masque_tissu            integer,  -- nbMasqueTissu
@@ -122,7 +122,7 @@ CREATE INDEX ix_pgt_tk_dpae_doc_demat_modif_date ON ticket_dpae.pgt_tk_dpae_doc_
 CREATE INDEX ix_pgt_tk_dpae_doc_demat_id_ste ON ticket_dpae.pgt_tk_dpae_doc_demat (id_ste);
 
 CREATE TABLE ticket_dpae.pgt_tk_type_photo_dpae (
-    id_tk_type_photo_dpae       bigint  NOT NULL,  -- IDTK_TypePhotoDPAE
+    id_tk_type_photo_dpae       bigint NOT NULL,  -- IDTK_TypePhotoDPAE
     lib_type_doc                varchar(50),  -- LibTypeDoc
     modif_date                  timestamp,  -- ModifDate
     modif_op                    bigint,  -- ModifOP

@@ -207,10 +207,9 @@ def build_table(schema: str, hf_table: str, cols: list[dict],
         pk = None
         report.append(f"[PK absente] {hf_table}: aucune cle unique -> table sans PK")
 
-    lines = [f"CREATE TABLE {schema}.{pg_table} ("]
-    body = []
-    indexed = []
     width = max((len(to_snake(c["name"])) for c in cols), default=10)
+    items: list[tuple[str, str]] = []   # (sql colonne/contrainte, commentaire HFSQL)
+    indexed = []
     for c in cols:
         sc = to_snake(c["name"])
         pgt, unknown = pg_type(c["type"], c["size"])
@@ -221,8 +220,8 @@ def build_table(schema: str, hf_table: str, cols: list[dict],
                 and "_" not in c["name"] and c["name"] not in OVERRIDES
                 and "_" not in sc):
             report.append(f"[ALL-CAPS a verifier] {hf_table}.{c['name']} -> {sc}")
-        notnull = "  NOT NULL" if (pk and c is pk) else ""
-        body.append(f"    {sc:<{width}}  {pgt}{notnull},  -- {c['name']}")
+        notnull = " NOT NULL" if (pk and c is pk) else ""
+        items.append((f"{sc:<{width}}  {pgt}{notnull}", c["name"]))
         # Index : "cles avec doublon" metier + modif_date (synchro). On
         # exclut modif_op/modif_elem (housekeeping, jamais filtres seuls).
         if (("cle avec doublon" in c["key"]) or sc == "modif_date") \
@@ -233,19 +232,22 @@ def build_table(schema: str, hf_table: str, cols: list[dict],
             "hfsql_column": c["name"], "pg_column": sc, "pg_type": pgt,
             "pk": "1" if (pk and c is pk) else "",
         })
-    lines.extend(body)
-    constraints = []
     if pk:
-        constraints.append(f"    CONSTRAINT pk_{pg_table} PRIMARY KEY ({to_snake(pk['name'])})")
+        items.append((f"CONSTRAINT pk_{pg_table} PRIMARY KEY ({to_snake(pk['name'])})", ""))
     if auto_col and auto_col is not pk:
-        constraints.append(
-            f"    CONSTRAINT uq_{pg_table}_auto UNIQUE ({to_snake(auto_col['name'])})")
-    lines.append(",\n".join(constraints) if constraints else "")
-    # retire la virgule finale de la derniere colonne si pas de contrainte
-    if not constraints:
-        lines[-2] = lines[-2].rstrip().rstrip(",") + lines[-2][len(lines[-2].rstrip().rstrip(",")):]
+        items.append((f"CONSTRAINT uq_{pg_table}_auto UNIQUE ({to_snake(auto_col['name'])})", ""))
+
+    # Assemble : virgule sur tous les items sauf le dernier (colonnes ET
+    # contraintes), commentaire APRES la virgule -> pas de virgule trainante.
+    lines = [f"CREATE TABLE {schema}.{pg_table} ("]
+    for i, (part, comment) in enumerate(items):
+        comma = "," if i < len(items) - 1 else ""
+        line = f"    {part}{comma}"
+        if comment:
+            line += f"  -- {comment}"
+        lines.append(line)
     lines.append(");")
-    sql = "\n".join(l for l in lines if l != "")
+    sql = "\n".join(lines)
     # Index
     idx_sql = []
     for sc in dict.fromkeys(indexed):  # dedup en gardant l'ordre

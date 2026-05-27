@@ -6,7 +6,7 @@ CREATE TABLE scool.pgt_bulletin_mention (
     lib_mention          varchar(50),  -- LibMention
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOP
-    modif_elem           varchar(5),  -- ModifELEM
+    modif_elem           varchar(5)  -- ModifELEM
 );
 CREATE INDEX ix_pgt_bulletin_mention_modif_date ON scool.pgt_bulletin_mention (modif_date);
 
@@ -16,7 +16,7 @@ CREATE TABLE scool.pgt_formateur (
     modif_op           bigint,  -- ModifOP
     modif_elem         varchar(5),  -- ModifELEM
     formateur_actif    boolean,  -- FormateurActif
-    id_formateur       bigint  NOT NULL,  -- IDFormateur
+    id_formateur       bigint NOT NULL,  -- IDFormateur
     i_dformateur_auto  bigint,  -- IDformateurAuto
     CONSTRAINT pk_pgt_formateur PRIMARY KEY (id_formateur),
     CONSTRAINT uq_pgt_formateur_auto UNIQUE (i_dformateur_auto)
@@ -24,7 +24,7 @@ CREATE TABLE scool.pgt_formateur (
 CREATE INDEX ix_pgt_formateur_modif_date ON scool.pgt_formateur (modif_date);
 
 CREATE TABLE scool.pgt_formation (
-    i_dformation        bigint  NOT NULL,  -- IDformation
+    i_dformation        bigint NOT NULL,  -- IDformation
     intitule            text,  -- INTITULE
     nb_heure_salle      numeric,  -- nb_HeureSalle
     nb_heure_terrain    numeric,  -- nb_HeureTerrain
@@ -65,7 +65,7 @@ CREATE TABLE scool.pgt_formation_bareme_note (
     position_bulletin         smallint,  -- PositionBulletin
     modif_date                timestamp,  -- ModifDate
     modif_op                  bigint,  -- ModifOP
-    modif_elem                varchar(5),  -- ModifELEM
+    modif_elem                varchar(5)  -- ModifELEM
 );
 CREATE INDEX ix_pgt_formation_bareme_note_id_formation ON scool.pgt_formation_bareme_note (id_formation);
 CREATE INDEX ix_pgt_formation_bareme_note_modif_date ON scool.pgt_formation_bareme_note (modif_date);
@@ -101,7 +101,7 @@ CREATE TABLE scool.pgt_formation_bulletin (
     type_bulletin          boolean,  -- TypeBulletin
     modif_date             timestamp,  -- ModifDate
     modif_op               bigint,  -- ModifOP
-    modif_elem             varchar(5),  -- ModifELEM
+    modif_elem             varchar(5)  -- ModifELEM
 );
 CREATE INDEX ix_pgt_formation_bulletin_id_formation ON scool.pgt_formation_bulletin (id_formation);
 CREATE INDEX ix_pgt_formation_bulletin_id_salarie ON scool.pgt_formation_bulletin (id_salarie);
@@ -110,7 +110,7 @@ CREATE INDEX ix_pgt_formation_bulletin_modif_date ON scool.pgt_formation_bulleti
 
 CREATE TABLE scool.pgt_formation_evenement (
     id_formation_evenement_auto  bigint,  -- IDFormationEvenementAuto
-    id_formation_evenement       bigint  NOT NULL,  -- IDFormationEvenement
+    id_formation_evenement       bigint NOT NULL,  -- IDFormationEvenement
     id_formation                 bigint,  -- IDFormation
     id_salarie                   bigint,  -- IDSalarie
     date                         date,  -- DATE
@@ -132,7 +132,7 @@ CREATE TABLE scool.pgt_formation_prev_recrut (
     id_prevision_recrut       bigint,  -- IDPrevisionRecrut
     modif_date                timestamp,  -- ModifDate
     modif_op                  bigint,  -- ModifOP
-    modif_elem                varchar(5),  -- ModifELEM
+    modif_elem                varchar(5)  -- ModifELEM
 );
 CREATE INDEX ix_pgt_formation_prev_recrut_id_formation ON scool.pgt_formation_prev_recrut (id_formation);
 CREATE INDEX ix_pgt_formation_prev_recrut_id_prevision_recrut ON scool.pgt_formation_prev_recrut (id_prevision_recrut);
@@ -140,7 +140,7 @@ CREATE INDEX ix_pgt_formation_prev_recrut_modif_date ON scool.pgt_formation_prev
 
 CREATE TABLE scool.pgt_formation_programme (
     i_dformation_programme_auto  bigint,  -- IDformation_programmeAuto
-    i_dformation_programme       bigint  NOT NULL,  -- IDformation_programme
+    i_dformation_programme       bigint NOT NULL,  -- IDformation_programme
     id_formation                 bigint,  -- idFormation
     num_semaine                  smallint,  -- NumSemaine
     date                         date,  -- Date
@@ -167,7 +167,7 @@ CREATE TABLE scool.pgt_formation_salarie (
     modif_date                 timestamp,  -- ModifDate
     modif_op                   bigint,  -- ModifOP
     modif_elem                 varchar(5),  -- ModifELEM
-    i_dformation_salarie_auto  bigint  NOT NULL,  -- IDformation_SalarieAuto
+    i_dformation_salarie_auto  bigint NOT NULL,  -- IDformation_SalarieAuto
     livrable                   boolean,  -- Livrable
     i_dformation_id_salarie    varchar(16),  -- IDformationIDSalarie
     CONSTRAINT pk_pgt_formation_salarie PRIMARY KEY (i_dformation_salarie_auto)
@@ -179,7 +179,7 @@ CREATE INDEX ix_pgt_formation_salarie_modif_date ON scool.pgt_formation_salarie 
 
 CREATE TABLE scool.pgt_form_modele (
     id_modele_form_auto  bigint,  -- IDModèleFormAuto
-    id_modele_form       bigint  NOT NULL,  -- IDModèleForm
+    id_modele_form       bigint NOT NULL,  -- IDModèleForm
     intitule             text,  -- INTITULE
     categorie            varchar(5),  -- Catégorie
     nb_heure_salle       numeric,  -- nb_HeureSalle
@@ -196,7 +196,7 @@ CREATE INDEX ix_pgt_form_modele_modif_date ON scool.pgt_form_modele (modif_date)
 
 CREATE TABLE scool.pgt_form_modele_programme (
     id_modele_programme_auto  bigint,  -- IDModèle_ProgrammeAuto
-    id_modele_programme       bigint  NOT NULL,  -- IDModèle_Programme
+    id_modele_programme       bigint NOT NULL,  -- IDModèle_Programme
     id_modele_form            bigint,  -- IDModèleForm
     date                      smallint,  -- Date
     salle                     numeric,  -- Salle
