@@ -32,7 +32,7 @@ CREATE TABLE recrutement.pgt_agenda_evenement (
     modif_op                  bigint,  -- ModifOP
     id_cv_lieux               bigint,  -- IdCvLieux
     id_categorie              integer,  -- IDCatégorie
-    i_dprevision_recrut       bigint,  -- IDprevisionRecrut
+    id_prevision_recrut       bigint,  -- IDprevisionRecrut
     modif_elem                varchar(5),  -- ModifELEM
     op_crea                   bigint,  -- OPCrea
     id_agenda_evenement_auto  bigint,  -- IDAgendaEvénementAuto
@@ -52,12 +52,12 @@ CREATE INDEX ix_pgt_agenda_evenement_id_salarie ON recrutement.pgt_agenda_evenem
 CREATE INDEX ix_pgt_agenda_evenement_date_debut ON recrutement.pgt_agenda_evenement (date_debut);
 CREATE INDEX ix_pgt_agenda_evenement_modif_date ON recrutement.pgt_agenda_evenement (modif_date);
 CREATE INDEX ix_pgt_agenda_evenement_id_categorie ON recrutement.pgt_agenda_evenement (id_categorie);
-CREATE INDEX ix_pgt_agenda_evenement_i_dprevision_recrut ON recrutement.pgt_agenda_evenement (i_dprevision_recrut);
+CREATE INDEX ix_pgt_agenda_evenement_id_prevision_recrut ON recrutement.pgt_agenda_evenement (id_prevision_recrut);
 
 CREATE TABLE recrutement.pgt_annuaire (
-    i_dcv_lieu_rdv                    bigint,  -- IDcvLieuRdv
-    i_dannuaire                       bigint NOT NULL,  -- IDannuaire
-    i_dannuaire_auto                  bigint,  -- IDannuaireAuto
+    id_cv_lieu_rdv                    bigint,  -- IDcvLieuRdv
+    id_annuaire                       bigint NOT NULL,  -- IDannuaire
+    id_annuaire_auto                  bigint,  -- IDannuaireAuto
     intitule                          text,  -- Intitulé
     detail                            text,  -- Détail
     adresse                           text,  -- Adresse
@@ -77,10 +77,10 @@ CREATE TABLE recrutement.pgt_annuaire (
     modif_op                          bigint,  -- ModifOp
     id_communes_france                bigint,  -- IDCommunesFrance
     telephone1_telephone2_telephone3  varchar(36),  -- Téléphone1Téléphone2Téléphone3
-    CONSTRAINT pk_pgt_annuaire PRIMARY KEY (i_dannuaire),
-    CONSTRAINT uq_pgt_annuaire_auto UNIQUE (i_dannuaire_auto)
+    CONSTRAINT pk_pgt_annuaire PRIMARY KEY (id_annuaire),
+    CONSTRAINT uq_pgt_annuaire_auto UNIQUE (id_annuaire_auto)
 );
-CREATE INDEX ix_pgt_annuaire_i_dcv_lieu_rdv ON recrutement.pgt_annuaire (i_dcv_lieu_rdv);
+CREATE INDEX ix_pgt_annuaire_id_cv_lieu_rdv ON recrutement.pgt_annuaire (id_cv_lieu_rdv);
 CREATE INDEX ix_pgt_annuaire_telephone1 ON recrutement.pgt_annuaire (telephone1);
 CREATE INDEX ix_pgt_annuaire_telephone2 ON recrutement.pgt_annuaire (telephone2);
 CREATE INDEX ix_pgt_annuaire_telephone3 ON recrutement.pgt_annuaire (telephone3);
@@ -109,7 +109,7 @@ CREATE INDEX ix_pgt_cv_annonceur_modif_date ON recrutement.pgt_cv_annonceur (mod
 
 CREATE TABLE recrutement.pgt_cv_lieu_rdv (
     id_cv_lieu_rdv_auto  bigint,  -- IDCvLieuRdvAuto
-    i_dcv_lieu_rdv       bigint NOT NULL,  -- IDcvLieuRdv
+    id_cv_lieu_rdv       bigint NOT NULL,  -- IDcvLieuRdv
     lib_lieu             varchar(50),  -- Lib_Lieu
     adresse1             text,  -- ADRESSE1
     adresse2             text,  -- ADRESSE2
@@ -120,7 +120,7 @@ CREATE TABLE recrutement.pgt_cv_lieu_rdv (
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOp
     modif_elem           varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_cv_lieu_rdv PRIMARY KEY (i_dcv_lieu_rdv),
+    CONSTRAINT pk_pgt_cv_lieu_rdv PRIMARY KEY (id_cv_lieu_rdv),
     CONSTRAINT uq_pgt_cv_lieu_rdv_auto UNIQUE (id_cv_lieu_rdv_auto)
 );
 CREATE INDEX ix_pgt_cv_lieu_rdv_id_communes_france ON recrutement.pgt_cv_lieu_rdv (id_communes_france);
@@ -130,13 +130,13 @@ CREATE INDEX ix_pgt_cv_lieu_rdv_modif_date ON recrutement.pgt_cv_lieu_rdv (modif
 
 CREATE TABLE recrutement.pgt_cvposte (
     id_cv_poste_auto  bigint,  -- IDCvPosteAuto
-    i_dcvposte        bigint NOT NULL,  -- IDcvposte
+    id_cvposte        bigint NOT NULL,  -- IDcvposte
     lib_poste         varchar(30),  -- Lib_Poste
     is_actif          boolean,  -- IsActif
     modif_date        timestamp,  -- ModifDate
     modif_op          bigint,  -- ModifOp
     modif_elem        varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_cvposte PRIMARY KEY (i_dcvposte),
+    CONSTRAINT pk_pgt_cvposte PRIMARY KEY (id_cvposte),
     CONSTRAINT uq_pgt_cvposte_auto UNIQUE (id_cv_poste_auto)
 );
 CREATE INDEX ix_pgt_cvposte_lib_poste ON recrutement.pgt_cvposte (lib_poste);
@@ -144,13 +144,13 @@ CREATE INDEX ix_pgt_cvposte_modif_date ON recrutement.pgt_cvposte (modif_date);
 
 CREATE TABLE recrutement.pgt_cv_source (
     id_cv_source_auto  bigint,  -- IDCvSourceAuto
-    i_dcvsource        bigint NOT NULL,  -- IDcvsource
+    id_cvsource        bigint NOT NULL,  -- IDcvsource
     lib_source         varchar(30),  -- Lib_Source
     is_actif           boolean,  -- IsActif
     modif_date         timestamp,  -- ModifDate
     modif_op           bigint,  -- ModifOp
     modif_elem         varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_cv_source PRIMARY KEY (i_dcvsource),
+    CONSTRAINT pk_pgt_cv_source PRIMARY KEY (id_cvsource),
     CONSTRAINT uq_pgt_cv_source_auto UNIQUE (id_cv_source_auto)
 );
 CREATE INDEX ix_pgt_cv_source_is_actif ON recrutement.pgt_cv_source (is_actif);
@@ -171,7 +171,7 @@ CREATE INDEX ix_pgt_cvstatut_modif_date ON recrutement.pgt_cvstatut (modif_date)
 
 CREATE TABLE recrutement.pgt_cvsuivi (
     id_cv_suivi                                          bigint NOT NULL,  -- IDCvSuivi
-    i_dcvtheque                                          bigint,  -- IDcvtheque
+    id_cvtheque                                          bigint,  -- IDcvtheque
     datecrea                                             timestamp,  -- Datecrea
     op_crea                                              bigint,  -- OPCREA
     id_cv_statut                                         bigint,  -- IdCvStatut
@@ -181,16 +181,16 @@ CREATE TABLE recrutement.pgt_cvsuivi (
     modif_date                                           timestamp,  -- ModifDate
     modif_op                                             bigint,  -- ModifOp
     modif_elem                                           varchar(5),  -- ModifElem
-    i_dcvtheque_datecrea_id_cv_statut_type_elem_id_elem  varchar(42),  -- IDcvthequeDatecreaIdCvStatutTypeElemIdElem
+    id_cvtheque_datecrea_id_cv_statut_type_elem_id_elem  varchar(42),  -- IDcvthequeDatecreaIdCvStatutTypeElemIdElem
     CONSTRAINT pk_pgt_cvsuivi PRIMARY KEY (id_cv_suivi)
 );
-CREATE INDEX ix_pgt_cvsuivi_i_dcvtheque ON recrutement.pgt_cvsuivi (i_dcvtheque);
+CREATE INDEX ix_pgt_cvsuivi_id_cvtheque ON recrutement.pgt_cvsuivi (id_cvtheque);
 CREATE INDEX ix_pgt_cvsuivi_id_cv_statut ON recrutement.pgt_cvsuivi (id_cv_statut);
 CREATE INDEX ix_pgt_cvsuivi_modif_date ON recrutement.pgt_cvsuivi (modif_date);
 
 CREATE TABLE recrutement.pgt_cvtheque (
-    i_dcvtheque_auto    bigint,  -- IDcvthequeAuto
-    i_dcvtheque         bigint NOT NULL,  -- IDcvtheque
+    id_cvtheque_auto    bigint,  -- IDcvthequeAuto
+    id_cvtheque         bigint NOT NULL,  -- IDcvtheque
     origine             smallint,  -- Origine
     nom                 text,  -- NOM
     pays                text,  -- PAYS
@@ -203,8 +203,8 @@ CREATE TABLE recrutement.pgt_cvtheque (
     gsm                 text,  -- GSM
     id_communes_france  bigint,  -- IDCommunesFrance
     fic_cv              text,  -- Fic_CV
-    i_dcvposte          bigint,  -- IDcvposte
-    i_dcvsource         bigint,  -- IDcvsource
+    id_cvposte          bigint,  -- IDcvposte
+    id_cvsource         bigint,  -- IDcvsource
     id_elem_source      bigint,  -- IdElemSource
     id_ste              bigint,  -- IdSte
     date_saisie         timestamp,  -- DateSAISIE
@@ -220,8 +220,8 @@ CREATE TABLE recrutement.pgt_cvtheque (
     modif_op            bigint,  -- ModifOP
     modif_date          timestamp,  -- ModifDate
     modif_elem          varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_cvtheque PRIMARY KEY (i_dcvtheque),
-    CONSTRAINT uq_pgt_cvtheque_auto UNIQUE (i_dcvtheque_auto)
+    CONSTRAINT pk_pgt_cvtheque PRIMARY KEY (id_cvtheque),
+    CONSTRAINT uq_pgt_cvtheque_auto UNIQUE (id_cvtheque_auto)
 );
 CREATE INDEX ix_pgt_cvtheque_origine ON recrutement.pgt_cvtheque (origine);
 CREATE INDEX ix_pgt_cvtheque_date_naissance ON recrutement.pgt_cvtheque (date_naissance);
@@ -229,8 +229,8 @@ CREATE INDEX ix_pgt_cvtheque_permis_b ON recrutement.pgt_cvtheque (permis_b);
 CREATE INDEX ix_pgt_cvtheque_vehicule ON recrutement.pgt_cvtheque (vehicule);
 CREATE INDEX ix_pgt_cvtheque_gsm ON recrutement.pgt_cvtheque (gsm);
 CREATE INDEX ix_pgt_cvtheque_id_communes_france ON recrutement.pgt_cvtheque (id_communes_france);
-CREATE INDEX ix_pgt_cvtheque_i_dcvposte ON recrutement.pgt_cvtheque (i_dcvposte);
-CREATE INDEX ix_pgt_cvtheque_i_dcvsource ON recrutement.pgt_cvtheque (i_dcvsource);
+CREATE INDEX ix_pgt_cvtheque_id_cvposte ON recrutement.pgt_cvtheque (id_cvposte);
+CREATE INDEX ix_pgt_cvtheque_id_cvsource ON recrutement.pgt_cvtheque (id_cvsource);
 CREATE INDEX ix_pgt_cvtheque_id_elem_source ON recrutement.pgt_cvtheque (id_elem_source);
 CREATE INDEX ix_pgt_cvtheque_id_ste ON recrutement.pgt_cvtheque (id_ste);
 CREATE INDEX ix_pgt_cvtheque_date_saisie ON recrutement.pgt_cvtheque (date_saisie);
@@ -241,13 +241,13 @@ CREATE INDEX ix_pgt_cvtheque_date_rappel ON recrutement.pgt_cvtheque (date_rappe
 CREATE INDEX ix_pgt_cvtheque_modif_date ON recrutement.pgt_cvtheque (modif_date);
 
 CREATE TABLE recrutement.pgt_cvtheque_temporaire (
-    i_dcvposte          bigint,  -- IDcvposte
-    i_dcvsource         bigint,  -- IDcvsource
+    id_cvposte          bigint,  -- IDcvposte
+    id_cvsource         bigint,  -- IDcvsource
     id_elem_source      bigint,  -- IdElemSource
     adr_mail_rh         text,  -- AdrMailRH
     modif_date          timestamp,  -- ModifDate
     modif_op            bigint,  -- ModifOP
-    i_dcvtheque         bigint,  -- IDcvtheque
+    id_cvtheque         bigint,  -- IDcvtheque
     nom                 text,  -- NOM
     prenom              text,  -- PRENOM
     pays                text,  -- PAYS
@@ -257,7 +257,7 @@ CREATE TABLE recrutement.pgt_cvtheque_temporaire (
     gsm                 text,  -- GSM
     observ              text,  -- OBSERV
     modif_elem          varchar(5),  -- ModifELEM
-    i_dcvtheque_auto    bigint NOT NULL,  -- IDcvthequeAuto
+    id_cvtheque_auto    bigint NOT NULL,  -- IDcvthequeAuto
     id_communes_france  bigint,  -- IDCommunesFrance
     cp                  varchar(5),  -- CP
     ville               text,  -- VILLE
@@ -265,14 +265,14 @@ CREATE TABLE recrutement.pgt_cvtheque_temporaire (
     mail_objet          text,  -- Mail_Objet
     mail_contenu        text,  -- Mail_Contenu
     mail_date           timestamp,  -- Mail_Date
-    CONSTRAINT pk_pgt_cvtheque_temporaire PRIMARY KEY (i_dcvtheque_auto)
+    CONSTRAINT pk_pgt_cvtheque_temporaire PRIMARY KEY (id_cvtheque_auto)
 );
-CREATE INDEX ix_pgt_cvtheque_temporaire_i_dcvposte ON recrutement.pgt_cvtheque_temporaire (i_dcvposte);
-CREATE INDEX ix_pgt_cvtheque_temporaire_i_dcvsource ON recrutement.pgt_cvtheque_temporaire (i_dcvsource);
+CREATE INDEX ix_pgt_cvtheque_temporaire_id_cvposte ON recrutement.pgt_cvtheque_temporaire (id_cvposte);
+CREATE INDEX ix_pgt_cvtheque_temporaire_id_cvsource ON recrutement.pgt_cvtheque_temporaire (id_cvsource);
 CREATE INDEX ix_pgt_cvtheque_temporaire_id_elem_source ON recrutement.pgt_cvtheque_temporaire (id_elem_source);
 CREATE INDEX ix_pgt_cvtheque_temporaire_adr_mail_rh ON recrutement.pgt_cvtheque_temporaire (adr_mail_rh);
 CREATE INDEX ix_pgt_cvtheque_temporaire_modif_date ON recrutement.pgt_cvtheque_temporaire (modif_date);
-CREATE INDEX ix_pgt_cvtheque_temporaire_i_dcvtheque ON recrutement.pgt_cvtheque_temporaire (i_dcvtheque);
+CREATE INDEX ix_pgt_cvtheque_temporaire_id_cvtheque ON recrutement.pgt_cvtheque_temporaire (id_cvtheque);
 CREATE INDEX ix_pgt_cvtheque_temporaire_id_ste ON recrutement.pgt_cvtheque_temporaire (id_ste);
 CREATE INDEX ix_pgt_cvtheque_temporaire_gsm ON recrutement.pgt_cvtheque_temporaire (gsm);
 CREATE INDEX ix_pgt_cvtheque_temporaire_id_communes_france ON recrutement.pgt_cvtheque_temporaire (id_communes_france);
@@ -298,19 +298,19 @@ CREATE TABLE recrutement.pgt_mails_rh_cv (
     modif_elem      varchar(5),  -- ModifELEM
     id_ste          bigint,  -- IdSte
     id_cv_poste     bigint,  -- IDCvPoste
-    i_dmails_rh_cv  bigint,  -- IDmails_RH_CV
+    id_mails_rh_cv  bigint,  -- IDmails_RH_CV
     import_externe  boolean,  -- ImportExterne
     is_actif        boolean,  -- IsActif
     CONSTRAINT pk_pgt_mails_rh_cv PRIMARY KEY (adr_mail_rh),
-    CONSTRAINT uq_pgt_mails_rh_cv_auto UNIQUE (i_dmails_rh_cv)
+    CONSTRAINT uq_pgt_mails_rh_cv_auto UNIQUE (id_mails_rh_cv)
 );
 CREATE INDEX ix_pgt_mails_rh_cv_modif_date ON recrutement.pgt_mails_rh_cv (modif_date);
 CREATE INDEX ix_pgt_mails_rh_cv_id_ste ON recrutement.pgt_mails_rh_cv (id_ste);
 CREATE INDEX ix_pgt_mails_rh_cv_id_cv_poste ON recrutement.pgt_mails_rh_cv (id_cv_poste);
 
 CREATE TABLE recrutement.pgt_portail_partenaire (
-    i_dportail_partenaire_auto  bigint,  -- IDportailPartenaireAuto
-    i_dportail_partenaire       bigint NOT NULL,  -- IDportailPartenaire
+    id_portail_partenaire_auto  bigint,  -- IDportailPartenaireAuto
+    id_portail_partenaire       bigint NOT NULL,  -- IDportailPartenaire
     id_partenaire               bigint,  -- IDPartenaire
     lien_portail                text,  -- LienPortail
     login                       text,  -- LOGIN
@@ -321,8 +321,8 @@ CREATE TABLE recrutement.pgt_portail_partenaire (
     modif_date                  timestamp,  -- ModifDate
     modif_op                    bigint,  -- ModifOP
     modif_elem                  varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_portail_partenaire PRIMARY KEY (i_dportail_partenaire),
-    CONSTRAINT uq_pgt_portail_partenaire_auto UNIQUE (i_dportail_partenaire_auto)
+    CONSTRAINT pk_pgt_portail_partenaire PRIMARY KEY (id_portail_partenaire),
+    CONSTRAINT uq_pgt_portail_partenaire_auto UNIQUE (id_portail_partenaire_auto)
 );
 CREATE INDEX ix_pgt_portail_partenaire_id_partenaire ON recrutement.pgt_portail_partenaire (id_partenaire);
 CREATE INDEX ix_pgt_portail_partenaire_login ON recrutement.pgt_portail_partenaire (login);
@@ -330,9 +330,9 @@ CREATE INDEX ix_pgt_portail_partenaire_id_entite ON recrutement.pgt_portail_part
 CREATE INDEX ix_pgt_portail_partenaire_modif_date ON recrutement.pgt_portail_partenaire (modif_date);
 
 CREATE TABLE recrutement.pgt_prev_recrut (
-    i_dcv_lieu_rdv            bigint,  -- IDcvLieuRdv
-    i_dprev_recrut_etat       bigint,  -- IDprevRecrutEtat
-    i_dprevision_recrut       bigint NOT NULL,  -- IDprevisionRecrut
+    id_cv_lieu_rdv            bigint,  -- IDcvLieuRdv
+    id_prev_recrut_etat       bigint,  -- IDprevRecrutEtat
+    id_prevision_recrut       bigint NOT NULL,  -- IDprevisionRecrut
     idorganigramme            bigint,  -- idorganigramme
     date_debut                date,  -- DateDébut
     date_fin                  date,  -- DateFin
@@ -354,13 +354,13 @@ CREATE TABLE recrutement.pgt_prev_recrut (
     id_communes_france        bigint,  -- IDCommunesFrance
     nb_coopt_mini             integer,  -- NbCooptMini
     nb_sourcing_mini          integer,  -- NbSourcingMini
-    i_dprevision_recrut_auto  bigint,  -- IDprevisionRecrutAuto
+    id_prevision_recrut_auto  bigint,  -- IDprevisionRecrutAuto
     id_recruteur              bigint,  -- IdRecruteur
-    CONSTRAINT pk_pgt_prev_recrut PRIMARY KEY (i_dprevision_recrut),
-    CONSTRAINT uq_pgt_prev_recrut_auto UNIQUE (i_dprevision_recrut_auto)
+    CONSTRAINT pk_pgt_prev_recrut PRIMARY KEY (id_prevision_recrut),
+    CONSTRAINT uq_pgt_prev_recrut_auto UNIQUE (id_prevision_recrut_auto)
 );
-CREATE INDEX ix_pgt_prev_recrut_i_dcv_lieu_rdv ON recrutement.pgt_prev_recrut (i_dcv_lieu_rdv);
-CREATE INDEX ix_pgt_prev_recrut_i_dprev_recrut_etat ON recrutement.pgt_prev_recrut (i_dprev_recrut_etat);
+CREATE INDEX ix_pgt_prev_recrut_id_cv_lieu_rdv ON recrutement.pgt_prev_recrut (id_cv_lieu_rdv);
+CREATE INDEX ix_pgt_prev_recrut_id_prev_recrut_etat ON recrutement.pgt_prev_recrut (id_prev_recrut_etat);
 CREATE INDEX ix_pgt_prev_recrut_idorganigramme ON recrutement.pgt_prev_recrut (idorganigramme);
 CREATE INDEX ix_pgt_prev_recrut_date_debut ON recrutement.pgt_prev_recrut (date_debut);
 CREATE INDEX ix_pgt_prev_recrut_date_fin ON recrutement.pgt_prev_recrut (date_fin);
@@ -370,15 +370,15 @@ CREATE INDEX ix_pgt_prev_recrut_date_butoire ON recrutement.pgt_prev_recrut (dat
 CREATE INDEX ix_pgt_prev_recrut_id_communes_france ON recrutement.pgt_prev_recrut (id_communes_france);
 
 CREATE TABLE recrutement.pgt_prev_recrut_etat (
-    i_dprev_recrut_etat_auto  bigint,  -- IDprevRecrutEtatAuto
-    i_dprev_recrut_etat       bigint NOT NULL,  -- IDprevRecrutEtat
+    id_prev_recrut_etat_auto  bigint,  -- IDprevRecrutEtatAuto
+    id_prev_recrut_etat       bigint NOT NULL,  -- IDprevRecrutEtat
     lib_etat                  text,  -- Lib_Etat
     contenu_mail              text,  -- ContenuMail
     modif_date                timestamp,  -- ModifDate
     modif_op                  bigint,  -- ModifOp
     modif_elem                varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_prev_recrut_etat PRIMARY KEY (i_dprev_recrut_etat),
-    CONSTRAINT uq_pgt_prev_recrut_etat_auto UNIQUE (i_dprev_recrut_etat_auto)
+    CONSTRAINT pk_pgt_prev_recrut_etat PRIMARY KEY (id_prev_recrut_etat),
+    CONSTRAINT uq_pgt_prev_recrut_etat_auto UNIQUE (id_prev_recrut_etat_auto)
 );
 CREATE INDEX ix_pgt_prev_recrut_etat_lib_etat ON recrutement.pgt_prev_recrut_etat (lib_etat);
 CREATE INDEX ix_pgt_prev_recrut_etat_modif_date ON recrutement.pgt_prev_recrut_etat (modif_date);

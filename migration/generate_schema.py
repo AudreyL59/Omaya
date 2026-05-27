@@ -92,8 +92,9 @@ def to_snake(name: str) -> str:
         return OVERRIDES[raw]
     s = strip_accents(raw)
     prefix = ""
-    # Prefixe "ID" traite comme token : IDSalarie -> id_salarie
-    if s[:2] == "ID" and len(s) > 2 and (s[2].isupper() or s[2] == "_"):
+    # Prefixe "ID" traite comme token : IDSalarie -> id_salarie,
+    # IDsalarie_progevo -> id_salarie_progevo (ID + lettre/underscore).
+    if s[:2] == "ID" and len(s) > 2 and (s[2].isalpha() or s[2] == "_"):
         prefix = "id_"
         s = s[2:].lstrip("_")
     s = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", s)   # xY... -> x_Y...
@@ -226,8 +227,16 @@ def build_table(schema: str, hf_table: str, cols: list[dict],
     elif auto_col:
         pk = auto_col
     else:
-        pk = None
-        report.append(f"[PK absente] {hf_table}: aucune cle unique -> table sans PK")
+        # Pas de cle unique declaree : on deduit la PK de la 1ere colonne si
+        # c'est un identifiant "ID<...>" (cas des tables ou l'auto-id n'est pas
+        # marque unique dans le descriptif). Sinon table sans PK.
+        c0 = cols[0] if cols else None
+        if c0 and c0["name"].lower().startswith("id") and len(c0["name"]) > 2:
+            pk = c0
+            report.append(f"[PK deduite] {hf_table}: {c0['name']} (1ere colonne ID, non marquee unique)")
+        else:
+            pk = None
+            report.append(f"[PK absente] {hf_table}: aucune cle -> table sans PK")
 
     width = max((len(to_snake(c["name"])) for c in cols), default=10)
     items: list[tuple[str, str]] = []   # (sql colonne/contrainte, commentaire HFSQL)

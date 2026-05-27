@@ -100,7 +100,7 @@ CREATE TABLE ulease.pgt_cartefournisseur (
 CREATE INDEX ix_pgt_cartefournisseur_modif_date ON ulease.pgt_cartefournisseur (modif_date);
 
 CREATE TABLE ulease.pgt_conducteur (
-    i_dconducteur       bigint NOT NULL,  -- IDconducteur
+    id_conducteur       bigint NOT NULL,  -- IDconducteur
     nom_conducteur      varchar(30),  -- NomConducteur
     prenom_conducteur   varchar(20),  -- PrenomConducteur
     date_naiss          date,  -- DateNaiss
@@ -126,14 +126,14 @@ CREATE TABLE ulease.pgt_conducteur (
     modif_date          timestamp,  -- ModifDate
     modif_op            bigint,  -- ModifOp
     modif_elem          varchar(5),  -- ModifElem
-    i_dconducteur_auto  bigint,  -- IDconducteurAuto
-    CONSTRAINT pk_pgt_conducteur PRIMARY KEY (i_dconducteur),
-    CONSTRAINT uq_pgt_conducteur_auto UNIQUE (i_dconducteur_auto)
+    id_conducteur_auto  bigint,  -- IDconducteurAuto
+    CONSTRAINT pk_pgt_conducteur PRIMARY KEY (id_conducteur),
+    CONSTRAINT uq_pgt_conducteur_auto UNIQUE (id_conducteur_auto)
 );
 CREATE INDEX ix_pgt_conducteur_modif_date ON ulease.pgt_conducteur (modif_date);
 
 CREATE TABLE ulease.pgt_doc_ulease (
-    i_ddoc_ulease  bigint NOT NULL,  -- IDdocUlease
+    id_doc_ulease  bigint NOT NULL,  -- IDdocUlease
     id_type_doc    bigint,  -- IDTypeDoc
     titre          varchar(255),  -- Titre
     info_cpl       varchar(50),  -- InfoCpl
@@ -145,7 +145,7 @@ CREATE TABLE ulease.pgt_doc_ulease (
     modif_date     timestamp,  -- ModifDate
     modif_op       bigint,  -- ModifOp
     modif_elem     varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_doc_ulease PRIMARY KEY (i_ddoc_ulease)
+    CONSTRAINT pk_pgt_doc_ulease PRIMARY KEY (id_doc_ulease)
 );
 CREATE INDEX ix_pgt_doc_ulease_id_type_doc ON ulease.pgt_doc_ulease (id_type_doc);
 CREATE INDEX ix_pgt_doc_ulease_id_ste ON ulease.pgt_doc_ulease (id_ste);
@@ -193,11 +193,11 @@ CREATE INDEX ix_pgt_typerelevefournisseur_lib_type ON ulease.pgt_typerelevefourn
 CREATE INDEX ix_pgt_typerelevefournisseur_modif_date ON ulease.pgt_typerelevefournisseur (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_accident (
-    i_dvehicule_acc_auto         bigint,  -- IDvehiculeAccAuto
-    i_dvehicule_acc              bigint NOT NULL,  -- IDvehiculeAcc
-    i_dvehicule                  bigint,  -- IDvehicule
+    id_vehicule_acc_auto         bigint,  -- IDvehiculeAccAuto
+    id_vehicule_acc              bigint NOT NULL,  -- IDvehiculeAcc
+    id_vehicule                  bigint,  -- IDvehicule
     vehicule_acc_date            timestamp,  -- vehiculeAcc_Date
-    i_dvehicule_pc               bigint,  -- IDvehiculePC
+    id_vehicule_pc               bigint,  -- IDvehiculePC
     resp                         smallint,  -- Resp
     prix_rep                     numeric(19,4),  -- PrixRep
     prix_fran                    numeric(19,4),  -- PrixFran
@@ -210,22 +210,22 @@ CREATE TABLE ulease.pgt_vehicule_accident (
     modif_date                   timestamp,  -- ModifDate
     modif_elem                   varchar(5),  -- ModifElem
     optim_cle_comp_vehic_i_dveh  varchar(16),  -- OptimCleComp_vehic_IDveh
-    CONSTRAINT pk_pgt_vehicule_accident PRIMARY KEY (i_dvehicule_acc),
-    CONSTRAINT uq_pgt_vehicule_accident_auto UNIQUE (i_dvehicule_acc_auto)
+    CONSTRAINT pk_pgt_vehicule_accident PRIMARY KEY (id_vehicule_acc),
+    CONSTRAINT uq_pgt_vehicule_accident_auto UNIQUE (id_vehicule_acc_auto)
 );
-CREATE INDEX ix_pgt_vehicule_accident_i_dvehicule ON ulease.pgt_vehicule_accident (i_dvehicule);
-CREATE INDEX ix_pgt_vehicule_accident_i_dvehicule_pc ON ulease.pgt_vehicule_accident (i_dvehicule_pc);
+CREATE INDEX ix_pgt_vehicule_accident_id_vehicule ON ulease.pgt_vehicule_accident (id_vehicule);
+CREATE INDEX ix_pgt_vehicule_accident_id_vehicule_pc ON ulease.pgt_vehicule_accident (id_vehicule_pc);
 CREATE INDEX ix_pgt_vehicule_accident_resp ON ulease.pgt_vehicule_accident (resp);
 CREATE INDEX ix_pgt_vehicule_accident_reparable ON ulease.pgt_vehicule_accident (reparable);
 CREATE INDEX ix_pgt_vehicule_accident_repare ON ulease.pgt_vehicule_accident (repare);
 CREATE INDEX ix_pgt_vehicule_accident_modif_date ON ulease.pgt_vehicule_accident (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_amende (
-    i_dvehicule_pv_auto                bigint,  -- IDvehiculePVAuto
-    i_dvehicule_pv                     bigint NOT NULL,  -- IDvehiculePV
-    i_dvehicule                        bigint,  -- IDvehicule
+    id_vehicule_pv_auto                bigint,  -- IDvehiculePVAuto
+    id_vehicule_pv                     bigint NOT NULL,  -- IDvehiculePV
+    id_vehicule                        bigint,  -- IDvehicule
     vehicule_pv_date                   timestamp,  -- vehiculePV_DATE
-    i_dvehicule_pc                     bigint,  -- IDvehiculePC
+    id_vehicule_pc                     bigint,  -- IDvehiculePC
     montant                            numeric(19,4),  -- Montant
     comment                            text,  -- Comment
     paye_employeur                     boolean,  -- payeEmployeur
@@ -239,19 +239,19 @@ CREATE TABLE ulease.pgt_vehicule_amende (
     modif_op                           bigint,  -- ModifOp
     modif_date                         timestamp,  -- ModifDate
     modif_elem                         varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_vehicule_amende PRIMARY KEY (i_dvehicule_pv),
-    CONSTRAINT uq_pgt_vehicule_amende_auto UNIQUE (i_dvehicule_pv_auto)
+    CONSTRAINT pk_pgt_vehicule_amende PRIMARY KEY (id_vehicule_pv),
+    CONSTRAINT uq_pgt_vehicule_amende_auto UNIQUE (id_vehicule_pv_auto)
 );
-CREATE INDEX ix_pgt_vehicule_amende_i_dvehicule ON ulease.pgt_vehicule_amende (i_dvehicule);
+CREATE INDEX ix_pgt_vehicule_amende_id_vehicule ON ulease.pgt_vehicule_amende (id_vehicule);
 CREATE INDEX ix_pgt_vehicule_amende_vehicule_pv_date ON ulease.pgt_vehicule_amende (vehicule_pv_date);
-CREATE INDEX ix_pgt_vehicule_amende_i_dvehicule_pc ON ulease.pgt_vehicule_amende (i_dvehicule_pc);
+CREATE INDEX ix_pgt_vehicule_amende_id_vehicule_pc ON ulease.pgt_vehicule_amende (id_vehicule_pc);
 CREATE INDEX ix_pgt_vehicule_amende_paye_employeur ON ulease.pgt_vehicule_amende (paye_employeur);
 CREATE INDEX ix_pgt_vehicule_amende_prel_salarie ON ulease.pgt_vehicule_amende (prel_salarie);
 CREATE INDEX ix_pgt_vehicule_amende_modif_date ON ulease.pgt_vehicule_amende (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_conducteur (
-    i_dvehicule_pc        bigint NOT NULL,  -- IDvehiculePC
-    i_dvehicule           bigint,  -- IDvehicule
+    id_vehicule_pc        bigint NOT NULL,  -- IDvehiculePC
+    id_vehicule           bigint,  -- IDvehicule
     id_conducteur         bigint,  -- IDConducteur
     perception_date       date,  -- PerceptionDate
     restitution_date      date,  -- RestitutionDate
@@ -271,17 +271,17 @@ CREATE TABLE ulease.pgt_vehicule_conducteur (
     perception_heure      time,  -- PerceptionHeure
     restitution_heure     time,  -- RestitutionHeure
     id_ste                bigint,  -- IDSte
-    i_dvehicule_pc_auto   bigint,  -- IDvehiculePCAuto
-    CONSTRAINT pk_pgt_vehicule_conducteur PRIMARY KEY (i_dvehicule_pc),
-    CONSTRAINT uq_pgt_vehicule_conducteur_auto UNIQUE (i_dvehicule_pc_auto)
+    id_vehicule_pc_auto   bigint,  -- IDvehiculePCAuto
+    CONSTRAINT pk_pgt_vehicule_conducteur PRIMARY KEY (id_vehicule_pc),
+    CONSTRAINT uq_pgt_vehicule_conducteur_auto UNIQUE (id_vehicule_pc_auto)
 );
-CREATE INDEX ix_pgt_vehicule_conducteur_i_dvehicule ON ulease.pgt_vehicule_conducteur (i_dvehicule);
+CREATE INDEX ix_pgt_vehicule_conducteur_id_vehicule ON ulease.pgt_vehicule_conducteur (id_vehicule);
 CREATE INDEX ix_pgt_vehicule_conducteur_id_conducteur ON ulease.pgt_vehicule_conducteur (id_conducteur);
 CREATE INDEX ix_pgt_vehicule_conducteur_modif_date ON ulease.pgt_vehicule_conducteur (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_entretien (
-    i_dvehicule_entretien       bigint NOT NULL,  -- IDvehicule_entretien
-    i_dvehicule                 bigint,  -- IDvehicule
+    id_vehicule_entretien       bigint NOT NULL,  -- IDvehicule_entretien
+    id_vehicule                 bigint,  -- IDvehicule
     type_entretien              smallint,  -- Type_Entretien
     realise_le                  date,  -- RéaliséLe
     montant_ht                  numeric(19,4),  -- MontantHT
@@ -290,28 +290,28 @@ CREATE TABLE ulease.pgt_vehicule_entretien (
     modif_op                    bigint,  -- ModifOp
     modif_date                  timestamp,  -- ModifDate
     modif_elem                  varchar(5),  -- ModifElem
-    i_dvehicule_entretien_auto  bigint,  -- IDvehicule_entretienAuto
-    CONSTRAINT pk_pgt_vehicule_entretien PRIMARY KEY (i_dvehicule_entretien),
-    CONSTRAINT uq_pgt_vehicule_entretien_auto UNIQUE (i_dvehicule_entretien_auto)
+    id_vehicule_entretien_auto  bigint,  -- IDvehicule_entretienAuto
+    CONSTRAINT pk_pgt_vehicule_entretien PRIMARY KEY (id_vehicule_entretien),
+    CONSTRAINT uq_pgt_vehicule_entretien_auto UNIQUE (id_vehicule_entretien_auto)
 );
-CREATE INDEX ix_pgt_vehicule_entretien_i_dvehicule ON ulease.pgt_vehicule_entretien (i_dvehicule);
+CREATE INDEX ix_pgt_vehicule_entretien_id_vehicule ON ulease.pgt_vehicule_entretien (id_vehicule);
 CREATE INDEX ix_pgt_vehicule_entretien_modif_date ON ulease.pgt_vehicule_entretien (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_etat (
-    i_dvehicule_etat  bigint NOT NULL,  -- IDvehiculeEtat
+    id_vehicule_etat  bigint NOT NULL,  -- IDvehiculeEtat
     lib_etat          varchar(50),  -- LibEtat
     logo              bytea,  -- LOGO
     modif_op          bigint,  -- ModifOp
     modif_date        timestamp,  -- ModifDate
     modif_elem        varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_vehicule_etat PRIMARY KEY (i_dvehicule_etat)
+    CONSTRAINT pk_pgt_vehicule_etat PRIMARY KEY (id_vehicule_etat)
 );
 CREATE INDEX ix_pgt_vehicule_etat_lib_etat ON ulease.pgt_vehicule_etat (lib_etat);
 CREATE INDEX ix_pgt_vehicule_etat_modif_date ON ulease.pgt_vehicule_etat (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_fiche (
-    i_dvehicule_marque         bigint,  -- IDvehiculeMarque
-    i_dvehicule                bigint NOT NULL,  -- IDvehicule
+    id_vehicule_marque         bigint,  -- IDvehiculeMarque
+    id_vehicule                bigint NOT NULL,  -- IDvehicule
     modele                     varchar(50),  -- MODELE
     immat                      varchar(20),  -- IMMAT
     forfait_km                 integer,  -- FORFAITKM
@@ -322,7 +322,7 @@ CREATE TABLE ulease.pgt_vehicule_fiche (
     k_mdepart                  integer,  -- KMdépart
     km_actuel                  integer,  -- KMActuel
     date_releve                date,  -- DateReleve
-    i_dvehicule_etat           bigint,  -- IDvehiculeEtat
+    id_vehicule_etat           bigint,  -- IDvehiculeEtat
     chevaux_fiscaux            integer,  -- ChevauxFiscaux
     modif_op                   bigint,  -- ModifOp
     modif_date                 timestamp,  -- ModifDate
@@ -335,39 +335,39 @@ CREATE TABLE ulease.pgt_vehicule_fiche (
     id_ste_reseau              bigint,  -- IdSte_Reseau
     alerte_rel                 boolean,  -- ALERTEREL
     id_vehicule_type_capacite  bigint,  -- IDVehicule_TypeCapacité
-    i_dvehicule_auto           bigint,  -- IDvehiculeAuto
-    CONSTRAINT pk_pgt_vehicule_fiche PRIMARY KEY (i_dvehicule),
-    CONSTRAINT uq_pgt_vehicule_fiche_auto UNIQUE (i_dvehicule_auto)
+    id_vehicule_auto           bigint,  -- IDvehiculeAuto
+    CONSTRAINT pk_pgt_vehicule_fiche PRIMARY KEY (id_vehicule),
+    CONSTRAINT uq_pgt_vehicule_fiche_auto UNIQUE (id_vehicule_auto)
 );
-CREATE INDEX ix_pgt_vehicule_fiche_i_dvehicule_marque ON ulease.pgt_vehicule_fiche (i_dvehicule_marque);
+CREATE INDEX ix_pgt_vehicule_fiche_id_vehicule_marque ON ulease.pgt_vehicule_fiche (id_vehicule_marque);
 CREATE INDEX ix_pgt_vehicule_fiche_immat ON ulease.pgt_vehicule_fiche (immat);
 CREATE INDEX ix_pgt_vehicule_fiche_date_deb ON ulease.pgt_vehicule_fiche (date_deb);
 CREATE INDEX ix_pgt_vehicule_fiche_date_releve ON ulease.pgt_vehicule_fiche (date_releve);
-CREATE INDEX ix_pgt_vehicule_fiche_i_dvehicule_etat ON ulease.pgt_vehicule_fiche (i_dvehicule_etat);
+CREATE INDEX ix_pgt_vehicule_fiche_id_vehicule_etat ON ulease.pgt_vehicule_fiche (id_vehicule_etat);
 CREATE INDEX ix_pgt_vehicule_fiche_modif_date ON ulease.pgt_vehicule_fiche (modif_date);
 CREATE INDEX ix_pgt_vehicule_fiche_id_ste_proprio ON ulease.pgt_vehicule_fiche (id_ste_proprio);
 CREATE INDEX ix_pgt_vehicule_fiche_id_vehicule_type_capacite ON ulease.pgt_vehicule_fiche (id_vehicule_type_capacite);
 
 CREATE TABLE ulease.pgt_vehicule_marque (
-    i_dvehicule_marque       bigint NOT NULL,  -- IDvehiculeMarque
+    id_vehicule_marque       bigint NOT NULL,  -- IDvehiculeMarque
     nom                      varchar(50),  -- NOM
     logo                     bytea,  -- LOGO
     modif_date               timestamp,  -- ModifDate
     modif_op                 bigint,  -- ModifOp
     modif_elem               varchar(5),  -- ModifElem
-    i_dvehicule_marque_auto  bigint,  -- IDvehiculeMarqueAuto
-    CONSTRAINT pk_pgt_vehicule_marque PRIMARY KEY (i_dvehicule_marque),
-    CONSTRAINT uq_pgt_vehicule_marque_auto UNIQUE (i_dvehicule_marque_auto)
+    id_vehicule_marque_auto  bigint,  -- IDvehiculeMarqueAuto
+    CONSTRAINT pk_pgt_vehicule_marque PRIMARY KEY (id_vehicule_marque),
+    CONSTRAINT uq_pgt_vehicule_marque_auto UNIQUE (id_vehicule_marque_auto)
 );
 CREATE INDEX ix_pgt_vehicule_marque_nom ON ulease.pgt_vehicule_marque (nom);
 CREATE INDEX ix_pgt_vehicule_marque_modif_date ON ulease.pgt_vehicule_marque (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_pv (
-    i_dvehicule_pv_auto                bigint,  -- IDvehiculePVAuto
-    i_dvehicule_pv                     bigint NOT NULL,  -- IDvehiculePV
-    i_dvehicule                        bigint,  -- IDvehicule
+    id_vehicule_pv_auto                bigint,  -- IDvehiculePVAuto
+    id_vehicule_pv                     bigint NOT NULL,  -- IDvehiculePV
+    id_vehicule                        bigint,  -- IDvehicule
     vehicule_pv_date                   timestamp,  -- vehiculePV_DATE
-    i_dvehicule_pc                     bigint,  -- IDvehiculePC
+    id_vehicule_pc                     bigint,  -- IDvehiculePC
     montant                            numeric(19,4),  -- Montant
     comment                            text,  -- Comment
     paye_employeur                     boolean,  -- payeEmployeur
@@ -381,22 +381,22 @@ CREATE TABLE ulease.pgt_vehicule_pv (
     modif_op                           bigint,  -- ModifOp
     modif_date                         timestamp,  -- ModifDate
     modif_elem                         varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_vehicule_pv PRIMARY KEY (i_dvehicule_pv),
-    CONSTRAINT uq_pgt_vehicule_pv_auto UNIQUE (i_dvehicule_pv_auto)
+    CONSTRAINT pk_pgt_vehicule_pv PRIMARY KEY (id_vehicule_pv),
+    CONSTRAINT uq_pgt_vehicule_pv_auto UNIQUE (id_vehicule_pv_auto)
 );
-CREATE INDEX ix_pgt_vehicule_pv_i_dvehicule ON ulease.pgt_vehicule_pv (i_dvehicule);
+CREATE INDEX ix_pgt_vehicule_pv_id_vehicule ON ulease.pgt_vehicule_pv (id_vehicule);
 CREATE INDEX ix_pgt_vehicule_pv_vehicule_pv_date ON ulease.pgt_vehicule_pv (vehicule_pv_date);
-CREATE INDEX ix_pgt_vehicule_pv_i_dvehicule_pc ON ulease.pgt_vehicule_pv (i_dvehicule_pc);
+CREATE INDEX ix_pgt_vehicule_pv_id_vehicule_pc ON ulease.pgt_vehicule_pv (id_vehicule_pc);
 CREATE INDEX ix_pgt_vehicule_pv_paye_employeur ON ulease.pgt_vehicule_pv (paye_employeur);
 CREATE INDEX ix_pgt_vehicule_pv_prel_salarie ON ulease.pgt_vehicule_pv (prel_salarie);
 CREATE INDEX ix_pgt_vehicule_pv_modif_date ON ulease.pgt_vehicule_pv (modif_date);
 
 CREATE TABLE ulease.pgt_vehicule_releve (
-    i_dvehicule_releve                   bigint NOT NULL,  -- IDvehiculeReleve
-    i_dvehicule                          bigint,  -- IDvehicule
+    id_vehicule_releve                   bigint NOT NULL,  -- IDvehiculeReleve
+    id_vehicule                          bigint,  -- IDvehicule
     km                                   integer,  -- KM
     op_releve                            bigint,  -- OP_Relève
-    i_dvehicule_pc                       bigint,  -- IDvehiculePC
+    id_vehicule_pc                       bigint,  -- IDvehiculePC
     km_restant                           integer,  -- KmRestant
     commentaire                          text,  -- Commentaire
     km_parcouru                          integer,  -- KmParcouru
@@ -405,15 +405,15 @@ CREATE TABLE ulease.pgt_vehicule_releve (
     modif_date                           timestamp,  -- ModifDate
     date_releve                          date,  -- DateReleve
     modif_elem                           varchar(5),  -- ModifElem
-    i_dvehicule_releve_auto              bigint,  -- IDvehiculeReleveAuto
+    id_vehicule_releve_auto              bigint,  -- IDvehiculeReleveAuto
     optim_cle_comp_vehic_i_dveh_vehic    varchar(21),  -- OptimCleComp_vehic_IDveh_vehic
     optim_cle_comp_vehic_i_dveh_vehic_1  varchar(21),  -- OptimCleComp_vehic_IDveh_vehic_1
-    CONSTRAINT pk_pgt_vehicule_releve PRIMARY KEY (i_dvehicule_releve),
-    CONSTRAINT uq_pgt_vehicule_releve_auto UNIQUE (i_dvehicule_releve_auto)
+    CONSTRAINT pk_pgt_vehicule_releve PRIMARY KEY (id_vehicule_releve),
+    CONSTRAINT uq_pgt_vehicule_releve_auto UNIQUE (id_vehicule_releve_auto)
 );
-CREATE INDEX ix_pgt_vehicule_releve_i_dvehicule ON ulease.pgt_vehicule_releve (i_dvehicule);
+CREATE INDEX ix_pgt_vehicule_releve_id_vehicule ON ulease.pgt_vehicule_releve (id_vehicule);
 CREATE INDEX ix_pgt_vehicule_releve_op_releve ON ulease.pgt_vehicule_releve (op_releve);
-CREATE INDEX ix_pgt_vehicule_releve_i_dvehicule_pc ON ulease.pgt_vehicule_releve (i_dvehicule_pc);
+CREATE INDEX ix_pgt_vehicule_releve_id_vehicule_pc ON ulease.pgt_vehicule_releve (id_vehicule_pc);
 CREATE INDEX ix_pgt_vehicule_releve_alerte ON ulease.pgt_vehicule_releve (alerte);
 CREATE INDEX ix_pgt_vehicule_releve_modif_date ON ulease.pgt_vehicule_releve (modif_date);
 CREATE INDEX ix_pgt_vehicule_releve_date_releve ON ulease.pgt_vehicule_releve (date_releve);

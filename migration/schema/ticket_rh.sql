@@ -104,9 +104,9 @@ CREATE INDEX ix_pgt_tk_demande_conges_date_fin ON ticket_rh.pgt_tk_demande_conge
 CREATE INDEX ix_pgt_tk_demande_conges_id_type_absence ON ticket_rh.pgt_tk_demande_conges (id_type_absence);
 
 CREATE TABLE ticket_rh.pgt_tk_demande_ctt_w (
-    i_ddoc_rhedit              bigint,  -- IDdocRHEDIT
+    id_doc_rhedit              bigint,  -- IDdocRHEDIT
     idorganigramme             bigint,  -- idorganigramme
-    i_ddemande_contrat_w       bigint NOT NULL,  -- IDdemandeContratW
+    id_demande_contrat_w       bigint NOT NULL,  -- IDdemandeContratW
     contenu                    bytea,  -- Contenu
     id_salarie                 bigint,  -- IDSalarie
     contrat_genere             boolean,  -- contratGénéré
@@ -126,11 +126,11 @@ CREATE TABLE ticket_rh.pgt_tk_demande_ctt_w (
     titre_contrat              text,  -- TitreContrat
     type_ctt_w                 text,  -- TypeCttW
     id_tk_liste                bigint,  -- IDTK_Liste
-    i_ddemande_contrat_w_auto  bigint,  -- IDdemandeContratWAuto
-    CONSTRAINT pk_pgt_tk_demande_ctt_w PRIMARY KEY (i_ddemande_contrat_w),
-    CONSTRAINT uq_pgt_tk_demande_ctt_w_auto UNIQUE (i_ddemande_contrat_w_auto)
+    id_demande_contrat_w_auto  bigint,  -- IDdemandeContratWAuto
+    CONSTRAINT pk_pgt_tk_demande_ctt_w PRIMARY KEY (id_demande_contrat_w),
+    CONSTRAINT uq_pgt_tk_demande_ctt_w_auto UNIQUE (id_demande_contrat_w_auto)
 );
-CREATE INDEX ix_pgt_tk_demande_ctt_w_i_ddoc_rhedit ON ticket_rh.pgt_tk_demande_ctt_w (i_ddoc_rhedit);
+CREATE INDEX ix_pgt_tk_demande_ctt_w_id_doc_rhedit ON ticket_rh.pgt_tk_demande_ctt_w (id_doc_rhedit);
 CREATE INDEX ix_pgt_tk_demande_ctt_w_idorganigramme ON ticket_rh.pgt_tk_demande_ctt_w (idorganigramme);
 CREATE INDEX ix_pgt_tk_demande_ctt_w_id_salarie ON ticket_rh.pgt_tk_demande_ctt_w (id_salarie);
 CREATE INDEX ix_pgt_tk_demande_ctt_w_contrat_genere ON ticket_rh.pgt_tk_demande_ctt_w (contrat_genere);
@@ -142,7 +142,7 @@ CREATE INDEX ix_pgt_tk_demande_ctt_w_id_tk_liste ON ticket_rh.pgt_tk_demande_ctt
 
 CREATE TABLE ticket_rh.pgt_tk_demandecttw_doc (
     id_tk_demande_ctt_w_doc  bigint NOT NULL,  -- IDTk_DemandeCttW_Doc
-    i_ddemande_contrat_w     bigint,  -- IDdemandeContratW
+    id_demande_contrat_w     bigint,  -- IDdemandeContratW
     id_tk_liste              bigint,  -- IDTK_Liste
     type_doc                 varchar(50),  -- TypeDoc
     nom_fichier              varchar(50),  -- NomFichier
@@ -152,7 +152,7 @@ CREATE TABLE ticket_rh.pgt_tk_demandecttw_doc (
     doc_present              boolean,  -- DocPresent
     CONSTRAINT pk_pgt_tk_demandecttw_doc PRIMARY KEY (id_tk_demande_ctt_w_doc)
 );
-CREATE INDEX ix_pgt_tk_demandecttw_doc_i_ddemande_contrat_w ON ticket_rh.pgt_tk_demandecttw_doc (i_ddemande_contrat_w);
+CREATE INDEX ix_pgt_tk_demandecttw_doc_id_demande_contrat_w ON ticket_rh.pgt_tk_demandecttw_doc (id_demande_contrat_w);
 CREATE INDEX ix_pgt_tk_demandecttw_doc_id_tk_liste ON ticket_rh.pgt_tk_demandecttw_doc (id_tk_liste);
 CREATE INDEX ix_pgt_tk_demandecttw_doc_modif_date ON ticket_rh.pgt_tk_demandecttw_doc (modif_date);
 
@@ -191,7 +191,7 @@ CREATE INDEX ix_pgt_tk_demande_mutuelle_fic_modif_date ON ticket_rh.pgt_tk_deman
 
 CREATE TABLE ticket_rh.pgt_tk_demandesignpv_photo (
     id_tk_demande_sign_pv_photo  bigint NOT NULL,  -- IDTK_DemandeSignPV_Photo
-    i_ddemande_sign_ulease_auto  bigint,  -- IDdemandeSignUleaseAuto
+    id_demande_sign_ulease_auto  bigint,  -- IDdemandeSignUleaseAuto
     id_type_capacite_photo       bigint,  -- IDTypeCapacite_Photo
     photo                        bytea,  -- Photo
     note_etat                    smallint,  -- NoteEtat
@@ -202,13 +202,13 @@ CREATE TABLE ticket_rh.pgt_tk_demandesignpv_photo (
     modif_elem                   varchar(5),  -- ModifELEM
     CONSTRAINT pk_pgt_tk_demandesignpv_photo PRIMARY KEY (id_tk_demande_sign_pv_photo)
 );
-CREATE INDEX ix_pgt_tk_demandesignpv_photo_i_ddemande_sign_ulease_auto ON ticket_rh.pgt_tk_demandesignpv_photo (i_ddemande_sign_ulease_auto);
+CREATE INDEX ix_pgt_tk_demandesignpv_photo_id_demande_sign_ulease_auto ON ticket_rh.pgt_tk_demandesignpv_photo (id_demande_sign_ulease_auto);
 CREATE INDEX ix_pgt_tk_demandesignpv_photo_id_type_capacite_photo ON ticket_rh.pgt_tk_demandesignpv_photo (id_type_capacite_photo);
 CREATE INDEX ix_pgt_tk_demandesignpv_photo_modif_date ON ticket_rh.pgt_tk_demandesignpv_photo (modif_date);
 
 CREATE TABLE ticket_rh.pgt_tk_demande_sign_pv_ulease (
-    i_ddemande_sign_pv_ulease_auto  bigint,  -- IDdemandeSignPVUleaseAuto
-    i_ddemande_sign_pv_ulease       bigint NOT NULL,  -- IDdemandeSignPVUlease
+    id_demande_sign_pv_ulease_auto  bigint,  -- IDdemandeSignPVUleaseAuto
+    id_demande_sign_pv_ulease       bigint NOT NULL,  -- IDdemandeSignPVUlease
     id_tk_liste                     bigint,  -- IDTK_Liste
     idorganigramme                  bigint,  -- idorganigramme
     id_salarie_ulease               bigint,  -- IDSalarie_Ulease
@@ -230,8 +230,8 @@ CREATE TABLE ticket_rh.pgt_tk_demande_sign_pv_ulease (
     modif_date                      timestamp,  -- ModifDate
     modif_op                        bigint,  -- ModifOP
     modif_elem                      varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_tk_demande_sign_pv_ulease PRIMARY KEY (i_ddemande_sign_pv_ulease),
-    CONSTRAINT uq_pgt_tk_demande_sign_pv_ulease_auto UNIQUE (i_ddemande_sign_pv_ulease_auto)
+    CONSTRAINT pk_pgt_tk_demande_sign_pv_ulease PRIMARY KEY (id_demande_sign_pv_ulease),
+    CONSTRAINT uq_pgt_tk_demande_sign_pv_ulease_auto UNIQUE (id_demande_sign_pv_ulease_auto)
 );
 CREATE INDEX ix_pgt_tk_demande_sign_pv_ulease_id_tk_liste ON ticket_rh.pgt_tk_demande_sign_pv_ulease (id_tk_liste);
 CREATE INDEX ix_pgt_tk_demande_sign_pv_ulease_idorganigramme ON ticket_rh.pgt_tk_demande_sign_pv_ulease (idorganigramme);
@@ -244,8 +244,8 @@ CREATE INDEX ix_pgt_tk_demande_sign_pv_ulease_contrat_signe ON ticket_rh.pgt_tk_
 CREATE INDEX ix_pgt_tk_demande_sign_pv_ulease_modif_date ON ticket_rh.pgt_tk_demande_sign_pv_ulease (modif_date);
 
 CREATE TABLE ticket_rh.pgt_tk_demande_sign_ulease (
-    i_ddemande_sign_ulease_auto  bigint,  -- IDdemandeSignUleaseAuto
-    i_ddemande_sign_ulease       bigint NOT NULL,  -- IDdemandeSignUlease
+    id_demande_sign_ulease_auto  bigint,  -- IDdemandeSignUleaseAuto
+    id_demande_sign_ulease       bigint NOT NULL,  -- IDdemandeSignUlease
     id_tk_liste                  bigint,  -- IDTK_Liste
     idorganigramme               bigint,  -- idorganigramme
     id_salarie_ulease            bigint,  -- IDSalarie_Ulease
@@ -268,8 +268,8 @@ CREATE TABLE ticket_rh.pgt_tk_demande_sign_ulease (
     modif_date                   timestamp,  -- ModifDate
     modif_op                     bigint,  -- ModifOP
     modif_elem                   varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_tk_demande_sign_ulease PRIMARY KEY (i_ddemande_sign_ulease),
-    CONSTRAINT uq_pgt_tk_demande_sign_ulease_auto UNIQUE (i_ddemande_sign_ulease_auto)
+    CONSTRAINT pk_pgt_tk_demande_sign_ulease PRIMARY KEY (id_demande_sign_ulease),
+    CONSTRAINT uq_pgt_tk_demande_sign_ulease_auto UNIQUE (id_demande_sign_ulease_auto)
 );
 CREATE INDEX ix_pgt_tk_demande_sign_ulease_id_tk_liste ON ticket_rh.pgt_tk_demande_sign_ulease (id_tk_liste);
 CREATE INDEX ix_pgt_tk_demande_sign_ulease_idorganigramme ON ticket_rh.pgt_tk_demande_sign_ulease (idorganigramme);

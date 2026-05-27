@@ -106,7 +106,7 @@ CREATE TABLE ticket_dpae.pgt_tk_dpae_doc_demat (
     modif_elem                 varchar(5),  -- ModifELEM
     id_ste                     bigint,  -- IdSte
     type_doc                   varchar(10),  -- TypeDoc
-    i_ddoc_rh                  bigint,  -- IDdocRH
+    id_doc_rh                  bigint,  -- IDdocRH
     cmu                        boolean,  -- CMU
     mutuelle                   boolean,  -- MUTUELLE
     nom_mutuelle               text,  -- NomMutuelle

@@ -62,7 +62,7 @@ CREATE INDEX ix_pgt_doc_distrib_id_type_doc_distributeur ON rh.pgt_doc_distrib (
 CREATE INDEX ix_pgt_doc_distrib_modif_date ON rh.pgt_doc_distrib (modif_date);
 
 CREATE TABLE rh.pgt_doc_courtage (
-    i_ddoc_courtage      bigint NOT NULL,  -- IDdocCourtage
+    id_doc_courtage      bigint NOT NULL,  -- IDdocCourtage
     titre                varchar(255),  -- Titre
     info_cpl             varchar(50),  -- InfoCpl
     id_groupe_operateur  bigint,  -- IDGroupeOpérateur
@@ -74,13 +74,13 @@ CREATE TABLE rh.pgt_doc_courtage (
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOp
     modif_elem           varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_doc_courtage PRIMARY KEY (i_ddoc_courtage)
+    CONSTRAINT pk_pgt_doc_courtage PRIMARY KEY (id_doc_courtage)
 );
 CREATE INDEX ix_pgt_doc_courtage_id_ste ON rh.pgt_doc_courtage (id_ste);
 CREATE INDEX ix_pgt_doc_courtage_modif_date ON rh.pgt_doc_courtage (modif_date);
 
 CREATE TABLE rh.pgt_doc_rh (
-    i_ddoc_rh              bigint NOT NULL,  -- IDdocRH
+    id_doc_rh              bigint NOT NULL,  -- IDdocRH
     id_type_doc            bigint,  -- IDTypeDoc
     titre                  varchar(255),  -- Titre
     info_cpl               varchar(50),  -- InfoCpl
@@ -96,7 +96,7 @@ CREATE TABLE rh.pgt_doc_rh (
     modif_date             timestamp,  -- ModifDate
     modif_op               bigint,  -- ModifOp
     modif_elem             varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_doc_rh PRIMARY KEY (i_ddoc_rh)
+    CONSTRAINT pk_pgt_doc_rh PRIMARY KEY (id_doc_rh)
 );
 CREATE INDEX ix_pgt_doc_rh_id_type_doc ON rh.pgt_doc_rh (id_type_doc);
 CREATE INDEX ix_pgt_doc_rh_id_ste ON rh.pgt_doc_rh (id_ste);
@@ -116,7 +116,7 @@ CREATE INDEX ix_pgt_doc_rhtype_lib_type ON rh.pgt_doc_rhtype (lib_type);
 CREATE INDEX ix_pgt_doc_rhtype_modif_date ON rh.pgt_doc_rhtype (modif_date);
 
 CREATE TABLE rh.pgt_mutuelle (
-    i_dmutuelle_auto  bigint,  -- IDmutuelleAuto
+    id_mutuelle_auto  bigint,  -- IDmutuelleAuto
     id_mutuelle       smallint NOT NULL,  -- IdMutuelle
     lib_mutuelle      varchar(50),  -- Lib_Mutuelle
     is_actif          boolean,  -- IsActif
@@ -124,7 +124,7 @@ CREATE TABLE rh.pgt_mutuelle (
     modif_op          bigint,  -- ModifOp
     modif_elem        varchar(5),  -- ModifElem
     CONSTRAINT pk_pgt_mutuelle PRIMARY KEY (id_mutuelle),
-    CONSTRAINT uq_pgt_mutuelle_auto UNIQUE (i_dmutuelle_auto)
+    CONSTRAINT uq_pgt_mutuelle_auto UNIQUE (id_mutuelle_auto)
 );
 CREATE INDEX ix_pgt_mutuelle_modif_date ON rh.pgt_mutuelle (modif_date);
 
@@ -209,7 +209,7 @@ CREATE INDEX ix_pgt_profil_droit_acces_categorie ON rh.pgt_profil_droit_acces (c
 CREATE INDEX ix_pgt_profil_droit_acces_modif_date ON rh.pgt_profil_droit_acces (modif_date);
 
 CREATE TABLE rh.pgt_salarie (
-    i_dsalarie_auto    bigint,  -- IDsalarieAuto
+    id_salarie_auto    bigint,  -- IDsalarieAuto
     id_salarie         bigint NOT NULL,  -- IDSalarie
     civilite           smallint,  -- Civilité
     nom                text,  -- Nom
@@ -240,7 +240,7 @@ CREATE TABLE rh.pgt_salarie (
     modif_op           bigint,  -- ModifOp
     modif_elem         varchar(5),  -- ModifElem
     CONSTRAINT pk_pgt_salarie PRIMARY KEY (id_salarie),
-    CONSTRAINT uq_pgt_salarie_auto UNIQUE (i_dsalarie_auto)
+    CONSTRAINT uq_pgt_salarie_auto UNIQUE (id_salarie_auto)
 );
 CREATE INDEX ix_pgt_salarie_login ON rh.pgt_salarie (login);
 CREATE INDEX ix_pgt_salarie_id_utilisateur ON rh.pgt_salarie (id_utilisateur);
@@ -248,7 +248,7 @@ CREATE INDEX ix_pgt_salarie_modif_date ON rh.pgt_salarie (modif_date);
 
 CREATE TABLE rh.pgt_salarie_adf (
     id_salarie_adf_auto  bigint,  -- IdSalarie_ADFAuto
-    i_dsalarie_adf       bigint NOT NULL,  -- IDsalarie_ADF
+    id_salarie_adf       bigint NOT NULL,  -- IDsalarie_ADF
     id_salarie           bigint,  -- IDSalarie
     date                 date,  -- Date
     horaires             varchar(7),  -- Horaires
@@ -262,7 +262,7 @@ CREATE TABLE rh.pgt_salarie_adf (
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOp
     modif_elem           varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_salarie_adf PRIMARY KEY (i_dsalarie_adf),
+    CONSTRAINT pk_pgt_salarie_adf PRIMARY KEY (id_salarie_adf),
     CONSTRAINT uq_pgt_salarie_adf_auto UNIQUE (id_salarie_adf_auto)
 );
 CREATE INDEX ix_pgt_salarie_adf_id_salarie ON rh.pgt_salarie_adf (id_salarie);
@@ -270,22 +270,22 @@ CREATE INDEX ix_pgt_salarie_adf_id_formateur ON rh.pgt_salarie_adf (id_formateur
 CREATE INDEX ix_pgt_salarie_adf_modif_date ON rh.pgt_salarie_adf (modif_date);
 
 CREATE TABLE rh.pgt_salarie_adf_item (
-    i_dsalarie_adf_item  bigint NOT NULL,  -- IDsalarie_ADF_Item
-    i_dsalarie_adf       bigint,  -- IDsalarie_ADF
+    id_salarie_adf_item  bigint NOT NULL,  -- IDsalarie_ADF_Item
+    id_salarie_adf       bigint,  -- IDsalarie_ADF
     id_type_adf_item     bigint,  -- IDTypeADF_Item
     note                 smallint,  -- Note
     datecrea             timestamp,  -- Datecrea
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOp
     modif_elem           varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_salarie_adf_item PRIMARY KEY (i_dsalarie_adf_item)
+    CONSTRAINT pk_pgt_salarie_adf_item PRIMARY KEY (id_salarie_adf_item)
 );
-CREATE INDEX ix_pgt_salarie_adf_item_i_dsalarie_adf ON rh.pgt_salarie_adf_item (i_dsalarie_adf);
+CREATE INDEX ix_pgt_salarie_adf_item_id_salarie_adf ON rh.pgt_salarie_adf_item (id_salarie_adf);
 CREATE INDEX ix_pgt_salarie_adf_item_id_type_adf_item ON rh.pgt_salarie_adf_item (id_type_adf_item);
 CREATE INDEX ix_pgt_salarie_adf_item_modif_date ON rh.pgt_salarie_adf_item (modif_date);
 
 CREATE TABLE rh.pgt_salarie_avance (
-    i_dsalarie_avance  bigint NOT NULL,  -- IDsalarie_avance
+    id_salarie_avance  bigint NOT NULL,  -- IDsalarie_avance
     id_salarie         bigint,  -- IDSalarie
     mois_salaire       date,  -- MoisSalaire
     montant            numeric(19,4),  -- Montant
@@ -297,14 +297,14 @@ CREATE TABLE rh.pgt_salarie_avance (
     modif_date         timestamp,  -- ModifDate
     modif_op           bigint,  -- ModifOP
     modif_elem         varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_salarie_avance PRIMARY KEY (i_dsalarie_avance)
+    CONSTRAINT pk_pgt_salarie_avance PRIMARY KEY (id_salarie_avance)
 );
 CREATE INDEX ix_pgt_salarie_avance_id_salarie ON rh.pgt_salarie_avance (id_salarie);
 CREATE INDEX ix_pgt_salarie_avance_id_tk_liste ON rh.pgt_salarie_avance (id_tk_liste);
 CREATE INDEX ix_pgt_salarie_avance_modif_date ON rh.pgt_salarie_avance (modif_date);
 
 CREATE TABLE rh.pgt_salarie_coordonnees (
-    i_dsalarie_coordonnees  bigint,  -- IDsalarie_coordonnées
+    id_salarie_coordonnees  bigint,  -- IDsalarie_coordonnées
     id_salarie              bigint NOT NULL,  -- IDSalarie
     adresse1                text,  -- Adresse1
     adresse2                text,  -- Adresse2
@@ -323,13 +323,13 @@ CREATE TABLE rh.pgt_salarie_coordonnees (
     modif_op                bigint,  -- ModifOp
     modif_elem              varchar(5),  -- ModifElem
     CONSTRAINT pk_pgt_salarie_coordonnees PRIMARY KEY (id_salarie),
-    CONSTRAINT uq_pgt_salarie_coordonnees_auto UNIQUE (i_dsalarie_coordonnees)
+    CONSTRAINT uq_pgt_salarie_coordonnees_auto UNIQUE (id_salarie_coordonnees)
 );
 CREATE INDEX ix_pgt_salarie_coordonnees_modif_date ON rh.pgt_salarie_coordonnees (modif_date);
 
 CREATE TABLE rh.pgt_salarie_decl_presence (
-    i_ddeclaratif_presence_auto  bigint,  -- IDdeclaratif_presenceAuto
-    i_ddeclaratif_presence       bigint NOT NULL,  -- IDdeclaratif_presence
+    id_declaratif_presence_auto  bigint,  -- IDdeclaratif_presenceAuto
+    id_declaratif_presence       bigint NOT NULL,  -- IDdeclaratif_presence
     id_salarie                   bigint,  -- IDSalarie
     date                         date,  -- Date
     presence                     boolean,  -- Presence
@@ -342,15 +342,15 @@ CREATE TABLE rh.pgt_salarie_decl_presence (
     modif_date                   timestamp,  -- ModifDate
     modif_op                     bigint,  -- ModifOP
     modif_elem                   varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_salarie_decl_presence PRIMARY KEY (i_ddeclaratif_presence),
-    CONSTRAINT uq_pgt_salarie_decl_presence_auto UNIQUE (i_ddeclaratif_presence_auto)
+    CONSTRAINT pk_pgt_salarie_decl_presence PRIMARY KEY (id_declaratif_presence),
+    CONSTRAINT uq_pgt_salarie_decl_presence_auto UNIQUE (id_declaratif_presence_auto)
 );
 CREATE INDEX ix_pgt_salarie_decl_presence_id_salarie ON rh.pgt_salarie_decl_presence (id_salarie);
 CREATE INDEX ix_pgt_salarie_decl_presence_modif_date ON rh.pgt_salarie_decl_presence (modif_date);
 
 CREATE TABLE rh.pgt_salarie_decl_production (
-    i_ddeclaratif_production_auto  bigint,  -- IDdeclaratif_productionAuto
-    i_ddeclaratif_production       bigint NOT NULL,  -- IDdeclaratif_production
+    id_declaratif_production_auto  bigint,  -- IDdeclaratif_productionAuto
+    id_declaratif_production       bigint NOT NULL,  -- IDdeclaratif_production
     id_salarie                     bigint,  -- IDSalarie
     date                           date,  -- Date
     id_type_prod_dec               bigint,  -- IdTypeProdDec
@@ -360,16 +360,16 @@ CREATE TABLE rh.pgt_salarie_decl_production (
     modif_op                       bigint,  -- ModifOP
     modif_date                     timestamp,  -- ModifDate
     modif_elem                     varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_salarie_decl_production PRIMARY KEY (i_ddeclaratif_production),
-    CONSTRAINT uq_pgt_salarie_decl_production_auto UNIQUE (i_ddeclaratif_production_auto)
+    CONSTRAINT pk_pgt_salarie_decl_production PRIMARY KEY (id_declaratif_production),
+    CONSTRAINT uq_pgt_salarie_decl_production_auto UNIQUE (id_declaratif_production_auto)
 );
 CREATE INDEX ix_pgt_salarie_decl_production_id_salarie ON rh.pgt_salarie_decl_production (id_salarie);
 CREATE INDEX ix_pgt_salarie_decl_production_id_type_prod_dec ON rh.pgt_salarie_decl_production (id_type_prod_dec);
 CREATE INDEX ix_pgt_salarie_decl_production_modif_date ON rh.pgt_salarie_decl_production (modif_date);
 
 CREATE TABLE rh.pgt_salarie_doc_rh (
-    i_dsalarie_doc_rh        bigint NOT NULL,  -- IDsalarie_docRH
-    i_ddoc_rhtype            bigint,  -- IDdocRHTYPE
+    id_salarie_doc_rh        bigint NOT NULL,  -- IDsalarie_docRH
+    id_doc_rhtype            bigint,  -- IDdocRHTYPE
     id_salarie               bigint,  -- IDSalarie
     id_da                    bigint,  -- ID_DA
     id_docusign              text,  -- IdDocusign
@@ -380,16 +380,16 @@ CREATE TABLE rh.pgt_salarie_doc_rh (
     modif_op                 bigint,  -- ModifOP
     modif_elem               varchar(5),  -- ModifELEM
     id_salarie_date_edition  varchar(16),  -- IDSalarieDATE_Edition
-    CONSTRAINT pk_pgt_salarie_doc_rh PRIMARY KEY (i_dsalarie_doc_rh)
+    CONSTRAINT pk_pgt_salarie_doc_rh PRIMARY KEY (id_salarie_doc_rh)
 );
-CREATE INDEX ix_pgt_salarie_doc_rh_i_ddoc_rhtype ON rh.pgt_salarie_doc_rh (i_ddoc_rhtype);
+CREATE INDEX ix_pgt_salarie_doc_rh_id_doc_rhtype ON rh.pgt_salarie_doc_rh (id_doc_rhtype);
 CREATE INDEX ix_pgt_salarie_doc_rh_id_salarie ON rh.pgt_salarie_doc_rh (id_salarie);
 CREATE INDEX ix_pgt_salarie_doc_rh_id_da ON rh.pgt_salarie_doc_rh (id_da);
 CREATE INDEX ix_pgt_salarie_doc_rh_modif_date ON rh.pgt_salarie_doc_rh (modif_date);
 
 CREATE TABLE rh.pgt_salarie_doc_ulease (
-    i_dsalarie_doc_ulease    bigint NOT NULL,  -- IDsalarie_docUlease
-    i_ddoc_ulease_type       bigint,  -- IDdocUleaseTYPE
+    id_salarie_doc_ulease    bigint NOT NULL,  -- IDsalarie_docUlease
+    id_doc_ulease_type       bigint,  -- IDdocUleaseTYPE
     id_salarie               bigint,  -- IDSalarie
     id_da                    bigint,  -- ID_DA
     id_docusign              text,  -- IdDocusign
@@ -400,15 +400,15 @@ CREATE TABLE rh.pgt_salarie_doc_ulease (
     modif_op                 bigint,  -- ModifOP
     modif_elem               varchar(5),  -- ModifELEM
     id_salarie_date_edition  varchar(16),  -- IDSalarieDATE_Edition
-    CONSTRAINT pk_pgt_salarie_doc_ulease PRIMARY KEY (i_dsalarie_doc_ulease)
+    CONSTRAINT pk_pgt_salarie_doc_ulease PRIMARY KEY (id_salarie_doc_ulease)
 );
-CREATE INDEX ix_pgt_salarie_doc_ulease_i_ddoc_ulease_type ON rh.pgt_salarie_doc_ulease (i_ddoc_ulease_type);
+CREATE INDEX ix_pgt_salarie_doc_ulease_id_doc_ulease_type ON rh.pgt_salarie_doc_ulease (id_doc_ulease_type);
 CREATE INDEX ix_pgt_salarie_doc_ulease_id_salarie ON rh.pgt_salarie_doc_ulease (id_salarie);
 CREATE INDEX ix_pgt_salarie_doc_ulease_id_da ON rh.pgt_salarie_doc_ulease (id_da);
 CREATE INDEX ix_pgt_salarie_doc_ulease_modif_date ON rh.pgt_salarie_doc_ulease (modif_date);
 
 CREATE TABLE rh.pgt_salarie_droit_acces (
-    i_dsalarie_droit_acces          bigint NOT NULL,  -- IDsalarie_droitAccès
+    id_salarie_droit_acces          bigint NOT NULL,  -- IDsalarie_droitAccès
     id_salarie                      bigint,  -- IDSalarie
     id_type_droit_acces             integer,  -- IDTypeDroitAccès
     droit_actif                     boolean,  -- DroitActif
@@ -416,14 +416,14 @@ CREATE TABLE rh.pgt_salarie_droit_acces (
     modif_op                        bigint,  -- ModifOp
     modif_elem                      varchar(5),  -- ModifElem
     id_salarie_id_type_droit_acces  varchar(12),  -- IDSalarieIDTypeDroitAccès
-    CONSTRAINT pk_pgt_salarie_droit_acces PRIMARY KEY (i_dsalarie_droit_acces)
+    CONSTRAINT pk_pgt_salarie_droit_acces PRIMARY KEY (id_salarie_droit_acces)
 );
 CREATE INDEX ix_pgt_salarie_droit_acces_id_salarie ON rh.pgt_salarie_droit_acces (id_salarie);
 CREATE INDEX ix_pgt_salarie_droit_acces_id_type_droit_acces ON rh.pgt_salarie_droit_acces (id_type_droit_acces);
 CREATE INDEX ix_pgt_salarie_droit_acces_modif_date ON rh.pgt_salarie_droit_acces (modif_date);
 
 CREATE TABLE rh.pgt_salarie_embauche (
-    i_dsalarie_embauche    bigint,  -- IDsalarie_embauche
+    id_salarie_embauche    bigint,  -- IDsalarie_embauche
     id_salarie             bigint NOT NULL,  -- IDSalarie
     date_debut             date,  -- DateDebut
     date_fin_per_essai     date,  -- DateFinPerEssai
@@ -448,7 +448,7 @@ CREATE TABLE rh.pgt_salarie_embauche (
     multi_prod             boolean,  -- MultiProd
     en_pause               boolean,  -- EnPause
     id_absence             bigint,  -- IdAbsence
-    i_dcvtheque            bigint,  -- IDcvtheque
+    id_cvtheque            bigint,  -- IDcvtheque
     cin_envoyee            boolean,  -- CIN_envoyée
     cj_envoye              boolean,  -- CJ_envoyé
     formation_iag          boolean,  -- FormationIAG
@@ -461,7 +461,7 @@ CREATE TABLE rh.pgt_salarie_embauche (
     modif_elem             varchar(5),  -- ModifElem
     id_salarie_trans_prod  bigint,  -- IdSalarieTransProd
     CONSTRAINT pk_pgt_salarie_embauche PRIMARY KEY (id_salarie),
-    CONSTRAINT uq_pgt_salarie_embauche_auto UNIQUE (i_dsalarie_embauche)
+    CONSTRAINT uq_pgt_salarie_embauche_auto UNIQUE (id_salarie_embauche)
 );
 CREATE INDEX ix_pgt_salarie_embauche_id_type_poste ON rh.pgt_salarie_embauche (id_type_poste);
 CREATE INDEX ix_pgt_salarie_embauche_id_type_ctt ON rh.pgt_salarie_embauche (id_type_ctt);
@@ -470,11 +470,11 @@ CREATE INDEX ix_pgt_salarie_embauche_id_ste ON rh.pgt_salarie_embauche (id_ste);
 CREATE INDEX ix_pgt_salarie_embauche_id_ste_dpae_energie ON rh.pgt_salarie_embauche (id_ste_dpae_energie);
 CREATE INDEX ix_pgt_salarie_embauche_id_ste_dpae_fibre ON rh.pgt_salarie_embauche (id_ste_dpae_fibre);
 CREATE INDEX ix_pgt_salarie_embauche_id_absence ON rh.pgt_salarie_embauche (id_absence);
-CREATE INDEX ix_pgt_salarie_embauche_i_dcvtheque ON rh.pgt_salarie_embauche (i_dcvtheque);
+CREATE INDEX ix_pgt_salarie_embauche_id_cvtheque ON rh.pgt_salarie_embauche (id_cvtheque);
 CREATE INDEX ix_pgt_salarie_embauche_modif_date ON rh.pgt_salarie_embauche (modif_date);
 
 CREATE TABLE rh.pgt_salarie_infotbx (
-    i_dsalarie_info_tbx  bigint NOT NULL,  -- IDsalarie_infoTbx
+    id_salarie_info_tbx  bigint NOT NULL,  -- IDsalarie_infoTbx
     id_salarie           bigint,  -- IDSalarie
     idorganigramme       bigint,  -- idorganigramme
     mois_salaire         date,  -- MoisSalaire
@@ -486,14 +486,14 @@ CREATE TABLE rh.pgt_salarie_infotbx (
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOP
     modif_elem           varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_salarie_infotbx PRIMARY KEY (i_dsalarie_info_tbx)
+    CONSTRAINT pk_pgt_salarie_infotbx PRIMARY KEY (id_salarie_info_tbx)
 );
 CREATE INDEX ix_pgt_salarie_infotbx_id_salarie ON rh.pgt_salarie_infotbx (id_salarie);
 CREATE INDEX ix_pgt_salarie_infotbx_idorganigramme ON rh.pgt_salarie_infotbx (idorganigramme);
 CREATE INDEX ix_pgt_salarie_infotbx_modif_date ON rh.pgt_salarie_infotbx (modif_date);
 
 CREATE TABLE rh.pgt_salarie_livret (
-    i_dsalarie_livret         bigint NOT NULL,  -- IDsalarie_Livret
+    id_salarie_livret         bigint NOT NULL,  -- IDsalarie_Livret
     id_salarie                bigint,  -- IDSalarie
     id_type_operation_livret  integer,  -- IDTypeOperationLivret
     id_challenge              bigint,  -- IDChallenge
@@ -505,7 +505,7 @@ CREATE TABLE rh.pgt_salarie_livret (
     modif_date                timestamp,  -- ModifDate
     modif_op                  bigint,  -- ModifOp
     modif_elem                varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_salarie_livret PRIMARY KEY (i_dsalarie_livret)
+    CONSTRAINT pk_pgt_salarie_livret PRIMARY KEY (id_salarie_livret)
 );
 CREATE INDEX ix_pgt_salarie_livret_id_salarie ON rh.pgt_salarie_livret (id_salarie);
 CREATE INDEX ix_pgt_salarie_livret_id_type_operation_livret ON rh.pgt_salarie_livret (id_type_operation_livret);
@@ -514,7 +514,7 @@ CREATE INDEX ix_pgt_salarie_livret_id_tk_liste ON rh.pgt_salarie_livret (id_tk_l
 CREATE INDEX ix_pgt_salarie_livret_modif_date ON rh.pgt_salarie_livret (modif_date);
 
 CREATE TABLE rh.pgt_salarie_mutuelle (
-    i_dsalarie_mutuelle            bigint,  -- IDsalarie_mutuelle
+    id_salarie_mutuelle            bigint,  -- IDsalarie_mutuelle
     id_salarie                     bigint NOT NULL,  -- IDSalarie
     adhesion                       boolean,  -- Adhésion
     adhesion_date                  date,  -- AdhésionDate
@@ -532,14 +532,14 @@ CREATE TABLE rh.pgt_salarie_mutuelle (
     modif_op                       bigint,  -- ModifOp
     modif_elem                     varchar(5),  -- ModifElem
     CONSTRAINT pk_pgt_salarie_mutuelle PRIMARY KEY (id_salarie),
-    CONSTRAINT uq_pgt_salarie_mutuelle_auto UNIQUE (i_dsalarie_mutuelle)
+    CONSTRAINT uq_pgt_salarie_mutuelle_auto UNIQUE (id_salarie_mutuelle)
 );
 CREATE INDEX ix_pgt_salarie_mutuelle_modif_date ON rh.pgt_salarie_mutuelle (modif_date);
 
 CREATE TABLE rh.pgt_salarie_organigramme (
     id_salarie                           bigint,  -- IDSalarie
     idorganigramme                       bigint,  -- idorganigramme
-    i_dsalarie_organigramme              bigint NOT NULL,  -- IDsalarie_organigramme
+    id_salarie_organigramme              bigint NOT NULL,  -- IDsalarie_organigramme
     date_debut                           date,  -- DateDébut
     date_fin                             date,  -- DateFin
     aff_actif                            boolean,  -- aff_ACTIF
@@ -548,7 +548,7 @@ CREATE TABLE rh.pgt_salarie_organigramme (
     id_ste                               bigint,  -- IdSte
     modif_elem                           varchar(5),  -- ModifELEM
     id_salarieidorganigramme_date_debut  varchar(24),  -- IDSalarieidorganigrammeDateDébut
-    CONSTRAINT pk_pgt_salarie_organigramme PRIMARY KEY (i_dsalarie_organigramme)
+    CONSTRAINT pk_pgt_salarie_organigramme PRIMARY KEY (id_salarie_organigramme)
 );
 CREATE INDEX ix_pgt_salarie_organigramme_id_salarie ON rh.pgt_salarie_organigramme (id_salarie);
 CREATE INDEX ix_pgt_salarie_organigramme_idorganigramme ON rh.pgt_salarie_organigramme (idorganigramme);
@@ -559,7 +559,7 @@ CREATE INDEX ix_pgt_salarie_organigramme_modif_date ON rh.pgt_salarie_organigram
 CREATE INDEX ix_pgt_salarie_organigramme_id_ste ON rh.pgt_salarie_organigramme (id_ste);
 
 CREATE TABLE rh.pgt_salarie_part_dpae (
-    i_dsalarie_partenaire     bigint NOT NULL,  -- IDsalarie_partenaire
+    id_salarie_partenaire     bigint NOT NULL,  -- IDsalarie_partenaire
     id_salarie                bigint,  -- IDSalarie
     id_partenaire             bigint,  -- IDPartenaire
     id_ste                    bigint,  -- IdSte
@@ -567,7 +567,7 @@ CREATE TABLE rh.pgt_salarie_part_dpae (
     modif_elem                varchar(5),  -- ModifElem
     modif_op                  bigint,  -- ModifOp
     id_salarie_id_partenaire  varchar(16),  -- IDSalarieIDPartenaire
-    CONSTRAINT pk_pgt_salarie_part_dpae PRIMARY KEY (i_dsalarie_partenaire)
+    CONSTRAINT pk_pgt_salarie_part_dpae PRIMARY KEY (id_salarie_partenaire)
 );
 CREATE INDEX ix_pgt_salarie_part_dpae_id_salarie ON rh.pgt_salarie_part_dpae (id_salarie);
 CREATE INDEX ix_pgt_salarie_part_dpae_id_partenaire ON rh.pgt_salarie_part_dpae (id_partenaire);
@@ -575,7 +575,7 @@ CREATE INDEX ix_pgt_salarie_part_dpae_id_ste ON rh.pgt_salarie_part_dpae (id_ste
 CREATE INDEX ix_pgt_salarie_part_dpae_modif_date ON rh.pgt_salarie_part_dpae (modif_date);
 
 CREATE TABLE rh.pgt_salarie_partenaire (
-    i_dsalarie_partenaire     bigint NOT NULL,  -- IDsalarie_partenaire
+    id_salarie_partenaire     bigint NOT NULL,  -- IDsalarie_partenaire
     id_salarie                bigint,  -- IDSalarie
     id_partenaire             bigint,  -- IDPartenaire
     id_salarie_id_partenaire  varchar(16),  -- IDSalarieIDPartenaire
@@ -585,7 +585,7 @@ CREATE TABLE rh.pgt_salarie_partenaire (
     modif_date                timestamp,  -- ModifDate
     modif_elem                varchar(5),  -- ModifElem
     modif_op                  bigint,  -- ModifOp
-    CONSTRAINT pk_pgt_salarie_partenaire PRIMARY KEY (i_dsalarie_partenaire)
+    CONSTRAINT pk_pgt_salarie_partenaire PRIMARY KEY (id_salarie_partenaire)
 );
 CREATE INDEX ix_pgt_salarie_partenaire_id_salarie ON rh.pgt_salarie_partenaire (id_salarie);
 CREATE INDEX ix_pgt_salarie_partenaire_id_partenaire ON rh.pgt_salarie_partenaire (id_partenaire);
@@ -594,7 +594,7 @@ CREATE INDEX ix_pgt_salarie_partenaire_login ON rh.pgt_salarie_partenaire (login
 CREATE INDEX ix_pgt_salarie_partenaire_modif_date ON rh.pgt_salarie_partenaire (modif_date);
 
 CREATE TABLE rh.pgt_salarie_prime (
-    i_dsalarie_prime  bigint NOT NULL,  -- IDsalarie_prime
+    id_salarie_prime  bigint NOT NULL,  -- IDsalarie_prime
     id_salarie        bigint,  -- IDSalarie
     mois_salaire      date,  -- MoisSalaire
     id_type_prime     integer,  -- IDTypePrime
@@ -605,14 +605,14 @@ CREATE TABLE rh.pgt_salarie_prime (
     modif_date        timestamp,  -- ModifDate
     modif_op          bigint,  -- ModifOP
     modif_elem        varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_salarie_prime PRIMARY KEY (i_dsalarie_prime)
+    CONSTRAINT pk_pgt_salarie_prime PRIMARY KEY (id_salarie_prime)
 );
 CREATE INDEX ix_pgt_salarie_prime_id_salarie ON rh.pgt_salarie_prime (id_salarie);
 CREATE INDEX ix_pgt_salarie_prime_id_type_prime ON rh.pgt_salarie_prime (id_type_prime);
 CREATE INDEX ix_pgt_salarie_prime_modif_date ON rh.pgt_salarie_prime (modif_date);
 
 CREATE TABLE rh.pgt_salarie_progevo (
-    i_dsalarie_prog_evo  bigint,  -- IDsalarie_progEvo
+    id_salarie_prog_evo  bigint NOT NULL,  -- IDsalarie_progEvo
     id_salarie           bigint,  -- IDSalarie
     date                 date,  -- Date
     id_da                bigint,  -- IDDa
@@ -624,27 +624,28 @@ CREATE TABLE rh.pgt_salarie_progevo (
     cloture              boolean,  -- Cloturé
     modif_date           timestamp,  -- ModifDate
     modif_op             bigint,  -- ModifOP
-    modif_elem           varchar(5)  -- ModifELEM
+    modif_elem           varchar(5),  -- ModifELEM
+    CONSTRAINT pk_pgt_salarie_progevo PRIMARY KEY (id_salarie_prog_evo)
 );
 CREATE INDEX ix_pgt_salarie_progevo_id_salarie ON rh.pgt_salarie_progevo (id_salarie);
 CREATE INDEX ix_pgt_salarie_progevo_modif_date ON rh.pgt_salarie_progevo (modif_date);
 
 CREATE TABLE rh.pgt_salarie_progevo_objectif (
-    i_dsalarie_prog_evo_item  bigint NOT NULL,  -- IDsalarie_progEvo_Item
-    i_dsalarie_prog_evo       bigint,  -- IDsalarie_progEvo
+    id_salarie_prog_evo_item  bigint NOT NULL,  -- IDsalarie_progEvo_Item
+    id_salarie_prog_evo       bigint,  -- IDsalarie_progEvo
     id_prog_evo_objectifs     bigint,  -- IDProgEvo_Objectifs
     champ_libre               varchar(50),  -- ChampLibre
     note                      smallint,  -- Note
     modif_date                timestamp,  -- ModifDate
     modif_op                  bigint,  -- ModifOP
     modif_elem                varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_salarie_progevo_objectif PRIMARY KEY (i_dsalarie_prog_evo_item)
+    CONSTRAINT pk_pgt_salarie_progevo_objectif PRIMARY KEY (id_salarie_prog_evo_item)
 );
-CREATE INDEX ix_pgt_salarie_progevo_objectif_i_dsalarie_prog_evo ON rh.pgt_salarie_progevo_objectif (i_dsalarie_prog_evo);
+CREATE INDEX ix_pgt_salarie_progevo_objectif_id_salarie_prog_evo ON rh.pgt_salarie_progevo_objectif (id_salarie_prog_evo);
 CREATE INDEX ix_pgt_salarie_progevo_objectif_modif_date ON rh.pgt_salarie_progevo_objectif (modif_date);
 
 CREATE TABLE rh.pgt_salarie_sortie (
-    i_dsalarie_sortie     bigint,  -- IDsalarie_sortie
+    id_salarie_sortie     bigint,  -- IDsalarie_sortie
     id_salarie            bigint NOT NULL,  -- IDSalarie
     id_type_sortie        integer,  -- IDTypeSortie
     date_sortie_demandee  timestamp,  -- DateSortieDemandée
@@ -665,14 +666,14 @@ CREATE TABLE rh.pgt_salarie_sortie (
     modif_date            timestamp,  -- ModifDate
     modif_elem            varchar(5),  -- ModifElem
     CONSTRAINT pk_pgt_salarie_sortie PRIMARY KEY (id_salarie),
-    CONSTRAINT uq_pgt_salarie_sortie_auto UNIQUE (i_dsalarie_sortie)
+    CONSTRAINT uq_pgt_salarie_sortie_auto UNIQUE (id_salarie_sortie)
 );
 CREATE INDEX ix_pgt_salarie_sortie_id_type_sortie ON rh.pgt_salarie_sortie (id_type_sortie);
 CREATE INDEX ix_pgt_salarie_sortie_modif_date ON rh.pgt_salarie_sortie (modif_date);
 
 CREATE TABLE rh.pgt_salarie_suivi (
-    i_dsuivi_auto   bigint,  -- IDsuiviAuto
-    i_dsuivi        bigint NOT NULL,  -- IDsuivi
+    id_suivi_auto   bigint,  -- IDsuiviAuto
+    id_suivi        bigint NOT NULL,  -- IDsuivi
     id_salarie      bigint,  -- IDSalarie
     type            integer,  -- TYPE
     idorganigramme  bigint,  -- idorganigramme
@@ -682,8 +683,8 @@ CREATE TABLE rh.pgt_salarie_suivi (
     modif_date      timestamp,  -- ModifDate
     modif_op        bigint,  -- ModifOp
     modif_elem      varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_salarie_suivi PRIMARY KEY (i_dsuivi),
-    CONSTRAINT uq_pgt_salarie_suivi_auto UNIQUE (i_dsuivi_auto)
+    CONSTRAINT pk_pgt_salarie_suivi PRIMARY KEY (id_suivi),
+    CONSTRAINT uq_pgt_salarie_suivi_auto UNIQUE (id_suivi_auto)
 );
 CREATE INDEX ix_pgt_salarie_suivi_id_salarie ON rh.pgt_salarie_suivi (id_salarie);
 CREATE INDEX ix_pgt_salarie_suivi_idorganigramme ON rh.pgt_salarie_suivi (idorganigramme);
@@ -693,8 +694,8 @@ CREATE INDEX ix_pgt_salarie_suivi_date_fin ON rh.pgt_salarie_suivi (date_fin);
 CREATE INDEX ix_pgt_salarie_suivi_modif_date ON rh.pgt_salarie_suivi (modif_date);
 
 CREATE TABLE rh.pgt_salarie_suivi_adm (
-    i_dsalarie_suivi_adm_auto  bigint,  -- IDsalarie_suiviADMAuto
-    i_dsalarie_suivi_adm       bigint NOT NULL,  -- IDsalarie_suiviADM
+    id_salarie_suivi_adm_auto  bigint,  -- IDsalarie_suiviADMAuto
+    id_salarie_suivi_adm       bigint NOT NULL,  -- IDsalarie_suiviADM
     id_salarie                 bigint,  -- IDSalarie
     op_crea                    bigint,  -- OPCREA
     description                text,  -- DESCRIPTION
@@ -703,8 +704,8 @@ CREATE TABLE rh.pgt_salarie_suivi_adm (
     modif_op                   bigint,  -- ModifOP
     modif_elem                 varchar(5),  -- ModifELEM
     id_salarie_datecrea        varchar(16),  -- IDSalarieDATECREA
-    CONSTRAINT pk_pgt_salarie_suivi_adm PRIMARY KEY (i_dsalarie_suivi_adm),
-    CONSTRAINT uq_pgt_salarie_suivi_adm_auto UNIQUE (i_dsalarie_suivi_adm_auto)
+    CONSTRAINT pk_pgt_salarie_suivi_adm PRIMARY KEY (id_salarie_suivi_adm),
+    CONSTRAINT uq_pgt_salarie_suivi_adm_auto UNIQUE (id_salarie_suivi_adm_auto)
 );
 CREATE INDEX ix_pgt_salarie_suivi_adm_id_salarie ON rh.pgt_salarie_suivi_adm (id_salarie);
 CREATE INDEX ix_pgt_salarie_suivi_adm_modif_date ON rh.pgt_salarie_suivi_adm (modif_date);
@@ -758,10 +759,10 @@ CREATE INDEX ix_pgt_societe_id_gerant ON rh.pgt_societe (id_gerant);
 CREATE INDEX ix_pgt_societe_modif_date ON rh.pgt_societe (modif_date);
 
 CREATE TABLE rh.pgt_societe_doc_courtage (
-    i_dsociete_doc_courtage  bigint NOT NULL,  -- IDsociete_docCourtage
+    id_societe_doc_courtage  bigint NOT NULL,  -- IDsociete_docCourtage
     id_salarie               bigint,  -- IDSalarie
     id_distrib               bigint,  -- idDistrib
-    i_ddoc_courtage          bigint,  -- IDdocCourtage
+    id_doc_courtage          bigint,  -- IDdocCourtage
     id_groupe_operateur      bigint,  -- IDGroupeOpérateur
     date_edition             timestamp,  -- DATE_Edition
     recu                     boolean,  -- RECU
@@ -772,21 +773,21 @@ CREATE TABLE rh.pgt_societe_doc_courtage (
     modif_op                 bigint,  -- ModifOP
     modif_elem               varchar(5),  -- ModifELEM
     id_salarie_date_edition  varchar(16),  -- IDSalarieDATE_Edition
-    CONSTRAINT pk_pgt_societe_doc_courtage PRIMARY KEY (i_dsociete_doc_courtage)
+    CONSTRAINT pk_pgt_societe_doc_courtage PRIMARY KEY (id_societe_doc_courtage)
 );
 CREATE INDEX ix_pgt_societe_doc_courtage_id_salarie ON rh.pgt_societe_doc_courtage (id_salarie);
 CREATE INDEX ix_pgt_societe_doc_courtage_id_distrib ON rh.pgt_societe_doc_courtage (id_distrib);
-CREATE INDEX ix_pgt_societe_doc_courtage_i_ddoc_courtage ON rh.pgt_societe_doc_courtage (i_ddoc_courtage);
+CREATE INDEX ix_pgt_societe_doc_courtage_id_doc_courtage ON rh.pgt_societe_doc_courtage (id_doc_courtage);
 CREATE INDEX ix_pgt_societe_doc_courtage_modif_date ON rh.pgt_societe_doc_courtage (modif_date);
 
 CREATE TABLE rh.pgt_societe_formjuri (
-    i_dsociete_form_juri_auto  bigint NOT NULL,  -- IDsociete_FormJuriAuto
-    i_dsociete_form_juri       integer,  -- IDsociete_FormJuri
+    id_societe_form_juri_auto  bigint NOT NULL,  -- IDsociete_FormJuriAuto
+    id_societe_form_juri       integer,  -- IDsociete_FormJuri
     lib_form_juri              varchar(50),  -- LibFormJuri
     modif_date                 timestamp,  -- ModifDate
     modif_elem                 varchar(5),  -- ModifELEM
     modif_op                   bigint,  -- ModifOP
-    CONSTRAINT pk_pgt_societe_formjuri PRIMARY KEY (i_dsociete_form_juri_auto)
+    CONSTRAINT pk_pgt_societe_formjuri PRIMARY KEY (id_societe_form_juri_auto)
 );
 CREATE INDEX ix_pgt_societe_formjuri_modif_date ON rh.pgt_societe_formjuri (modif_date);
 
@@ -832,10 +833,10 @@ CREATE TABLE rh.pgt_type_doc_distributeur (
     obligatoire_dem           boolean,  -- ObligatoireDem
     afaire_signer             boolean,  -- AfaireSigner
     rappel_annuel             smallint,  -- RappelAnnuel
-    i_ddoc_courtage           bigint,  -- IDdocCourtage
+    id_doc_courtage           bigint,  -- IDdocCourtage
     CONSTRAINT pk_pgt_type_doc_distributeur PRIMARY KEY (id_type_doc_distributeur)
 );
-CREATE INDEX ix_pgt_type_doc_distributeur_i_ddoc_courtage ON rh.pgt_type_doc_distributeur (i_ddoc_courtage);
+CREATE INDEX ix_pgt_type_doc_distributeur_id_doc_courtage ON rh.pgt_type_doc_distributeur (id_doc_courtage);
 
 CREATE TABLE rh.pgt_type_droit_acces (
     id_type_droit_acces_auto  bigint,  -- IDTypeDroitAccèsAuto
