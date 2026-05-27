@@ -8,7 +8,7 @@ Connexion : arguments CLI ou variables d'env (utiles dans .env) :
 
 Usage :
     python migration/apply_schema.py                 # depuis .env / defauts
-    python migration/apply_schema.py --host 192.168.1.50 --dbname omaya \
+    python migration/apply_schema.py --host 192.168.1.50 --dbname erp_db \
         --user postgres --password ****
     python migration/apply_schema.py --reset         # DROP SCHEMA avant (re-apply propre)
     python migration/apply_schema.py --dry-run       # liste sans executer
@@ -32,7 +32,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Applique le schema PG (sync_control + 10 schemas).")
     ap.add_argument("--host", default=os.getenv("PG_HOST", "localhost"))
     ap.add_argument("--port", default=os.getenv("PG_PORT", "5432"))
-    ap.add_argument("--dbname", default=os.getenv("PG_DBNAME", "omaya"))
+    ap.add_argument("--dbname", default=os.getenv("PG_DBNAME", "erp_db"))
     ap.add_argument("--user", default=os.getenv("PG_USER", "postgres"))
     ap.add_argument("--password", default=os.getenv("PG_PASSWORD", ""))
     ap.add_argument("--input", default=str(Path(__file__).parent / "schema"))
