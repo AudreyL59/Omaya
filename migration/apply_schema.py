@@ -63,8 +63,19 @@ def main() -> None:
         print("psycopg2 manquant -> pip install psycopg2-binary")
         sys.exit(1)
 
-    conn = psycopg2.connect(host=args.host, port=args.port, dbname=args.dbname,
-                            user=args.user, password=args.password)
+    try:
+        conn = psycopg2.connect(host=args.host, port=args.port, dbname=args.dbname,
+                                user=args.user, password=args.password)
+    except UnicodeDecodeError as e:
+        # Message d'erreur serveur en Windows-1252 (locale FR) -> psycopg2 echoue
+        # a le decoder en UTF-8. On recupere les octets et on les decode en cp1252.
+        msg = (e.object.decode("cp1252", "replace")
+               if getattr(e, "object", None) else str(e))
+        print("\nConnexion echouee (message serveur, decode cp1252) :")
+        print("  " + msg.strip())
+        print("\nVerifie : PG_USER / PG_PASSWORD dans .env (ils sont vides ?), "
+              "les droits, et l'entree pg_hba.conf pour ton IP.")
+        sys.exit(1)
     conn.set_client_encoding("UTF8")
     conn.autocommit = False
     try:
