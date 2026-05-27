@@ -25,7 +25,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Charge le .env du projet (parent de migration/), quel que soit le cwd.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 def main() -> None:
