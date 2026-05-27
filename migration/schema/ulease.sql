@@ -205,7 +205,7 @@ CREATE TABLE ulease.pgt_vehicule_accident (
     deb_rep                      date,  -- DebRep
     fin_rep                      date,  -- FinRep
     repare                       boolean,  -- Reparé
-    desc                         text,  -- Desc
+    desc_                        text,  -- Desc
     modif_op                     bigint,  -- ModifOp
     modif_date                   timestamp,  -- ModifDate
     modif_elem                   varchar(5),  -- ModifElem
