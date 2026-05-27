@@ -63,11 +63,13 @@ def main() -> None:
             "source_table_name, channel_id, sync_on_insert, sync_on_update, "
             "sync_on_delete, last_update_time, create_time) VALUES "
             f"('{trig}', '{schema}', '{pg_table}', '{channel}', 1, 1, 1, "
-            "current_timestamp, current_timestamp);")
+            "current_timestamp, current_timestamp) "
+            "ON CONFLICT (trigger_id) DO NOTHING;")
         lines.append(
             "INSERT INTO sym_trigger_router (trigger_id, router_id, "
             "initial_load_order, last_update_time, create_time) VALUES "
-            f"('{trig}', 'erp2erp', 100, current_timestamp, current_timestamp);")
+            f"('{trig}', 'erp2erp', 100, current_timestamp, current_timestamp) "
+            "ON CONFLICT (trigger_id, router_id) DO NOTHING;")
         if not t["has_modif"]:
             no_modif.append((schema, pg_table))
             # Le conflit global 'newer_wins' (modif_date) ne s'applique pas :
@@ -79,7 +81,8 @@ def main() -> None:
                 "resolve_row_only, create_time, last_update_time) VALUES "
                 f"('cf_{trig}', 'erp', 'erp', '{schema}', '{pg_table}', "
                 "'USE_PK_DATA', 'FALLBACK', 'SINGLE_ROW', 0, 0, "
-                "current_timestamp, current_timestamp);")
+                "current_timestamp, current_timestamp) "
+                "ON CONFLICT (conflict_id) DO NOTHING;")
         if not t["has_pk"]:
             no_pk.append((schema, pg_table))
         lines.append("")
