@@ -85,8 +85,8 @@ def main() -> None:
                     schema = f.stem
                     print(f"  DROP SCHEMA {schema} CASCADE")
                     cur.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
-                cur.execute("TRUNCATE public.sync_control;"
-                            if _table_exists(cur, "public", "sync_control") else "SELECT 1;")
+                cur.execute("TRUNCATE sync.sync_control;"
+                            if _table_exists(cur, "sync", "sync_control") else "SELECT 1;")
                 conn.commit()
             for f in files:
                 print(f"  applique {f.name} ...")

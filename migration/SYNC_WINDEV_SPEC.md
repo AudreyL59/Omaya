@@ -58,10 +58,12 @@ d'où l'usage du mapping (pas de copie automatique par nom).
 
 ## 3. Curseur de synchro (incrémental)
 
-Une table de contrôle **dans PG** (résiste aux redémarrages, interrogeable) :
+Une table de contrôle **dans PG**, schéma dédié `sync` (pas `public` : depuis
+PG 15 `public` n'accorde plus `CREATE` aux non-propriétaires) :
 
 ```sql
-CREATE TABLE IF NOT EXISTS sync_control (
+CREATE SCHEMA IF NOT EXISTS sync;
+CREATE TABLE IF NOT EXISTS sync.sync_control (
     schema_name   text      NOT NULL,
     table_name    text      NOT NULL,   -- nom HFSQL
     last_modif    timestamp,            -- max(ModifDate) traité
