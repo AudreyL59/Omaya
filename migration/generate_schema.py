@@ -107,8 +107,22 @@ def to_snake(name: str) -> str:
     return out
 
 
-def pg_type(type_str: str, size) -> tuple[str, bool]:
-    """(type PG, est_inconnu). type_str = colonne 'Type' du descriptif."""
+# ----------------------------------------------------------------------------
+#  Overrides de type par (schema, hfsql_table, hfsql_column).
+#  Pour les colonnes dont la rubrique HFSQL est "Texte Unicode" en realite
+#  utilisee pour stocker du binaire (ex. mdp chiffre AES). varchar mojibake
+#  les bytes -> on force bytea.
+# ----------------------------------------------------------------------------
+COL_TYPE_OVERRIDES: dict[tuple[str, str, str], str] = {
+    ("rh", "salarie", "MDPCrypte"): "bytea",   # 32 bytes AES-128, decrypte par DecrypteStandard
+}
+
+
+def pg_type(type_str: str, size, key: tuple[str, str, str] | None = None) -> tuple[str, bool]:
+    """(type PG, est_inconnu). type_str = colonne 'Type' du descriptif.
+    Si key=(schema, table, col) figure dans COL_TYPE_OVERRIDES, prevaut."""
+    if key is not None and key in COL_TYPE_OVERRIDES:
+        return COL_TYPE_OVERRIDES[key], False
     t = strip_accents(type_str or "").lower().strip()
     sz = int(size) if str(size).strip().isdigit() else 0
     if "identifiant automatique" in t:
@@ -243,7 +257,7 @@ def build_table(schema: str, hf_table: str, cols: list[dict],
     indexed = []
     for c in cols:
         sc = to_snake(c["name"])
-        pgt, unknown = pg_type(c["type"], c["size"])
+        pgt, unknown = pg_type(c["type"], c["size"], key=(schema, hf_table, c["name"]))
         if unknown:
             report.append(f"[type inconnu] {hf_table}.{c['name']} : '{c['type']}' -> text")
         # ALL-CAPS compose non override potentiellement mal coupe

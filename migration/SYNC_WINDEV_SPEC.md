@@ -41,9 +41,9 @@ dans la même analyse).
 
 ### Moteur générique piloté par le mapping
 Plutôt que coder 298 tables à la main, un **moteur générique** lit la table de
-correspondance (`migration/mapping/columns.csv` : `hfsql_table, pg_table,
-hfsql_column, pg_column, pg_type, pk`) et, par **indirection** (`{ }`), copie
-champ à champ :
+correspondance (`migration/mapping/columns.csv`, colonnes :
+`schema, hfsql_table, pg_table, hfsql_column, pg_column, pg_type, pk`) et, par
+**indirection** (`{ }`), copie champ à champ :
 
 ```
 POUR CHAQUE ligne_mapping DE la table courante
@@ -112,10 +112,11 @@ FIN
 |---|---|---|
 | Date+Heure | `timestamp` | WinDev gère (sinon ISO `AAAA-MM-JJ HH:MM:SS`) |
 | Date | `date` | idem (`AAAA-MM-JJ`) |
+| Heure | `time` | idem (`HH:MM:SS`) |
 | Booléen | `boolean` | direct |
 | Entier / Identifiant auto | `bigint`/`integer`/`smallint` | direct |
 | Texte / Mémo texte | `varchar`/`text` | **encodage → UTF-8** (HFSQL ANSI/latin-1) |
-| Mémo binaire/image | `bytea` | transfert natif (gros volumes : ticket_rh, recrutement) |
+| Mémo binaire/image | `bytea` | transfert natif (47 tables ; gros volumes : `ticket_rh`, `recrutement`) |
 | Réel / Monétaire | `double precision`/`numeric` | direct |
 
 ⚠️ **Dates stockées en texte** : certaines colonnes « date » sont des champs
@@ -150,36 +151,57 @@ PG UTF-8). Test sur une table à accents (`client`, `salarie`).
 
 ---
 
-## 8. Tables sans clé unique (12)
+## 8. Tables sans `modif_date` (6)
 
-`dialoguehisto/lu/msg`, `notificationpush`, `SFR_ClusterObjectif`,
-`salarie_progevo`, `ProgEvo_Objectifs`, `Formation_barèmeNote/Bulletin/PrevRecrut`,
-`Bulletin_Mention`, `tk_callsfr_typeanomalie`.
+`divers.SuiviTicketCall`, `divers.UUID_connexion`, `divers.listeScanner`,
+`divers.smsanimation`, `recrutement.MailRefusRH`, `rh.TypeDocDistributeur`.
 
-Pas de PK → pas d'UPSERT possible. Options :
-- **Truncate + reload** à chaque passe (recommandé : tables petites/périphériques),
-- ou clé composite naturelle si une combinaison de colonnes est unique.
+Pas de colonne `modif_date` → impossible de faire de l'incrémental dessus.
+Toutes ces tables ont en revanche une PK (ce sont des tables petites /
+périphériques). Stratégie : **truncate + reload complet à chaque passe**
+(transaction unique pour éviter une fenêtre vide). À reconsidérer si l'une
+d'elles grossit (ajout d'une colonne `modif_date` côté HFSQL = solution propre).
+
+> Toutes les autres tables (292/298) ont `modif_date` ET une PK → incrémental
+> + UPSERT standard (cf. §3, §4). Plus aucune table sans PK depuis la
+> génération du schéma PG (PK déduite par `id_<table>` quand absente).
 
 ---
 
 ## 9. Ordonnancement, cutover, validation
 
-- **Déploiement par site (Cas A retenu)** : HFSQL est déjà répliqué entre le
-  serveur interne et OVH (réplication HFSQL existante). On déploie donc le
-  **même exe de sync sur chaque serveur**, pointé sur son **HFSQL local → son
-  PG local** (LAN, pas de transfert de blobs via VPN). Curseur `sync.sync_control`
-  propre à chaque PG. **Aucune réplication PG↔PG nécessaire.**
+> **Mise à jour 2026-05-29** : SymmetricDS étant désormais opérationnel en
+> réplication bidirectionnelle PG↔PG, on retient l'**archi B** : un seul point
+> de conversion HFSQL→PG (interne) ; OVH suit automatiquement via SymmetricDS.
+
+- **Déploiement (archi B retenue)** : l'exe WinDev de sync tourne **uniquement
+  sur le serveur interne** et écrit dans **PG interne**. SymmetricDS réplique
+  ensuite vers **PG OVH** par le VPN (politique « newer_wins » sur `modif_date`).
+  La réplication HFSQL existante interne↔OVH n'est plus utilisée par la
+  synchro PG (elle reste utile tant que WinDev tourne).
+  - Pro : une seule chaîne HFSQL→PG à maintenir/debug ; SymmetricDS est exercé
+    en continu donc rodé bien avant le cutover.
+  - Con : les blobs (~25 Go au chargement initial sur `ticket_rh` +
+    `recrutement`) transitent par VPN une fois — ponctuel, acceptable.
+- **Curseur** : table `sync.sync_control` **uniquement dans PG interne**.
+  (Pas de curseur OVH puisque pas de sync directe vers OVH.)
 - **Cadence** : phase 1 = planificateur Windows lance l'exe toutes les 15–30 min
   (ou service WinDev). Pré-bascule : resserrer.
 - **Cutover (big-bang)** :
   1. Geler les écritures WinDev (mode maintenance),
-  2. **passe de synchro finale** (delta),
-  3. **validation** : comparer `COUNT(*)` HFSQL vs PG par table (+ checksums sur
-     tables clés),
-  4. basculer l'appli sur PG, retirer le bridge,
-  5. **rollback** : HFSQL reste intact ; en cas de souci on revient sur WinDev.
+  2. **passe de synchro finale** (delta) sur interne,
+  3. Attendre que SymmetricDS ait drainé ses batches (`sym_outgoing_batch` →
+     tout `OK`, aucun `NE`/`ER`),
+  4. **validation** : comparer `COUNT(*)` HFSQL vs PG interne par table
+     (+ checksums sur tables clés) ; vérifier que PG OVH = PG interne,
+  5. **arrêter l'exe de sync WinDev** (SymmetricDS reste actif),
+  6. basculer l'appli sur PG, retirer le bridge HFSQL,
+  7. **rollback** : HFSQL reste intact ; en cas de souci on revient sur WinDev
+     (et on relance la sync pour rattraper les écritures faites entre-temps
+     sur PG via SymmetricDS — donc rollback à faire vite).
 - **Réconciliation** (périodique + avant cutover) : comparer les ensembles de PK
-  HFSQL vs PG pour rattraper d'éventuels manques / suppressions physiques.
+  HFSQL interne vs PG interne pour rattraper d'éventuels manques / suppressions
+  physiques.
 
 ---
 
@@ -196,9 +218,14 @@ faudrait charger les tables parentes d'abord.)
 Avant d'industrialiser les 298 tables, valider sur **une table simple**
 (`ticket.pgt_tk_statut`) puis **une table à mémo binaire** (`ticket_rh` /
 `ulease`) :
-1. Connexion native PG OK (interne + OVH).
+1. Connexion native PG OK vers **PG interne** (l'archi B ne sync que là ;
+   OVH est servi par SymmetricDS et n'a pas à être ouvert depuis WinDev).
 2. Import du schéma PG dans l'analyse + copie enregistrement OK.
 3. Accents corrects (UTF-8).
 4. Mémo binaire → `bytea` lisible côté PG (rouvrir l'image).
 5. Curseur `sync_control` lu/écrit correctement.
 6. Idempotence : relancer 2× la même passe → 0 doublon, données identiques.
+7. **Propagation SymmetricDS** : après upsert sur PG interne, vérifier que la
+   ligne arrive sur PG OVH dans la minute (`SELECT * FROM <schema>.<table>
+   WHERE id_... = ...` côté OVH). C'est la validation bout en bout de la chaîne
+   HFSQL → PG interne → PG OVH.
