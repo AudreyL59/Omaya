@@ -127,7 +127,7 @@ def calculer_stats_entree_sortie(
         ids_sql = ",".join(str(i) for i in orga_ids)
         sql_dpae_base += f" INNER JOIN pgt_salarie_organigramme so ON so.id_salarie = s.id_salarie"
         where_dpae.append(f"so.idorganigramme IN ({ids_sql})")
-        where_dpae.append(f"so.date_debut::date <= ?::date::date")
+        where_dpae.append(f"so.date_debut::date <= ?::date")
         params_dpae.append(date_fin)
 
     sql_dpae = sql_dpae_base + " WHERE " + " AND ".join(where_dpae)

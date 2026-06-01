@@ -594,7 +594,7 @@ def affectation_vendeur_by_date(id_vendeur: int, ymd: str) -> tuple[str, str]:
         WHERE so.modif_elem NOT LIKE '%suppr%'
           AND s.modif_elem NOT LIKE '%suppr%'
           AND so.id_salarie = ?
-          AND so.date_debut::date <= ?::date::date
+          AND so.date_debut::date <= ?::date
         LIMIT 1""",
         (id_vendeur, ymd),
     )

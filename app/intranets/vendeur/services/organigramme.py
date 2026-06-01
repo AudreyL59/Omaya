@@ -87,7 +87,7 @@ def get_organigramme(
             """SELECT DISTINCT idorganigramme FROM pgt_salarie_organigramme
             WHERE id_salarie = ?
               AND modif_elem <> 'suppr'
-              AND date_debut::date <= ?::date::date""",
+              AND date_debut::date <= ?::date""",
             (id_salarie_user, today),
         )
         user_orga_ids = {_to_int(r.get("idorganigramme")) for r in user_rows}
@@ -130,8 +130,8 @@ def get_organigramme(
             INNER JOIN pgt_salarie_organigramme so ON s.id_salarie = so.id_salarie
             WHERE so.idorganigramme IN ({ids_sql})
               AND so.modif_elem <> 'suppr'
-              AND so.date_debut::date <= ?::date::date
-              AND (so.date_fin IS NULL OR so.date_fin::date >= ?::date::date)
+              AND so.date_debut::date <= ?::date
+              AND (so.date_fin IS NULL OR so.date_fin::date >= ?::date)
               AND se.en_activite = TRUE
               AND s.modif_elem <> 'suppr'
             ORDER BY se.resp_equipe DESC, se.resp_adjoint DESC, s.nom ASC, s.prenom ASC""",
@@ -199,8 +199,8 @@ def get_organigramme(
             FROM pgt_absence
             WHERE modif_elem NOT LIKE '%suppr%'
               AND id_salarie IN ({ids_sal_sql})
-              AND date_debut::date <= ?::date::date
-              AND (date_fin IS NULL OR date_fin::date >= ?::date::date)""",
+              AND date_debut::date <= ?::date
+              AND (date_fin IS NULL OR date_fin::date >= ?::date)""",
             (today, today),
         )
         type_abs_ids = {_to_int(a.get("id_type_absence")) for a in abs_rows}
@@ -247,9 +247,9 @@ def get_organigramme(
                     f"""SELECT id_salarie, MAX(date_signature) AS maxdate
                     FROM pgt_{prefix.lower()}_contrat
                     WHERE id_salarie IN ({ids_sal_sql_quoted})
-                      AND date_signature <> ''
+                      AND date_signature IS NOT NULL
                       AND modif_elem NOT LIKE '%suppr%'
-                      AND date_signature::date <= ?::date::date
+                      AND date_signature::date <= ?::date
                     GROUP BY id_salarie""",
                     (today,),
                 )
