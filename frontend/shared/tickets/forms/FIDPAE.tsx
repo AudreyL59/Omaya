@@ -264,13 +264,13 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             <Field label="Date Début">
               <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
             </Field>
-            <div className="flex items-center gap-3 pl-[7.75rem]">
+            <div className="flex items-center gap-3">
               <Check label="Adhère à la mutuelle" checked={!!form.mutuelle} onChange={(v) => set('mutuelle', v)} />
             </div>
             <Field label="Date adhésion">
               <input type="date" value={form.mutdate || ''} onChange={(e) => set('mutdate', e.target.value)} disabled={!form.mutuelle} className={inCls} />
             </Field>
-            <div className="flex items-center gap-3 pl-[7.75rem]">
+            <div className="flex items-center gap-3">
               <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
               {form.coopte && (
                 <PickerBtn
@@ -280,7 +280,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 />
               )}
             </div>
-            <div className="flex items-center gap-3 pl-[7.75rem]">
+            <div className="flex items-center gap-3">
               <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
               {form.jodirecte && (
                 <PickerBtn
