@@ -212,7 +212,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             </Field>
             <div className="flex items-center gap-4 pl-[5.75rem]">
               <Check label="Avec Enfant" checked={!!form.avec_enfant} onChange={(v) => set('avec_enfant', v)} />
-              <span className="text-xs text-c-ink-soft">Nb Enfants</span>
+              <span className="text-xs text-c-ink-soft">Nb :</span>
               <input
                 type="number"
                 value={form.nb_enfants || 0}
