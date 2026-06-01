@@ -30,7 +30,7 @@ from app.core.config import (
     FTP_USER,
 )
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -78,12 +78,12 @@ def _ftp_download(path: str) -> bytes | None:
 
 def _id_salarie(id_ticket: int) -> int:
     try:
-        r = get_connection("ticket_rh").query_one(
-            "SELECT IDTK_Liste, IDSalarie FROM TK_DemandeMutuelle "
-            "WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_rh").query_one(
+            "SELECT id_tk_liste, id_salarie FROM pgt_tk_demande_mutuelle "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
-        return _clean_id(_to_int(r.get("IDSalarie"))) if r else 0
+        return _clean_id(_to_int(r.get("id_salarie"))) if r else 0
     except Exception:
         return 0
 
@@ -92,39 +92,40 @@ def _salarie_header(id_salarie: int) -> dict:
     """En-tête salarié : nom / nom marital / prénom / activité / date début."""
     if not id_salarie:
         return {}
-    rh = get_connection("rh")
+    rh = get_pg_connection("rh")
     out = {
         "nom": "", "nom_marital": "", "prenom": "",
         "en_activite": False, "date_debut": "",
     }
     try:
         s = rh.query_one(
-            "SELECT IDSalarie, Nom, Nom_Marital, Prenom FROM salarie "
-            "WHERE IDSalarie = ?",
+            "SELECT id_salarie, nom, nom_marital, prenom FROM pgt_salarie "
+            "WHERE id_salarie = ?",
             (int(id_salarie),),
         )
         if s:
-            out["nom"] = (s.get("Nom") or "").strip()
-            out["nom_marital"] = (s.get("Nom_Marital") or "").strip()
-            out["prenom"] = (s.get("Prenom") or "").strip()
+            out["nom"] = (s.get("nom") or "").strip()
+            out["nom_marital"] = (s.get("nom_marital") or "").strip()
+            out["prenom"] = (s.get("prenom") or "").strip()
     except Exception:
         pass
     try:
         e = rh.query_one(
-            "SELECT TOP 1 IDSalarie, DateDebut, EnActivité FROM salarie_embauche "
-            "WHERE IDSalarie = ? ORDER BY DateDebut DESC",
+            "SELECT id_salarie, date_debut, en_activite FROM pgt_salarie_embauche "
+            "WHERE id_salarie = ? ORDER BY date_debut DESC LIMIT 1",
             (int(id_salarie),),
         )
         if e:
-            out["en_activite"] = bool(e.get("EnActivité"))
-            out["date_debut"] = date_only_to_iso(e.get("DateDebut"))
+            out["en_activite"] = bool(e.get("en_activite"))
+            out["date_debut"] = date_only_to_iso(e.get("date_debut"))
     except Exception:
         pass
     return out
 
 
 def _info_cplt(id_ticket: int) -> str:
-    """Mémo texte InfoCplt (lecture isolée — cf. bridge HFSQL)."""
+    """Mémo texte InfoCplt (lecture isolée — HFSQL : helper partagé
+    avec save (add_obser concat read-modify-write))."""
     try:
         r = get_connection("ticket_rh").query_one(
             "SELECT IDTK_Liste, InfoCplt FROM TK_DemandeMutuelle "
@@ -138,30 +139,30 @@ def _info_cplt(id_ticket: int) -> str:
 
 def _pieces(id_ticket: int) -> list[dict]:
     """Pièces jointes (TK_DemandeMutuelle_FIC). NomFichier = mémo (isolé)."""
-    rh = get_connection("ticket_rh")
+    rh = get_pg_connection("ticket_rh")
     try:
         rows = rh.query(
-            "SELECT IDTK_DemandeMutuelle_FIC, CheminFic FROM "
-            "TK_DemandeMutuelle_FIC WHERE IDTK_Liste = ? "
-            "AND ModifElem NOT LIKE '%suppr%'",
+            "SELECT id_tk_demande_mutuelle_fic, chemin_fic FROM "
+            "pgt_tk_demande_mutuelle_fic WHERE id_tk_liste = ? "
+            "AND modif_elem NOT LIKE '%suppr%'",
             (int(id_ticket),),
         )
     except Exception:
         return []
     out = []
     for r in rows or []:
-        idf = _clean_id(_to_int(r.get("IDTK_DemandeMutuelle_FIC")))
+        idf = _clean_id(_to_int(r.get("id_tk_demande_mutuelle_fic")))
         if not idf:
             continue
-        chemin = (r.get("CheminFic") or "").strip()
+        chemin = (r.get("chemin_fic") or "").strip()
         nom = ""
         try:
             f = rh.query_one(
-                "SELECT IDTK_DemandeMutuelle_FIC, NomFichier FROM "
-                "TK_DemandeMutuelle_FIC WHERE IDTK_DemandeMutuelle_FIC = ?",
+                "SELECT id_tk_demande_mutuelle_fic, nom_fichier FROM "
+                "pgt_tk_demande_mutuelle_fic WHERE id_tk_demande_mutuelle_fic = ?",
                 (int(idf),),
             )
-            nom = ((f.get("NomFichier") if f else "") or "").strip()
+            nom = ((f.get("nom_fichier") if f else "") or "").strip()
         except Exception:
             pass
         if not nom:

@@ -18,7 +18,7 @@ Bouton « Je valide ce retour » :
 from datetime import datetime
 
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -52,15 +52,15 @@ def _fr_now() -> str:
 
 def _statuts_rdv() -> list[dict]:
     try:
-        db = get_connection("adv")
+        db = get_pg_connection("adv")
         return [
             {
-                "id": _to_int(r.get("IdSFR_StatutRDV")),
-                "lib": (r.get("LibStatut") or "").strip(),
+                "id": _to_int(r.get("id_sfr_statut_rdv")),
+                "lib": (r.get("lib_statut") or "").strip(),
             }
             for r in db.query(
-                "SELECT IdSFR_StatutRDV, LibStatut FROM SFR_StatutRDV "
-                "ORDER BY LibStatut"
+                "SELECT id_sfr_statut_rdv, lib_statut FROM pgt_sfr_statut_rdv "
+                "ORDER BY lib_statut"
             )
         ]
     except Exception:
@@ -68,6 +68,9 @@ def _statuts_rdv() -> list[dict]:
 
 
 def _memo_sfr(db, id_contrat: int, field: str) -> str:
+    """Lecture isolee InfoVenteSFR / NumBS de SFR_contrat. **HFSQL**
+    car save fait un read-modify-write (concat InfoVenteSFR) qui doit
+    voir la valeur la plus fraiche (pas de lag PG)."""
     try:
         r = db.query_one(
             f"SELECT IDcontrat, {field} FROM SFR_contrat WHERE IDcontrat = ?",
@@ -82,38 +85,42 @@ def _client_info(id_client: int) -> dict:
     if not id_client:
         return {}
     try:
-        r = get_connection("adv").query_one(
-            "SELECT IDclient, NOM, PRENOM, ADRESSE1, ADRESSE2, CP, VILLE, "
-            "TEL, GSM, MAIL FROM client WHERE IDclient = ?",
+        r = get_pg_connection("adv").query_one(
+            "SELECT id_client, nom, prenom, adresse1, adresse2, cp, ville, "
+            "tel, gsm, mail FROM pgt_client WHERE id_client = ?",
             (int(id_client),),
         )
         if not r:
             return {}
         return {
-            "nom": (r.get("NOM") or "").strip(),
-            "prenom": (r.get("PRENOM") or "").strip(),
-            "adresse1": (r.get("ADRESSE1") or "").strip(),
-            "adresse2": (r.get("ADRESSE2") or "").strip(),
-            "cp": (r.get("CP") or "").strip(),
-            "ville": (r.get("VILLE") or "").strip(),
-            "tel": (r.get("TEL") or "").strip(),
-            "mobile": (r.get("GSM") or "").strip(),
-            "mail": (r.get("MAIL") or "").strip(),
+            "nom": (r.get("nom") or "").strip(),
+            "prenom": (r.get("prenom") or "").strip(),
+            "adresse1": (r.get("adresse1") or "").strip(),
+            "adresse2": (r.get("adresse2") or "").strip(),
+            "cp": (r.get("cp") or "").strip(),
+            "ville": (r.get("ville") or "").strip(),
+            "tel": (r.get("tel") or "").strip(),
+            "mobile": (r.get("gsm") or "").strip(),
+            "mail": (r.get("mail") or "").strip(),
         }
     except Exception:
         return {}
 
 
 def _contrat_info(id_contrat: int) -> dict:
+    """Infos contrat SFR pour l'affichage (PG en lecture, lag tolere).
+    NB : NumBS / InfoVenteSFR (memos lus via _memo_sfr) restent en HFSQL
+    pour le concat read-modify-write au moment du save."""
     if not id_contrat:
         return {}
-    adv = get_connection("adv")
+    adv_pg = get_pg_connection("adv")
+    adv_hf = get_connection("adv")  # pour _memo_sfr (memos critiques)
     try:
-        r = adv.query_one(
-            """SELECT IDcontrat, IDclient, IDproduit, DateSignature,
-                DateRDVTech, PériodeRDVTech, IDSFR_Cluster, IdSFR_StatutRDV,
-                IDetatContrat, IDetatSFR, TypeVente
-            FROM SFR_contrat WHERE IDcontrat = ?""",
+        r = adv_pg.query_one(
+            """SELECT id_contrat, id_client, id_produit, date_signature,
+                date_rdv_tech, periode_rdv_tech, id_sfr_cluster, id_sfr_statut_rdv,
+                id_etat_contrat, id_etat_sfr, type_vente
+            FROM pgt_sfr_contrat WHERE id_contrat = ?""",
             (int(id_contrat),),
         )
     except Exception:
@@ -121,50 +128,50 @@ def _contrat_info(id_contrat: int) -> dict:
     if not r:
         return {}
     out = {
-        "id_client": _clean_id(_to_int(r.get("IDclient"))),
-        "id_produit": _to_int(r.get("IDproduit")),
-        "num_bs": _memo_sfr(adv, id_contrat, "NumBS"),
-        "info_vente_sfr": _memo_sfr(adv, id_contrat, "InfoVenteSFR"),
-        "date_signature": date_only_to_iso(r.get("DateSignature")),
-        "date_rdv_tech": date_only_to_iso(r.get("DateRDVTech")),
-        "periode_rdv": _to_int(r.get("PériodeRDVTech")),
-        "id_cluster": _to_int(r.get("IDSFR_Cluster")),
-        "id_statut_rdv": _to_int(r.get("IdSFR_StatutRDV")),
-        "id_etat_contrat": _to_int(r.get("IDetatContrat")),
-        "id_etat_sfr": _to_int(r.get("IDetatSFR")),
-        "type_vente": _to_int(r.get("TypeVente")),
+        "id_client": _clean_id(_to_int(r.get("id_client"))),
+        "id_produit": _to_int(r.get("id_produit")),
+        "num_bs": _memo_sfr(adv_hf, id_contrat, "NumBS"),
+        "info_vente_sfr": _memo_sfr(adv_hf, id_contrat, "InfoVenteSFR"),
+        "date_signature": date_only_to_iso(r.get("date_signature")),
+        "date_rdv_tech": date_only_to_iso(r.get("date_rdv_tech")),
+        "periode_rdv": _to_int(r.get("periode_rdv_tech")),
+        "id_cluster": _to_int(r.get("id_sfr_cluster")),
+        "id_statut_rdv": _to_int(r.get("id_sfr_statut_rdv")),
+        "id_etat_contrat": _to_int(r.get("id_etat_contrat")),
+        "id_etat_sfr": _to_int(r.get("id_etat_sfr")),
+        "type_vente": _to_int(r.get("type_vente")),
         "offre_lib": "",
         "cluster_lib": "",
         "etat_vendeur_lib": "",
     }
     if out["id_produit"]:
         try:
-            p = adv.query_one(
-                "SELECT IDproduit, Lib_produit FROM SFR_produit "
-                "WHERE IDproduit = ?",
+            p = adv_pg.query_one(
+                "SELECT id_produit, lib_produit FROM pgt_sfr_produit "
+                "WHERE id_produit = ?",
                 (int(out["id_produit"]),),
             )
-            out["offre_lib"] = (p.get("Lib_produit") or "").strip() if p else ""
+            out["offre_lib"] = (p.get("lib_produit") or "").strip() if p else ""
         except Exception:
             pass
     if out["id_cluster"]:
         try:
-            cl = adv.query_one(
-                "SELECT IDSFR_Cluster, NomCluster FROM SFR_Cluster "
-                "WHERE IDSFR_Cluster = ?",
+            cl = adv_pg.query_one(
+                "SELECT id_sfr_cluster, nom_cluster FROM pgt_sfr_cluster "
+                "WHERE id_sfr_cluster = ?",
                 (int(out["id_cluster"]),),
             )
-            out["cluster_lib"] = (cl.get("NomCluster") or "").strip() if cl else ""
+            out["cluster_lib"] = (cl.get("nom_cluster") or "").strip() if cl else ""
         except Exception:
             pass
     if out["id_etat_contrat"]:
         try:
-            e = adv.query_one(
-                "SELECT IDetat, Lib_Etat FROM SFR_etatContrat "
-                "WHERE IDetat = ?",
+            e = adv_pg.query_one(
+                "SELECT id_etat, lib_etat FROM pgt_sfr_etat_contrat "
+                "WHERE id_etat = ?",
                 (int(out["id_etat_contrat"]),),
             )
-            out["etat_vendeur_lib"] = (e.get("Lib_Etat") or "").strip() if e else ""
+            out["etat_vendeur_lib"] = (e.get("lib_etat") or "").strip() if e else ""
         except Exception:
             pass
     out["type_vente_lib"] = SFR_TYPE_VENTE_LABELS.get(out["type_vente"], "")
@@ -173,34 +180,34 @@ def _contrat_info(id_contrat: int) -> dict:
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDTK_RetourRdvTechFIBRE, IDcontrat,
-            IdFIBRE_StatutRDV
-        FROM TK_RetourRdvTechFIBRE WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_tk_retour_rdv_tech_fibre, id_contrat,
+            id_fibre_statut_rdv
+        FROM pgt_tk_retour_rdv_tech_fibre WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
-    id_contrat = _clean_id(_to_int(r.get("IDcontrat")))
+    id_contrat = _clean_id(_to_int(r.get("id_contrat")))
     info_cplt = ""
     try:
         rm = db.query_one(
-            "SELECT IDTK_Liste, InfoCplt FROM TK_RetourRdvTechFIBRE "
-            "WHERE IDTK_Liste = ?",
+            "SELECT id_tk_liste, info_cplt FROM pgt_tk_retour_rdv_tech_fibre "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
-        info_cplt = ((rm.get("InfoCplt") if rm else "") or "").strip()
+        info_cplt = ((rm.get("info_cplt") if rm else "") or "").strip()
     except Exception:
         pass
     contrat = _contrat_info(id_contrat)
     client = _client_info(contrat.get("id_client", 0))
     return {
         "found": True,
-        "id_retour": str(_clean_id(_to_int(r.get("IDTK_RetourRdvTechFIBRE")))),
+        "id_retour": str(_clean_id(_to_int(r.get("id_tk_retour_rdv_tech_fibre")))),
         "id_contrat": str(id_contrat) if id_contrat else "",
         "num_bs": contrat.get("num_bs", ""),
-        "id_statut_rdv_choisi": _to_int(r.get("IdFIBRE_StatutRDV"))
+        "id_statut_rdv_choisi": _to_int(r.get("id_fibre_statut_rdv"))
             or contrat.get("id_statut_rdv", 0),
         "info_cplt": info_cplt,
         "statuts_rdv": _statuts_rdv(),

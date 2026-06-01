@@ -32,7 +32,7 @@ from app.core.config import (
     MAIL_BO,
 )
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.mail import envoi_mail_rh
 from app.shared.notifications.sms import envoi_sms
 
@@ -105,48 +105,48 @@ def _demande(id_ticket: int) -> dict | None:
 
 
 def _infos_doc(id_doc: int) -> dict:
-    """Cross-DB sur rh : Doc_Distrib → TypeDocDistributeur (LibDoc) +
-    societe (RaisonSociale, IdGérant) + salarie (gérant)."""
+    """Cross-schema sur rh : Doc_Distrib -> TypeDocDistributeur (LibDoc) +
+    societe (RaisonSociale, IdGerant) + salarie (gerant). Lecture pure PG."""
     out = {
         "lib_doc": "", "lib_ste": "", "lib_gerant": "",
         "id_gerant": 0, "id_ste": 0,
     }
     if not id_doc:
         return out
-    rh = get_connection("rh")
+    rh = get_pg_connection("rh")
     try:
         d = rh.query_one(
-            "SELECT IDDoc_Distrib, IdSte, IDTypeDocDistributeur "
-            "FROM Doc_Distrib WHERE IDDoc_Distrib = ?",
+            "SELECT id_doc_distrib, id_ste, id_type_doc_distributeur "
+            "FROM pgt_doc_distrib WHERE id_doc_distrib = ?",
             (int(id_doc),),
         )
     except Exception:
         d = None
     if not d:
         return out
-    id_ste = _clean_id(_to_int(d.get("IdSte")))
-    id_type = _to_int(d.get("IDTypeDocDistributeur"))
+    id_ste = _clean_id(_to_int(d.get("id_ste")))
+    id_type = _to_int(d.get("id_type_doc_distributeur"))
     out["id_ste"] = id_ste
     # LibDoc
     try:
         t = rh.query_one(
-            "SELECT IDTypeDocDistributeur, LibDoc FROM TypeDocDistributeur "
-            "WHERE IDTypeDocDistributeur = ?",
+            "SELECT id_type_doc_distributeur, lib_doc FROM pgt_type_doc_distributeur "
+            "WHERE id_type_doc_distributeur = ?",
             (int(id_type),),
         )
-        out["lib_doc"] = ((t.get("LibDoc") if t else "") or "").strip()
+        out["lib_doc"] = ((t.get("lib_doc") if t else "") or "").strip()
     except Exception:
         pass
     # Société + gérant
     try:
         s = rh.query_one(
-            "SELECT IdSte, RaisonSociale, IdGérant FROM societe "
-            "WHERE IdSte = ?",
+            "SELECT id_ste, raison_sociale, id_gerant FROM pgt_societe "
+            "WHERE id_ste = ?",
             (int(id_ste),),
         )
         if s:
-            out["lib_ste"] = (s.get("RaisonSociale") or "").strip()
-            out["id_gerant"] = _clean_id(_to_int(s.get("IdGérant")))
+            out["lib_ste"] = (s.get("raison_sociale") or "").strip()
+            out["id_gerant"] = _clean_id(_to_int(s.get("id_gerant")))
     except Exception:
         pass
     if out["id_gerant"]:
@@ -162,12 +162,12 @@ def _gsm_gerant(id_gerant: int) -> str:
     if not id_gerant:
         return ""
     try:
-        c = get_connection("rh").query_one(
-            "SELECT IDSalarie, TélMob FROM salarie_coordonnées "
-            "WHERE IDSalarie = ?",
+        c = get_pg_connection("rh").query_one(
+            "SELECT id_salarie, tel_mob FROM pgt_salarie_coordonnees "
+            "WHERE id_salarie = ?",
             (int(id_gerant),),
         )
-        gsm = ((c.get("TélMob") if c else "") or "")
+        gsm = ((c.get("tel_mob") if c else "") or "")
         for ch in (".", " ", "/", "-"):
             gsm = gsm.replace(ch, "")
         return gsm

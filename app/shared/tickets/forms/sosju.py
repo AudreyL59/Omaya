@@ -16,7 +16,7 @@ TK_TypeSOS_JU (ticket_rh) définit le `TypeForm` qui pilote l'UI :
 """
 
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -33,16 +33,16 @@ from ..service import (
 
 def _types() -> list[dict]:
     try:
-        db = get_connection("ticket_rh")
+        db = get_pg_connection("ticket_rh")
         return [
             {
-                "id": _to_int(r.get("IDTK_TypeSOS_JU")),
-                "lib": (r.get("Lib_TypeSos") or "").strip(),
-                "type_form": (r.get("TypeForm") or "").strip(),
+                "id": _to_int(r.get("id_tk_type_sos_ju")),
+                "lib": (r.get("lib_type_sos") or "").strip(),
+                "type_form": (r.get("type_form") or "").strip(),
             }
             for r in db.query(
-                "SELECT IDTK_TypeSOS_JU, Lib_TypeSos, TypeForm "
-                "FROM TK_TypeSOS_JU ORDER BY Lib_TypeSos"
+                "SELECT id_tk_type_sos_ju, lib_type_sos, type_form "
+                "FROM pgt_tk_type_sos_ju ORDER BY lib_type_sos"
             )
         ]
     except Exception:
@@ -51,15 +51,15 @@ def _types() -> list[dict]:
 
 def _postes() -> list[dict]:
     try:
-        db = get_connection("rh")
+        db = get_pg_connection("rh")
         return [
             {
-                "id": _to_int(r.get("IdTypePoste")),
-                "lib": (r.get("Lib_Poste") or "").strip(),
+                "id": _to_int(r.get("id_type_poste")),
+                "lib": (r.get("lib_poste") or "").strip(),
             }
             for r in db.query(
-                "SELECT IdTypePoste, Lib_Poste FROM TypePoste "
-                "ORDER BY Lib_Poste"
+                "SELECT id_type_poste, lib_poste FROM pgt_type_poste "
+                "ORDER BY lib_poste"
             )
         ]
     except Exception:
@@ -68,14 +68,14 @@ def _postes() -> list[dict]:
 
 def _societes() -> list[dict]:
     try:
-        db = get_connection("rh")
+        db = get_pg_connection("rh")
         return [
             {
-                "id": _to_int(r.get("IdSte")),
-                "lib": (r.get("RS_Interne") or "").strip(),
+                "id": _to_int(r.get("id_ste")),
+                "lib": (r.get("rs_interne") or "").strip(),
             }
             for r in db.query(
-                "SELECT IdSte, RS_Interne FROM societe ORDER BY RS_Interne"
+                "SELECT id_ste, rs_interne FROM pgt_societe ORDER BY rs_interne"
             )
         ]
     except Exception:
@@ -83,10 +83,12 @@ def _societes() -> list[dict]:
 
 
 def _memo(db, id_ticket: int, field: str) -> str:
+    """Mémo texte (lecture isolée, PG). `db` est conservé pour
+    compatibilité d'appel mais on lit toujours sur PG."""
     try:
-        r = db.query_one(
-            f"SELECT IDTK_Liste, {field} FROM TK_DemandeSOS_JU "
-            f"WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_rh").query_one(
+            f"SELECT id_tk_liste, {field} FROM pgt_tk_demande_sos_ju "
+            f"WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         return ((r.get(field) if r else "") or "").strip()
@@ -108,21 +110,21 @@ def _pour_name(id_elem: int, type_form: str) -> str:
         ).strip()
     if tf == "Poste":
         try:
-            r = get_connection("rh").query_one(
-                "SELECT IdTypePoste, Lib_Poste FROM TypePoste "
-                "WHERE IdTypePoste = ?",
+            r = get_pg_connection("rh").query_one(
+                "SELECT id_type_poste, lib_poste FROM pgt_type_poste "
+                "WHERE id_type_poste = ?",
                 (int(id_elem),),
             )
-            return (r.get("Lib_Poste") or "").strip() if r else ""
+            return (r.get("lib_poste") or "").strip() if r else ""
         except Exception:
             return ""
     if tf == "Societe":
         try:
-            r = get_connection("rh").query_one(
-                "SELECT IdSte, RS_Interne FROM societe WHERE IdSte = ?",
+            r = get_pg_connection("rh").query_one(
+                "SELECT id_ste, rs_interne FROM pgt_societe WHERE id_ste = ?",
                 (int(id_elem),),
             )
-            return (r.get("RS_Interne") or "").strip() if r else ""
+            return (r.get("rs_interne") or "").strip() if r else ""
         except Exception:
             return ""
     return ""
@@ -133,17 +135,17 @@ def _pour_name(id_elem: int, type_form: str) -> str:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDTK_DemandeSOS_JU, IDTK_TypeSOS_JU, IdElem
-        FROM TK_DemandeSOS_JU WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_tk_demande_sos_ju, id_tk_type_sos_ju, id_elem
+        FROM pgt_tk_demande_sos_ju WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
 
-    id_type = _to_int(r.get("IDTK_TypeSOS_JU"))
-    id_elem = _clean_id(_to_int(r.get("IdElem")))
+    id_type = _to_int(r.get("id_tk_type_sos_ju"))
+    id_elem = _clean_id(_to_int(r.get("id_elem")))
     types = _types()
     type_form = ""
     for t in types:
@@ -153,14 +155,14 @@ def load(id_ticket: int) -> dict:
 
     return {
         "found": True,
-        "id_demande": str(_clean_id(_to_int(r.get("IDTK_DemandeSOS_JU")))),
+        "id_demande": str(_clean_id(_to_int(r.get("id_tk_demande_sos_ju")))),
         "id_type": id_type,
         "types": types,
         "id_elem": str(id_elem) if id_elem else "",
         "type_form": type_form,
         "pour_name": _pour_name(id_elem, type_form),
-        "ref_demande": _memo(db, id_ticket, "RefDemande"),
-        "descriptif": _memo(db, id_ticket, "Descriptif"),
+        "ref_demande": _memo(db, id_ticket, "ref_demande"),
+        "descriptif": _memo(db, id_ticket, "descriptif"),
         # Lookups pour les TypeForm Poste / Societe (combos)
         "postes": _postes(),
         "societes": _societes(),

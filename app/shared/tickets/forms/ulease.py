@@ -15,7 +15,7 @@ dans le dossier véhicule (si IdPC) ou salarié.
 
 from app.core.config import FTP_GESTION_RH_PATH
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -52,19 +52,19 @@ def _salarie_nom(sid: int) -> str:
 
 
 def _coord_salarie(id_salarie: int) -> tuple[str, str]:
-    """(mail, gsm nettoyé) depuis salarie_coordonnées (rh)."""
+    """(mail, gsm nettoye) depuis salarie_coordonnees (rh). Lecture pure PG."""
     if not id_salarie:
         return "", ""
     try:
-        r = get_connection("rh").query_one(
-            "SELECT IDSalarie, MAIL, TélMob FROM salarie_coordonnées "
-            "WHERE IDSalarie = ?",
+        r = get_pg_connection("rh").query_one(
+            "SELECT id_salarie, mail, tel_mob FROM pgt_salarie_coordonnees "
+            "WHERE id_salarie = ?",
             (int(id_salarie),),
         )
         if not r:
             return "", ""
-        mail = (r.get("MAIL") or "").strip()
-        gsm = (r.get("TélMob") or "")
+        mail = (r.get("mail") or "").strip()
+        gsm = (r.get("tel_mob") or "")
         for c in (".", " ", "/", "-"):
             gsm = gsm.replace(c, "")
         return mail, gsm.strip()
@@ -73,17 +73,17 @@ def _coord_salarie(id_salarie: int) -> tuple[str, str]:
 
 
 def _id_vehicule(id_pc: int) -> int:
-    """IDvehicule depuis vehicule_Conducteur (module véhicules). Tente
-    plusieurs bases ; 0 si introuvable."""
+    """IDvehicule depuis vehicule_Conducteur (module vehicules, schema ulease).
+    Lecture pure PG."""
     if not id_pc:
         return 0
     try:
-        r = get_connection("ulease").query_one(
-            "SELECT IDvehiculePC, IDvehicule FROM vehicule_Conducteur "
-            "WHERE IDvehiculePC = ?",
+        r = get_pg_connection("ulease").query_one(
+            "SELECT id_vehicule_pc, id_vehicule FROM pgt_vehicule_conducteur "
+            "WHERE id_vehicule_pc = ?",
             (int(id_pc),),
         )
-        return _clean_id(_to_int(r.get("IDvehicule"))) if r else 0
+        return _clean_id(_to_int(r.get("id_vehicule"))) if r else 0
     except Exception:
         return 0
 

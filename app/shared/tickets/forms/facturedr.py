@@ -23,7 +23,7 @@ import io
 
 from app.core.config import FTP_HOST, FTP_PASSWORD, FTP_USER
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -137,15 +137,15 @@ def _id_societe_salarie(id_salarie: int) -> int:
 
 def _societes() -> list[dict]:
     try:
-        rows = get_connection("rh").query(
-            "SELECT IdSte, RaisonSociale FROM societe ORDER BY RaisonSociale"
+        rows = get_pg_connection("rh").query(
+            "SELECT id_ste, raison_sociale FROM pgt_societe ORDER BY raison_sociale"
         )
     except Exception:
         return []
     out = []
     for r in rows or []:
-        ids = _clean_id(_to_int(r.get("IdSte")))
-        lib = (r.get("RaisonSociale") or "").strip()
+        ids = _clean_id(_to_int(r.get("id_ste")))
+        lib = (r.get("raison_sociale") or "").strip()
         if ids and lib:
             out.append({"id": str(ids), "lib": lib})
     return out

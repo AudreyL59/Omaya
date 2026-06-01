@@ -28,7 +28,7 @@ from app.core.config import (
     MAIL_RESP_JURISTE,
 )
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.mail import envoi_mail_rh
 
 from ..service import (
@@ -105,11 +105,11 @@ def _lib_ste(id_ste: int) -> str:
     if not id_ste:
         return ""
     try:
-        r = get_connection("rh").query_one(
-            "SELECT IdSte, RaisonSociale FROM societe WHERE IdSte = ?",
+        r = get_pg_connection("rh").query_one(
+            "SELECT id_ste, raison_sociale FROM pgt_societe WHERE id_ste = ?",
             (int(id_ste),),
         )
-        return ((r.get("RaisonSociale") if r else "") or "").strip()
+        return ((r.get("raison_sociale") if r else "") or "").strip()
     except Exception:
         return ""
 
@@ -123,45 +123,45 @@ def _lib_gerant(id_gerant: int) -> str:
 
 
 def _suivi_adm(id_gerant: int) -> list[dict]:
-    """Journal salarie_suiviADM (base rh) pour le gérant. Description =
-    mémo texte → lecture isolée."""
+    """Journal salarie_suiviADM (schema rh) pour le gerant. Description =
+    memo texte -> lecture isolee. Lecture pure PG (lag tolere)."""
     if not id_gerant:
         return []
-    rh = get_connection("rh")
+    rh = get_pg_connection("rh")
     try:
         rows = rh.query(
-            "SELECT IDsalarie_suiviADM, OPCREA, DATECREA FROM salarie_suiviADM "
-            "WHERE IDSalarie = ? AND ModifElem NOT LIKE '%suppr%' "
-            "ORDER BY DATECREA DESC",
+            "SELECT id_salarie_suivi_adm, op_crea, date_crea FROM pgt_salarie_suivi_adm "
+            "WHERE id_salarie = ? AND modif_elem NOT LIKE '%suppr%' "
+            "ORDER BY date_crea DESC",
             (int(id_gerant),),
         )
     except Exception:
         return []
     rows = rows or []
-    ops = {_clean_id(_to_int(r.get("OPCREA"))) for r in rows}
+    ops = {_clean_id(_to_int(r.get("op_crea"))) for r in rows}
     noms = load_salaries_minimal(ops)
     out = []
     for r in rows:
-        idm = _clean_id(_to_int(r.get("IDsalarie_suiviADM")))
+        idm = _clean_id(_to_int(r.get("id_salarie_suivi_adm")))
         if not idm:
             continue
-        op = _clean_id(_to_int(r.get("OPCREA")))
+        op = _clean_id(_to_int(r.get("op_crea")))
         ni = noms.get(op, {})
         np = (ni.get("prenom") or "")
         par = f"{ni.get('nom', '')} {np[:1].upper() + np[1:].lower() if np else ''}".strip()
         desc = ""
         try:
             d = rh.query_one(
-                "SELECT IDsalarie_suiviADM, DESCRIPTION FROM salarie_suiviADM "
-                "WHERE IDsalarie_suiviADM = ?",
+                "SELECT id_salarie_suivi_adm, description FROM pgt_salarie_suivi_adm "
+                "WHERE id_salarie_suivi_adm = ?",
                 (int(idm),),
             )
-            desc = rtf_to_text((d.get("DESCRIPTION") if d else "") or "")
+            desc = rtf_to_text((d.get("description") if d else "") or "")
         except Exception:
             pass
         out.append({
             "id": str(idm),
-            "depose_le": _windev_to_iso(r.get("DATECREA")),
+            "depose_le": _windev_to_iso(r.get("date_crea")),
             "par": par,
             "message": desc,
         })

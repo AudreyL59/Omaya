@@ -7,7 +7,7 @@ ligne sélectionnée).
 """
 
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -59,19 +59,19 @@ def load(id_ticket: int) -> dict:
             "adr_livraison": "",
         })
 
-    # Libellés type commande (TK_TypeCommande.LibTypeBS)
+    # Libellés type commande (TK_TypeCommande.LibTypeBS) - lecture pure PG
     type_libs: dict[int, str] = {}
     if type_ids:
         try:
             ids_t = ",".join(str(i) for i in type_ids)
-            for t in db.query(
-                f"""SELECT IDTK_TypeCommande, LibTypeBS
-                FROM TK_TypeCommande
-                WHERE IDTK_TypeCommande IN ({ids_t})"""
+            for t in get_pg_connection("ticket_bo").query(
+                f"""SELECT id_tk_type_commande, lib_type_bs
+                FROM pgt_tk_type_commande
+                WHERE id_tk_type_commande IN ({ids_t})"""
             ):
-                tid = _clean_id(_to_int(t.get("IDTK_TypeCommande")))
+                tid = _clean_id(_to_int(t.get("id_tk_type_commande")))
                 if tid:
-                    type_libs[tid] = (t.get("LibTypeBS") or "").strip()
+                    type_libs[tid] = (t.get("lib_type_bs") or "").strip()
         except Exception:
             pass
 

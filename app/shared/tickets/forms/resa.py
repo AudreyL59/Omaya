@@ -27,7 +27,7 @@ from app.core.config import (
     FTP_USER,
 )
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -101,30 +101,31 @@ def _salaries_full(ids: set[int]) -> dict[int, dict]:
     ids = {i for i in ids if i}
     if not ids:
         return {}
-    rh = get_connection("rh")
+    rh = get_pg_connection("rh")
+    # NOM en upper sur HFSQL -> salarie.nom (text) en PG
     ids_sql = ",".join(str(i) for i in ids)
     base: dict[int, dict] = {}
     for r in rh.query(
-        f"SELECT IDSalarie, NOM, PRENOM FROM salarie "
-        f"WHERE IDSalarie IN ({ids_sql})"
+        f"SELECT id_salarie, nom, prenom FROM pgt_salarie "
+        f"WHERE id_salarie IN ({ids_sql})"
     ):
-        sid = _clean_id(_to_int(r.get("IDSalarie")))
+        sid = _clean_id(_to_int(r.get("id_salarie")))
         if sid:
             base[sid] = {
-                "nom": (r.get("NOM") or "").strip(),
-                "prenom": (r.get("PRENOM") or "").strip(),
+                "nom": (r.get("nom") or "").strip(),
+                "prenom": (r.get("prenom") or "").strip(),
                 "gsm": "",
                 "mail": "",
             }
     try:
         for r in rh.query(
-            f"SELECT IDSalarie, TélMob, MAIL FROM salarie_coordonnées "
-            f"WHERE IDSalarie IN ({ids_sql})"
+            f"SELECT id_salarie, tel_mob, mail FROM pgt_salarie_coordonnees "
+            f"WHERE id_salarie IN ({ids_sql})"
         ):
-            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            sid = _clean_id(_to_int(r.get("id_salarie")))
             if sid in base:
-                base[sid]["gsm"] = (r.get("TélMob") or "").strip()
-                base[sid]["mail"] = (r.get("MAIL") or "").strip()
+                base[sid]["gsm"] = (r.get("tel_mob") or "").strip()
+                base[sid]["mail"] = (r.get("mail") or "").strip()
     except Exception:
         pass
     return base
@@ -151,10 +152,12 @@ def _parse_supp(liste: str) -> list[int]:
 # --------------------------------------------------------------------
 
 def _memo(db, id_ticket: int, field: str) -> str:
+    """Memo texte (lecture isolee, PG). `db` conserve pour compat
+    d'appel ; on lit toujours sur PG (lag tolere pour affichage)."""
     try:
-        r = db.query_one(
-            f"SELECT IDTK_Liste, {field} FROM TK_DemandeResa "
-            f"WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_bo").query_one(
+            f"SELECT id_tk_liste, {field} FROM pgt_tk_demande_resa "
+            f"WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         return ((r.get(field) if r else "") or "").strip()
@@ -163,13 +166,13 @@ def _memo(db, id_ticket: int, field: str) -> str:
 
 
 def _heure(db, id_ticket: int, field: str) -> str:
-    """SELECT isolé (clé + champ) -> évite la troncature du dernier
-    caractère du bridge sur les rubriques 'Heure' en SELECT multi-
-    colonnes (ex: '08:00' renvoyé '08:0')."""
+    """Rubrique Heure (lecture isolee, PG). `db` conserve pour compat
+    d'appel. Le bridge HFSQL tronquait le dernier caractere en SELECT
+    multi-colonnes ; PG ne fait pas ca, mais on garde l'isolation."""
     try:
-        r = db.query_one(
-            f"SELECT IDTK_Liste, {field} FROM TK_DemandeResa "
-            f"WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_bo").query_one(
+            f"SELECT id_tk_liste, {field} FROM pgt_tk_demande_resa "
+            f"WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         return _heure_to_hhmm(r.get(field) if r else "")
@@ -344,15 +347,15 @@ def _mime_for(name: str) -> str:
 
 def _categories() -> list[dict]:
     try:
-        db = get_connection("ticket_bo")
+        db = get_pg_connection("ticket_bo")
         return [
             {
-                "id": _to_int(r.get("IDTK_TypeResa")),
-                "lib": (r.get("Lib_TypeResa") or "").strip(),
+                "id": _to_int(r.get("id_tk_type_resa")),
+                "lib": (r.get("lib_type_resa") or "").strip(),
             }
             for r in db.query(
-                "SELECT IDTK_TypeResa, Lib_TypeResa FROM TK_TypeResa "
-                "ORDER BY Lib_TypeResa"
+                "SELECT id_tk_type_resa, lib_type_resa FROM pgt_tk_type_resa "
+                "ORDER BY lib_type_resa"
             )
         ]
     except Exception:
@@ -361,16 +364,16 @@ def _categories() -> list[dict]:
 
 def _sous_familles() -> list[dict]:
     try:
-        db = get_connection("ticket_bo")
+        db = get_pg_connection("ticket_bo")
         return [
             {
-                "id": _to_int(r.get("IDTK_TypeResaSSFam")),
-                "lib": (r.get("Lib_TypeResaSSFam") or "").strip(),
-                "id_type_resa": _to_int(r.get("IDTK_TypeResa")),
+                "id": _to_int(r.get("id_tk_type_resa_ss_fam")),
+                "lib": (r.get("lib_type_resa_ss_fam") or "").strip(),
+                "id_type_resa": _to_int(r.get("id_tk_type_resa")),
             }
             for r in db.query(
-                "SELECT IDTK_TypeResaSSFam, Lib_TypeResaSSFam, IDTK_TypeResa "
-                "FROM TK_TypeResaSSFam ORDER BY Lib_TypeResaSSFam"
+                "SELECT id_tk_type_resa_ss_fam, lib_type_resa_ss_fam, id_tk_type_resa "
+                "FROM pgt_tk_type_resa_ss_fam ORDER BY lib_type_resa_ss_fam"
             )
         ]
     except Exception:
@@ -381,13 +384,13 @@ def _id_type_resa_of(id_ss_fam: int) -> int:
     if not id_ss_fam:
         return 0
     try:
-        db = get_connection("ticket_bo")
+        db = get_pg_connection("ticket_bo")
         r = db.query_one(
-            "SELECT IDTK_TypeResaSSFam, IDTK_TypeResa FROM TK_TypeResaSSFam "
-            "WHERE IDTK_TypeResaSSFam = ?",
+            "SELECT id_tk_type_resa_ss_fam, id_tk_type_resa FROM pgt_tk_type_resa_ss_fam "
+            "WHERE id_tk_type_resa_ss_fam = ?",
             (int(id_ss_fam),),
         )
-        return _to_int(r.get("IDTK_TypeResa")) if r else 0
+        return _to_int(r.get("id_tk_type_resa")) if r else 0
     except Exception:
         return 0
 
@@ -426,35 +429,35 @@ def _libelles(id_type_resa: int, ar: bool) -> dict:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDTK_TypeResaSSFam, Ville_Dep, Ville_Arr,
-            Jour_Dep, Jour_Arr, Heure_Dep, Heure_Arr, Bénéficiaire, AR,
-            JourR_Dep, JourR_Arr, HeureR_Dep, HeureR_Arr
-        FROM TK_DemandeResa WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_tk_type_resa_ss_fam, ville_dep, ville_arr,
+            jour_dep, jour_arr, heure_dep, heure_arr, beneficiaire, ar,
+            jour_r_dep, jour_r_arr, heure_r_dep, heure_r_arr
+        FROM pgt_tk_demande_resa WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
 
-    id_ss_fam = _to_int(r.get("IDTK_TypeResaSSFam"))
+    id_ss_fam = _to_int(r.get("id_tk_type_resa_ss_fam"))
     id_type_resa = _id_type_resa_of(id_ss_fam)
-    ar = bool(r.get("AR"))
+    ar = bool(r.get("ar"))
 
-    liste_supp = _memo(db, id_ticket, "ListeBénéSupp")
-    info_cplt = _memo(db, id_ticket, "InfoCplt")
+    liste_supp = _memo(db, id_ticket, "liste_bene_supp")
+    info_cplt = _memo(db, id_ticket, "info_cplt")
 
-    benef_id = _clean_id(_to_int(r.get("Bénéficiaire")))
+    benef_id = _clean_id(_to_int(r.get("beneficiaire")))
     supp_ids = _parse_supp(liste_supp)
 
-    # Demandeur (TK_Liste.OPCREA, base ticket)
+    # Demandeur (TK_Liste.OPCREA) - PG (lecture pure)
     op_crea = 0
     try:
-        tk = get_connection("ticket").query_one(
-            "SELECT IDTK_Liste, OPCREA FROM TK_Liste WHERE IDTK_Liste = ?",
+        tk = get_pg_connection("ticket").query_one(
+            "SELECT id_tk_liste, op_crea FROM pgt_tk_liste WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
-        op_crea = _clean_id(_to_int(tk.get("OPCREA"))) if tk else 0
+        op_crea = _clean_id(_to_int(tk.get("op_crea"))) if tk else 0
     except Exception:
         op_crea = 0
 
@@ -481,17 +484,17 @@ def load(id_ticket: int) -> dict:
         "id_ss_fam": id_ss_fam,
         "categories": _categories(),
         "sous_familles": _sous_familles(),
-        "ville_dep": (r.get("Ville_Dep") or "").strip(),
-        "ville_arr": (r.get("Ville_Arr") or "").strip(),
-        "jour_dep": date_only_to_iso(r.get("Jour_Dep")),
-        "jour_arr": date_only_to_iso(r.get("Jour_Arr")),
-        "heure_dep": _heure(db, id_ticket, "Heure_Dep"),
-        "heure_arr": _heure(db, id_ticket, "Heure_Arr"),
+        "ville_dep": (r.get("ville_dep") or "").strip(),
+        "ville_arr": (r.get("ville_arr") or "").strip(),
+        "jour_dep": date_only_to_iso(r.get("jour_dep")),
+        "jour_arr": date_only_to_iso(r.get("jour_arr")),
+        "heure_dep": _heure(db, id_ticket, "heure_dep"),
+        "heure_arr": _heure(db, id_ticket, "heure_arr"),
         "ar": ar,
-        "jourr_dep": date_only_to_iso(r.get("JourR_Dep")),
-        "jourr_arr": date_only_to_iso(r.get("JourR_Arr")),
-        "heurer_dep": _heure(db, id_ticket, "HeureR_Dep"),
-        "heurer_arr": _heure(db, id_ticket, "HeureR_Arr"),
+        "jourr_dep": date_only_to_iso(r.get("jour_r_dep")),
+        "jourr_arr": date_only_to_iso(r.get("jour_r_arr")),
+        "heurer_dep": _heure(db, id_ticket, "heure_r_dep"),
+        "heurer_arr": _heure(db, id_ticket, "heure_r_arr"),
         "benef_id": str(benef_id) if benef_id else "",
         "benef_nom": _nom_complet(sal.get(benef_id, {})) if benef_id else "",
         "beneficiaires": beneficiaires,

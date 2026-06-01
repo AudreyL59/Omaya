@@ -26,7 +26,7 @@ import os
 import tempfile
 
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -104,55 +104,55 @@ def _photo_cache_invalide(id_ticket: int, id_photo: int) -> None:
 # --------------------------------------------------------------------
 
 def _infos_pc(id_pc: int) -> dict:
-    """IdPC (IDvehiculePC) → infos véhicule + conducteur (chaînage ulease
-    + salarie rh)."""
+    """IdPC (IDvehiculePC) -> infos vehicule + conducteur (chainage ulease
+    + salarie rh). Lecture pure PG."""
     out = {
         "id_vehicule": 0, "modele": "", "immat": "", "lib_type": "",
         "id_salarie": 0, "nom_salarie": "",
     }
     if not id_pc:
         return out
-    u = get_connection("ulease")
+    u = get_pg_connection("ulease")
     try:
         pc = u.query_one(
-            "SELECT IDvehiculePC, IDvehicule, IDConducteur FROM "
-            "vehicule_Conducteur WHERE IDvehiculePC = ?",
+            "SELECT id_vehicule_pc, id_vehicule, id_conducteur FROM "
+            "pgt_vehicule_conducteur WHERE id_vehicule_pc = ?",
             (int(id_pc),),
         )
     except Exception:
         pc = None
     if not pc:
         return out
-    out["id_vehicule"] = _clean_id(_to_int(pc.get("IDvehicule")))
-    id_cond = _clean_id(_to_int(pc.get("IDConducteur")))
-    # Fiche véhicule
+    out["id_vehicule"] = _clean_id(_to_int(pc.get("id_vehicule")))
+    id_cond = _clean_id(_to_int(pc.get("id_conducteur")))
+    # Fiche vehicule
     try:
         f = u.query_one(
-            "SELECT IDvehicule, MODELE, IMMAT, IDVehicule_TypeCapacité "
-            "FROM vehicule_Fiche WHERE IDvehicule = ?",
+            "SELECT id_vehicule, modele, immat, id_vehicule_type_capacite "
+            "FROM pgt_vehicule_fiche WHERE id_vehicule = ?",
             (int(out["id_vehicule"]),),
         )
         if f:
-            out["modele"] = (f.get("MODELE") or "").strip()
-            out["immat"] = (f.get("IMMAT") or "").strip()
-            id_type = _to_int(f.get("IDVehicule_TypeCapacité"))
+            out["modele"] = (f.get("modele") or "").strip()
+            out["immat"] = (f.get("immat") or "").strip()
+            id_type = _to_int(f.get("id_vehicule_type_capacite"))
             if id_type:
                 t = u.query_one(
-                    "SELECT IDVehicule_TypeCapacité, Lib_Type FROM "
-                    "Vehicule_TypeCapacité WHERE IDVehicule_TypeCapacité = ?",
+                    "SELECT id_vehicule_type_capacite, lib_type FROM "
+                    "pgt_vehicule_typecapacite WHERE id_vehicule_type_capacite = ?",
                     (int(id_type),),
                 )
-                out["lib_type"] = ((t.get("Lib_Type") if t else "") or "").strip()
+                out["lib_type"] = ((t.get("lib_type") if t else "") or "").strip()
     except Exception:
         pass
-    # Conducteur → salarié
+    # Conducteur -> salarie
     try:
         c = u.query_one(
-            "SELECT IDconducteur, IDSalarie FROM conducteur "
-            "WHERE IDconducteur = ?",
+            "SELECT id_conducteur, id_salarie FROM pgt_conducteur "
+            "WHERE id_conducteur = ?",
             (int(id_cond),),
         )
-        out["id_salarie"] = _clean_id(_to_int(c.get("IDSalarie"))) if c else 0
+        out["id_salarie"] = _clean_id(_to_int(c.get("id_salarie"))) if c else 0
     except Exception:
         pass
     if out["id_salarie"]:
@@ -165,37 +165,36 @@ def _infos_pc(id_pc: int) -> dict:
 
 
 def _photos(id_ticket: int) -> list[dict]:
-    """Photos du PV (TK_DemandeSignPV_Photo, ticket_rh). Le binaire n'est
-    pas chargé (flag a_photo) — accès via get_file. DatePhoto = « Prise le »
-    et OpPhoto = « par » (opérateur, ID salarié) pour le PDF."""
+    """Photos du PV (TK_DemandeSignPV_Photo, ticket_rh). Lecture pure PG
+    (les binaires sont lus separement via get_file sur HFSQL -- memos)."""
     try:
-        rows = get_connection("ticket_rh").query(
-            "SELECT IDTK_DemandeSignPV_Photo, IDTypeCapacite_Photo, NoteEtat, "
-            "DatePhoto, OpPhoto FROM TK_DemandeSignPV_Photo "
-            "WHERE IDdemandeSignUleaseAuto = ? AND ModifElem <> 'suppr'",
+        rows = get_pg_connection("ticket_rh").query(
+            "SELECT id_tk_demande_sign_pv_photo, id_type_capacite_photo, note_etat, "
+            "date_photo, op_photo FROM pgt_tk_demandesignpv_photo "
+            "WHERE id_demande_sign_ulease_auto = ? AND modif_elem <> 'suppr'",
             (int(id_ticket),),
         )
     except Exception:
         return []
     rows = rows or []
-    # Libellés en UNE requête (sinon 1 requête bridge par photo = très lent)
-    ids_type = {_to_int(r.get("IDTypeCapacite_Photo")) for r in rows}
+    # Libelles en UNE requete
+    ids_type = {_to_int(r.get("id_type_capacite_photo")) for r in rows}
     ids_type = {i for i in ids_type if i}
     libs: dict[int, str] = {}
     if ids_type:
         try:
-            for t in get_connection("ulease").query(
-                "SELECT IDTypeCapacite_Photo, LibPhoto FROM TypeCapacite_Photo "
-                "WHERE IDTypeCapacite_Photo IN ("
+            for t in get_pg_connection("ulease").query(
+                "SELECT id_type_capacite_photo, lib_photo FROM pgt_typecapacite_photo "
+                "WHERE id_type_capacite_photo IN ("
                 + ",".join(str(i) for i in ids_type) + ")"
             ):
-                libs[_to_int(t.get("IDTypeCapacite_Photo"))] = (
-                    t.get("LibPhoto") or ""
+                libs[_to_int(t.get("id_type_capacite_photo"))] = (
+                    t.get("lib_photo") or ""
                 ).strip()
         except Exception:
             pass
-    # Noms des opérateurs (= salariés) en UNE requête batch
-    ids_op = {_clean_id(_to_int(r.get("OpPhoto"))) for r in rows}
+    # Noms des operateurs (= salaries) en UNE requete batch
+    ids_op = {_clean_id(_to_int(r.get("op_photo"))) for r in rows}
     ids_op = {i for i in ids_op if i}
     ops = load_salaries_minimal(ids_op) if ids_op else {}
 
@@ -208,19 +207,19 @@ def _photos(id_ticket: int) -> list[dict]:
 
     out = []
     for r in rows:
-        idp = _clean_id(_to_int(r.get("IDTK_DemandeSignPV_Photo")))
+        idp = _clean_id(_to_int(r.get("id_tk_demande_sign_pv_photo")))
         if not idp:
             continue
-        id_type = _to_int(r.get("IDTypeCapacite_Photo"))
+        id_type = _to_int(r.get("id_type_capacite_photo"))
         out.append({
             "id": str(idp),
-            # id_type_photo à 17 chiffres > 2^53 → exposé en str sinon
-            # JavaScript perd en précision (cf. feedback_ids_8octets_string)
+            # id_type_photo a 17 chiffres > 2^53 -> expose en str sinon
+            # JavaScript perd en precision (cf. feedback_ids_8octets_string)
             "id_type_photo": str(id_type),
             "lib_photo": libs.get(id_type, ""),
-            "note": _to_int(r.get("NoteEtat")),
-            "date_photo": _fmt_dt(r.get("DatePhoto")),
-            "op_nom": _op_nom(_clean_id(_to_int(r.get("OpPhoto")))),
+            "note": _to_int(r.get("note_etat")),
+            "date_photo": _fmt_dt(r.get("date_photo")),
+            "op_nom": _op_nom(_clean_id(_to_int(r.get("op_photo")))),
         })
     out.sort(key=lambda p: p["lib_photo"])
     return out

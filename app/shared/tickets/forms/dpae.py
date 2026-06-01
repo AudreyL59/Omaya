@@ -19,7 +19,7 @@ from app.core.config import (
     FTP_USER,
 )
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -129,25 +129,27 @@ def load(id_ticket: int) -> dict:
             .strip()
         )
 
-    # Sous-table DOCUMENTS (TK_DemandeDPAEPhoto, fichiers sur le FTP)
+    # Sous-table DOCUMENTS (TK_DemandeDPAEPhoto, fichiers sur le FTP).
+    # Lecture pure (PG) ; les uploads de docs vont sur HFSQL via d'autres
+    # routes -> lag tolere pour l'affichage.
     documents: list[dict] = []
     try:
-        for d in db.query(
-            """SELECT IDTK_DemandeDPAEPhoto, Nom, NomFichier,
-                IDTK_TypePhotoDPAE
-            FROM TK_DemandeDPAEPhoto
-            WHERE IDTK_Liste = ?
-              AND ModifElem NOT LIKE '%suppr%'
-            ORDER BY Nom""",
+        for d in get_pg_connection("ticket_dpae").query(
+            """SELECT id_tk_demande_dpae_photo, nom, nom_fichier,
+                id_tk_type_photo_dpae
+            FROM pgt_tk_demande_dpae_photo
+            WHERE id_tk_liste = ?
+              AND modif_elem NOT LIKE '%suppr%'
+            ORDER BY nom""",
             (int(id_ticket),),
         ):
-            did = _clean_id(_to_int(d.get("IDTK_DemandeDPAEPhoto")))
+            did = _clean_id(_to_int(d.get("id_tk_demande_dpae_photo")))
             if did:
                 documents.append({
                     "id": str(did),
-                    "nom": (d.get("Nom") or "").strip(),
-                    "nom_fichier": (d.get("NomFichier") or "").strip(),
-                    "id_type_photo": _to_int(d.get("IDTK_TypePhotoDPAE")),
+                    "nom": (d.get("nom") or "").strip(),
+                    "nom_fichier": (d.get("nom_fichier") or "").strip(),
+                    "id_type_photo": _to_int(d.get("id_tk_type_photo_dpae")),
                 })
     except Exception:
         documents = []

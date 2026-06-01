@@ -17,7 +17,7 @@ salarie / salarie_partenaire = rh.
 """
 
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -79,10 +79,12 @@ def _iso_dt_to_windev(s: str) -> str:
 
 
 def _memo(db, id_ticket: int, field: str) -> str:
+    """Mémo texte (lecture isolée, PG). `db` conservé pour compat
+    d'appel ; on lit toujours sur PG (lag accepté pour l'affichage)."""
     try:
-        r = db.query_one(
-            f"SELECT IDTK_Liste, {field} FROM TK_DemandeSOS_BO "
-            f"WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_bo").query_one(
+            f"SELECT id_tk_liste, {field} FROM pgt_tk_demande_sos_bo "
+            f"WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         return ((r.get(field) if r else "") or "").strip()
@@ -92,15 +94,15 @@ def _memo(db, id_ticket: int, field: str) -> str:
 
 def _types() -> list[dict]:
     try:
-        db = get_connection("ticket_bo")
+        db = get_pg_connection("ticket_bo")
         return [
             {
-                "id": _to_int(r.get("IDTK_TypeSOS_BO")),
-                "lib": (r.get("Lib_TypeSos") or "").strip(),
+                "id": _to_int(r.get("id_tk_type_sos_bo")),
+                "lib": (r.get("lib_type_sos") or "").strip(),
             }
             for r in db.query(
-                "SELECT IDTK_TypeSOS_BO, Lib_TypeSos FROM TK_TypeSOS_BO "
-                "ORDER BY Lib_TypeSos"
+                "SELECT id_tk_type_sos_bo, lib_type_sos FROM pgt_tk_type_sos_bo "
+                "ORDER BY lib_type_sos"
             )
         ]
     except Exception:
@@ -111,17 +113,17 @@ def _incidents() -> list[dict]:
     """Table_incidentCALL : journal GLOBAL des incidents (non rattaché
     au ticket — requête WinDev = tous les incidentCall non supprimés)."""
     try:
-        db = get_connection("adv")
+        db = get_pg_connection("adv")
         out = []
         for r in db.query(
-            "SELECT IDincidentCall, DateDEBUT, DateFIN, commentaire "
-            "FROM incidentCall WHERE ModifELEM NOT LIKE '%suppr%' "
-            "ORDER BY DateDEBUT DESC"
+            "SELECT id_incident_call, date_debut, date_fin, commentaire "
+            "FROM pgt_incident_call WHERE modif_elem NOT LIKE '%suppr%' "
+            "ORDER BY date_debut DESC"
         ):
             out.append({
-                "id_incident": str(_clean_id(_to_int(r.get("IDincidentCall")))),
-                "debut": _windev_to_iso(r.get("DateDEBUT")),
-                "fin": _windev_to_iso(r.get("DateFIN")),
+                "id_incident": str(_clean_id(_to_int(r.get("id_incident_call")))),
+                "debut": _windev_to_iso(r.get("date_debut")),
+                "fin": _windev_to_iso(r.get("date_fin")),
                 "commentaire": (r.get("commentaire") or "").strip(),
             })
         return out
@@ -131,17 +133,17 @@ def _incidents() -> list[dict]:
 
 def _partenaires() -> list[dict]:
     try:
-        db = get_connection("adv")
+        db = get_pg_connection("adv")
         out = []
         for r in db.query(
-            "SELECT IDPartenaire, Lib_Partenaire, PréfixeBDD, IsActif "
-            "FROM Partenaire WHERE IsActif = 1 ORDER BY Lib_Partenaire"
+            "SELECT id_partenaire, lib_partenaire, prefixe_bdd, is_actif "
+            "FROM pgt_partenaire WHERE is_actif = TRUE ORDER BY lib_partenaire"
         ):
-            pfx = (r.get("PréfixeBDD") or "").strip()
+            pfx = (r.get("prefixe_bdd") or "").strip()
             if pfx:
                 out.append({
-                    "id": _to_int(r.get("IDPartenaire")),
-                    "lib": (r.get("Lib_Partenaire") or "").strip(),
+                    "id": _to_int(r.get("id_partenaire")),
+                    "lib": (r.get("lib_partenaire") or "").strip(),
                     "prefixe": pfx,
                 })
         return out
@@ -188,40 +190,43 @@ def _chercher_contrat(ref: str) -> list[dict]:
     ref = (ref or "").strip()
     if not ref:
         return []
-    adv = get_connection("adv")
+    adv = get_pg_connection("adv")
     rows: list[dict] = []
     cli_ids: set[int] = set()
     sal_ids: set[int] = set()
     for p in _partenaires():
         pfx = p["prefixe"]
-        moisp = "MoisP_Ra" if pfx.upper() == "SFR" else "MoisP"
+        # MoisP_Ra (SFR) / MoisP (autres) -> mois_p_ra / mois_p en PG
+        moisp = "mois_p_ra" if pfx.upper() == "SFR" else "mois_p"
+        pfxl = pfx.lower()
         sql = (
-            f"SELECT pc.IDcontrat, pc.NumBS, pc.IDclient, pc.IDSalarie, "
-            f"pc.DateSignature, pc.{moisp} AS MoisP, pp.Lib_produit, "
-            f"pe.Lib_Etat, pe.IDetat "
-            f"FROM {pfx}_contrat pc, {pfx}_produit pp, {pfx}_etatContrat pe "
-            f"WHERE pc.IDproduit = pp.IDproduit "
-            f"AND pc.IDetatContrat = pe.IDetat "
-            f"AND pc.NumBS LIKE ? AND pc.ModifElem NOT LIKE '%suppr%'"
+            f"SELECT pc.id_contrat, pc.num_bs, pc.id_client, pc.id_salarie, "
+            f"pc.date_signature, pc.{moisp} AS mois_p, pp.lib_produit, "
+            f"pe.lib_etat, pe.id_etat "
+            f"FROM pgt_{pfxl}_contrat pc, pgt_{pfxl}_produit pp, "
+            f"pgt_{pfxl}_etat_contrat pe "
+            f"WHERE pc.id_produit = pp.id_produit "
+            f"AND pc.id_etat_contrat = pe.id_etat "
+            f"AND pc.num_bs LIKE ? AND pc.modif_elem NOT LIKE '%suppr%'"
         )
         try:
             res = adv.query(sql, (f"{ref}%",))
         except Exception:
             continue
         for r in res or []:
-            idc = _clean_id(_to_int(r.get("IDclient")))
-            ids = _clean_id(_to_int(r.get("IDSalarie")))
+            idc = _clean_id(_to_int(r.get("id_client")))
+            ids = _clean_id(_to_int(r.get("id_salarie")))
             cli_ids.add(idc)
             sal_ids.add(ids)
             rows.append({
-                "id_contrat": str(_clean_id(_to_int(r.get("IDcontrat")))),
+                "id_contrat": str(_clean_id(_to_int(r.get("id_contrat")))),
                 "partenaire": pfx,
-                "n_contrat": (r.get("NumBS") or "").strip(),
-                "prod": (r.get("Lib_produit") or "").strip(),
-                "date_signature": _windev_to_iso(r.get("DateSignature")),
-                "etat": (r.get("Lib_Etat") or "").strip(),
-                "id_etat": _to_int(r.get("IDetat")),
-                "mois_paiement": (str(r.get("MoisP") or "")).strip(),
+                "n_contrat": (r.get("num_bs") or "").strip(),
+                "prod": (r.get("lib_produit") or "").strip(),
+                "date_signature": _windev_to_iso(r.get("date_signature")),
+                "etat": (r.get("lib_etat") or "").strip(),
+                "id_etat": _to_int(r.get("id_etat")),
+                "mois_paiement": (str(r.get("mois_p") or "")).strip(),
                 "_id_client": idc,
                 "id_salarie": str(ids) if ids else "",
             })
@@ -231,13 +236,13 @@ def _chercher_contrat(ref: str) -> list[dict]:
         ids_sql = ",".join(str(i) for i in cli_ids if i)
         try:
             for r in adv.query(
-                f"SELECT IDclient, NOM, PRENOM FROM client "
-                f"WHERE IDclient IN ({ids_sql})"
+                f"SELECT id_client, nom, prenom FROM pgt_client "
+                f"WHERE id_client IN ({ids_sql})"
             ):
-                cid = _clean_id(_to_int(r.get("IDclient")))
-                pn = (r.get("PRENOM") or "").strip()
+                cid = _clean_id(_to_int(r.get("id_client")))
+                pn = (r.get("prenom") or "").strip()
                 clients[cid] = (
-                    f"{(r.get('NOM') or '').strip()} "
+                    f"{(r.get('nom') or '').strip()} "
                     f"{pn[:1].upper() + pn[1:].lower() if pn else ''}".strip()
                 )
         except Exception:
@@ -259,25 +264,25 @@ def _chercher_contrat(ref: str) -> list[dict]:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDTK_DemandeSOS_BO, Bénéficiaire,
-            IDTK_TypeSOS_BO, Ref_A_contrôler
-        FROM TK_DemandeSOS_BO WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_tk_demande_sos_bo, beneficiaire,
+            id_tk_type_sos_bo, ref_a_controler
+        FROM pgt_tk_demande_sos_bo WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
 
-    id_type = _to_int(r.get("IDTK_TypeSOS_BO"))
-    benef = _clean_id(_to_int(r.get("Bénéficiaire")))
-    ref = (r.get("Ref_A_contrôler") or "").strip()
-    info_cplt = _memo(db, id_ticket, "InfoCplt")
+    id_type = _to_int(r.get("id_tk_type_sos_bo"))
+    benef = _clean_id(_to_int(r.get("beneficiaire")))
+    ref = (r.get("ref_a_controler") or "").strip()
+    info_cplt = _memo(db, id_ticket, "info_cplt")
     mode = _mode(id_type)
 
     out = {
         "found": True,
-        "id_demande": str(_clean_id(_to_int(r.get("IDTK_DemandeSOS_BO")))),
+        "id_demande": str(_clean_id(_to_int(r.get("id_tk_demande_sos_bo")))),
         "id_type": id_type,
         "types": _types(),
         "benef_id": str(benef) if benef else "",

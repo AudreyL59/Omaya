@@ -30,9 +30,11 @@ from app.core.config import (
     SOFFICE_BIN,
 )
 from app.core.database import get_connection
-# NB phase 1 hybride : ce module manipule des memos binaires HFSQL via le bridge
-# pour la generation du PDF signe — on reste sur HFSQL ici (lectures critiques
-# liees aux ecritures FTP/PDF, pas de migration vers PG en phase 1).
+from app.core.database.pg import get_pg_connection
+# NB phase 1 hybride : ce module manipule majoritairement des memos binaires
+# HFSQL via le bridge (Photo, Signature, Paraphe, luApp, Contenu docx) -- on
+# reste HFSQL pour ces lectures (bytea PG arrive en memoryview, format
+# different). Seul ContenuValidation (memo texte sec) est lu sur PG ci-dessous.
 
 CREATE_NO_WINDOW = 0x08000000
 
@@ -535,16 +537,40 @@ def regenerate_signed_pdf(
         id_ticket, "PhotoSalarié", table=table, db_key=db_key
     )
 
-    # ContenuValidation (pages validées + code SMS)
-    db = get_connection(db_key)
-    cv = db.query_one(
-        f"SELECT IDTK_Liste, ContenuValidation FROM {table} "
-        f"WHERE IDTK_Liste = ?",
-        (int(id_ticket),),
-    )
-    pages, code_sms = parse_contenu_validation(
-        (cv.get("ContenuValidation") if cv else "") or ""
-    )
+    # ContenuValidation (pages validees + code SMS) -- memo texte sec, PG OK.
+    # Le binaire/memo des autres champs reste sur HFSQL (cf. _memo_bytes ci-dessus).
+    _PG_TABLES = {
+        "TK_DemandeCttW": "pgt_tk_demande_ctt_w",
+        "TK_DemandeCttCourtage": "pgt_tk_demande_ctt_courtage",
+    }
+    pg_table = _PG_TABLES.get(table)
+    cv = None
+    if pg_table:
+        try:
+            cv = get_pg_connection(db_key).query_one(
+                f"SELECT id_tk_liste, contenu_validation FROM {pg_table} "
+                f"WHERE id_tk_liste = ?",
+                (int(id_ticket),),
+            )
+        except Exception:
+            cv = None
+    if cv is None:
+        # Repli HFSQL si table inconnue ou erreur PG
+        try:
+            cv_hf = get_connection(db_key).query_one(
+                f"SELECT IDTK_Liste, ContenuValidation FROM {table} "
+                f"WHERE IDTK_Liste = ?",
+                (int(id_ticket),),
+            )
+            pages, code_sms = parse_contenu_validation(
+                (cv_hf.get("ContenuValidation") if cv_hf else "") or ""
+            )
+        except Exception:
+            pages, code_sms = [], ""
+    else:
+        pages, code_sms = parse_contenu_validation(
+            (cv.get("contenu_validation") or "")
+        )
 
     tmp = tempfile.mkdtemp(prefix=f"{tmp_prefix}{id_ticket}_")
     docx_path = os.path.join(tmp, f"{id_ticket}.docx")

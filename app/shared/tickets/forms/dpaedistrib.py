@@ -30,7 +30,7 @@ from app.core.config import (
     FTP_USER,
 )
 from app.core.database import get_connection
-from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -113,18 +113,23 @@ def _equipe_label(id_orga: int) -> str:
     if not id_orga:
         return ""
     try:
-        r = get_connection("rh").query_one(
-            "SELECT idorganigramme, Lib_ORGA FROM organigramme "
+        r = get_pg_connection("rh").query_one(
+            "SELECT idorganigramme, lib_orga FROM pgt_organigramme "
             "WHERE idorganigramme = ?",
             (int(id_orga),),
         )
-        return ((r.get("Lib_ORGA") if r else "") or "").strip()
+        return ((r.get("lib_orga") if r else "") or "").strip()
     except Exception:
         return ""
 
 
 def _doc_nom(id_doc: int) -> str:
-    """NOM (mémo texte) d'un document (lecture isolée)."""
+    """NOM (mémo texte) d'un document (lecture isolée).
+
+    Helper partage save+load : `save(action="doc_non_conforme")`
+    appelle _doc_nom APRES la soft-delete pour le texte du SMS.
+    On reste sur HFSQL pour eviter le lag (~15 min) qui causerait
+    un libelle vide juste apres suppression."""
     try:
         r = get_connection("ticket_bo").query_one(
             "SELECT IDTK_DemandeDPAEPhoto, NOM FROM TK_DemandeDPAE_DistribPhoto "
@@ -137,7 +142,10 @@ def _doc_nom(id_doc: int) -> str:
 
 
 def _documents(id_ticket: int) -> list[dict]:
-    """Documents TK_DemandeDPAE_DistribPhoto (base ticket_bo)."""
+    """Documents TK_DemandeDPAE_DistribPhoto (base ticket_bo).
+
+    Renvoye apres save(doc_non_conforme) -> on reste HFSQL pour voir
+    immediatement le doc disparaitre (sinon lag PG -> doc encore visible)."""
     bo = get_connection("ticket_bo")
     try:
         rows = bo.query(
@@ -163,30 +171,29 @@ def _documents(id_ticket: int) -> list[dict]:
 
 def _partenaires_map() -> dict[int, str]:
     try:
-        rows = get_connection("adv").query(
-            "SELECT IDPartenaire, Lib_Partenaire FROM Partenaire"
+        rows = get_pg_connection("adv").query(
+            "SELECT id_partenaire, lib_partenaire FROM pgt_partenaire"
         )
     except Exception:
         return {}
     return {
-        _to_int(r.get("IDPartenaire")): (r.get("Lib_Partenaire") or "").strip()
+        _to_int(r.get("id_partenaire")): (r.get("lib_partenaire") or "").strip()
         for r in rows or []
     }
 
 
 def _partenaires_portail() -> list[dict]:
     """Combo « Choisir un partenaire » : partenaires ayant un portail
-    partenaire actif. Cross-DB : PortailPartenaire (base recrutement) →
-    Lib_Partenaire (base adv). Le JOIN WinDev n'est pas faisable via le
-    bridge (bases différentes)."""
+    partenaire actif. Cross-DB : PortailPartenaire (schema recrutement) ->
+    Lib_Partenaire (schema adv)."""
     try:
-        rows = get_connection("recrutement").query(
-            "SELECT IDPartenaire FROM PortailPartenaire "
-            "WHERE ModifElem NOT LIKE '%suppr%' AND IsActif = 1"
+        rows = get_pg_connection("recrutement").query(
+            "SELECT id_partenaire FROM pgt_portail_partenaire "
+            "WHERE modif_elem NOT LIKE '%suppr%' AND is_actif = TRUE"
         )
     except Exception:
         return []
-    ids = {_to_int(r.get("IDPartenaire")) for r in rows or []}
+    ids = {_to_int(r.get("id_partenaire")) for r in rows or []}
     ids = {i for i in ids if i}
     if not ids:
         return []
@@ -201,13 +208,13 @@ def _partenaires_portail() -> list[dict]:
 
 def _demandes_code(id_ticket: int) -> list[dict]:
     """Demandes de code vendeur liées à ce ticket (TK_DemandeCodeVendeur
-    base ticket_bo) + libellé partenaire (adv) + statut (ticket)."""
-    bo = get_connection("ticket_bo")
+    schema ticket_bo) + libellé partenaire (adv) + statut (ticket)."""
+    bo = get_pg_connection("ticket_bo")
     try:
         rows = bo.query(
-            "SELECT IDTK_Liste, IDPartenaire, ModifDate FROM "
-            "TK_DemandeCodeVendeur WHERE IdElem = ? "
-            "AND ModifElem NOT LIKE '%suppr%'",
+            "SELECT id_tk_liste, id_partenaire, modif_date FROM "
+            "pgt_tk_demande_code_vendeur WHERE id_elem = ? "
+            "AND modif_elem NOT LIKE '%suppr%'",
             (int(id_ticket),),
         )
     except Exception:
@@ -217,25 +224,25 @@ def _demandes_code(id_ticket: int) -> list[dict]:
         return []
     parts = _partenaires_map()
     statuts = {s["id_statut"]: s["lib_statut"] for s in list_statuts()}
-    tk = get_connection("ticket")
+    tk = get_pg_connection("ticket")
     out = []
     for r in rows:
-        id_liste = _clean_id(_to_int(r.get("IDTK_Liste")))
-        id_part = _to_int(r.get("IDPartenaire"))
+        id_liste = _clean_id(_to_int(r.get("id_tk_liste")))
+        id_part = _to_int(r.get("id_partenaire"))
         id_statut = 0
         try:
             st = tk.query_one(
-                "SELECT IDTK_Liste, IDTK_Statut FROM TK_Liste "
-                "WHERE IDTK_Liste = ?",
+                "SELECT id_tk_liste, id_tk_statut FROM pgt_tk_liste "
+                "WHERE id_tk_liste = ?",
                 (int(id_liste),),
             )
-            id_statut = _to_int(st.get("IDTK_Statut")) if st else 0
+            id_statut = _to_int(st.get("id_tk_statut")) if st else 0
         except Exception:
             pass
         out.append({
             "partenaire": parts.get(id_part, ""),
             "statut": statuts.get(id_statut, ""),
-            "date": _windev_to_iso(r.get("ModifDate")),
+            "date": _windev_to_iso(r.get("modif_date")),
         })
     return out
 
