@@ -20,7 +20,8 @@ def _charger_fiche(id_salarie: int) -> MonCompteResponse:
     row_sal = db.query_one(
         """SELECT id_salarie, civilite, nom, nom_marital, prenom, sexe, nationalite,
             date_naiss, lieu_naiss, dep_naiss, num_ss, cpam, num_cin,
-            situation_fam, avec_enfant, nb_enfants, travailleur_handi, photo
+            situation_fam, avec_enfant, nb_enfants, travailleur_handi,
+            encode(photo, 'base64') AS photo_b64
         FROM pgt_salarie WHERE id_salarie = ?""",
         (id_salarie,),
     )
@@ -45,7 +46,7 @@ def _charger_fiche(id_salarie: int) -> MonCompteResponse:
             avec_enfant=bool(row_sal.get("avec_enfant")),
             nb_enfants=int(row_sal.get("nb_enfants") or 0),
             travailleur_handi=bool(row_sal.get("travailleur_handi")),
-            photo=row_sal.get("photo") or "",
+            photo=(row_sal.get("photo_b64") or "").replace("\n", ""),
         )
 
     row_coord = db.query_one(

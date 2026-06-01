@@ -53,6 +53,25 @@ def _now_windev() -> str:
     return now.strftime("%Y%m%d%H%M%S") + f"{now.microsecond // 1000:03d}"
 
 
+def _windev_to_iso(v) -> str:
+    """Convertit une date (datetime PG, chaine compact HFSQL, ou ISO) en
+    chaine ISO 'YYYY-MM-DD HH:MM:SS'. Renvoie '' pour valeur vide/None."""
+    if not v:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    s = str(v).strip()
+    if not s:
+        return ""
+    # Compact HFSQL YYYYMMDDHHMMSS[mmm]
+    if len(s) >= 14 and s[:8].isdigit() and s[8:14].isdigit():
+        return f"{s[0:4]}-{s[4:6]}-{s[6:8]} {s[8:10]}:{s[10:12]}:{s[12:14]}"
+    # ISO deja
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:19]
+    return s
+
+
 def _new_id() -> int:
     return int(_now_windev())
 
@@ -127,16 +146,18 @@ def priority_for_user(droits: list[str]) -> int:
 def count_active_jobs(id_salarie_user: int) -> int:
     """Nombre de jobs actifs (pending + running) pour ce user, hors suppr.
 
-    Attention phase 1 hybride : on lit ce compteur sur PG (15-30 min de lag).
+    LIT HFSQL : la quota-check doit voir IMMEDIATEMENT les jobs juste crees
+    (cas typique : creation a la chaine en moins de 15 min). Le lag PG
+    casserait la limite anti-DoS. A bouger sur PG au cutover.
     Un user pourrait donc créer un job juste après la suppression d'un autre
     sans que le compteur l'ait vu disparaître — anti-DoS, pas critique.
     """
-    db = get_pg_connection("divers")
+    db = get_connection("divers")
     rows = db.query(
-        """SELECT COUNT(*) AS n FROM pgt_productionextractionjob
-        WHERE id_salarie_user = ?
-          AND statut IN ('pending', 'running')
-          AND modif_elem <> 'suppr'""",
+        """SELECT COUNT(*) AS n FROM ProductionExtractionJob
+        WHERE IDSalarieUser = ?
+          AND Statut IN ('pending', 'running')
+          AND ModifELEM <> 'suppr'""",
         (id_salarie_user,),
     )
     if not rows:
@@ -208,19 +229,34 @@ def list_jobs(id_salarie_user: int, limit: int = 50) -> list[dict]:
 
     Calcule pour chaque job 'pending' sa position dans la file globale
     (priorité supérieure ou plus ancien à priorité égale = devant).
+
+    LIT HFSQL : un job vient potentiellement d'etre cree dans la meme session
+    par le user (clic "Lancer l'extraction" -> redirect liste). Le lag PG de
+    15 min ferait disparaitre le job pendant ce temps. A bouger sur PG au
+    cutover.
     """
-    db = get_pg_connection("divers")
+    db = get_connection("divers")
     rows = db.query(
-        f"""SELECT
-            id_production_extraction_job, id_salarie_user, datecrea,
-            date_debut_trait, date_fin_trait, statut, progression_pct,
-            progression_msg, nb_lignes, duree_s, path_resultat,
-            message_erreur, titre, params_json, priority
-        FROM pgt_productionextractionjob
-        WHERE id_salarie_user = ?
-          AND modif_elem <> 'suppr'
-        ORDER BY datecrea DESC
-        LIMIT {int(limit)}""",
+        f"""SELECT TOP {int(limit)}
+            IDProductionExtractionJob AS id_production_extraction_job,
+            IDSalarieUser              AS id_salarie_user,
+            DateCrea                   AS datecrea,
+            DateDebutTrait             AS date_debut_trait,
+            DateFinTrait               AS date_fin_trait,
+            Statut                     AS statut,
+            ProgressionPct             AS progression_pct,
+            ProgressionMsg             AS progression_msg,
+            NbLignes                   AS nb_lignes,
+            DureeS                     AS duree_s,
+            PathResultat               AS path_resultat,
+            MessageErreur              AS message_erreur,
+            Titre                      AS titre,
+            ParamsJSON                 AS params_json,
+            Priority                   AS priority
+        FROM ProductionExtractionJob
+        WHERE IDSalarieUser = ?
+          AND ModifELEM <> 'suppr'
+        ORDER BY DateCrea DESC""",
         (id_salarie_user,),
     )
     queue = _load_pending_queue()
@@ -232,16 +268,28 @@ def get_job(id_job: int, id_salarie_user: int) -> dict | None:
 
     Inclut la position dans la file si le job est en statut 'pending'.
     """
-    db = get_pg_connection("divers")
+    db = get_connection("divers")
     row = db.query_one(
-        """SELECT id_production_extraction_job, id_salarie_user, datecrea,
-            date_debut_trait, date_fin_trait, statut, progression_pct,
-            progression_msg, nb_lignes, duree_s, path_resultat,
-            message_erreur, titre, params_json, priority
-        FROM pgt_productionextractionjob
-        WHERE id_production_extraction_job = ?
-          AND id_salarie_user = ?
-          AND modif_elem <> 'suppr'""",
+        """SELECT
+            IDProductionExtractionJob AS id_production_extraction_job,
+            IDSalarieUser              AS id_salarie_user,
+            DateCrea                   AS datecrea,
+            DateDebutTrait             AS date_debut_trait,
+            DateFinTrait               AS date_fin_trait,
+            Statut                     AS statut,
+            ProgressionPct             AS progression_pct,
+            ProgressionMsg             AS progression_msg,
+            NbLignes                   AS nb_lignes,
+            DureeS                     AS duree_s,
+            PathResultat               AS path_resultat,
+            MessageErreur              AS message_erreur,
+            Titre                      AS titre,
+            ParamsJSON                 AS params_json,
+            Priority                   AS priority
+        FROM ProductionExtractionJob
+        WHERE IDProductionExtractionJob = ?
+          AND IDSalarieUser = ?
+          AND ModifELEM <> 'suppr'""",
         (id_job, id_salarie_user),
     )
     if not row:
@@ -256,12 +304,15 @@ def _load_pending_queue() -> list[tuple[int, int, str]]:
     Retour : list[(id_job, priority, date_crea)] avec ordre = priority DESC,
     date_crea ASC.
     """
-    db = get_pg_connection("divers")
+    db = get_connection("divers")
     rows = db.query(
-        """SELECT id_production_extraction_job, priority, datecrea
-        FROM pgt_productionextractionjob
-        WHERE statut = 'pending'
-          AND modif_elem <> 'suppr'"""
+        """SELECT
+            IDProductionExtractionJob AS id_production_extraction_job,
+            Priority AS priority,
+            DateCrea AS datecrea
+        FROM ProductionExtractionJob
+        WHERE Statut = 'pending'
+          AND ModifELEM <> 'suppr'"""
     )
     items = [
         (
@@ -356,9 +407,9 @@ def _row_to_dict(
     return {
         "id_job": str(id_job),
         "id_salarie_user": str(_clean_id(_to_int(r.get("id_salarie_user")))),
-        "date_crea": r.get("datecrea") or "",
-        "date_debut_trait": r.get("date_debut_trait") or "",
-        "date_fin_trait": r.get("date_fin_trait") or "",
+        "date_crea": _windev_to_iso(r.get("datecrea") or ""),
+        "date_debut_trait": _windev_to_iso(r.get("date_debut_trait") or ""),
+        "date_fin_trait": _windev_to_iso(r.get("date_fin_trait") or ""),
         "statut": statut,
         "progression_pct": _to_int(r.get("progression_pct")),
         "progression_msg": r.get("progression_msg") or "",
@@ -383,8 +434,8 @@ def list_partenaires() -> list[dict]:
         """SELECT lib_partenaire, prefixe_bdd, is_actif,
             couleur_r, couleur_v, couleur_b
         FROM pgt_partenaire
-        WHERE modif_elem <> 'suppr'
-          AND prefixe_bdd <> ''
+        WHERE COALESCE(modif_elem, '') <> 'suppr'
+          AND COALESCE(prefixe_bdd, '') <> ''
         ORDER BY is_actif DESC, lib_partenaire ASC"""
     )
     out = []
