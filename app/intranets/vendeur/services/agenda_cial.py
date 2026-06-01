@@ -111,8 +111,8 @@ def lister_rdvs_cial(id_commercial: int, date_from: str, date_to: str) -> list[d
     """
     db_adv = get_pg_connection("adv")
 
-    # DateDébut est Date+Heure stocké en ISO "YYYY-MM-DDT..."
-    # On utilise LEFT(DateDébut, 8) qui retourne YYYYMMDD (confirmé fonctionnel)
+    # date_debut est timestamp côté PG. On compare la partie date (cast ::date)
+    # contre les bornes YYYYMMDD passées en paramètre (parseables par PG en date).
     rows = db_adv.query(
         """SELECT
             a.id_agenda_commercial, a.titre, a.contenu, a.info_compl,
@@ -123,8 +123,8 @@ def lister_rdvs_cial(id_commercial: int, date_from: str, date_to: str) -> list[d
         INNER JOIN pgt_agenda_commercial_categorie c
             ON c.id_agenda_commercial_categorie = a.id_agenda_commercial_categorie
         WHERE a.id_salarie = ?
-          AND LEFT(a.date_debut, 8) >= ?
-          AND LEFT(a.date_debut, 8) <= ?
+          AND a.date_debut::date >= ?::date
+          AND a.date_debut::date <= ?::date
           AND a.modif_elem <> 'suppr'
         ORDER BY a.date_debut ASC""",
         (id_commercial, date_from, date_to),

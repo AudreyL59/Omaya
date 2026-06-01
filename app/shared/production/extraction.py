@@ -171,8 +171,8 @@ def _req_equipe_terrain_by_salarie(db_rh, id_salarie: int, date_c_ymd: str) -> O
         INNER JOIN pgt_organigramme o ON o.idorganigramme = so.idorganigramme
         WHERE so.id_salarie = ?
           AND so.modif_elem NOT LIKE '%suppr%'
-          AND LEFT(so.date_debut, 8) <= ?
-          AND (so.date_fin = '' OR LEFT(so.date_fin, 8) >= ?)
+          AND so.date_debut::date <= ?::date
+          AND (so.date_fin IS NULL OR so.date_fin::date >= ?::date)
         ORDER BY so.date_debut DESC
         LIMIT 1""",
         (id_salarie, date_c_ymd, date_c_ymd),
@@ -1207,7 +1207,7 @@ def extract_job_to_parquet(
         puissance = _to_int(r.get("elec_puissance")) if prefix in ("ENI", "OEN") else 0
 
         # Date Racc / Activation (SFR = date_racc_activ ; OEN = date_activation)
-        date_racc_activ = ""
+        date_racc_activ IS NULL
         if prefix == "SFR":
             date_racc_activ = _iso(r.get("date_racc_activ"))
         elif prefix == "OEN":

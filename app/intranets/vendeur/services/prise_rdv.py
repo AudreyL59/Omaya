@@ -69,7 +69,7 @@ def lister_sessions() -> list[dict]:
             id_recruteur, id_cv_lieu_rdv
         FROM pgt_prev_recrut
         WHERE (id_prev_recrut_etat = 6 OR id_prev_recrut_etat = 2)
-          AND LEFT(date_session, 8) >= ?
+          AND date_session::date >= ?::date
         ORDER BY date_session ASC""",
         (today,),
     )

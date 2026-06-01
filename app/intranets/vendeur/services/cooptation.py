@@ -66,7 +66,7 @@ def lister_cooptations_du_jour(id_salarie: int) -> list[dict]:
         """SELECT nom, prenom, date_saisie
         FROM pgt_cvtheque
         WHERE ope_saisie = ?
-          AND LEFT(date_saisie, 8) >= ?
+          AND date_saisie::date >= ?::date
         ORDER BY date_saisie DESC""",
         (id_salarie, today),
     )
@@ -152,7 +152,7 @@ def rechercher_vendeurs(
         """SELECT DISTINCT idorganigramme FROM pgt_salarie_organigramme
         WHERE id_salarie = ?
           AND modif_elem NOT LIKE '%suppr%'
-          AND LEFT(date_debut, 8) <= ?""",
+          AND date_debut::date <= ?::date""",
         (id_salarie_user, today),
     )
     orga_ids = {int(r.get("idorganigramme") or 0) for r in orga_rows}
@@ -189,7 +189,7 @@ def rechercher_vendeurs(
         INNER JOIN pgt_salarie_embauche se ON s.id_salarie = se.id_salarie
         INNER JOIN pgt_salarie_organigramme so ON s.id_salarie = so.id_salarie
         WHERE so.modif_elem NOT LIKE '%suppr%'
-          AND LEFT(so.date_debut, 8) <= ?
+          AND so.date_debut::date <= ?::date
           AND so.idorganigramme IN ({orga_ids_sql})
           AND se.en_activite = TRUE
           AND s.nom LIKE ?

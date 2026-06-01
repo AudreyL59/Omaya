@@ -105,8 +105,7 @@ def lister_rdvs(id_recruteur: int, date_from: str, date_to: str) -> list[dict]:
         LEFT JOIN pgt_cvsuivi cs ON cs.id_cv_suivi = ae.id_cv_suivi
         LEFT JOIN pgt_cvtheque cv ON cv.id_cvtheque = cs.id_cvtheque
         LEFT JOIN pgt_cvposte cp ON cp.id_cvposte = cv.id_cvposte
-        WHERE LEFT(ae.date_debut, 8) >= ?
-          AND LEFT(ae.date_debut, 8) <= ?
+        WHERE ae.date_debut::date BETWEEN ?::date AND ?::date
           AND ae.id_salarie = ?
           AND ae.modif_elem NOT LIKE '%suppr%'
         ORDER BY ae.date_debut ASC""",

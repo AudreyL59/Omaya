@@ -594,7 +594,7 @@ def affectation_vendeur_by_date(id_vendeur: int, ymd: str) -> tuple[str, str]:
         WHERE so.modif_elem NOT LIKE '%suppr%'
           AND s.modif_elem NOT LIKE '%suppr%'
           AND so.id_salarie = ?
-          AND LEFT(so.date_debut, 8) <= ?
+          AND so.date_debut::date <= ?::date::date
         LIMIT 1""",
         (id_vendeur, ymd),
     )
@@ -734,7 +734,7 @@ def rechercher_cvtheque(
 
         if age_min == 0:
             where_extra.append(
-                "(cv.date_naissance = '' OR cv.date_naissance BETWEEN ? AND ?)"
+                "(cv.date_naissance IS NULL OR cv.date_naissance BETWEEN ? AND ?)"
             )
             params.extend([_iso_date(age_min_date), _iso_date(age_max_date)])
         else:

@@ -33,8 +33,8 @@ def _get_user_scope(user: UserToken) -> dict:
         LEFT JOIN pgt_organigramme o ON o.idorganigramme = so.idorganigramme
         WHERE so.id_salarie = ?
           AND so.modif_elem <> 'suppr'
-          AND LEFT(so.date_debut, 8) <= ?
-          AND (so.date_fin = '' OR LEFT(so.date_fin, 8) >= ?)
+          AND so.date_debut::date <= ?::date::date
+          AND (so.date_fin IS NULL OR so.date_fin::date >= ?::date::date)
         ORDER BY so.date_debut DESC
         LIMIT 1""",
         (user.id_salarie, today, today),

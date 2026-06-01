@@ -555,7 +555,24 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
                               }`}
                             >
                               {t.icone_data_url ? (
-                                <img src={t.icone_data_url} alt="" className="w-5 h-5 shrink-0" />
+                                // Icone monochrome teinte via mask + currentColor :
+                                // - ADM definit --color-c-icon-tint = #17494E (brand)
+                                // - autres intranets : noir par defaut (fallback CSS var)
+                                <span
+                                  aria-hidden
+                                  className="w-5 h-5 shrink-0 inline-block"
+                                  style={{
+                                    backgroundColor: 'var(--color-c-icon-tint, #000)',
+                                    WebkitMaskImage: `url(${t.icone_data_url})`,
+                                    maskImage: `url(${t.icone_data_url})`,
+                                    WebkitMaskSize: 'contain',
+                                    maskSize: 'contain',
+                                    WebkitMaskRepeat: 'no-repeat',
+                                    maskRepeat: 'no-repeat',
+                                    WebkitMaskPosition: 'center',
+                                    maskPosition: 'center',
+                                  }}
+                                />
                               ) : (
                                 <TicketTypeIcon idType={t.id_type_demande} />
                               )}

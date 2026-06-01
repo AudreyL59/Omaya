@@ -56,6 +56,8 @@
   --color-c-brand-strong: #0F353A;
   --color-c-brand-soft: rgba(23, 73, 78, 0.08);
   --color-c-brand-line: rgba(23, 73, 78, 0.25);
+  /* Teinte des icones FI_* dans la sidebar tickets (vert fonce ADM) */
+  --color-c-icon-tint: #17494E;
 }
 
 /* Style global des champs de saisie ADM (cf. maquette Figma).
