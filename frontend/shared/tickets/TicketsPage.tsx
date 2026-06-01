@@ -853,7 +853,12 @@ function TicketContenuModal({
     if (!detail) return
     setStatutId(detail.id_statut)
     setCloturee(detail.cloturee)
-    setDateCloture(detail.date_cloture ? detail.date_cloture.slice(0, 10) : '')
+    {
+      // HFSQL renvoie parfois "0000-00-00..." pour une date vide :
+      // l'input[type=date] refuse ce format → on normalise en chaine vide.
+      const d = (detail.date_cloture || '').slice(0, 10)
+      setDateCloture(d && !d.startsWith('0000') ? d : '')
+    }
     setOpDest(detail.op_dest || '')
     setOpDestLabel(
       detail.op_dest_nom
