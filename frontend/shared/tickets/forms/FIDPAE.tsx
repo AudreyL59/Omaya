@@ -124,8 +124,8 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
         Enregistrer le ticket
       </button>
 
-      <div className="space-y-6 max-w-3xl">
-        {/* Une seule colonne, chaque champ empile verticalement */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Col 1 : etat civil */}
         <div className="space-y-6">
       {/* ÉTAT CIVIL */}
       <Section title="Infos état civil">
@@ -197,7 +197,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
       </Section>
         </div>
 
-        {/* Colonne droite */}
+        {/* Col 2 : coordonnees + contact urgence */}
         <div className="space-y-6">
       {/* COORDONNÉES */}
       <Section title="Coordonnées postales et téléphoniques">
@@ -236,7 +236,10 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
           </Field>
         </Row>
       </Section>
+        </div>
 
+        {/* Col 3 : embauche */}
+        <div className="space-y-6">
       {/* EMBAUCHE */}
       <Section title="Infos embauche">
         <Row>
