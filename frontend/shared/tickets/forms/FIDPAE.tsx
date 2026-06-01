@@ -156,173 +156,149 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
         </button>
       </div>
 
-      {/* Grid : 2 cols formulaire a gauche, 1 col documents (liste) a droite */}
+      {/* Grid 3 cols pleines, chaque col empile 2 sections (sauf col 3 :
+          liste documents + viewer PDF) */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Colonne gauche (span 2) : 4 sections en grid 2x2 + PDF viewer en dessous */}
-        <div className="xl:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* ÉTAT CIVIL */}
-            <Section title="Infos état civil">
-              <Field label="Civilité">
-                <ToggleGroup
-                  value={Number(form.civilite || 0)}
-                  options={[{ v: 1, lib: 'M.' }, { v: 2, lib: 'Mme' }]}
-                  onChange={(v) => set('civilite', v)}
-                />
-              </Field>
-              <Field label="Nom">
-                <input value={form.nom || ''} onChange={(e) => set('nom', e.target.value)} className={inCls} />
-              </Field>
-              <Field label="Époux(se)">
-                <input value={form.nom_marital || ''} onChange={(e) => set('nom_marital', e.target.value)} className={inCls} />
-              </Field>
-              <Field label="Prénom">
-                <input value={form.prenom || ''} onChange={(e) => set('prenom', e.target.value)} className={inCls} />
-              </Field>
-              <div className="flex items-center gap-3 text-sm">
-                <span className="text-c-ink-soft w-28 shrink-0 text-right">N° SS</span>
-                <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
-                <span className="text-c-ink-soft shrink-0">Nat.</span>
-                <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls + ' w-20'} />
-              </div>
-              <Field label="CPAM">
-                <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
-              </Field>
-              <div className="flex items-center gap-3 text-sm">
-                <span className="text-c-ink-soft w-28 shrink-0 text-right">Né(e) le</span>
-                <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
-                <span className="text-c-ink-soft shrink-0">à</span>
-                <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
-                <span className="text-c-ink-soft shrink-0">Dép</span>
-                <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-16'} />
-              </div>
-              <Field label="N° CIN">
-                <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
-              </Field>
-              <Field label="Situation Fam.">
-                <select
-                  value={form.situation_fam || 0}
-                  onChange={(e) => set('situation_fam', Number(e.target.value))}
-                  className={selCls}
-                >
-                  {Object.entries(situOptions).map(([k, v]) => (
-                    <option key={k} value={Number(k)}>{v}</option>
-                  ))}
-                </select>
-              </Field>
-              <div className="flex items-center gap-4 pl-[7.75rem]">
-                <Check label="Avec Enfant" checked={!!form.avec_enfant} onChange={(v) => set('avec_enfant', v)} />
-                <span className="text-xs text-c-ink-soft">Nb Enfants</span>
-                <input
-                  type="number"
-                  value={form.nb_enfants || 0}
-                  onChange={(e) => set('nb_enfants', Number(e.target.value))}
-                  className={inCls + ' w-16'}
-                />
-              </div>
-              <div className="pl-[7.75rem]">
-                <Check label="Travailleur Handicapé" checked={!!form.travailleur_handi} onChange={(v) => set('travailleur_handi', v)} />
-              </div>
-            </Section>
-
-            {/* INFOS EMBAUCHE */}
-            <Section title="Infos embauche">
-              <Field label="Date Début">
-                <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
-              </Field>
-              <div className="flex items-center gap-3 pl-[7.75rem]">
-                <Check label="Adhère à la mutuelle" checked={!!form.mutuelle} onChange={(v) => set('mutuelle', v)} />
-              </div>
-              <Field label="Date adhésion">
-                <input type="date" value={form.mutdate || ''} onChange={(e) => set('mutdate', e.target.value)} disabled={!form.mutuelle} className={inCls} />
-              </Field>
-              <div className="flex items-center gap-3 pl-[7.75rem]">
-                <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
-                {form.coopte && (
-                  <PickerBtn
-                    icon={<UserPlus className="w-4 h-4 text-c-brand" />}
-                    label={form.coopteur_nom || 'Choisir le coopteur'}
-                    onClick={() => setPicker('coopteur')}
-                  />
-                )}
-              </div>
-              <div className="flex items-center gap-3 pl-[7.75rem]">
-                <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
-                {form.jodirecte && (
-                  <PickerBtn
-                    icon={<UserPlus className="w-4 h-4 text-c-brand" />}
-                    label={form.jocoopteur_nom || 'Choisir le coopteur JO'}
-                    onClick={() => setPicker('jocoopteur')}
-                  />
-                )}
-              </div>
-              <div className="pl-[7.75rem]">
-                <PickerBtn
-                  icon={<Users className="w-4 h-4 text-c-brand" />}
-                  label={form.lib_equipe || "Choisir l'équipe"}
-                  onClick={() => setPicker('equipe')}
-                />
-              </div>
-            </Section>
-
-            {/* COORDONNÉES (1 col) */}
-            <Section title="Coordonnées postales et téléphoniques">
-              <Field label="Adresse">
-                <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
-              </Field>
-              <div className="flex items-center gap-3 text-sm">
-                <span className="text-c-ink-soft w-28 shrink-0 text-right">CP</span>
-                <input value={form.cp || ''} onChange={(e) => set('cp', e.target.value)} className={inCls + ' w-24'} />
-                <span className="text-c-ink-soft shrink-0">Ville</span>
-                <input value={form.ville || ''} onChange={(e) => set('ville', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
-              </div>
-              <Field label="Mobile">
-                <input value={form.gsm || ''} onChange={(e) => set('gsm', e.target.value)} className={inCls} />
-              </Field>
-              <Field label="Mail">
-                <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
-              </Field>
-            </Section>
-
-            {/* CONTACT URGENCE (1 col) */}
-            <Section title="Contact en cas d'urgence">
-              <Field label="Identité">
-                <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
-              </Field>
-              <Field label="Parenté">
-                <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
-              </Field>
-              <Field label="Tél">
-                <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
-              </Field>
-            </Section>
-          </div>
-
-          {/* VIEWER PDF : pleine largeur 2/3 (span 2 cols outer) */}
-          <div>
-            <h3 className="text-sm font-semibold text-c-brand-strong uppercase tracking-wide mb-3">
-              Aperçu document
-            </h3>
-            <div className="min-h-[600px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
-              {docLoading ? (
-                <div className="h-full flex items-center justify-center py-10">
-                  <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
-                </div>
-              ) : !docUrl ? (
-                <div className="h-full flex items-center justify-center text-c-ink-faint text-sm py-10">
-                  Sélectionne un document à droite pour l'aperçu.
-                </div>
-              ) : docMime.startsWith('image/') ? (
-                <img src={docUrl} alt={docName} className="w-full h-full object-contain" />
-              ) : (
-                <iframe src={docUrl} title={docName} className="w-full h-[600px]" />
-              )}
+        {/* COL 1 : Etat civil + Coordonnees */}
+        <div className="space-y-6">
+          <Section title="Infos état civil">
+            <Field label="Civilité">
+              <ToggleGroup
+                value={Number(form.civilite || 0)}
+                options={[{ v: 1, lib: 'M.' }, { v: 2, lib: 'Mme' }]}
+                onChange={(v) => set('civilite', v)}
+              />
+            </Field>
+            <Field label="Nom">
+              <input value={form.nom || ''} onChange={(e) => set('nom', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Époux(se)">
+              <input value={form.nom_marital || ''} onChange={(e) => set('nom_marital', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Prénom">
+              <input value={form.prenom || ''} onChange={(e) => set('prenom', e.target.value)} className={inCls} />
+            </Field>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-c-ink-soft w-28 shrink-0 text-right">N° SS</span>
+              <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+              <span className="text-c-ink-soft shrink-0">Nat.</span>
+              <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls + ' w-20'} />
             </div>
-          </div>
+            <Field label="CPAM">
+              <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
+            </Field>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-c-ink-soft w-28 shrink-0 text-right">Né(e) le</span>
+              <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+              <span className="text-c-ink-soft shrink-0">à</span>
+              <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+              <span className="text-c-ink-soft shrink-0">Dép</span>
+              <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-16'} />
+            </div>
+            <Field label="N° CIN">
+              <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Situation Fam.">
+              <select
+                value={form.situation_fam || 0}
+                onChange={(e) => set('situation_fam', Number(e.target.value))}
+                className={selCls}
+              >
+                {Object.entries(situOptions).map(([k, v]) => (
+                  <option key={k} value={Number(k)}>{v}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="flex items-center gap-4 pl-[7.75rem]">
+              <Check label="Avec Enfant" checked={!!form.avec_enfant} onChange={(v) => set('avec_enfant', v)} />
+              <span className="text-xs text-c-ink-soft">Nb Enfants</span>
+              <input
+                type="number"
+                value={form.nb_enfants || 0}
+                onChange={(e) => set('nb_enfants', Number(e.target.value))}
+                className={inCls + ' w-16'}
+              />
+            </div>
+            <div className="pl-[7.75rem]">
+              <Check label="Travailleur Handicapé" checked={!!form.travailleur_handi} onChange={(v) => set('travailleur_handi', v)} />
+            </div>
+          </Section>
+
+          <Section title="Coordonnées postales et téléphoniques">
+            <Field label="Adresse">
+              <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
+            </Field>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-c-ink-soft w-28 shrink-0 text-right">CP</span>
+              <input value={form.cp || ''} onChange={(e) => set('cp', e.target.value)} className={inCls + ' w-24'} />
+              <span className="text-c-ink-soft shrink-0">Ville</span>
+              <input value={form.ville || ''} onChange={(e) => set('ville', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+            </div>
+            <Field label="Mobile">
+              <input value={form.gsm || ''} onChange={(e) => set('gsm', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Mail">
+              <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
+            </Field>
+          </Section>
         </div>
 
-        {/* Colonne droite (1/3) : liste Documents seulement */}
-        <div>
+        {/* COL 2 : Embauche + Urgence */}
+        <div className="space-y-6">
+          <Section title="Infos embauche">
+            <Field label="Date Début">
+              <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
+            </Field>
+            <div className="flex items-center gap-3 pl-[7.75rem]">
+              <Check label="Adhère à la mutuelle" checked={!!form.mutuelle} onChange={(v) => set('mutuelle', v)} />
+            </div>
+            <Field label="Date adhésion">
+              <input type="date" value={form.mutdate || ''} onChange={(e) => set('mutdate', e.target.value)} disabled={!form.mutuelle} className={inCls} />
+            </Field>
+            <div className="flex items-center gap-3 pl-[7.75rem]">
+              <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
+              {form.coopte && (
+                <PickerBtn
+                  icon={<UserPlus className="w-4 h-4 text-c-brand" />}
+                  label={form.coopteur_nom || 'Choisir le coopteur'}
+                  onClick={() => setPicker('coopteur')}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-3 pl-[7.75rem]">
+              <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
+              {form.jodirecte && (
+                <PickerBtn
+                  icon={<UserPlus className="w-4 h-4 text-c-brand" />}
+                  label={form.jocoopteur_nom || 'Choisir le coopteur JO'}
+                  onClick={() => setPicker('jocoopteur')}
+                />
+              )}
+            </div>
+            <div className="pl-[7.75rem]">
+              <PickerBtn
+                icon={<Users className="w-4 h-4 text-c-brand" />}
+                label={form.lib_equipe || "Choisir l'équipe"}
+                onClick={() => setPicker('equipe')}
+              />
+            </div>
+          </Section>
+
+          <Section title="Contact en cas d'urgence">
+            <Field label="Identité">
+              <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Parenté">
+              <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Tél">
+              <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
+            </Field>
+          </Section>
+        </div>
+
+        {/* COL 3 : liste Documents + viewer PDF (sous la liste) */}
+        <div className="space-y-3">
           <Section title="Documents">
             {(form.documents || []).length === 0 ? (
               <div className="text-sm text-c-ink-faint">Aucun document.</div>
@@ -346,6 +322,21 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
               </ul>
             )}
           </Section>
+          <div className="min-h-[600px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
+            {docLoading ? (
+              <div className="h-full flex items-center justify-center py-10">
+                <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
+              </div>
+            ) : !docUrl ? (
+              <div className="h-full flex items-center justify-center text-c-ink-faint text-sm py-10">
+                Sélectionne un document pour l'aperçu.
+              </div>
+            ) : docMime.startsWith('image/') ? (
+              <img src={docUrl} alt={docName} className="w-full h-full object-contain" />
+            ) : (
+              <iframe src={docUrl} title={docName} className="w-full h-[600px]" />
+            )}
+          </div>
         </div>
       </div>
 
