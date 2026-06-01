@@ -255,10 +255,10 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
           </Section>
         </div>
 
-        {/* COL 2+3 : Embauche + Documents en haut (sous-grid 2 cols),
-            puis PDF viewer span pleine largeur en dessous */}
+        {/* COL 2+3 : Embauche + Documents en haut (sous-grid 2fr/1fr pour
+            laisser respirer Embauche), puis PDF viewer span pleine largeur */}
         <div className="xl:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-6">
           <Section title="Infos embauche">
             <Field label="Date Début">
               <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
