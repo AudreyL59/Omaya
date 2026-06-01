@@ -19,7 +19,7 @@ from collections import defaultdict
 from datetime import date
 from typing import Optional
 
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 def _to_int(v) -> int:
@@ -71,7 +71,7 @@ def _descendants_orga(all_orgas: list[dict], root_ids: set[int]) -> set[int]:
     while frontier:
         next_frontier: set[int] = set()
         for o in all_orgas:
-            parent = _to_int(o.get("IdPARENT"))
+            parent = _to_int(o.get("id_parent"))
             if parent in frontier:
                 oid = _to_int(o.get("idorganigramme"))
                 if oid and oid not in result:
@@ -87,8 +87,8 @@ def calculer_stats_entree_sortie(
     type_recherche: str,  # "reseau" ou "orga"
     id_orgas: Optional[list[int]] = None,
 ) -> dict:
-    db_rh = get_connection("rh")
-    db_adv = get_connection("adv")
+    db_rh = get_pg_connection("rh")
+    db_adv = get_pg_connection("adv")
 
     param_deb = f"{date_debut}000000"
     param_fin = f"{date_fin}235959"
@@ -96,28 +96,28 @@ def calculer_stats_entree_sortie(
     # --- Scope orga : descendants de toutes les orgas selectionnees -------
     orga_ids: Optional[set[int]] = None
     all_orgas = db_rh.query(
-        """SELECT idorganigramme, IdPARENT, Lib_ORGA, IDTypeNiveauOrga, IdSte
-        FROM organigramme
-        WHERE ModifELEM <> 'suppr'"""
+        """SELECT idorganigramme, id_parent, lib_orga, id_type_niveau_orga, id_ste
+        FROM pgt_organigramme
+        WHERE modif_elem <> 'suppr'"""
     )
     if type_recherche == "orga" and id_orgas:
         orga_ids = _descendants_orga(all_orgas, set(id_orgas))
 
     # --- Requete DPAE -----------------------------------------------------
     sql_dpae_base = """
-        SELECT DISTINCT s.IDSalarie, s.Nom, s.Prenom,
-            sc.ADRESSE1, sc.CP, sc.VILLE,
-            se.DateDebut, se.EnActivité, se.IdSte, se.IDcvtheque,
-            se.JOdirecte, se.JOCoopteur, se.Coopté, se.Coopteur
-        FROM salarie s
-        INNER JOIN salarie_embauche se ON se.IDSalarie = s.IDSalarie
-        LEFT JOIN salarie_coordonnées sc ON sc.IDSalarie = s.IDSalarie
+        SELECT DISTINCT s.id_salarie, s.nom, s.prenom,
+            sc.adresse1, sc.cp, sc.ville,
+            se.date_debut, se.en_activite, se.id_ste, se.id_cvtheque,
+            se.j_odirecte, se.jo_coopteur, se.coopte, se.coopteur
+        FROM pgt_salarie s
+        INNER JOIN pgt_salarie_embauche se ON se.id_salarie = s.id_salarie
+        LEFT JOIN pgt_salarie_coordonnees sc ON sc.id_salarie = s.id_salarie
     """
     where_dpae = [
-        "s.ModifELEM <> 'suppr'",
-        "se.ModifELEM <> 'suppr'",
-        "se.IdSte <> 4",
-        "se.DateDebut BETWEEN ? AND ?",
+        "s.modif_elem <> 'suppr'",
+        "se.modif_elem <> 'suppr'",
+        "se.id_ste <> 4",
+        "se.date_debut BETWEEN ? AND ?",
     ]
     params_dpae: list = [param_deb, param_fin]
 
@@ -125,9 +125,9 @@ def calculer_stats_entree_sortie(
         if not orga_ids:
             return {"dpae": [], "sorties": [], "resume": []}
         ids_sql = ",".join(str(i) for i in orga_ids)
-        sql_dpae_base += f" INNER JOIN salarie_organigramme so ON so.IDSalarie = s.IDSalarie"
+        sql_dpae_base += f" INNER JOIN pgt_salarie_organigramme so ON so.id_salarie = s.id_salarie"
         where_dpae.append(f"so.idorganigramme IN ({ids_sql})")
-        where_dpae.append(f"LEFT(so.DateDébut, 8) <= ?")
+        where_dpae.append(f"LEFT(so.date_debut, 8) <= ?")
         params_dpae.append(date_fin)
 
     sql_dpae = sql_dpae_base + " WHERE " + " AND ".join(where_dpae)
@@ -135,26 +135,26 @@ def calculer_stats_entree_sortie(
 
     # --- Requete Sorties --------------------------------------------------
     sql_sortie_base = """
-        SELECT DISTINCT s.IDSalarie, s.Nom, s.Prenom,
-            sc.ADRESSE1, sc.CP, sc.VILLE,
-            ss.DateSortieRéelle, ss.DateSortieDemandée, ss.IDTypeSortie,
-            se.EnActivité, se.DateDebut, se.IdSte
-        FROM salarie s
-        INNER JOIN salarie_embauche se ON se.IDSalarie = s.IDSalarie
-        INNER JOIN salarie_sortie ss ON ss.IDSalarie = s.IDSalarie
-        LEFT JOIN salarie_coordonnées sc ON sc.IDSalarie = s.IDSalarie
+        SELECT DISTINCT s.id_salarie, s.nom, s.prenom,
+            sc.adresse1, sc.cp, sc.ville,
+            ss.date_sortie_reelle, ss.date_sortie_demandee, ss.id_type_sortie,
+            se.en_activite, se.date_debut, se.id_ste
+        FROM pgt_salarie s
+        INNER JOIN pgt_salarie_embauche se ON se.id_salarie = s.id_salarie
+        INNER JOIN pgt_salarie_sortie ss ON ss.id_salarie = s.id_salarie
+        LEFT JOIN pgt_salarie_coordonnees sc ON sc.id_salarie = s.id_salarie
     """
     where_sortie = [
-        "s.ModifELEM <> 'suppr'",
-        "ss.ModifELEM <> 'suppr'",
-        "se.IdSte <> 4",
-        "se.EnActivité = 0",
-        "ss.DateSortieDemandée BETWEEN ? AND ?",
+        "s.modif_elem <> 'suppr'",
+        "ss.modif_elem <> 'suppr'",
+        "se.id_ste <> 4",
+        "se.en_activite = FALSE",
+        "ss.date_sortie_demandee BETWEEN ? AND ?",
     ]
     params_sortie: list = [param_deb, param_fin]
     if orga_ids is not None and orga_ids:
         ids_sql = ",".join(str(i) for i in orga_ids)
-        sql_sortie_base += " INNER JOIN salarie_organigramme so2 ON so2.IDSalarie = s.IDSalarie"
+        sql_sortie_base += " INNER JOIN pgt_salarie_organigramme so2 ON so2.id_salarie = s.id_salarie"
         where_sortie.append(f"so2.idorganigramme IN ({ids_sql})")
 
     sql_sortie = sql_sortie_base + " WHERE " + " AND ".join(where_sortie)
@@ -163,9 +163,9 @@ def calculer_stats_entree_sortie(
     # --- Lookup orga de rattachement par salarie (pour le Resume) ---------
     all_salarie_ids = set()
     for r in dpae_rows:
-        all_salarie_ids.add(_to_int(r.get("IDSalarie")))
+        all_salarie_ids.add(_to_int(r.get("id_salarie")))
     for r in sortie_rows:
-        all_salarie_ids.add(_to_int(r.get("IDSalarie")))
+        all_salarie_ids.add(_to_int(r.get("id_salarie")))
     all_salarie_ids.discard(0)
 
     # Orgas valides pour le rattachement :
@@ -176,19 +176,19 @@ def calculer_stats_entree_sortie(
     }
     valid_orgas.discard(0)
 
-    # On prend l'orga la plus recente (DateDébut max) du salarié parmi les orgas valides
+    # On prend l'orga la plus recente (date_debut max) du salarié parmi les orgas valides
     salarie_to_orga: dict[int, int] = {}
     if all_salarie_ids:
         ids_sql = ",".join(str(i) for i in all_salarie_ids)
         so_rows = db_rh.query(
-            f"""SELECT IDSalarie, idorganigramme, DateDébut
-            FROM salarie_organigramme
-            WHERE IDSalarie IN ({ids_sql})
-              AND ModifELEM <> 'suppr'
-            ORDER BY IDSalarie, DateDébut DESC"""
+            f"""SELECT id_salarie, idorganigramme, date_debut
+            FROM pgt_salarie_organigramme
+            WHERE id_salarie IN ({ids_sql})
+              AND modif_elem <> 'suppr'
+            ORDER BY id_salarie, date_debut DESC"""
         )
         for r in so_rows:
-            sid = _to_int(r.get("IDSalarie"))
+            sid = _to_int(r.get("id_salarie"))
             oid = _to_int(r.get("idorganigramme"))
             if sid and oid in valid_orgas and sid not in salarie_to_orga:
                 salarie_to_orga[sid] = oid
@@ -199,9 +199,9 @@ def calculer_stats_entree_sortie(
     productifs: set[int] = set()
     if all_salarie_ids:
         part_rows = db_adv.query(
-            "SELECT PréfixeBDD FROM Partenaire WHERE IsActif = 1 AND ModifElem <> 'suppr'"
+            "SELECT prefixe_bdd FROM pgt_partenaire WHERE is_actif = TRUE AND modif_elem <> 'suppr'"
         )
-        prefixes = [(p.get("PréfixeBDD") or "").strip() for p in part_rows]
+        prefixes = [(p.get("prefixe_bdd") or "").strip() for p in part_rows]
         prefixes = [p for p in prefixes if p]
         ids_sal_sql_quoted = ",".join(f"'{i}'" for i in all_salarie_ids)
 
@@ -209,16 +209,16 @@ def calculer_stats_entree_sortie(
         from concurrent.futures import ThreadPoolExecutor
 
         def fetch_contrat(prefix: str) -> list[int]:
-            db = get_connection("adv")
+            db = get_pg_connection("adv")
             try:
                 rows = db.query(
-                    f"""SELECT DISTINCT IDSalarie
-                    FROM {prefix}_contrat
-                    WHERE IDSalarie IN ({ids_sal_sql_quoted})
-                      AND DateSignature <> ''
-                      AND ModifElem NOT LIKE '%suppr%'"""
+                    f"""SELECT DISTINCT id_salarie
+                    FROM pgt_{prefix.lower()}_contrat
+                    WHERE id_salarie IN ({ids_sal_sql_quoted})
+                      AND date_signature <> ''
+                      AND modif_elem NOT LIKE '%suppr%'"""
                 )
-                return [_to_int(r.get("IDSalarie")) for r in rows]
+                return [_to_int(r.get("id_salarie")) for r in rows]
             except Exception as e:
                 logging.getLogger(__name__).warning(
                     f"[ENTREE-SORTIE] fetch_contrat({prefix}) failed: {e}"
@@ -233,60 +233,60 @@ def calculer_stats_entree_sortie(
     # --- Labels TypeSortieSalarie -----------------------------------------
     type_sortie_map: dict[int, str] = {}
     try:
-        ts_rows = db_rh.query("SELECT IDTypeSortie, Lib_Sortie FROM TypeSortieSalarie")
+        ts_rows = db_rh.query("SELECT id_type_sortie, lib_sortie FROM pgt_type_sortie_salarie")
         for t in ts_rows:
-            type_sortie_map[_to_int(t.get("IDTypeSortie"))] = t.get("Lib_Sortie") or ""
+            type_sortie_map[_to_int(t.get("id_type_sortie"))] = t.get("lib_sortie") or ""
     except Exception:
         pass
 
     # --- Lookup origine DPAE via cvtheque.IDcvsource ----------------------
-    # IDcvsource = 1 : cooptation (salarie) ; 2+ : CVtheque / annonceur / autre
-    db_rec = get_connection("recrutement")
+    # id_cvsource = 1 : cooptation (salarie) ; 2+ : CVtheque / annonceur / autre
+    db_rec = get_pg_connection("recrutement")
     cvtheque_source: dict[int, int] = {}
     cvtheque_ids_dpae = {
-        _to_int(r.get("IDcvtheque"))
+        _to_int(r.get("id_cvtheque"))
         for r in dpae_rows
-        if _to_int(r.get("IDcvtheque")) > 0
+        if _to_int(r.get("id_cvtheque")) > 0
     }
     if cvtheque_ids_dpae:
         cv_sql = ",".join(str(i) for i in cvtheque_ids_dpae)
         cv_rows = db_rec.query(
-            f"SELECT IDcvtheque, IDcvsource FROM cvtheque WHERE IDcvtheque IN ({cv_sql})"
+            f"SELECT id_cvtheque, id_cvsource FROM pgt_cvtheque WHERE id_cvtheque IN ({cv_sql})"
         )
         for c in cv_rows:
-            cvtheque_source[_to_int(c.get("IDcvtheque"))] = _to_int(c.get("IDcvsource"))
+            cvtheque_source[_to_int(c.get("id_cvtheque"))] = _to_int(c.get("id_cvsource"))
 
     # --- Lookup des sorties pour les DPAE inactifs ------------------------
     # Pour un DPAE dont EnActivité = 0, on veut date_sortie + fin_demandee
     sortie_by_sal: dict[int, dict] = {}
     dpae_inactif_ids = {
-        _to_int(r.get("IDSalarie"))
+        _to_int(r.get("id_salarie"))
         for r in dpae_rows
-        if not bool(r.get("EnActivité")) and _to_int(r.get("IDSalarie")) > 0
+        if not bool(r.get("en_activite")) and _to_int(r.get("id_salarie")) > 0
     }
     if dpae_inactif_ids:
         ids_sql = ",".join(str(i) for i in dpae_inactif_ids)
         ss_rows = db_rh.query(
-            f"""SELECT IDSalarie, DateSortieRéelle, DateSortieDemandée
-            FROM salarie_sortie
-            WHERE IDSalarie IN ({ids_sql})
-              AND ModifELEM <> 'suppr'
-            ORDER BY IDSalarie, DateSortieDemandée DESC"""
+            f"""SELECT id_salarie, date_sortie_reelle, date_sortie_demandee
+            FROM pgt_salarie_sortie
+            WHERE id_salarie IN ({ids_sql})
+              AND modif_elem <> 'suppr'
+            ORDER BY id_salarie, date_sortie_demandee DESC"""
         )
         for r in ss_rows:
-            sid = _to_int(r.get("IDSalarie"))
+            sid = _to_int(r.get("id_salarie"))
             if sid and sid not in sortie_by_sal:
                 sortie_by_sal[sid] = {
-                    "date_sortie": r.get("DateSortieRéelle") or "",
-                    "fin_demandee": r.get("DateSortieDemandée") or "",
+                    "date_sortie": r.get("date_sortie_reelle") or "",
+                    "fin_demandee": r.get("date_sortie_demandee") or "",
                 }
 
     # --- Lookup societe : IdSte → RS_Interne ------------------------------
     societe_rs: dict[int, str] = {}
     try:
-        ste_rows = db_rh.query("SELECT IdSte, RS_Interne FROM societe")
+        ste_rows = db_rh.query("SELECT id_ste, rs_interne FROM pgt_societe")
         for s in ste_rows:
-            societe_rs[_to_int(s.get("IdSte"))] = s.get("RS_Interne") or ""
+            societe_rs[_to_int(s.get("id_ste"))] = s.get("rs_interne") or ""
     except Exception:
         pass
 
@@ -296,8 +296,8 @@ def calculer_stats_entree_sortie(
     for o in all_orgas:
         oid = _to_int(o.get("idorganigramme"))
         orga_info[oid] = {
-            "lib_orga": o.get("Lib_ORGA") or "",
-            "id_parent": _to_int(o.get("IdPARENT")),
+            "lib_orga": o.get("lib_orga") or "",
+            "id_parent": _to_int(o.get("id_parent")),
         }
 
     def _agence_equipe(id_orga: int) -> tuple[str, str]:
@@ -313,25 +313,25 @@ def calculer_stats_entree_sortie(
     # --- Construction des lignes DPAE -------------------------------------
     dpae_list: list[dict] = []
     for r in dpae_rows:
-        sid = _to_int(r.get("IDSalarie"))
+        sid = _to_int(r.get("id_salarie"))
         id_orga_sal = salarie_to_orga.get(sid, 0)
         sortie = sortie_by_sal.get(sid, {})
-        id_cvtheque = _to_int(r.get("IDcvtheque"))
+        id_cvtheque = _to_int(r.get("id_cvtheque"))
         id_source = cvtheque_source.get(id_cvtheque, 0)
         origine = "Cooptation" if id_source <= 1 or id_cvtheque == 0 else "CVtheque"
-        id_ste = _to_int(r.get("IdSte"))
+        id_ste = _to_int(r.get("id_ste"))
         agence_lib, equipe_lib = _agence_equipe(id_orga_sal)
         dpae_list.append({
             "id_salarie": str(sid),
             "id_ste": id_ste,
             "rs_interne": societe_rs.get(id_ste, ""),
-            "nom": (r.get("Nom") or "").strip(),
-            "prenom": (r.get("Prenom") or "").strip(),
-            "adresse": r.get("ADRESSE1") or "",
-            "cp": r.get("CP") or "",
-            "ville": r.get("VILLE") or "",
-            "date_entree": r.get("DateDebut") or "",
-            "en_activite": bool(r.get("EnActivité")),
+            "nom": (r.get("nom") or "").strip(),
+            "prenom": (r.get("prenom") or "").strip(),
+            "adresse": r.get("adresse1") or "",
+            "cp": r.get("cp") or "",
+            "ville": r.get("ville") or "",
+            "date_entree": r.get("date_debut") or "",
+            "en_activite": bool(r.get("en_activite")),
             "date_sortie": sortie.get("date_sortie", ""),
             "fin_demandee": sortie.get("fin_demandee", ""),
             "origine": origine,
@@ -345,23 +345,23 @@ def calculer_stats_entree_sortie(
     # --- Construction des lignes Sortie -----------------------------------
     sortie_list: list[dict] = []
     for r in sortie_rows:
-        sid = _to_int(r.get("IDSalarie"))
+        sid = _to_int(r.get("id_salarie"))
         id_orga_sal = salarie_to_orga.get(sid, 0)
-        id_type = _to_int(r.get("IDTypeSortie"))
-        id_ste = _to_int(r.get("IdSte"))
+        id_type = _to_int(r.get("id_type_sortie"))
+        id_ste = _to_int(r.get("id_ste"))
         agence_lib, equipe_lib = _agence_equipe(id_orga_sal)
         sortie_list.append({
             "id_salarie": str(sid),
             "id_ste": id_ste,
             "rs_interne": societe_rs.get(id_ste, ""),
-            "nom": (r.get("Nom") or "").strip(),
-            "prenom": (r.get("Prenom") or "").strip(),
-            "adresse": r.get("ADRESSE1") or "",
-            "cp": r.get("CP") or "",
-            "ville": r.get("VILLE") or "",
-            "date_entree": r.get("DateDebut") or "",
-            "date_sortie_reelle": r.get("DateSortieRéelle") or "",
-            "fin_demandee": r.get("DateSortieDemandée") or "",
+            "nom": (r.get("nom") or "").strip(),
+            "prenom": (r.get("prenom") or "").strip(),
+            "adresse": r.get("adresse1") or "",
+            "cp": r.get("cp") or "",
+            "ville": r.get("ville") or "",
+            "date_entree": r.get("date_debut") or "",
+            "date_sortie_reelle": r.get("date_sortie_reelle") or "",
+            "fin_demandee": r.get("date_sortie_demandee") or "",
             "id_type_sortie": id_type,
             "type_sortie_lib": type_sortie_map.get(id_type, ""),
             "id_orga": str(id_orga_sal),

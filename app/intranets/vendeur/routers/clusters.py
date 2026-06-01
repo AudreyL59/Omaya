@@ -1,10 +1,11 @@
+import base64
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 from app.intranets.vendeur.schemas.clusters import ClusterCard, GroupementItem
 from app.intranets.vendeur.services.clusters import (
     list_clusters,
@@ -22,19 +23,20 @@ def _get_user_scope(user: UserToken) -> dict:
       - lib_societe : RaisonSociale du user (via id_ste)
       - logo_ste : logo société (GUIMMICK) en base64
     """
-    db_rh = get_connection("rh")
+    db_rh = get_pg_connection("rh")
     today = datetime.now().strftime("%Y%m%d")
 
     # Affectation principale
     aff_row = db_rh.query_one(
-        """SELECT TOP 1 so.idorganigramme, o.Lib_ORGA
-        FROM salarie_organigramme so
-        LEFT JOIN organigramme o ON o.idorganigramme = so.idorganigramme
-        WHERE so.IDSalarie = ?
-          AND so.ModifELEM <> 'suppr'
-          AND LEFT(so.DateDébut, 8) <= ?
-          AND (so.DateFin = '' OR LEFT(so.DateFin, 8) >= ?)
-        ORDER BY so.DateDébut DESC""",
+        """SELECT so.idorganigramme, o.lib_orga
+        FROM pgt_salarie_organigramme so
+        LEFT JOIN pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+        WHERE so.id_salarie = ?
+          AND so.modif_elem <> 'suppr'
+          AND LEFT(so.date_debut, 8) <= ?
+          AND (so.date_fin = '' OR LEFT(so.date_fin, 8) >= ?)
+        ORDER BY so.date_debut DESC
+        LIMIT 1""",
         (user.id_salarie, today, today),
     )
     id_affectation = 0
@@ -45,19 +47,27 @@ def _get_user_scope(user: UserToken) -> dict:
             id_affectation = int(raw_id) if raw_id not in (None, "") else 0
         except (TypeError, ValueError):
             id_affectation = 0
-        lib_affectation = aff_row.get("Lib_ORGA") or ""
+        lib_affectation = aff_row.get("lib_orga") or ""
 
     # Société du user
     lib_societe = ""
     logo_ste = ""
     if user.id_ste:
         ste_row = db_rh.query_one(
-            "SELECT RaisonSociale, GUIMMICK FROM societe WHERE IdSte = ?",
+            "SELECT raison_sociale, guimmick FROM pgt_societe WHERE id_ste = ?",
             (user.id_ste,),
         )
         if ste_row:
-            lib_societe = ste_row.get("RaisonSociale") or ""
-            logo_ste = ste_row.get("GUIMMICK") or ""
+            lib_societe = ste_row.get("raison_sociale") or ""
+            raw_logo = ste_row.get("guimmick")
+            # guimmick = bytea PG → on encode en base64 pour conserver l'API string
+            if raw_logo:
+                if isinstance(raw_logo, memoryview):
+                    raw_logo = bytes(raw_logo)
+                if isinstance(raw_logo, (bytes, bytearray)):
+                    logo_ste = base64.b64encode(raw_logo).decode("ascii")
+                else:
+                    logo_ste = str(raw_logo)
 
     return {
         "id_affectation": id_affectation,

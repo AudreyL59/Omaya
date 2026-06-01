@@ -17,7 +17,7 @@ import struct
 from collections import defaultdict
 from typing import Optional
 
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 def _to_int(v) -> int:
@@ -67,8 +67,8 @@ def calculer_stats_saisie_cv(
     type_recherche: str,  # "service" ou "personne"
     id_ope_filter: Optional[int] = None,
 ) -> dict:
-    db_rec = get_connection("recrutement")
-    db_rh = get_connection("rh")
+    db_rec = get_pg_connection("recrutement")
+    db_rh = get_pg_connection("rh")
 
     param_deb = f"{date_debut}000000"
     param_fin = f"{date_fin}235959"
@@ -90,22 +90,22 @@ def calculer_stats_saisie_cv(
             op_filter_params = ()
 
     # --- Req CV Saisis (saisie OU reactivation dans la periode) -----------
-    # Note : c.Origine est stocke comme chaine cote HFSQL ; on compare toujours avec LIKE + string param.
+    # Note : c.origine est stocke comme chaine cote HFSQL ; on compare toujours avec LIKE + string param.
     sql_cv_saisis = f"""
         SELECT
-            c.IDcvtheque, c.Nom, c.Prenom, c.GSM,
-            c.IDCommunesFrance, c.IDcvsource, c.IdElemSource,
-            c.DateSAISIE, c.Opé_SAISIE,
-            c.DateREAC, c.Opé_REAC,
-            c.Origine,
-            s.Lib_Source
-        FROM cvtheque c
-        LEFT JOIN CvSource s ON s.IDcvsource = c.IDcvsource
-        WHERE c.ModifElem <> 'suppr'
-          AND c.Origine LIKE ?
+            c.id_cvtheque, c.nom, c.prenom, c.gsm,
+            c.id_communes_france, c.id_cvsource, c.id_elem_source,
+            c.date_saisie, c.ope_saisie,
+            c.date_reac, c.ope_reac,
+            c.origine,
+            s.lib_source
+        FROM pgt_cvtheque c
+        LEFT JOIN pgt_cv_source s ON s.id_cvsource = c.id_cvsource
+        WHERE c.modif_elem <> 'suppr'
+          AND c.origine LIKE ?
           AND (
-                (c.DateSAISIE BETWEEN ? AND ? AND c.Opé_SAISIE {op_filter_sql})
-             OR (c.DateREAC   BETWEEN ? AND ? AND c.Opé_REAC   {op_filter_sql})
+                (c.date_saisie BETWEEN ? AND ? AND c.ope_saisie {op_filter_sql})
+             OR (c.date_reac   BETWEEN ? AND ? AND c.ope_reac   {op_filter_sql})
           )
     """
     params_saisis: list = [
@@ -115,23 +115,23 @@ def calculer_stats_saisie_cv(
     ]
     saisis_rows = db_rec.query(sql_cv_saisis, tuple(params_saisis))
 
-    # --- Req CV Traite (CvSuivi avec IdCvStatut 2..99) --------------------
+    # --- Req CV Traite (CvSuivi avec id_cv_statut 2..99) ------------------
     sql_cv_traite = f"""
         SELECT
-            c.IDcvtheque, c.Nom, c.Prenom, c.GSM,
-            c.IDCommunesFrance, c.IDcvsource, c.IdElemSource,
-            c.DateSAISIE,
-            cs.IdCvStatut, cs.OPCrea, cs.Datecrea,
-            st.LibStatut,
-            s.Lib_Source
-        FROM cvtheque c
-        INNER JOIN CvSuivi cs ON cs.IDcvtheque = c.IDcvtheque
-        LEFT JOIN CvStatut st ON st.IdCvStatut = cs.IdCvStatut
-        LEFT JOIN CvSource s ON s.IDcvsource = c.IDcvsource
-        WHERE cs.Datecrea BETWEEN ? AND ?
-          AND cs.IdCvStatut BETWEEN 2 AND 99
-          AND cs.OPCrea {op_filter_sql}
-          AND c.ModifElem <> 'suppr'
+            c.id_cvtheque, c.nom, c.prenom, c.gsm,
+            c.id_communes_france, c.id_cvsource, c.id_elem_source,
+            c.date_saisie,
+            cs.id_cv_statut, cs.op_crea, cs.datecrea,
+            st.lib_statut,
+            s.lib_source
+        FROM pgt_cvtheque c
+        INNER JOIN pgt_cvsuivi cs ON cs.id_cvtheque = c.id_cvtheque
+        LEFT JOIN pgt_cvstatut st ON st.id_cv_statut = cs.id_cv_statut
+        LEFT JOIN pgt_cv_source s ON s.id_cvsource = c.id_cvsource
+        WHERE cs.datecrea BETWEEN ? AND ?
+          AND cs.id_cv_statut BETWEEN 2 AND 99
+          AND cs.op_crea {op_filter_sql}
+          AND c.modif_elem <> 'suppr'
     """
     params_traite: list = [param_deb, param_fin, *op_filter_params]
     traite_rows = db_rec.query(sql_cv_traite, tuple(params_traite))
@@ -139,31 +139,31 @@ def calculer_stats_saisie_cv(
     # --- Lookup CommunesFrance (pour les deux listes) ---------------------
     commune_ids = set()
     for r in saisis_rows:
-        commune_ids.add(_to_int(r.get("IDCommunesFrance")))
+        commune_ids.add(_to_int(r.get("id_communes_france")))
     for r in traite_rows:
-        commune_ids.add(_to_int(r.get("IDCommunesFrance")))
+        commune_ids.add(_to_int(r.get("id_communes_france")))
     commune_ids.discard(0)
 
     commune_map: dict[int, str] = {}
     if commune_ids:
-        db_divers = get_connection("divers")
+        db_divers = get_pg_connection("divers")
         ids_sql = ",".join(str(i) for i in commune_ids)
         try:
             cf_rows = db_divers.query(
-                f"SELECT IDCommunesFrance, CodePostal, NomVille FROM CommunesFrance WHERE IDCommunesFrance IN ({ids_sql})"
+                f"SELECT id_communes_france, code_postal, nom_ville FROM pgt_communes_france WHERE id_communes_france IN ({ids_sql})"
             )
             for c in cf_rows:
-                cid = _to_int(c.get("IDCommunesFrance"))
-                cp = c.get("CodePostal") or ""
-                nom = c.get("NomVille") or ""
+                cid = _to_int(c.get("id_communes_france"))
+                cp = c.get("code_postal") or ""
+                nom = c.get("nom_ville") or ""
                 commune_map[cid] = f"{cp} {nom}".strip()
         except Exception:
             pass
 
     # --- Lookup statut actuel de chaque cvtheque (dernier CvSuivi) --------
     # Pour la colonne "Statut actuel" des onglets
-    cvtheque_ids = {_to_int(r.get("IDcvtheque")) for r in saisis_rows}
-    cvtheque_ids |= {_to_int(r.get("IDcvtheque")) for r in traite_rows}
+    cvtheque_ids = {_to_int(r.get("id_cvtheque")) for r in saisis_rows}
+    cvtheque_ids |= {_to_int(r.get("id_cvtheque")) for r in traite_rows}
     cvtheque_ids.discard(0)
 
     statut_actuel_map: dict[int, str] = {}
@@ -171,17 +171,17 @@ def calculer_stats_saisie_cv(
         ids_sql = ",".join(str(i) for i in cvtheque_ids)
         try:
             latest_rows = db_rec.query(
-                f"""SELECT cs.IDcvtheque, cs.IdCvStatut, st.LibStatut, cs.Datecrea
-                FROM CvSuivi cs
-                LEFT JOIN CvStatut st ON st.IdCvStatut = cs.IdCvStatut
-                WHERE cs.IDcvtheque IN ({ids_sql})
-                  AND cs.ModifElem NOT LIKE '%suppr%'
-                ORDER BY cs.IDcvtheque, cs.Datecrea DESC"""
+                f"""SELECT cs.id_cvtheque, cs.id_cv_statut, st.lib_statut, cs.datecrea
+                FROM pgt_cvsuivi cs
+                LEFT JOIN pgt_cvstatut st ON st.id_cv_statut = cs.id_cv_statut
+                WHERE cs.id_cvtheque IN ({ids_sql})
+                  AND cs.modif_elem NOT LIKE '%suppr%'
+                ORDER BY cs.id_cvtheque, cs.datecrea DESC"""
             )
             for r in latest_rows:
-                cid = _to_int(r.get("IDcvtheque"))
+                cid = _to_int(r.get("id_cvtheque"))
                 if cid and cid not in statut_actuel_map:
-                    statut_actuel_map[cid] = r.get("LibStatut") or ""
+                    statut_actuel_map[cid] = r.get("lib_statut") or ""
         except Exception:
             pass
 
@@ -189,60 +189,60 @@ def calculer_stats_saisie_cv(
     ope_ids = set()
     for r in saisis_rows:
         # Saisie ou reac : on prend la saisie si dans periode, sinon reac
-        date_saisie_ymd = _to_ymd(r.get("DateSAISIE") or "")
+        date_saisie_ymd = _to_ymd(r.get("date_saisie") or "")
         if date_saisie_ymd and date_debut <= date_saisie_ymd <= date_fin:
-            ope_ids.add(_to_int(r.get("Opé_SAISIE")))
+            ope_ids.add(_to_int(r.get("ope_saisie")))
         else:
-            ope_ids.add(_to_int(r.get("Opé_REAC")))
+            ope_ids.add(_to_int(r.get("ope_reac")))
     for r in traite_rows:
-        ope_ids.add(_to_int(r.get("OPCrea")))
+        ope_ids.add(_to_int(r.get("op_crea")))
     ope_ids.discard(0)
 
     salarie_name_map: dict[int, str] = {}
     if ope_ids:
         ids_sql = ",".join(str(i) for i in ope_ids)
         sal_rows = db_rh.query(
-            f"SELECT IDSalarie, Nom, Prenom FROM salarie WHERE IDSalarie IN ({ids_sql})"
+            f"SELECT id_salarie, nom, prenom FROM pgt_salarie WHERE id_salarie IN ({ids_sql})"
         )
         for s in sal_rows:
-            sid = _to_int(s.get("IDSalarie"))
-            nom = (s.get("Nom") or "").strip()
-            prenom = _capitalize(s.get("Prenom") or "")
+            sid = _to_int(s.get("id_salarie"))
+            nom = (s.get("nom") or "").strip()
+            prenom = _capitalize(s.get("prenom") or "")
             salarie_name_map[sid] = f"{nom} {prenom}".strip()
 
     # Annonceurs/coopteurs pour les CV saisis
     annonceur_lib_map: dict[int, str] = {}
     annonceur_ids = {
-        _to_int(r.get("IdElemSource"))
+        _to_int(r.get("id_elem_source"))
         for r in saisis_rows
-        if _to_int(r.get("IDcvsource")) == 2 and _to_int(r.get("IdElemSource")) > 0
+        if _to_int(r.get("id_cvsource")) == 2 and _to_int(r.get("id_elem_source")) > 0
     }
     if annonceur_ids:
         ids_sql = ",".join(str(i) for i in annonceur_ids)
         try:
             a_rows = db_rec.query(
-                f"SELECT IDCvAnnonceur, Lib_Annonceur FROM CvAnnonceur WHERE IDCvAnnonceur IN ({ids_sql})"
+                f"SELECT id_cv_annonceur, lib_annonceur FROM pgt_cv_annonceur WHERE id_cv_annonceur IN ({ids_sql})"
             )
             for a in a_rows:
-                annonceur_lib_map[_to_int(a.get("IDCvAnnonceur"))] = a.get("Lib_Annonceur") or ""
+                annonceur_lib_map[_to_int(a.get("id_cv_annonceur"))] = a.get("lib_annonceur") or ""
         except Exception:
             pass
     # Coopteurs (salaries) pour source=1 : deja dans salarie_name_map si l'id est dans ope_ids,
     # sinon on complete
     coopt_salarie_ids = {
-        _to_int(r.get("IdElemSource"))
+        _to_int(r.get("id_elem_source"))
         for r in saisis_rows
-        if _to_int(r.get("IDcvsource")) == 1 and _to_int(r.get("IdElemSource")) > 0
+        if _to_int(r.get("id_cvsource")) == 1 and _to_int(r.get("id_elem_source")) > 0
     } - set(salarie_name_map.keys())
     if coopt_salarie_ids:
         ids_sql = ",".join(str(i) for i in coopt_salarie_ids)
         sal_rows = db_rh.query(
-            f"SELECT IDSalarie, Nom, Prenom FROM salarie WHERE IDSalarie IN ({ids_sql})"
+            f"SELECT id_salarie, nom, prenom FROM pgt_salarie WHERE id_salarie IN ({ids_sql})"
         )
         for s in sal_rows:
-            sid = _to_int(s.get("IDSalarie"))
-            nom = (s.get("Nom") or "").strip()
-            prenom = _capitalize(s.get("Prenom") or "")
+            sid = _to_int(s.get("id_salarie"))
+            nom = (s.get("nom") or "").strip()
+            prenom = _capitalize(s.get("prenom") or "")
             salarie_name_map[sid] = f"{nom} {prenom}".strip()
 
     # --- Construction des lignes + agregation resume ----------------------
@@ -250,56 +250,56 @@ def calculer_stats_saisie_cv(
 
     saisis_list: list[dict] = []
     for r in saisis_rows:
-        date_saisie_raw = r.get("DateSAISIE") or ""
-        date_reac_raw = r.get("DateREAC") or ""
+        date_saisie_raw = r.get("date_saisie") or ""
+        date_reac_raw = r.get("date_reac") or ""
         date_saisie_ymd = _to_ymd(date_saisie_raw)
         if (
             date_saisie_ymd
             and date_debut <= date_saisie_ymd <= date_fin
-            and _to_int(r.get("Opé_SAISIE")) > 0
+            and _to_int(r.get("ope_saisie")) > 0
         ):
-            ope_id = _to_int(r.get("Opé_SAISIE"))
+            ope_id = _to_int(r.get("ope_saisie"))
             date_traitement = date_saisie_raw
             est_reac = False
         else:
-            ope_id = _to_int(r.get("Opé_REAC"))
+            ope_id = _to_int(r.get("ope_reac"))
             date_traitement = date_reac_raw
             est_reac = True
 
         resume_agg[ope_id]["nb_cv_saisis"] += 1
 
-        id_source = _to_int(r.get("IDcvsource"))
-        id_elem = _to_int(r.get("IdElemSource"))
+        id_source = _to_int(r.get("id_cvsource"))
+        id_elem = _to_int(r.get("id_elem_source"))
         annonceur = ""
         if id_source == 1 and id_elem > 0:
             annonceur = salarie_name_map.get(id_elem, "")
         elif id_source == 2 and id_elem > 0:
             annonceur = annonceur_lib_map.get(id_elem, "")
 
-        cid = _to_int(r.get("IDcvtheque"))
+        cid = _to_int(r.get("id_cvtheque"))
         saisis_list.append({
             "id_cvtheque": str(cid),
             "ope_id": str(ope_id),
             "ope_nom": salarie_name_map.get(ope_id, ""),
             "date_traitement": date_traitement,
             "est_reactivation": est_reac,
-            "nom_prenom": f"{(r.get('Nom') or '').strip()} {_capitalize(r.get('Prenom') or '')}".strip(),
-            "commune": commune_map.get(_to_int(r.get("IDCommunesFrance")), ""),
-            "tel": r.get("GSM") or "",
+            "nom_prenom": f"{(r.get('nom') or '').strip()} {_capitalize(r.get('prenom') or '')}".strip(),
+            "commune": commune_map.get(_to_int(r.get("id_communes_france")), ""),
+            "tel": r.get("gsm") or "",
             "statut_actuel": statut_actuel_map.get(cid, ""),
             "id_source": id_source,
-            "lib_source": r.get("Lib_Source") or "",
+            "lib_source": r.get("lib_source") or "",
             "annonceur_coopteur": annonceur,
         })
 
     traite_list: list[dict] = []
     for r in traite_rows:
-        ope_id = _to_int(r.get("OPCrea"))
+        ope_id = _to_int(r.get("op_crea"))
         resume_agg[ope_id]["nb_cv_traites"] += 1
-        cid = _to_int(r.get("IDcvtheque"))
+        cid = _to_int(r.get("id_cvtheque"))
 
-        id_source = _to_int(r.get("IDcvsource"))
-        id_elem = _to_int(r.get("IdElemSource"))
+        id_source = _to_int(r.get("id_cvsource"))
+        id_elem = _to_int(r.get("id_elem_source"))
         annonceur = ""
         if id_source == 1 and id_elem > 0:
             annonceur = salarie_name_map.get(id_elem, "")
@@ -310,15 +310,15 @@ def calculer_stats_saisie_cv(
             "id_cvtheque": str(cid),
             "ope_id": str(ope_id),
             "ope_nom": salarie_name_map.get(ope_id, ""),
-            "date_traitement": r.get("Datecrea") or "",
-            "nom_prenom": f"{(r.get('Nom') or '').strip()} {_capitalize(r.get('Prenom') or '')}".strip(),
-            "commune": commune_map.get(_to_int(r.get("IDCommunesFrance")), ""),
-            "tel": r.get("GSM") or "",
-            "statut_actuel": r.get("LibStatut") or statut_actuel_map.get(cid, ""),
-            "id_cv_statut": _to_int(r.get("IdCvStatut")),
-            "date_saisie": r.get("DateSAISIE") or "",
+            "date_traitement": r.get("datecrea") or "",
+            "nom_prenom": f"{(r.get('nom') or '').strip()} {_capitalize(r.get('prenom') or '')}".strip(),
+            "commune": commune_map.get(_to_int(r.get("id_communes_france")), ""),
+            "tel": r.get("gsm") or "",
+            "statut_actuel": r.get("lib_statut") or statut_actuel_map.get(cid, ""),
+            "id_cv_statut": _to_int(r.get("id_cv_statut")),
+            "date_saisie": r.get("date_saisie") or "",
             "id_source": id_source,
-            "lib_source": r.get("Lib_Source") or "",
+            "lib_source": r.get("lib_source") or "",
             "annonceur_coopteur": annonceur,
         })
 

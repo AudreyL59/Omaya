@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 router = APIRouter(prefix="/organigrammes", tags=["adm-organigrammes"])
 
@@ -32,26 +32,26 @@ def search_orgas(
     if not search:
         return []
 
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     like = f"%{search}%"
     rows = db.query(
-        """SELECT a.idorganigramme, a.Lib_ORGA, a.IdPARENT,
-            n.Lib_Niveau,
-            b.Lib_ORGA AS Lib_Parent
-        FROM organigramme a
-        LEFT JOIN TypeNiveauOrga n ON a.IDTypeNiveauOrga = n.IDTypeNiveauOrga
-        LEFT JOIN organigramme b ON a.IdPARENT = b.idorganigramme
-        WHERE a.ModifELEM <> 'suppr'
-          AND a.Lib_ORGA LIKE ?
-        ORDER BY a.Lib_ORGA""",
+        """SELECT a.idorganigramme, a.lib_orga, a.id_parent,
+            n.lib_niveau,
+            b.lib_orga AS lib_parent
+        FROM pgt_organigramme a
+        LEFT JOIN pgt_type_niveau_orga n ON a.id_type_niveau_orga = n.id_type_niveau_orga
+        LEFT JOIN pgt_organigramme b ON a.id_parent = b.idorganigramme
+        WHERE a.modif_elem <> 'suppr'
+          AND a.lib_orga LIKE ?
+        ORDER BY a.lib_orga""",
         (like,),
     )
     return [
         {
             "id_orga": str(r.get("idorganigramme")),
-            "lib_orga": r.get("Lib_ORGA") or "",
-            "lib_niveau": r.get("Lib_Niveau") or "",
-            "lib_parent": r.get("Lib_Parent") or "",
+            "lib_orga": r.get("lib_orga") or "",
+            "lib_niveau": r.get("lib_niveau") or "",
+            "lib_parent": r.get("lib_parent") or "",
         }
         for r in rows
         if r.get("idorganigramme") and int(r.get("idorganigramme")) > 0

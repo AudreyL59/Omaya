@@ -18,7 +18,7 @@ IDResp = 0 → label "Réseau" (objectifs globaux, pas rattachés à un responsa
 import base64
 import struct
 
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 # -- Helpers ------------------------------------------------------------
@@ -212,8 +212,8 @@ def list_clusters(
     if not periodes:
         return []
 
-    db_adv = get_connection("adv")
-    db_rh = get_connection("rh")
+    db_adv = get_pg_connection("adv")
+    db_rh = get_pg_connection("rh")
 
     # Accumulateur : key = "dep" (agrégation) ou "codeVAD complet" (détail)
     #   value = dict avec compteurs cumulés + infos d'affichage
@@ -224,72 +224,81 @@ def list_clusters(
     #   - sinon    : restreindre à son affectation (ou 0=Réseau global)
     for (mois, annee) in periodes:
         sql = [
-            "SELECT ObjCtt, NbCttBrut, nbRaccSFR, nbS1, nbFibHorsAtt,",
-            "       CodeVAD, IDResp",
-            "FROM SFR_ClusterObjectif",
-            "WHERE ObjMois = ? AND ObjAnnée = ?",
-            "  AND ModifELEM <> 'suppr'",
+            "SELECT obj_ctt, nb_ctt_brut, nb_racc_sfr, nb_s1, nb_fib_hors_att,",
+            "       code_vad, id_resp",
+            "FROM pgt_sfr_cluster_objectif",
+            "WHERE obj_mois = ? AND obj_annee = ?",
+            "  AND modif_elem <> 'suppr'",
         ]
         params: list = [mois, annee]
 
         # Filtre département si on est en vue détail
         if code_vad_parent:
-            sql.append("  AND LEFT(CodeVAD, 2) = ?")
+            sql.append("  AND LEFT(code_vad, 2) = ?")
             params.append(code_vad_parent[:2])
 
         # Filtre responsable si user non-ProdRezo
         if not acces_global:
-            # Scope : son affectation OU lignes Réseau (IDResp=0)
-            sql.append("  AND (IDResp = ? OR IDResp = 0)")
+            # Scope : son affectation OU lignes Réseau (id_resp=0)
+            sql.append("  AND (id_resp = ? OR id_resp = 0)")
             params.append(id_affectation_user)
 
         rows = db_adv.query("\n".join(sql), tuple(params))
 
-        # Collecte des IDResp rencontrés pour batch lookup organigramme + societe
+        # Collecte des id_resp rencontrés pour batch lookup organigramme + societe
         resp_ids: set[int] = set()
         for r in rows:
-            resp_ids.add(_to_int(r.get("IDResp")))
+            resp_ids.add(_to_int(r.get("id_resp")))
         resp_ids.discard(0)
 
-        # Batch lookup organigramme → IdSte/Lib_ORGA
+        # Batch lookup organigramme → id_ste/lib_orga
         orga_info: dict[int, dict] = {}
         if resp_ids:
             ids_sql = ",".join(str(i) for i in resp_ids)
             orga_rows = db_rh.query(
-                f"""SELECT idorganigramme, Lib_ORGA, IdSte
-                FROM organigramme
+                f"""SELECT idorganigramme, lib_orga, id_ste
+                FROM pgt_organigramme
                 WHERE idorganigramme IN ({ids_sql})"""
             )
             for o in orga_rows:
                 orga_info[_to_int(o.get("idorganigramme"))] = {
-                    "lib_orga": o.get("Lib_ORGA") or "",
-                    "id_ste": _to_int(o.get("IdSte")),
+                    "lib_orga": o.get("lib_orga") or "",
+                    "id_ste": _to_int(o.get("id_ste")),
                 }
 
-        # Batch lookup societe → RaisonSociale/Logo (GUIMMICK)
+        # Batch lookup societe → raison_sociale/Logo (guimmick = bytea)
         ste_ids: set[int] = {v["id_ste"] for v in orga_info.values() if v["id_ste"]}
         ste_info: dict[int, dict] = {}
         if ste_ids:
             ids_sql = ",".join(str(i) for i in ste_ids)
             ste_rows = db_rh.query(
-                f"""SELECT IdSte, RaisonSociale, GUIMMICK
-                FROM societe
-                WHERE IdSte IN ({ids_sql})"""
+                f"""SELECT id_ste, raison_sociale, guimmick
+                FROM pgt_societe
+                WHERE id_ste IN ({ids_sql})"""
             )
             for s in ste_rows:
-                ste_info[_to_int(s.get("IdSte"))] = {
-                    "rs": s.get("RaisonSociale") or "",
-                    "logo": s.get("GUIMMICK") or "",
+                raw_logo = s.get("guimmick")
+                logo_str = ""
+                if raw_logo:
+                    if isinstance(raw_logo, memoryview):
+                        raw_logo = bytes(raw_logo)
+                    if isinstance(raw_logo, (bytes, bytearray)):
+                        logo_str = base64.b64encode(raw_logo).decode("ascii")
+                    else:
+                        logo_str = str(raw_logo)
+                ste_info[_to_int(s.get("id_ste"))] = {
+                    "rs": s.get("raison_sociale") or "",
+                    "logo": logo_str,
                 }
 
         # Agrégation
         for r in rows:
-            code_vad = (r.get("CodeVAD") or "").strip()
+            code_vad = (r.get("code_vad") or "").strip()
             if not code_vad or code_vad == "00-00":
                 continue
 
             dep = code_vad[:2]
-            id_resp = _to_int(r.get("IDResp"))
+            id_resp = _to_int(r.get("id_resp"))
 
             # Clé d'agrégation : dep en vue principale, codeVAD complet en vue détail
             key = code_vad if code_vad_parent else dep
@@ -344,11 +353,11 @@ def list_clusters(
                     "nb_fib_hors_att": 0,
                 }
 
-            acc[key]["obj_ctt"] += _to_int(r.get("ObjCtt"))
-            acc[key]["nb_ctt_brut"] += _to_int(r.get("NbCttBrut"))
-            acc[key]["nb_s1"] += _to_int(r.get("nbS1"))
-            acc[key]["nb_racc_sfr"] += _to_int(r.get("nbRaccSFR"))
-            acc[key]["nb_fib_hors_att"] += _to_int(r.get("nbFibHorsAtt"))
+            acc[key]["obj_ctt"] += _to_int(r.get("obj_ctt"))
+            acc[key]["nb_ctt_brut"] += _to_int(r.get("nb_ctt_brut"))
+            acc[key]["nb_s1"] += _to_int(r.get("nb_s1"))
+            acc[key]["nb_racc_sfr"] += _to_int(r.get("nb_racc_sfr"))
+            acc[key]["nb_fib_hors_att"] += _to_int(r.get("nb_fib_hors_att"))
 
     # Pour la vue détail (sous-clusters), enrichir avec le NomCluster depuis SFR_Cluster
     if code_vad_parent and acc:
@@ -356,13 +365,13 @@ def list_clusters(
         codes_quoted = ",".join("'" + c.replace("'", "''") + "'" for c in codes_vad)
         if codes_quoted:
             cluster_rows = db_adv.query(
-                f"""SELECT CodeVAD, NomCluster
-                FROM SFR_Cluster
-                WHERE CodeVAD IN ({codes_quoted})
-                  AND ModifELEM NOT LIKE '%suppr%'"""
+                f"""SELECT code_vad, nom_cluster
+                FROM pgt_sfr_cluster
+                WHERE code_vad IN ({codes_quoted})
+                  AND modif_elem NOT LIKE '%suppr%'"""
             )
             nom_par_vad = {
-                (c.get("CodeVAD") or "").strip(): (c.get("NomCluster") or "").strip()
+                (c.get("code_vad") or "").strip(): (c.get("nom_cluster") or "").strip()
                 for c in cluster_rows
             }
             for v in acc.values():
@@ -410,15 +419,15 @@ def list_groupements() -> list[dict]:
     if not GROUPEMENTS_ORGAS:
         return []
 
-    db_rh = get_connection("rh")
+    db_rh = get_pg_connection("rh")
     ids_sql = ",".join(str(i) for i in GROUPEMENTS_ORGAS)
     rows = db_rh.query(
-        f"""SELECT idorganigramme, Lib_ORGA
-        FROM organigramme
+        f"""SELECT idorganigramme, lib_orga
+        FROM pgt_organigramme
         WHERE idorganigramme IN ({ids_sql})"""
     )
     label_par_id: dict[int, str] = {
-        _to_int(r.get("idorganigramme")): (r.get("Lib_ORGA") or "").strip()
+        _to_int(r.get("idorganigramme")): (r.get("lib_orga") or "").strip()
         for r in rows
     }
 

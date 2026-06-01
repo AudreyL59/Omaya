@@ -47,7 +47,7 @@ au fur et à mesure des besoins de test.
 
 from __future__ import annotations
 
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 from .service import (
     _clean_id,
@@ -100,22 +100,22 @@ def _info_dpae(id_tickets: list[int]) -> dict[int, str]:
     """Cas 3 (DPAE) et 21 (DPAE à venir) — TK_DemandeDPAE dans ticket_dpae."""
     if not id_tickets:
         return {}
-    db = get_connection("ticket_dpae")
+    db = get_pg_connection("ticket_dpae")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Nom, Prenom FROM TK_DemandeDPAE
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, nom, prenom FROM pgt_tk_demande_dpae
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     out: dict[int, str] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        nom = (r.get("Nom") or "").strip()
-        prenom = (r.get("Prenom") or "").strip()
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        nom = (r.get("nom") or "").strip()
+        prenom = (r.get("prenom") or "").strip()
         if idl and (nom or prenom):
             out[idl] = f"pour {nom} {_capit(prenom)}".strip()
     return out
@@ -125,27 +125,27 @@ def _info_call_sfr(id_tickets: list[int]) -> dict[int, str]:
     """Cas 20 — TK_CallSFR dans ticket_bo."""
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, NomClient, PrenomClient, CP, VILLE
-            FROM TK_CallSFR
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, nom_client, prenom_client, cp, ville
+            FROM pgt_tk_call_sfr
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     out: dict[int, str] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
         if not idl:
             continue
-        nom = (r.get("NomClient") or "").strip()
-        prenom = (r.get("PrenomClient") or "").strip()
-        cp = (r.get("CP") or "").strip()
-        ville = (r.get("VILLE") or "").strip()
+        nom = (r.get("nom_client") or "").strip()
+        prenom = (r.get("prenom_client") or "").strip()
+        cp = (r.get("cp") or "").strip()
+        ville = (r.get("ville") or "").strip()
         # WinDev : ExtraitChaîne(VILLE,1,"(") → on coupe à "("
         if "(" in ville:
             ville = ville.split("(", 1)[0].strip()
@@ -157,27 +157,27 @@ def _info_call_energie(id_tickets: list[int]) -> dict[int, str]:
     """Cas 22 — TK_Call dans ticket_bo."""
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, NomClient, PrenomClient, CP, VILLE
-            FROM TK_Call
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, nom_client, prenom_client, cp, ville
+            FROM pgt_tk_call
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     out: dict[int, str] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
         if not idl:
             continue
-        nom = (r.get("NomClient") or "").strip()
-        prenom = (r.get("PrenomClient") or "").strip()
-        cp = (r.get("CP") or "").strip()
-        ville = (r.get("VILLE") or "").strip()
+        nom = (r.get("nom_client") or "").strip()
+        prenom = (r.get("prenom_client") or "").strip()
+        cp = (r.get("cp") or "").strip()
+        ville = (r.get("ville") or "").strip()
         if "(" in ville:
             ville = ville.split("(", 1)[0].strip()
         out[idl] = f"pour {nom} {_capit(prenom)}, {cp} {ville}".strip()
@@ -188,7 +188,7 @@ def _info_via_id_salarie(
     id_tickets: list[int],
     db_key: str,
     table: str,
-    id_col: str = "IDSalarie",
+    id_col: str = "id_salarie",
     prefix: str = "pour ",
 ) -> dict[int, str]:
     """Cas générique : table satellite (db_key.table) avec une colonne
@@ -199,22 +199,22 @@ def _info_via_id_salarie(
     """
     if not id_tickets:
         return {}
-    db = get_connection(db_key)
+    db = get_pg_connection(db_key)
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, {id_col}
+            f"""SELECT id_tk_liste, {id_col}
             FROM {table}
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     # Map id_ticket → id_salarie
     ticket_to_salarie: dict[int, int] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
         ids = _clean_id(_to_int(r.get(id_col)))
         if idl and ids:
             ticket_to_salarie[idl] = ids
@@ -233,23 +233,23 @@ def _info_avance(id_tickets: list[int]) -> dict[int, str]:
     """Cas 10 — TK_DemandeAvance.Bénéficiaire + Montant."""
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Bénéficiaire, Montant
-            FROM TK_DemandeAvance
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, beneficiaire, montant
+            FROM pgt_tk_demande_avance
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     ticket_to: dict[int, tuple[int, str]] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        ids = _clean_id(_to_int(r.get("Bénéficiaire")))
-        montant = _to_montant(r.get("Montant"))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        ids = _clean_id(_to_int(r.get("beneficiaire")))
+        montant = _to_montant(r.get("montant"))
         if idl and ids:
             ticket_to[idl] = (ids, montant)
     if not ticket_to:
@@ -271,23 +271,23 @@ def _info_attr_exocash(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, IDSalarie, MontantEC
-            FROM Tk_DemandeAttExoCash
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, id_salarie, montant_ec
+            FROM pgt_tk_demande_att_exo_cash
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     ticket_to: dict[int, tuple[int, str]] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        ids = _clean_id(_to_int(r.get("IDSalarie")))
-        mt = _to_montant(r.get("MontantEC"))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        ids = _clean_id(_to_int(r.get("id_salarie")))
+        mt = _to_montant(r.get("montant_ec"))
         if idl and ids:
             ticket_to[idl] = (ids, mt)
     sals = load_salaries_minimal({ids for ids, _ in ticket_to.values()})
@@ -307,25 +307,25 @@ def _info_sos_bo(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     # 1. Demandes
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Bénéficiaire, IDTK_TypeSOS_BO
-            FROM TK_DemandeSOS_BO
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, beneficiaire, id_tk_type_sos_bo
+            FROM pgt_tk_demande_sos_bo
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     ticket_to: dict[int, tuple[int, int]] = {}
     type_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        ben = _clean_id(_to_int(r.get("Bénéficiaire")))
-        idtype = _clean_id(_to_int(r.get("IDTK_TypeSOS_BO")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        ben = _clean_id(_to_int(r.get("beneficiaire")))
+        idtype = _clean_id(_to_int(r.get("id_tk_type_sos_bo")))
         if idl:
             ticket_to[idl] = (ben, idtype)
             type_ids.add(idtype)
@@ -336,13 +336,13 @@ def _info_sos_bo(id_tickets: list[int]) -> dict[int, str]:
             ids_t = ",".join(str(i) for i in type_ids if i)
             if ids_t:
                 trows = db.query(
-                    f"""SELECT IDTK_TypeSOS_BO, Lib_TypeSos
-                    FROM TK_TypeSOS_BO
-                    WHERE IDTK_TypeSOS_BO IN ({ids_t})"""
+                    f"""SELECT id_tk_type_sos_bo, lib_type_sos
+                    FROM pgt_tk_type_sos_bo
+                    WHERE id_tk_type_sos_bo IN ({ids_t})"""
                 )
                 for t in trows:
-                    type_libs[_clean_id(_to_int(t.get("IDTK_TypeSOS_BO")))] = (
-                        t.get("Lib_TypeSos") or ""
+                    type_libs[_clean_id(_to_int(t.get("id_tk_type_sos_bo")))] = (
+                        t.get("lib_type_sos") or ""
                     ).strip()
         except Exception:
             pass
@@ -366,23 +366,23 @@ def _info_dpae_distrib(id_tickets: list[int]) -> dict[int, str]:
     """Cas 29 — TK_DemandeDPAE_Distrib.Nom + Prenom."""
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Nom, Prenom
-            FROM TK_DemandeDPAE_Distrib
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, nom, prenom
+            FROM pgt_tk_demande_dpae_distrib
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     out: dict[int, str] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        nom = (r.get("Nom") or "").strip()
-        prenom = (r.get("Prenom") or "").strip()
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        nom = (r.get("nom") or "").strip()
+        prenom = (r.get("prenom") or "").strip()
         if idl and (nom or prenom):
             out[idl] = f"pour {nom} {_capit(prenom)}".strip()
     return out
@@ -397,7 +397,7 @@ def _info_integration_distrib(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
@@ -405,29 +405,29 @@ def _info_integration_distrib(id_tickets: list[int]) -> dict[int, str]:
     raison_sociale: dict[int, str] = {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Nom, Prenom
-            FROM TK_DemandeDPAE_Distrib
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, nom, prenom
+            FROM pgt_tk_demande_dpae_distrib
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
         for r in rows:
-            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            idl = _clean_id(_to_int(r.get("id_tk_liste")))
             if idl:
                 nom_prenom[idl] = (
-                    (r.get("Nom") or "").strip(),
-                    (r.get("Prenom") or "").strip(),
+                    (r.get("nom") or "").strip(),
+                    (r.get("prenom") or "").strip(),
                 )
     except Exception:
         pass
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, RaisonSociale
-            FROM TK_DemandeDPAE_Distrib
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, raison_sociale
+            FROM pgt_tk_demande_dpae_distrib
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
         for r in rows:
-            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            idl = _clean_id(_to_int(r.get("id_tk_liste")))
             if idl:
-                raison_sociale[idl] = (r.get("RaisonSociale") or "").strip()
+                raison_sociale[idl] = (r.get("raison_sociale") or "").strip()
     except Exception:
         pass
     out: dict[int, str] = {}
@@ -448,23 +448,23 @@ def _info_facturation(id_tickets: list[int]) -> dict[int, str]:
     """Cas 33 — TK_DemandeFacturation.LibFacture + Montant."""
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, LibFacture, Montant
-            FROM TK_DemandeFacturation
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, lib_facture, montant
+            FROM pgt_tk_demande_facturation
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     out: dict[int, str] = {}
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        lib = (r.get("LibFacture") or "").strip()
-        mt = _to_int(r.get("Montant"))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        lib = (r.get("lib_facture") or "").strip()
+        mt = _to_int(r.get("montant"))
         if idl and (lib or mt):
             parts: list[str] = []
             if lib:
@@ -482,24 +482,24 @@ def _info_commande_fourniture(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Qté, IDTK_TypeCommande
-            FROM TK_DemandeFourniture
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, qte, id_tk_type_commande
+            FROM pgt_tk_demande_fourniture
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     grouped: dict[int, list[tuple[int, int]]] = {}  # id_ticket -> [(qte, id_typecmd)]
     type_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        qt = _to_int(r.get("Qté"))
-        idtc = _clean_id(_to_int(r.get("IDTK_TypeCommande")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        qt = _to_int(r.get("qte"))
+        idtc = _clean_id(_to_int(r.get("id_tk_type_commande")))
         if not idl:
             continue
         grouped.setdefault(idl, []).append((qt, idtc))
@@ -512,13 +512,13 @@ def _info_commande_fourniture(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in type_ids)
             trows = db.query(
-                f"""SELECT IDTK_TypeCommande, LibTypeBS
-                FROM TK_TypeCommande
-                WHERE IDTK_TypeCommande IN ({ids_t})"""
+                f"""SELECT id_tk_type_commande, lib_type_bs
+                FROM pgt_tk_type_commande
+                WHERE id_tk_type_commande IN ({ids_t})"""
             )
             for t in trows:
-                type_libs[_clean_id(_to_int(t.get("IDTK_TypeCommande")))] = (
-                    t.get("LibTypeBS") or ""
+                type_libs[_clean_id(_to_int(t.get("id_tk_type_commande")))] = (
+                    t.get("lib_type_bs") or ""
                 ).strip()
         except Exception:
             pass
@@ -547,29 +547,29 @@ def _info_reservation(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, Bénéficiaire, IDTK_TypeResaSSFam, AR
-            FROM TK_DemandeResa
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, beneficiaire, id_tk_type_resa_ss_fam, ar
+            FROM pgt_tk_demande_resa
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     base: dict[int, dict] = {}
     ssfam_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
         if not idl:
             continue
-        ssfam = _clean_id(_to_int(r.get("IDTK_TypeResaSSFam")))
+        ssfam = _clean_id(_to_int(r.get("id_tk_type_resa_ss_fam")))
         base[idl] = {
-            "ben": _clean_id(_to_int(r.get("Bénéficiaire"))),
+            "ben": _clean_id(_to_int(r.get("beneficiaire"))),
             "ssfam": ssfam,
-            "ar": bool(r.get("AR")),
+            "ar": bool(r.get("ar")),
         }
         if ssfam:
             ssfam_ids.add(ssfam)
@@ -577,14 +577,14 @@ def _info_reservation(id_tickets: list[int]) -> dict[int, str]:
     listebs: dict[int, str] = {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, ListeBénéSupp
-            FROM TK_DemandeResa
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, liste_bene_supp
+            FROM pgt_tk_demande_resa
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
         for r in rows:
-            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            idl = _clean_id(_to_int(r.get("id_tk_liste")))
             if idl:
-                listebs[idl] = (r.get("ListeBénéSupp") or "").strip()
+                listebs[idl] = (r.get("liste_bene_supp") or "").strip()
     except Exception:
         pass
     # Charge TypeResaSSFam → TypeResa → Lib_TypeResa
@@ -594,13 +594,13 @@ def _info_reservation(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in ssfam_ids)
             srows = db.query(
-                f"""SELECT IDTK_TypeResaSSFam, IDTK_TypeResa
-                FROM TK_TypeResaSSFam
-                WHERE IDTK_TypeResaSSFam IN ({ids_t})"""
+                f"""SELECT id_tk_type_resa_ss_fam, id_tk_type_resa
+                FROM pgt_tk_type_resa_ss_fam
+                WHERE id_tk_type_resa_ss_fam IN ({ids_t})"""
             )
             for s in srows:
-                idss = _clean_id(_to_int(s.get("IDTK_TypeResaSSFam")))
-                idr = _clean_id(_to_int(s.get("IDTK_TypeResa")))
+                idss = _clean_id(_to_int(s.get("id_tk_type_resa_ss_fam")))
+                idr = _clean_id(_to_int(s.get("id_tk_type_resa")))
                 if idss and idr:
                     ssfam_to_resa[idss] = idr
                     resa_ids.add(idr)
@@ -611,13 +611,13 @@ def _info_reservation(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in resa_ids)
             rrows = db.query(
-                f"""SELECT IDTK_TypeResa, Lib_TypeResa
-                FROM TK_TypeResa
-                WHERE IDTK_TypeResa IN ({ids_t})"""
+                f"""SELECT id_tk_type_resa, lib_type_resa
+                FROM pgt_tk_type_resa
+                WHERE id_tk_type_resa IN ({ids_t})"""
             )
             for r in rrows:
-                resa_libs[_clean_id(_to_int(r.get("IDTK_TypeResa")))] = (
-                    r.get("Lib_TypeResa") or ""
+                resa_libs[_clean_id(_to_int(r.get("id_tk_type_resa")))] = (
+                    r.get("lib_type_resa") or ""
                 ).strip()
         except Exception:
             pass
@@ -653,26 +653,26 @@ def _info_sos_juri(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, IDTK_TypeSOS_JU, IdElem
-            FROM TK_DemandeSOS_JU
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, id_tk_type_sos_ju, id_elem
+            FROM pgt_tk_demande_sos_ju
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     base: dict[int, dict] = {}
     type_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
         if not idl:
             continue
-        idtype = _clean_id(_to_int(r.get("IDTK_TypeSOS_JU")))
-        idelem = _clean_id(_to_int(r.get("IdElem")))
+        idtype = _clean_id(_to_int(r.get("id_tk_type_sos_ju")))
+        idelem = _clean_id(_to_int(r.get("id_elem")))
         base[idl] = {"idtype": idtype, "idelem": idelem}
         if idtype:
             type_ids.add(idtype)
@@ -680,14 +680,14 @@ def _info_sos_juri(id_tickets: list[int]) -> dict[int, str]:
     refs: dict[int, str] = {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, RefDemande
-            FROM TK_DemandeSOS_JU
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, ref_demande
+            FROM pgt_tk_demande_sos_ju
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
         for r in rows:
-            idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+            idl = _clean_id(_to_int(r.get("id_tk_liste")))
             if idl:
-                refs[idl] = (r.get("RefDemande") or "").strip()
+                refs[idl] = (r.get("ref_demande") or "").strip()
     except Exception:
         pass
     type_info: dict[int, dict] = {}
@@ -695,14 +695,14 @@ def _info_sos_juri(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in type_ids)
             trows = db.query(
-                f"""SELECT IDTK_TypeSOS_JU, Lib_TypeSos, TypeForm
-                FROM TK_TypeSOS_JU
-                WHERE IDTK_TypeSOS_JU IN ({ids_t})"""
+                f"""SELECT id_tk_type_sos_ju, lib_type_sos, type_form
+                FROM pgt_tk_type_sos_ju
+                WHERE id_tk_type_sos_ju IN ({ids_t})"""
             )
             for t in trows:
-                type_info[_clean_id(_to_int(t.get("IDTK_TypeSOS_JU")))] = {
-                    "lib": (t.get("Lib_TypeSos") or "").strip(),
-                    "form": (t.get("TypeForm") or "").strip(),
+                type_info[_clean_id(_to_int(t.get("id_tk_type_sos_ju")))] = {
+                    "lib": (t.get("lib_type_sos") or "").strip(),
+                    "form": (t.get("type_form") or "").strip(),
                 }
         except Exception:
             pass
@@ -720,14 +720,14 @@ def _info_sos_juri(id_tickets: list[int]) -> dict[int, str]:
     societes: dict[int, str] = {}
     if societe_ids:
         try:
-            db_rh = get_connection("rh")
+            db_rh = get_pg_connection("rh")
             ids_t = ",".join(str(i) for i in societe_ids)
             srows = db_rh.query(
-                f"""SELECT IdSte, RS_Interne FROM societe WHERE IdSte IN ({ids_t})"""
+                f"""SELECT id_ste, rs_interne FROM pgt_societe WHERE id_ste IN ({ids_t})"""
             )
             for s in srows:
-                societes[_clean_id(_to_int(s.get("IdSte")))] = (
-                    s.get("RS_Interne") or ""
+                societes[_clean_id(_to_int(s.get("id_ste")))] = (
+                    s.get("rs_interne") or ""
                 ).strip()
         except Exception:
             pass
@@ -766,23 +766,23 @@ def _info_call_sfr_ret_rdv_tech(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, IDcontrat
-            FROM TK_CallSFR_RetRDVTech
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, id_contrat
+            FROM pgt_tk_call_sfr_ret_rdv_tech
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     ticket_to_contrat: dict[int, int] = {}
     contrat_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        idc = _clean_id(_to_int(r.get("IDcontrat")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        idc = _clean_id(_to_int(r.get("id_contrat")))
         if idl and idc:
             ticket_to_contrat[idl] = idc
             contrat_ids.add(idc)
@@ -791,17 +791,17 @@ def _info_call_sfr_ret_rdv_tech(id_tickets: list[int]) -> dict[int, str]:
     contrat_to_client: dict[int, tuple[int, str]] = {}  # idc -> (idclient, numbs)
     client_ids: set[int] = set()
     try:
-        db_adv = get_connection("adv")
+        db_adv = get_pg_connection("adv")
         ids_t = ",".join(str(i) for i in contrat_ids)
         crows = db_adv.query(
-            f"""SELECT IDcontrat, IDclient, NumBS
-            FROM SFR_contrat
-            WHERE IDcontrat IN ({ids_t})"""
+            f"""SELECT id_contrat, id_client, num_bs
+            FROM pgt_sfr_contrat
+            WHERE id_contrat IN ({ids_t})"""
         )
         for c in crows:
-            idc = _clean_id(_to_int(c.get("IDcontrat")))
-            idcl = _clean_id(_to_int(c.get("IDclient")))
-            num = (c.get("NumBS") or "").strip()
+            idc = _clean_id(_to_int(c.get("id_contrat")))
+            idcl = _clean_id(_to_int(c.get("id_client")))
+            num = (c.get("num_bs") or "").strip()
             if idc:
                 contrat_to_client[idc] = (idcl, num)
                 if idcl:
@@ -811,14 +811,14 @@ def _info_call_sfr_ret_rdv_tech(id_tickets: list[int]) -> dict[int, str]:
     client_noms: dict[int, str] = {}
     if client_ids:
         try:
-            db_adv = get_connection("adv")
+            db_adv = get_pg_connection("adv")
             ids_t = ",".join(str(i) for i in client_ids)
             clrows = db_adv.query(
-                f"""SELECT IDclient, NOM FROM client WHERE IDclient IN ({ids_t})"""
+                f"""SELECT id_client, nom FROM pgt_client WHERE id_client IN ({ids_t})"""
             )
             for cl in clrows:
-                client_noms[_clean_id(_to_int(cl.get("IDclient")))] = (
-                    cl.get("NOM") or ""
+                client_noms[_clean_id(_to_int(cl.get("id_client")))] = (
+                    cl.get("nom") or ""
                 ).strip()
         except Exception:
             pass
@@ -838,24 +838,24 @@ def _info_facturation_distrib(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, IdSte, Montant
-            FROM TK_DemandeFacturationDistrib
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, id_ste, montant
+            FROM pgt_tk_demande_facturation_distrib
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     ticket_to: dict[int, tuple[int, str]] = {}
     ste_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        idste = _clean_id(_to_int(r.get("IdSte")))
-        mt = _to_montant(r.get("Montant"))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        idste = _clean_id(_to_int(r.get("id_ste")))
+        mt = _to_montant(r.get("montant"))
         if idl:
             ticket_to[idl] = (idste, mt)
             if idste:
@@ -863,14 +863,14 @@ def _info_facturation_distrib(id_tickets: list[int]) -> dict[int, str]:
     societes: dict[int, str] = {}
     if ste_ids:
         try:
-            db_rh = get_connection("rh")
+            db_rh = get_pg_connection("rh")
             ids_t = ",".join(str(i) for i in ste_ids)
             srows = db_rh.query(
-                f"""SELECT IdSte, RaisonSociale FROM societe WHERE IdSte IN ({ids_t})"""
+                f"""SELECT id_ste, raison_sociale FROM pgt_societe WHERE id_ste IN ({ids_t})"""
             )
             for s in srows:
-                societes[_clean_id(_to_int(s.get("IdSte")))] = (
-                    s.get("RaisonSociale") or ""
+                societes[_clean_id(_to_int(s.get("id_ste")))] = (
+                    s.get("raison_sociale") or ""
                 ).strip()
         except Exception:
             pass
@@ -894,43 +894,43 @@ def _info_doc_distrib(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, IDDoc_Distrib
-            FROM TK_DemandeDocDistrib
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, id_doc_distrib
+            FROM pgt_tk_demande_doc_distrib
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     ticket_to_doc: dict[int, int] = {}
     doc_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        idd = _clean_id(_to_int(r.get("IDDoc_Distrib")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        idd = _clean_id(_to_int(r.get("id_doc_distrib")))
         if idl and idd:
             ticket_to_doc[idl] = idd
             doc_ids.add(idd)
     if not doc_ids:
         return {}
-    db_rh = get_connection("rh")
+    db_rh = get_pg_connection("rh")
     doc_info: dict[int, dict] = {}
     typedoc_ids: set[int] = set()
     ste_ids: set[int] = set()
     try:
         ids_t = ",".join(str(i) for i in doc_ids)
         drows = db_rh.query(
-            f"""SELECT IDDoc_Distrib, IDTypeDocDistributeur, IdSte
-            FROM Doc_Distrib
-            WHERE IDDoc_Distrib IN ({ids_t})"""
+            f"""SELECT id_doc_distrib, id_type_doc_distributeur, id_ste
+            FROM pgt_doc_distrib
+            WHERE id_doc_distrib IN ({ids_t})"""
         )
         for d in drows:
-            idd = _clean_id(_to_int(d.get("IDDoc_Distrib")))
-            idtd = _clean_id(_to_int(d.get("IDTypeDocDistributeur")))
-            idste = _clean_id(_to_int(d.get("IdSte")))
+            idd = _clean_id(_to_int(d.get("id_doc_distrib")))
+            idtd = _clean_id(_to_int(d.get("id_type_doc_distributeur")))
+            idste = _clean_id(_to_int(d.get("id_ste")))
             if idd:
                 doc_info[idd] = {"idtd": idtd, "idste": idste}
                 if idtd:
@@ -944,13 +944,13 @@ def _info_doc_distrib(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in typedoc_ids)
             trows = db_rh.query(
-                f"""SELECT IDTypeDocDistributeur, LibDoc
-                FROM TypeDocDistributeur
-                WHERE IDTypeDocDistributeur IN ({ids_t})"""
+                f"""SELECT id_type_doc_distributeur, lib_doc
+                FROM pgt_type_doc_distributeur
+                WHERE id_type_doc_distributeur IN ({ids_t})"""
             )
             for t in trows:
-                typedoc_libs[_clean_id(_to_int(t.get("IDTypeDocDistributeur")))] = (
-                    t.get("LibDoc") or ""
+                typedoc_libs[_clean_id(_to_int(t.get("id_type_doc_distributeur")))] = (
+                    t.get("lib_doc") or ""
                 ).strip()
         except Exception:
             pass
@@ -959,11 +959,11 @@ def _info_doc_distrib(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in ste_ids)
             srows = db_rh.query(
-                f"""SELECT IdSte, RaisonSociale FROM societe WHERE IdSte IN ({ids_t})"""
+                f"""SELECT id_ste, raison_sociale FROM pgt_societe WHERE id_ste IN ({ids_t})"""
             )
             for s in srows:
-                societes[_clean_id(_to_int(s.get("IdSte")))] = (
-                    s.get("RaisonSociale") or ""
+                societes[_clean_id(_to_int(s.get("id_ste")))] = (
+                    s.get("raison_sociale") or ""
                 ).strip()
         except Exception:
             pass
@@ -991,42 +991,42 @@ def _info_pv_ulease(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, IdPC
-            FROM TK_DemandeSignPVUlease
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, id_pc
+            FROM pgt_tk_demande_sign_pv_ulease
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     ticket_to_pc: dict[int, int] = {}
     pc_ids: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        idpc = _clean_id(_to_int(r.get("IdPC")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        idpc = _clean_id(_to_int(r.get("id_pc")))
         if idl and idpc:
             ticket_to_pc[idl] = idpc
             pc_ids.add(idpc)
     if not pc_ids:
         return {}
-    db_ul = get_connection("ulease")
+    db_ul = get_pg_connection("ulease")
     # vehicule_Conducteur (PC) → IDvehicule
     pc_to_vehicule: dict[int, int] = {}
     veh_ids: set[int] = set()
     try:
         ids_t = ",".join(str(i) for i in pc_ids)
         vcrows = db_ul.query(
-            f"""SELECT IDvehiculePC, IDvehicule
-            FROM vehicule_Conducteur
-            WHERE IDvehiculePC IN ({ids_t})"""
+            f"""SELECT id_vehicule_pc, id_vehicule
+            FROM pgt_vehicule_conducteur
+            WHERE id_vehicule_pc IN ({ids_t})"""
         )
         for v in vcrows:
-            idpc = _clean_id(_to_int(v.get("IDvehiculePC")))
-            idv = _clean_id(_to_int(v.get("IDvehicule")))
+            idpc = _clean_id(_to_int(v.get("id_vehicule_pc")))
+            idv = _clean_id(_to_int(v.get("id_vehicule")))
             if idpc and idv:
                 pc_to_vehicule[idpc] = idv
                 veh_ids.add(idv)
@@ -1038,14 +1038,14 @@ def _info_pv_ulease(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in veh_ids)
             vfrows = db_ul.query(
-                f"""SELECT IDvehicule, IMMAT, IDVehicule_TypeCapacité
-                FROM vehicule_Fiche
-                WHERE IDvehicule IN ({ids_t})"""
+                f"""SELECT id_vehicule, immat, id_vehicule_type_capacite
+                FROM pgt_vehicule_fiche
+                WHERE id_vehicule IN ({ids_t})"""
             )
             for v in vfrows:
-                idv = _clean_id(_to_int(v.get("IDvehicule")))
-                immat = (v.get("IMMAT") or "").strip()
-                idtc = _clean_id(_to_int(v.get("IDVehicule_TypeCapacité")))
+                idv = _clean_id(_to_int(v.get("id_vehicule")))
+                immat = (v.get("immat") or "").strip()
+                idtc = _clean_id(_to_int(v.get("id_vehicule_type_capacite")))
                 if idv:
                     veh_info[idv] = {"immat": immat, "idtc": idtc, "modele": ""}
                     if idtc:
@@ -1057,14 +1057,14 @@ def _info_pv_ulease(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in veh_ids)
             mrows = db_ul.query(
-                f"""SELECT IDvehicule, Modèle
-                FROM vehicule_Fiche
-                WHERE IDvehicule IN ({ids_t})"""
+                f"""SELECT id_vehicule, modele
+                FROM pgt_vehicule_fiche
+                WHERE id_vehicule IN ({ids_t})"""
             )
             for m in mrows:
-                idv = _clean_id(_to_int(m.get("IDvehicule")))
+                idv = _clean_id(_to_int(m.get("id_vehicule")))
                 if idv in veh_info:
-                    veh_info[idv]["modele"] = (m.get("Modèle") or "").strip()
+                    veh_info[idv]["modele"] = (m.get("modele") or "").strip()
         except Exception:
             pass
     typecapa_libs: dict[int, str] = {}
@@ -1072,13 +1072,13 @@ def _info_pv_ulease(id_tickets: list[int]) -> dict[int, str]:
         try:
             ids_t = ",".join(str(i) for i in typecapa_ids)
             tcrows = db_ul.query(
-                f"""SELECT IDVehicule_TypeCapacité, Lib_Type
-                FROM Vehicule_TypeCapacité
-                WHERE IDVehicule_TypeCapacité IN ({ids_t})"""
+                f"""SELECT id_vehicule_type_capacite, lib_type
+                FROM pgt_vehicule_typecapacite
+                WHERE id_vehicule_type_capacite IN ({ids_t})"""
             )
             for t in tcrows:
-                typecapa_libs[_clean_id(_to_int(t.get("IDVehicule_TypeCapacité")))] = (
-                    t.get("Lib_Type") or ""
+                typecapa_libs[_clean_id(_to_int(t.get("id_vehicule_type_capacite")))] = (
+                    t.get("lib_type") or ""
                 ).strip()
         except Exception:
             pass
@@ -1109,15 +1109,15 @@ def _info_code_vendeur(id_tickets: list[int], desactivation: bool = False) -> di
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, TypeOri, IDElem, IDPartenaire
-            FROM TK_DemandeCodeVendeur
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, type_ori, id_elem, id_partenaire
+            FROM pgt_tk_demande_code_vendeur
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
@@ -1126,12 +1126,12 @@ def _info_code_vendeur(id_tickets: list[int], desactivation: bool = False) -> di
     salarie_ids: set[int] = set()
     distrib_ids: set[int] = set()  # IDTK_Liste de TK_DemandeDPAE_Distrib
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
         if not idl:
             continue
-        idp = _clean_id(_to_int(r.get("IDPartenaire")))
-        idelem = _clean_id(_to_int(r.get("IDElem")))
-        typeori = (r.get("TypeOri") or "").strip().upper()
+        idp = _clean_id(_to_int(r.get("id_partenaire")))
+        idelem = _clean_id(_to_int(r.get("id_elem")))
+        typeori = (r.get("type_ori") or "").strip().upper()
         base[idl] = {"typeori": typeori, "idelem": idelem, "idp": idp}
         if idp:
             part_ids.add(idp)
@@ -1144,15 +1144,15 @@ def _info_code_vendeur(id_tickets: list[int], desactivation: bool = False) -> di
     part_libs: dict[int, str] = {}
     if part_ids:
         try:
-            db_adv = get_connection("adv")
+            db_adv = get_pg_connection("adv")
             ids_t = ",".join(str(i) for i in part_ids)
             prows = db_adv.query(
-                f"""SELECT IDPartenaire, Lib_Partenaire FROM Partenaire
-                WHERE IDPartenaire IN ({ids_t})"""
+                f"""SELECT id_partenaire, lib_partenaire FROM pgt_partenaire
+                WHERE id_partenaire IN ({ids_t})"""
             )
             for p in prows:
-                part_libs[_clean_id(_to_int(p.get("IDPartenaire")))] = (
-                    p.get("Lib_Partenaire") or ""
+                part_libs[_clean_id(_to_int(p.get("id_partenaire")))] = (
+                    p.get("lib_partenaire") or ""
                 ).strip()
         except Exception:
             pass
@@ -1164,16 +1164,16 @@ def _info_code_vendeur(id_tickets: list[int], desactivation: bool = False) -> di
         try:
             ids_t = ",".join(str(i) for i in distrib_ids)
             drows = db.query(
-                f"""SELECT IDTK_Liste, Nom, Prenom
-                FROM TK_DemandeDPAE_Distrib
-                WHERE IDTK_Liste IN ({ids_t})"""
+                f"""SELECT id_tk_liste, nom, prenom
+                FROM pgt_tk_demande_dpae_distrib
+                WHERE id_tk_liste IN ({ids_t})"""
             )
             for d in drows:
-                idl_d = _clean_id(_to_int(d.get("IDTK_Liste")))
+                idl_d = _clean_id(_to_int(d.get("id_tk_liste")))
                 if idl_d:
                     distrib_names[idl_d] = (
-                        (d.get("Nom") or "").strip(),
-                        (d.get("Prenom") or "").strip(),
+                        (d.get("nom") or "").strip(),
+                        (d.get("prenom") or "").strip(),
                     )
         except Exception:
             pass
@@ -1200,23 +1200,23 @@ def _info_carte_pro(id_tickets: list[int]) -> dict[int, str]:
     """
     if not id_tickets:
         return {}
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     ids_sql = _ids_in_clause(id_tickets)
     if not ids_sql:
         return {}
     try:
         rows = db.query(
-            f"""SELECT IDTK_Liste, IDSalarie
-            FROM TK_DemandeCartePRO
-            WHERE IDTK_Liste IN ({ids_sql})"""
+            f"""SELECT id_tk_liste, id_salarie
+            FROM pgt_tk_demande_carte_pro
+            WHERE id_tk_liste IN ({ids_sql})"""
         )
     except Exception:
         return {}
     grouped: dict[int, list[int]] = {}
     all_salaries: set[int] = set()
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_Liste")))
-        ids = _clean_id(_to_int(r.get("IDSalarie")))
+        idl = _clean_id(_to_int(r.get("id_tk_liste")))
+        ids = _clean_id(_to_int(r.get("id_salarie")))
         if not idl or not ids:
             continue
         grouped.setdefault(idl, []).append(ids)
@@ -1273,15 +1273,15 @@ _DIRECT_CASES = {
 # dans `ticket_bo`. La doc projet liste les tables ticket_rh (CttW, Conges,
 # CdeExoCash, AttExoCash, Mutuelle, SignPVUlease, SortieRH, SOS_JU, ...).
 _SALARIE_CASES: dict[int, tuple[str, str, str, str]] = {
-    27: ("ticket_rh", "TK_DemandeMutuelle", "IDSalarie", "pour "),
-    24: ("ticket_rh", "TK_CdeExoCash", "IDSalarie", "pour "),
-    23: ("ticket_bo", "TK_DemandeCttCourtage", "IDSalarie", "pour "),
-    4:  ("ticket_rh", "TK_DemandeCttW", "IDSalarie", "pour "),
-    40: ("ticket_rh", "TK_DemandeCttW", "IDSalarie", "pour "),
-    12: ("ticket_rh", "TK_DemandeSortieRH", "IDSalarie", "pour "),
-    36: ("ticket_rh", "TK_DemandeSortieRH", "IDSalarie", "pour "),
-    37: ("ticket_rh", "TK_DemandeSortieRH", "IDSalarie", "pour "),
-    13: ("ticket_rh", "TK_DemandeConges", "IDSalarie", "pour "),
+    27: ("ticket_rh", "pgt_tk_demande_mutuelle", "id_salarie", "pour "),
+    24: ("ticket_rh", "pgt_tk_cde_exo_cash", "id_salarie", "pour "),
+    23: ("ticket_bo", "pgt_tk_demande_ctt_courtage", "id_salarie", "pour "),
+    4:  ("ticket_rh", "pgt_tk_demande_ctt_w", "id_salarie", "pour "),
+    40: ("ticket_rh", "pgt_tk_demande_ctt_w", "id_salarie", "pour "),
+    12: ("ticket_rh", "pgt_tk_demande_sortie_rh", "id_salarie", "pour "),
+    36: ("ticket_rh", "pgt_tk_demande_sortie_rh", "id_salarie", "pour "),
+    37: ("ticket_rh", "pgt_tk_demande_sortie_rh", "id_salarie", "pour "),
+    13: ("ticket_rh", "pgt_tk_demande_conges", "id_salarie", "pour "),
 }
 
 

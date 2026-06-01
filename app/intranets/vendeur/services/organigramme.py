@@ -12,7 +12,7 @@ import base64
 import struct
 from datetime import datetime
 
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 def _to_int(v) -> int:
@@ -47,7 +47,7 @@ def _descendants(all_orgas: list[dict], root_ids: set[int]) -> set[int]:
     while frontier:
         next_frontier = set()
         for o in all_orgas:
-            parent = _to_int(o.get("IdPARENT"))
+            parent = _to_int(o.get("id_parent"))
             if parent in frontier:
                 oid = _to_int(o.get("idorganigramme"))
                 if oid and oid not in result:
@@ -66,14 +66,14 @@ def get_organigramme(
     Retourne la liste des racines de l'arbre (chaque racine est un OrgaTreeNode
     récursif avec ses enfants et salariés).
     """
-    db_rh = get_connection("rh")
+    db_rh = get_pg_connection("rh")
     today = _today_windev()
 
     # 1. Toutes les orgas non-supprimées
     all_orgas = db_rh.query(
-        """SELECT idorganigramme, IdPARENT, Lib_ORGA, IDTypeNiveauOrga, IDTypeOrga
-        FROM organigramme
-        WHERE ModifELEM <> 'suppr'"""
+        """SELECT idorganigramme, id_parent, lib_orga, id_type_niveau_orga, id_type_orga
+        FROM pgt_organigramme
+        WHERE modif_elem <> 'suppr'"""
     )
 
     acces_global = "ProdRezo" in droits
@@ -84,10 +84,10 @@ def get_organigramme(
     else:
         # Orgas actifs du user
         user_rows = db_rh.query(
-            """SELECT DISTINCT idorganigramme FROM salarie_organigramme
-            WHERE IDSalarie = ?
-              AND ModifELEM <> 'suppr'
-              AND LEFT(DateDébut, 8) <= ?""",
+            """SELECT DISTINCT idorganigramme FROM pgt_salarie_organigramme
+            WHERE id_salarie = ?
+              AND modif_elem <> 'suppr'
+              AND LEFT(date_debut, 8) <= ?""",
             (id_salarie_user, today),
         )
         user_orga_ids = {_to_int(r.get("idorganigramme")) for r in user_rows}
@@ -103,10 +103,10 @@ def get_organigramme(
 
     # 2. Niveaux
     niv_rows = db_rh.query(
-        "SELECT IDTypeNiveauOrga, Lib_Niveau FROM TypeNiveauOrga"
+        "SELECT id_type_niveau_orga, lib_niveau FROM pgt_type_niveau_orga"
     )
     niveaux_map = {
-        _to_int(n.get("IDTypeNiveauOrga")): n.get("Lib_Niveau") or ""
+        _to_int(n.get("id_type_niveau_orga")): n.get("lib_niveau") or ""
         for n in niv_rows
     }
 
@@ -119,22 +119,22 @@ def get_organigramme(
 
     def fetch_chunk(chunk: list[int]) -> list[dict]:
         ids_sql = ",".join(str(cid) for cid in chunk)
-        db = get_connection("rh")
+        db = get_pg_connection("rh")
         return db.query(
-            f"""SELECT so.idorganigramme, s.IDSalarie, s.NOM, s.PRENOM,
-                se.RespEquipe, se.RespAdjoint, se.IdTypePoste,
-                se.DateAncienneté, se.DateDebut,
-                se.CJ_envoyé, se.FormationIAG, se.EnPause, se.Chauffeur
-            FROM salarie s
-            INNER JOIN salarie_embauche se ON s.IDSalarie = se.IDSalarie
-            INNER JOIN salarie_organigramme so ON s.IDSalarie = so.IDSalarie
+            f"""SELECT so.idorganigramme, s.id_salarie, s.nom, s.prenom,
+                se.resp_equipe, se.resp_adjoint, se.id_type_poste,
+                se.date_anciennete, se.date_debut,
+                se.cj_envoye, se.formation_iag, se.en_pause, se.chauffeur
+            FROM pgt_salarie s
+            INNER JOIN pgt_salarie_embauche se ON s.id_salarie = se.id_salarie
+            INNER JOIN pgt_salarie_organigramme so ON s.id_salarie = so.id_salarie
             WHERE so.idorganigramme IN ({ids_sql})
-              AND so.ModifELEM <> 'suppr'
-              AND LEFT(so.DateDébut, 8) <= ?
-              AND (so.DateFin = '' OR LEFT(so.DateFin, 8) >= ?)
-              AND se.EnActivité = 1
-              AND s.ModifELEM <> 'suppr'
-            ORDER BY se.RespEquipe DESC, se.RespAdjoint DESC, s.NOM ASC, s.PRENOM ASC""",
+              AND so.modif_elem <> 'suppr'
+              AND LEFT(so.date_debut, 8) <= ?
+              AND (so.date_fin = '' OR LEFT(so.date_fin, 8) >= ?)
+              AND se.en_activite = TRUE
+              AND s.modif_elem <> 'suppr'
+            ORDER BY se.resp_equipe DESC, se.resp_adjoint DESC, s.nom ASC, s.prenom ASC""",
             (today, today),
         )
 
@@ -151,22 +151,22 @@ def get_organigramme(
     )
 
     # Poste labels + catégorie
-    poste_ids = {_to_int(s.get("IdTypePoste")) for s in salaries_rows}
+    poste_ids = {_to_int(s.get("id_type_poste")) for s in salaries_rows}
     poste_ids.discard(0)
     poste_map: dict[int, dict] = {}
     if poste_ids:
         ids_poste_sql = ",".join(str(i) for i in poste_ids)
         p_rows = db_rh.query(
-            f"SELECT IdTypePoste, Lib_Poste, Catégorie FROM TypePoste WHERE IdTypePoste IN ({ids_poste_sql})"
+            f"SELECT id_type_poste, lib_poste, categorie FROM pgt_type_poste WHERE id_type_poste IN ({ids_poste_sql})"
         )
         for p in p_rows:
-            poste_map[_to_int(p.get("IdTypePoste"))] = {
-                "lib": p.get("Lib_Poste") or "",
-                "cat": p.get("Catégorie") or "",
+            poste_map[_to_int(p.get("id_type_poste"))] = {
+                "lib": p.get("lib_poste") or "",
+                "cat": p.get("categorie") or "",
             }
 
     # Mutuelles + absences en batch pour tous les salariés
-    all_salarie_ids = {_to_int(s.get("IDSalarie")) for s in salaries_rows}
+    all_salarie_ids = {_to_int(s.get("id_salarie")) for s in salaries_rows}
     all_salarie_ids.discard(0)
 
     mutuelle_by_sal: dict[int, dict] = {}
@@ -176,81 +176,81 @@ def get_organigramme(
         ids_sal_sql = ",".join(str(i) for i in all_salarie_ids)
 
         mut_rows = db_rh.query(
-            f"""SELECT sm.IDSalarie, sm.Adhésion, sm.IdMutuelle,
-                sm.Mutuelle_PasAdhésion, sm.Mutuelle_PasAdhésionJusquau,
-                m.Lib_Mutuelle
-            FROM salarie_mutuelle sm
-            LEFT JOIN mutuelle m ON m.IdMutuelle = sm.IdMutuelle
-            WHERE sm.IDSalarie IN ({ids_sal_sql})"""
+            f"""SELECT sm.id_salarie, sm.adhesion, sm.id_mutuelle,
+                sm.mutuelle_pas_adhesion, sm.mutuelle_pas_adhesion_jusquau,
+                m.lib_mutuelle
+            FROM pgt_salarie_mutuelle sm
+            LEFT JOIN pgt_mutuelle m ON m.id_mutuelle = sm.id_mutuelle
+            WHERE sm.id_salarie IN ({ids_sal_sql})"""
         )
         for m in mut_rows:
-            sid = _to_int(m.get("IDSalarie"))
+            sid = _to_int(m.get("id_salarie"))
             mutuelle_by_sal[sid] = {
-                "adhesion": bool(m.get("Adhésion")),
-                "id": _to_int(m.get("IdMutuelle")),
-                "lib": m.get("Lib_Mutuelle") or "",
-                "pas_adhesion": bool(m.get("Mutuelle_PasAdhésion")),
-                "fin_date": m.get("Mutuelle_PasAdhésionJusquau") or "",
+                "adhesion": bool(m.get("adhesion")),
+                "id": _to_int(m.get("id_mutuelle")),
+                "lib": m.get("lib_mutuelle") or "",
+                "pas_adhesion": bool(m.get("mutuelle_pas_adhesion")),
+                "fin_date": m.get("mutuelle_pas_adhesion_jusquau") or "",
             }
 
         # Absences (lib depuis TypeAbsence)
         abs_rows = db_rh.query(
-            f"""SELECT IDSalarie, IdAbsence, DateDEBUT, DateFIN, IDTypeAbsence
-            FROM absence
-            WHERE ModifELEM NOT LIKE '%suppr%'
-              AND IDSalarie IN ({ids_sal_sql})
-              AND LEFT(DateDEBUT, 8) <= ?
-              AND (DateFIN = '' OR LEFT(DateFIN, 8) >= ?)""",
+            f"""SELECT id_salarie, id_absence, date_debut, date_fin, id_type_absence
+            FROM pgt_absence
+            WHERE modif_elem NOT LIKE '%suppr%'
+              AND id_salarie IN ({ids_sal_sql})
+              AND LEFT(date_debut, 8) <= ?
+              AND (date_fin = '' OR LEFT(date_fin, 8) >= ?)""",
             (today, today),
         )
-        type_abs_ids = {_to_int(a.get("IDTypeAbsence")) for a in abs_rows}
+        type_abs_ids = {_to_int(a.get("id_type_absence")) for a in abs_rows}
         type_abs_ids.discard(0)
         type_abs_map: dict[int, str] = {}
         if type_abs_ids:
             ta_sql = ",".join(str(i) for i in type_abs_ids)
             ta_rows = db_rh.query(
-                f"SELECT IDTypeAbsence, Lib_Absence FROM TypeAbsence WHERE IDTypeAbsence IN ({ta_sql})"
+                f"SELECT id_type_absence, lib_absence FROM pgt_type_absence WHERE id_type_absence IN ({ta_sql})"
             )
             for t in ta_rows:
-                type_abs_map[_to_int(t.get("IDTypeAbsence"))] = t.get("Lib_Absence") or ""
+                type_abs_map[_to_int(t.get("id_type_absence"))] = t.get("lib_absence") or ""
 
         for a in abs_rows:
-            sid = _to_int(a.get("IDSalarie"))
+            sid = _to_int(a.get("id_salarie"))
             if sid in absence_by_sal:
                 continue  # premier trouvé suffit
-            id_type = _to_int(a.get("IDTypeAbsence"))
+            id_type = _to_int(a.get("id_type_absence"))
             absence_by_sal[sid] = {
                 "type_id": id_type,
                 "lib": type_abs_map.get(id_type, ""),
-                "date_debut": a.get("DateDEBUT") or "",
-                "date_fin": a.get("DateFIN") or "",
+                "date_debut": a.get("date_debut") or "",
+                "date_fin": a.get("date_fin") or "",
             }
 
     # Dernier contrat signé par vendeur (tous partenaires confondus)
     dernier_ctt_by_sal: dict[int, str] = {}
     if all_salarie_ids:
-        db_adv = get_connection("adv")
+        db_adv = get_pg_connection("adv")
         part_rows = db_adv.query(
-            "SELECT PréfixeBDD FROM Partenaire WHERE IsActif = 1 AND ModifElem <> 'suppr'"
+            "SELECT prefixe_bdd FROM pgt_partenaire WHERE is_actif = TRUE AND modif_elem <> 'suppr'"
         )
         prefixes = [
-            (p.get("PréfixeBDD") or "").strip()
+            (p.get("prefixe_bdd") or "").strip()
             for p in part_rows
         ]
         prefixes = [p for p in prefixes if p]
         ids_sal_sql_quoted = ",".join(f"'{i}'" for i in all_salarie_ids)
 
         def fetch_contrat(prefix: str) -> list[dict]:
-            db = get_connection("adv")
+            db = get_pg_connection("adv")
             try:
                 return db.query(
-                    f"""SELECT IDSalarie, MAX(DateSignature) AS MaxDate
-                    FROM {prefix}_contrat
-                    WHERE IDSalarie IN ({ids_sal_sql_quoted})
-                      AND DateSignature <> ''
-                      AND ModifElem NOT LIKE '%suppr%'
-                      AND LEFT(DateSignature, 8) <= ?
-                    GROUP BY IDSalarie""",
+                    f"""SELECT id_salarie, MAX(date_signature) AS maxdate
+                    FROM pgt_{prefix.lower()}_contrat
+                    WHERE id_salarie IN ({ids_sal_sql_quoted})
+                      AND date_signature <> ''
+                      AND modif_elem NOT LIKE '%suppr%'
+                      AND LEFT(date_signature, 8) <= ?
+                    GROUP BY id_salarie""",
                     (today,),
                 )
             except Exception as e:
@@ -263,11 +263,11 @@ def get_organigramme(
             with ThreadPoolExecutor(max_workers=8) as pool:
                 for rows in pool.map(fetch_contrat, prefixes):
                     for r in rows:
-                        sid = _to_int(r.get("IDSalarie"))
+                        sid = _to_int(r.get("id_salarie"))
                         d = (
-                            r.get("MaxDate")
-                            or r.get("maxdate")
-                            or r.get("MAX(DateSignature)")
+                            r.get("maxdate")
+                            or r.get("MaxDate")
+                            or r.get("max")
                             or ""
                         )
                         d = (d or "").strip()
@@ -293,30 +293,30 @@ def get_organigramme(
     seen: set[tuple[int, int]] = set()
     for s in salaries_rows:
         orga_id = _to_int(s.get("idorganigramme"))
-        sid = _to_int(s.get("IDSalarie"))
+        sid = _to_int(s.get("id_salarie"))
         key = (orga_id, sid)
         if key in seen:
             continue
         seen.add(key)
-        info_poste = poste_map.get(_to_int(s.get("IdTypePoste")), {})
+        info_poste = poste_map.get(_to_int(s.get("id_type_poste")), {})
         mut = mutuelle_by_sal.get(sid, {})
         absence = absence_by_sal.get(sid, {})
-        date_debut = s.get("DateAncienneté") or s.get("DateDebut") or ""
+        date_debut = s.get("date_anciennete") or s.get("date_debut") or ""
         salaries_by_orga.setdefault(orga_id, []).append({
             "id_salarie": str(sid),
-            "nom": s.get("NOM") or "",
-            "prenom": s.get("PRENOM") or "",
+            "nom": s.get("nom") or "",
+            "prenom": s.get("prenom") or "",
             "poste": info_poste.get("lib", ""),
             "categorie": info_poste.get("cat", ""),
-            "is_resp": bool(s.get("RespEquipe")),
-            "is_resp_adjoint": bool(s.get("RespAdjoint")),
+            "is_resp": bool(s.get("resp_equipe")),
+            "is_resp_adjoint": bool(s.get("resp_adjoint")),
             "date_debut": date_debut,
             "anciennete_jours": _jours_depuis(date_debut),
             "date_dernier_ctt": dernier_ctt_by_sal.get(sid, ""),
-            "cj_envoye": bool(s.get("CJ_envoyé")),
-            "formation_iag": bool(s.get("FormationIAG")),
-            "en_pause": bool(s.get("EnPause")),
-            "chauffeur": bool(s.get("Chauffeur")),
+            "cj_envoye": bool(s.get("cj_envoye")),
+            "formation_iag": bool(s.get("formation_iag")),
+            "en_pause": bool(s.get("en_pause")),
+            "chauffeur": bool(s.get("chauffeur")),
             "mutuelle_adhesion": mut.get("adhesion", False),
             "mutuelle_id": mut.get("id", 0),
             "mutuelle_lib": mut.get("lib", ""),
@@ -338,7 +338,7 @@ def get_organigramme(
     children_map: dict[int, list[int]] = {}
     for o in orgas_accessible:
         oid = _to_int(o.get("idorganigramme"))
-        parent_id = _to_int(o.get("IdPARENT"))
+        parent_id = _to_int(o.get("id_parent"))
         if parent_id in accessible_ids:
             children_map.setdefault(parent_id, []).append(oid)
 
@@ -357,21 +357,21 @@ def get_organigramme(
             roots = [
                 _to_int(o.get("idorganigramme"))
                 for o in orgas_accessible
-                if _to_int(o.get("IdPARENT")) == 0
+                if _to_int(o.get("id_parent")) == 0
             ]
     else:
         # Orgas avec PARENT_ID vide dans le scope
         roots = [
             _to_int(o.get("idorganigramme"))
             for o in orgas_accessible
-            if _to_int(o.get("IdPARENT")) == 0
+            if _to_int(o.get("id_parent")) == 0
         ]
         # Fallback : orgas dont le parent n'est pas accessible
         if not roots:
             roots = [
                 _to_int(o.get("idorganigramme"))
                 for o in orgas_accessible
-                if _to_int(o.get("IdPARENT")) not in accessible_ids
+                if _to_int(o.get("id_parent")) not in accessible_ids
             ]
 
     orga_by_id = {
@@ -380,11 +380,11 @@ def get_organigramme(
 
     def build_node(orga_id: int) -> dict:
         o = orga_by_id[orga_id]
-        id_niv = _to_int(o.get("IDTypeNiveauOrga"))
+        id_niv = _to_int(o.get("id_type_niveau_orga"))
         children_ids = children_map.get(orga_id, [])
         return {
             "id": str(orga_id),
-            "lib": o.get("Lib_ORGA") or "",
+            "lib": o.get("lib_orga") or "",
             "lib_niveau": niveaux_map.get(id_niv, ""),
             "id_type_niveau": id_niv,
             "salaries": salaries_by_orga.get(orga_id, []),

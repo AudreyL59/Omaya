@@ -20,16 +20,17 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 12
 
 
-def verify_password(encrypted_password: str, plain_password: str) -> bool:
+def verify_password(encrypted_password, plain_password: str) -> bool:
     """
-    Vérifie un mot de passe en déchiffrant le MDPCrypte stocké en base (AES-128).
+    Vérifie un mot de passe en déchiffrant le mdp_crypte stocké en base (AES-128).
     Compatible avec CrypteStandard/DécrypteStandard de WinDev.
+
+    `encrypted_password` arrive de PG comme `bytes` ou `memoryview` (colonne bytea).
     """
     if not encrypted_password:
         return False
     try:
-        import base64
-        encrypted_bytes = base64.b64decode(encrypted_password)
+        encrypted_bytes = bytes(encrypted_password)
 
         # WinDev CrypteStandard AES128 : IV = premiers 16 octets, reste = ciphertext
         iv = encrypted_bytes[:16]

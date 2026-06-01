@@ -22,7 +22,7 @@ import struct
 from collections import defaultdict
 from typing import Optional
 
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 def _to_int(v) -> int:
@@ -69,8 +69,8 @@ def calculer_stats_annonceurs(
     date_fin: str,     # YYYYMMDD
     id_annonceur: Optional[int] = None,
 ) -> dict:
-    db_rec = get_connection("recrutement")
-    db_rh = get_connection("rh")
+    db_rec = get_pg_connection("recrutement")
+    db_rh = get_pg_connection("rh")
 
     param_deb = f"{date_debut}000000"
     param_fin = f"{date_fin}235959"
@@ -86,15 +86,15 @@ def calculer_stats_annonceurs(
     # --- Requete principale CV annonceurs ---------------------------------
     sql_cv = f"""
         SELECT
-            c.IDcvtheque, c.Nom, c.Prenom, c.GSM,
-            c.IDCommunesFrance, c.IDcvsource, c.IdElemSource,
-            c.DateSAISIE, c.Opé_SAISIE,
-            c.DateREAC, c.Opé_REAC
-        FROM cvtheque c
-        WHERE c.ModifElem <> 'suppr'
-          AND c.IDcvsource = 2
-          AND c.IdElemSource {annonceur_sql}
-          AND (c.DateSAISIE BETWEEN ? AND ? OR c.DateREAC BETWEEN ? AND ?)
+            c.id_cvtheque, c.nom, c.prenom, c.gsm,
+            c.id_communes_france, c.id_cvsource, c.id_elem_source,
+            c.date_saisie, c.ope_saisie,
+            c.date_reac, c.ope_reac
+        FROM pgt_cvtheque c
+        WHERE c.modif_elem <> 'suppr'
+          AND c.id_cvsource = 2
+          AND c.id_elem_source {annonceur_sql}
+          AND (c.date_saisie BETWEEN ? AND ? OR c.date_reac BETWEEN ? AND ?)
     """
     params: list = [*annonceur_params, param_deb, param_fin, param_deb, param_fin]
     cv_rows = db_rec.query(sql_cv, tuple(params))
@@ -112,19 +112,19 @@ def calculer_stats_annonceurs(
     def _valid_id(n: int) -> bool:
         return 0 < n < 9_000_000_000_000_000_000
 
-    cv_rows = [r for r in cv_rows if _valid_id(_to_int(r.get("IdElemSource")))]
+    cv_rows = [r for r in cv_rows if _valid_id(_to_int(r.get("id_elem_source")))]
     if not cv_rows:
         return {"saisis": [], "resume": []}
 
     for r in cv_rows:
-        cvtheque_ids.add(_to_int(r.get("IDcvtheque")))
-        commune_ids.add(_to_int(r.get("IDCommunesFrance")))
-        annonceur_ids.add(_to_int(r.get("IdElemSource")))
-        date_saisie_ymd = _to_ymd(r.get("DateSAISIE") or "")
+        cvtheque_ids.add(_to_int(r.get("id_cvtheque")))
+        commune_ids.add(_to_int(r.get("id_communes_france")))
+        annonceur_ids.add(_to_int(r.get("id_elem_source")))
+        date_saisie_ymd = _to_ymd(r.get("date_saisie") or "")
         if date_saisie_ymd and date_debut <= date_saisie_ymd <= date_fin:
-            ope_ids.add(_to_int(r.get("Opé_SAISIE")))
+            ope_ids.add(_to_int(r.get("ope_saisie")))
         else:
-            ope_ids.add(_to_int(r.get("Opé_REAC")))
+            ope_ids.add(_to_int(r.get("ope_reac")))
     cvtheque_ids.discard(0)
     commune_ids.discard(0)
     ope_ids.discard(0)
@@ -135,24 +135,24 @@ def calculer_stats_annonceurs(
     if annonceur_ids:
         ids_sql = ",".join(str(i) for i in annonceur_ids)
         a_rows = db_rec.query(
-            f"SELECT IDCvAnnonceur, Lib_Annonceur FROM CvAnnonceur WHERE IDCvAnnonceur IN ({ids_sql})"
+            f"SELECT id_cv_annonceur, lib_annonceur FROM pgt_cv_annonceur WHERE id_cv_annonceur IN ({ids_sql})"
         )
         for a in a_rows:
-            annonceur_lib_map[_to_int(a.get("IDCvAnnonceur"))] = a.get("Lib_Annonceur") or ""
+            annonceur_lib_map[_to_int(a.get("id_cv_annonceur"))] = a.get("lib_annonceur") or ""
 
     # --- Batch : communes -------------------------------------------------
     commune_map: dict[int, str] = {}
     if commune_ids:
-        db_divers = get_connection("divers")
+        db_divers = get_pg_connection("divers")
         ids_sql = ",".join(str(i) for i in commune_ids)
         try:
             cf_rows = db_divers.query(
-                f"SELECT IDCommunesFrance, CodePostal, NomVille FROM CommunesFrance WHERE IDCommunesFrance IN ({ids_sql})"
+                f"SELECT id_communes_france, code_postal, nom_ville FROM pgt_communes_france WHERE id_communes_france IN ({ids_sql})"
             )
             for c in cf_rows:
-                cid = _to_int(c.get("IDCommunesFrance"))
-                cp = c.get("CodePostal") or ""
-                nom = c.get("NomVille") or ""
+                cid = _to_int(c.get("id_communes_france"))
+                cp = c.get("code_postal") or ""
+                nom = c.get("nom_ville") or ""
                 commune_map[cid] = f"{cp} {nom}".strip()
         except Exception:
             pass
@@ -162,12 +162,12 @@ def calculer_stats_annonceurs(
     if ope_ids:
         ids_sql = ",".join(str(i) for i in ope_ids)
         sal_rows = db_rh.query(
-            f"SELECT IDSalarie, Nom, Prenom FROM salarie WHERE IDSalarie IN ({ids_sql})"
+            f"SELECT id_salarie, nom, prenom FROM pgt_salarie WHERE id_salarie IN ({ids_sql})"
         )
         for s in sal_rows:
-            sid = _to_int(s.get("IDSalarie"))
-            nom = (s.get("Nom") or "").strip()
-            prenom = _capitalize(s.get("Prenom") or "")
+            sid = _to_int(s.get("id_salarie"))
+            nom = (s.get("nom") or "").strip()
+            prenom = _capitalize(s.get("prenom") or "")
             salarie_name_map[sid] = f"{nom} {prenom}".strip()
 
     # --- Batch : statuts actuels + statuts traites -----------------------
@@ -179,17 +179,17 @@ def calculer_stats_annonceurs(
         ids_sql = ",".join(str(i) for i in cvtheque_ids)
         try:
             cs_rows = db_rec.query(
-                f"""SELECT cs.IDcvtheque, cs.IdCvStatut, cs.Datecrea, st.LibStatut
-                FROM CvSuivi cs
-                LEFT JOIN CvStatut st ON st.IdCvStatut = cs.IdCvStatut
-                WHERE cs.IDcvtheque IN ({ids_sql})
-                  AND cs.ModifElem NOT LIKE '%suppr%'
-                ORDER BY cs.IDcvtheque, cs.Datecrea DESC"""
+                f"""SELECT cs.id_cvtheque, cs.id_cv_statut, cs.datecrea, st.lib_statut
+                FROM pgt_cvsuivi cs
+                LEFT JOIN pgt_cvstatut st ON st.id_cv_statut = cs.id_cv_statut
+                WHERE cs.id_cvtheque IN ({ids_sql})
+                  AND cs.modif_elem NOT LIKE '%suppr%'
+                ORDER BY cs.id_cvtheque, cs.datecrea DESC"""
             )
             for r in cs_rows:
-                cid = _to_int(r.get("IDcvtheque"))
-                id_stat = _to_int(r.get("IdCvStatut"))
-                lib = r.get("LibStatut") or ""
+                cid = _to_int(r.get("id_cvtheque"))
+                id_stat = _to_int(r.get("id_cv_statut"))
+                lib = r.get("lib_statut") or ""
                 if cid and cid not in statut_actuel_map:
                     statut_actuel_map[cid] = (id_stat, lib)
                 if cid and id_stat > 1 and cid not in statut_traite_map:
@@ -204,20 +204,20 @@ def calculer_stats_annonceurs(
         ids_sql = ",".join(str(i) for i in cvtheque_ids)
         try:
             rdv_rows = db_rec.query(
-                f"""SELECT cs.IDcvtheque, ac.IdCvStatut AS IdCvStatutAg, ac.Lib_Catégorie
-                FROM CvSuivi cs
-                INNER JOIN AgendaEvénement ae ON ae.IDCvSuivi = cs.IDCvSuivi
-                INNER JOIN AgendaCatégorie ac ON ac.IDAgendaCatégorie = ae.IDCatégorie
-                WHERE cs.IDcvtheque IN ({ids_sql})
-                  AND cs.TypeElem = 'RDV'
-                  AND ae.ModifElem <> 'suppr'"""
+                f"""SELECT cs.id_cvtheque, ac.id_cv_statut AS id_cv_statut_ag, ac.lib_categorie
+                FROM pgt_cvsuivi cs
+                INNER JOIN pgt_agenda_evenement ae ON ae.id_cv_suivi = cs.id_cv_suivi
+                INNER JOIN pgt_agenda_categorie ac ON ac.id_agenda_categorie = ae.id_categorie
+                WHERE cs.id_cvtheque IN ({ids_sql})
+                  AND cs.type_elem = 'RDV'
+                  AND ae.modif_elem <> 'suppr'"""
             )
             for r in rdv_rows:
-                cid = _to_int(r.get("IDcvtheque"))
+                cid = _to_int(r.get("id_cvtheque"))
                 if cid and cid not in rdv_map:
                     rdv_map[cid] = {
-                        "id_cv_statut_ag": _to_int(r.get("IdCvStatutAg")),
-                        "lib_categorie": r.get("Lib_Catégorie") or "",
+                        "id_cv_statut_ag": _to_int(r.get("id_cv_statut_ag")),
+                        "lib_categorie": r.get("lib_categorie") or "",
                     }
         except Exception:
             pass
@@ -228,10 +228,10 @@ def calculer_stats_annonceurs(
         ids_sql = ",".join(str(i) for i in cvtheque_ids)
         try:
             emb_rows = db_rh.query(
-                f"SELECT DISTINCT IDcvtheque FROM salarie_embauche WHERE IDcvtheque IN ({ids_sql})"
+                f"SELECT DISTINCT id_cvtheque FROM pgt_salarie_embauche WHERE id_cvtheque IN ({ids_sql})"
             )
             for e in emb_rows:
-                embauche_cvtheque.add(_to_int(e.get("IDcvtheque")))
+                embauche_cvtheque.add(_to_int(e.get("id_cvtheque")))
         except Exception:
             pass
 
@@ -249,23 +249,23 @@ def calculer_stats_annonceurs(
     saisis_list: list[dict] = []
 
     for r in cv_rows:
-        cid = _to_int(r.get("IDcvtheque"))
-        id_ann = _to_int(r.get("IdElemSource"))
+        cid = _to_int(r.get("id_cvtheque"))
+        id_ann = _to_int(r.get("id_elem_source"))
 
         # Operateur : saisie ou reactivation
-        date_saisie_raw = r.get("DateSAISIE") or ""
-        date_reac_raw = r.get("DateREAC") or ""
+        date_saisie_raw = r.get("date_saisie") or ""
+        date_reac_raw = r.get("date_reac") or ""
         date_saisie_ymd = _to_ymd(date_saisie_raw)
         if (
             date_saisie_ymd
             and date_debut <= date_saisie_ymd <= date_fin
-            and _to_int(r.get("Opé_SAISIE")) > 0
+            and _to_int(r.get("ope_saisie")) > 0
         ):
-            ope_id = _to_int(r.get("Opé_SAISIE"))
+            ope_id = _to_int(r.get("ope_saisie"))
             date_traitement = date_saisie_raw
             est_reac = False
         else:
-            ope_id = _to_int(r.get("Opé_REAC"))
+            ope_id = _to_int(r.get("ope_reac"))
             date_traitement = date_reac_raw
             est_reac = True
 
@@ -309,9 +309,9 @@ def calculer_stats_annonceurs(
             "ope_nom": salarie_name_map.get(ope_id, ""),
             "date_traitement": date_traitement,
             "est_reactivation": est_reac,
-            "nom_prenom": f"{(r.get('Nom') or '').strip()} {_capitalize(r.get('Prenom') or '')}".strip(),
-            "commune": commune_map.get(_to_int(r.get("IDCommunesFrance")), ""),
-            "tel": r.get("GSM") or "",
+            "nom_prenom": f"{(r.get('nom') or '').strip()} {_capitalize(r.get('prenom') or '')}".strip(),
+            "commune": commune_map.get(_to_int(r.get("id_communes_france")), ""),
+            "tel": r.get("gsm") or "",
             "statut_actuel": statut_actuel_lib,
             "id_statut_actuel": statut_actuel_id,
             "statut_rdv": lib_rdv,

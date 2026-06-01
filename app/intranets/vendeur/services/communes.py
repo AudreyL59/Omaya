@@ -2,10 +2,10 @@
 Recherche des villes par code postal.
 
 Transposition de l'endpoint REST WebRest_Omayapp/ListeVilleByCP.
-Table communes_france dans Bdd_Omaya_Divers.
+Table pgt_communes_france dans le schema divers de erp_db.
 """
 
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 def rechercher_par_cp(cp: str) -> list[dict]:
@@ -18,21 +18,21 @@ def rechercher_par_cp(cp: str) -> list[dict]:
     if not cp:
         return []
 
-    db = get_connection("divers")
+    db = get_pg_connection("divers")
     rows = db.query(
-        """SELECT IDCommunesFrance, NomVille, CodePostal
-        FROM CommunesFrance
-        WHERE ModifELEM NOT LIKE '%suppr%'
-          AND CodePostal LIKE ?
-        ORDER BY NomVille""",
+        """SELECT id_communes_france, nom_ville, code_postal
+        FROM pgt_communes_france
+        WHERE modif_elem NOT LIKE '%suppr%'
+          AND code_postal LIKE ?
+        ORDER BY nom_ville""",
         (f"{cp}%",),
     )
 
     return [
         {
-            "id": int(r.get("IDCommunesFrance") or 0),
-            "nom_ville": r.get("NomVille") or "",
-            "cp": r.get("CodePostal") or "",
+            "id": int(r.get("id_communes_france") or 0),
+            "nom_ville": r.get("nom_ville") or "",
+            "cp": r.get("code_postal") or "",
         }
         for r in rows
     ]

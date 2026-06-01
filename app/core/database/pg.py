@@ -23,7 +23,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PG_HOST = os.getenv("PG_HOST", "localhost")
+# PG_Host_Test (si defini) prime sur PG_HOST : permet au dev local d'avoir
+# un PG_HOST de prod dans .env tout en pointant ses tests sur une autre IP.
+PG_HOST = (
+    os.getenv("PG_HOST_TEST")
+    or os.getenv("PG_Host_Test")
+    or os.getenv("PG_HOST", "localhost")
+)
 PG_PORT = os.getenv("PG_PORT", "5432")
 PG_DBNAME = os.getenv("PG_DBNAME", "erp_db")
 PG_USER = os.getenv("PG_USER", "erp_user")

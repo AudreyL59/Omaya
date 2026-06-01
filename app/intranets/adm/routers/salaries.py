@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 router = APIRouter(prefix="/salaries", tags=["adm-salaries"])
 
@@ -27,29 +27,29 @@ def search_salaries(
     user: UserToken = Depends(get_current_user),
 ):
     """
-    Recherche les salaries actifs par nom (LIKE 'q%'). Case-insensitive cote HFSQL :
-    on met q en majuscules car la colonne NOM est stockee en majuscules.
+    Recherche les salaries actifs par nom (LIKE 'q%'). Les noms sont stockes
+    en majuscules en base : on uppercase la saisie pour matcher.
     """
     search = q.strip().upper()
     if not search:
         return []
 
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     like = f"{search}%"
     rows = db.query(
-        """SELECT DISTINCT s.IDSalarie, s.NOM, s.PRENOM
-        FROM salarie s
-        INNER JOIN salarie_embauche se ON s.IDSalarie = se.IDSalarie
-        WHERE se.EnActivité = 1
-          AND s.NOM LIKE ?
-        ORDER BY s.NOM, s.PRENOM""",
+        """SELECT DISTINCT s.id_salarie, s.nom, s.prenom
+        FROM pgt_salarie s
+        INNER JOIN pgt_salarie_embauche se ON s.id_salarie = se.id_salarie
+        WHERE se.en_activite = TRUE
+          AND s.nom LIKE ?
+        ORDER BY s.nom, s.prenom""",
         (like,),
     )
     return [
         {
-            "id_salarie": str(r.get("IDSalarie")),
-            "nom": (r.get("NOM") or "").strip(),
-            "prenom": (r.get("PRENOM") or "").strip(),
+            "id_salarie": str(r.get("id_salarie")),
+            "nom": (r.get("nom") or "").strip(),
+            "prenom": (r.get("prenom") or "").strip(),
         }
         for r in rows
     ]

@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from app.core.config import PRODUCTION_EXTRACTS_DIR
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 ProgressCb = Callable[[int, str], None]
@@ -164,16 +164,17 @@ def _req_equipe_terrain_by_salarie(db_rh, id_salarie: int, date_c_ymd: str) -> O
     Retourne l'affectation salarie_organigramme active à la date donnée.
     """
     rows = db_rh.query(
-        """SELECT TOP 1
-            so.idorganigramme, so.DateDébut, so.DateFin,
-            o.IdPARENT, o.Lib_ORGA, o.IDTypeOrga, o.IDTypeProduit
-        FROM salarie_organigramme so
-        INNER JOIN organigramme o ON o.idorganigramme = so.idorganigramme
-        WHERE so.IDSalarie = ?
-          AND so.ModifELEM NOT LIKE '%suppr%'
-          AND LEFT(so.DateDébut, 8) <= ?
-          AND (so.DateFin = '' OR LEFT(so.DateFin, 8) >= ?)
-        ORDER BY so.DateDébut DESC""",
+        """SELECT
+            so.idorganigramme, so.date_debut, so.date_fin,
+            o.id_parent, o.lib_orga, o.id_type_orga, o.id_type_produit
+        FROM pgt_salarie_organigramme so
+        INNER JOIN pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+        WHERE so.id_salarie = ?
+          AND so.modif_elem NOT LIKE '%suppr%'
+          AND LEFT(so.date_debut, 8) <= ?
+          AND (so.date_fin = '' OR LEFT(so.date_fin, 8) >= ?)
+        ORDER BY so.date_debut DESC
+        LIMIT 1""",
         (id_salarie, date_c_ymd, date_c_ymd),
     )
     return rows[0] if rows else None
@@ -200,10 +201,10 @@ def build_liste_affectations(
     if scope == 4:
         rows = db_rh.query(
             """SELECT idorganigramme
-            FROM organigramme
-            WHERE IdPARENT = 0
-              AND IdSte <> 4
-              AND ModifELEM <> 'suppr'"""
+            FROM pgt_organigramme
+            WHERE id_parent = 0
+              AND id_ste <> 4
+              AND modif_elem <> 'suppr'"""
         )
         segs = []
         for r in rows:
@@ -249,15 +250,15 @@ def build_liste_affectations(
     aff = _req_equipe_terrain_by_salarie(db_rh, id_sal, prod_deb)
     if aff:
         id_eq = _clean_id(_to_int(aff.get("idorganigramme")))
-        d_deb = _to_ymd(aff.get("DateDébut")) or prod_deb
-        d_fin = _to_ymd(aff.get("DateFin")) or prod_fin
+        d_deb = _to_ymd(aff.get("date_debut")) or prod_deb
+        d_fin = _to_ymd(aff.get("date_fin")) or prod_fin
         segs.append(AffSegment(
             id_salarie=id_sal, id_orga=id_eq,
             date_debut=d_deb, date_fin=d_fin or prod_fin,
         ))
 
         # Suivre les changements d'équipe pendant la période
-        date_ref = _to_ymd(aff.get("DateFin"))
+        date_ref = _to_ymd(aff.get("date_fin"))
         last_eq = id_eq
         while date_ref and date_ref <= prod_fin:
             # +1 jour
@@ -268,29 +269,29 @@ def build_liste_affectations(
                 break
             new_eq = _clean_id(_to_int(aff_next.get("idorganigramme")))
             if new_eq != last_eq:
-                d_deb_n = _to_ymd(aff_next.get("DateDébut")) or date_ref_next
-                d_fin_n = _to_ymd(aff_next.get("DateFin")) or prod_fin
+                d_deb_n = _to_ymd(aff_next.get("date_debut")) or date_ref_next
+                d_fin_n = _to_ymd(aff_next.get("date_fin")) or prod_fin
                 segs.append(AffSegment(
                     id_salarie=id_sal, id_orga=new_eq,
                     date_debut=d_deb_n, date_fin=d_fin_n,
                 ))
                 last_eq = new_eq
-            next_fin = _to_ymd(aff_next.get("DateFin"))
+            next_fin = _to_ymd(aff_next.get("date_fin"))
             if not next_fin or next_fin == date_ref:
                 break
             date_ref = next_fin
 
     # Dérogations (table DerogationOrga)
     dero_rows = db_rh.query(
-        """SELECT idorganigramme, DateDEBUT, DATEFIN
-        FROM DerogationOrga
-        WHERE ModifELEM NOT LIKE '%suppr%'
-          AND IDSalarie = ?""",
+        """SELECT idorganigramme, date_debut, date_fin
+        FROM pgt_derogation_orga
+        WHERE modif_elem NOT LIKE '%suppr%'
+          AND id_salarie = ?""",
         (id_sal,),
     )
     for d in dero_rows:
-        d_deb = _to_ymd(d.get("DateDEBUT"))
-        d_fin = _to_ymd(d.get("DATEFIN"))
+        d_deb = _to_ymd(d.get("date_debut"))
+        d_fin = _to_ymd(d.get("date_fin"))
         if d_deb and d_deb > prod_fin:
             continue
         if d_fin and d_fin < prod_deb:
@@ -334,22 +335,22 @@ def _load_salaries_info(db_rh, ids_salaries: set[int]) -> dict[int, dict]:
     for chunk in _chunked(all_ids, _IN_CHUNK):
         ids_sql = ",".join(str(i) for i in chunk)
         rows = db_rh.query(
-            f"""SELECT s.IDSalarie, s.Nom, s.Prenom,
-                se.EnActivité, se.DateAncienneté, se.IdTypePoste,
-                tp.Lib_Poste
-            FROM salarie s
-            INNER JOIN salarie_embauche se ON se.IDSalarie = s.IDSalarie
-            LEFT JOIN TypePoste tp ON tp.IdTypePoste = se.IdTypePoste
-            WHERE s.IDSalarie IN ({ids_sql})"""
+            f"""SELECT s.id_salarie, s.nom, s.prenom,
+                se.en_activite, se.date_anciennete, se.id_type_poste,
+                tp.lib_poste
+            FROM pgt_salarie s
+            INNER JOIN pgt_salarie_embauche se ON se.id_salarie = s.id_salarie
+            LEFT JOIN pgt_type_poste tp ON tp.id_type_poste = se.id_type_poste
+            WHERE s.id_salarie IN ({ids_sql})"""
         )
         for r in rows:
-            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            sid = _clean_id(_to_int(r.get("id_salarie")))
             out[sid] = {
-                "nom": r.get("Nom") or "",
-                "prenom": r.get("Prenom") or "",
-                "en_activite": bool(r.get("EnActivité")),
-                "date_embauche": _iso(r.get("DateAncienneté")),
-                "poste": r.get("Lib_Poste") or "",
+                "nom": r.get("nom") or "",
+                "prenom": r.get("prenom") or "",
+                "en_activite": bool(r.get("en_activite")),
+                "date_embauche": _iso(r.get("date_anciennete")),
+                "poste": r.get("lib_poste") or "",
             }
 
     # Date sortie pour les inactifs
@@ -357,15 +358,15 @@ def _load_salaries_info(db_rh, ids_salaries: set[int]) -> dict[int, dict]:
     for chunk in _chunked(inactifs, _IN_CHUNK):
         ids_sql_i = ",".join(str(i) for i in chunk)
         sortie_rows = db_rh.query(
-            f"""SELECT IDSalarie, DateSortieDemandée
-            FROM salarie_sortie
-            WHERE IDSalarie IN ({ids_sql_i})
-              AND ModifELEM <> 'suppr'"""
+            f"""SELECT id_salarie, date_sortie_demandee
+            FROM pgt_salarie_sortie
+            WHERE id_salarie IN ({ids_sql_i})
+              AND modif_elem <> 'suppr'"""
         )
         for r in sortie_rows:
-            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            sid = _clean_id(_to_int(r.get("id_salarie")))
             if sid in out:
-                out[sid]["date_sortie"] = _iso(r.get("DateSortieDemandée"))
+                out[sid]["date_sortie"] = _iso(r.get("date_sortie_demandee"))
 
     for v in out.values():
         v.setdefault("date_sortie", "")
@@ -385,17 +386,17 @@ def _load_orgas_info(db_rh, ids_orgas: set[int]) -> dict[int, dict]:
 
     # Couche 1 : orga directe
     rows = db_rh.query(
-        f"""SELECT idorganigramme, Lib_ORGA, IdPARENT
-        FROM organigramme
+        f"""SELECT idorganigramme, lib_orga, id_parent
+        FROM pgt_organigramme
         WHERE idorganigramme IN ({ids_sql})"""
     )
     out: dict[int, dict] = {}
     parent_ids: set[int] = set()
     for r in rows:
         oid = _clean_id(_to_int(r.get("idorganigramme")))
-        pid = _clean_id(_to_int(r.get("IdPARENT")))
+        pid = _clean_id(_to_int(r.get("id_parent")))
         out[oid] = {
-            "lib": r.get("Lib_ORGA") or "",
+            "lib": r.get("lib_orga") or "",
             "parent_id": pid,
             "parent_lib": "",
         }
@@ -406,12 +407,12 @@ def _load_orgas_info(db_rh, ids_orgas: set[int]) -> dict[int, dict]:
     if parent_ids:
         ids_sql_p = ",".join(str(i) for i in parent_ids)
         prows = db_rh.query(
-            f"""SELECT idorganigramme, Lib_ORGA
-            FROM organigramme
+            f"""SELECT idorganigramme, lib_orga
+            FROM pgt_organigramme
             WHERE idorganigramme IN ({ids_sql_p})"""
         )
         plibs = {
-            _clean_id(_to_int(p.get("idorganigramme"))): p.get("Lib_ORGA") or ""
+            _clean_id(_to_int(p.get("idorganigramme"))): p.get("lib_orga") or ""
             for p in prows
         }
         for v in out.values():
@@ -445,22 +446,25 @@ def _load_nb_jour_pres(
     out: dict[int, int] = {i: 0 for i in all_ids}
 
     # 1. Jours de semaine (lundi-vendredi) : requête groupée par salarié
+    # NB: HFSQL DAYOFWEEK retourne 1=dimanche..7=samedi → on garde la même
+    # logique en PG via EXTRACT(DOW FROM ...) qui renvoie 0=dimanche..6=samedi,
+    # donc lundi-vendredi = 1..5.
     for chunk in _chunked(all_ids, _IN_CHUNK):
         ids_sql = ",".join(str(i) for i in chunk)
         rows = db_rh.query(
-            f"""SELECT IDSalarie, COUNT(*) AS NbPres
-            FROM salarie_decl_presence
-            WHERE IDSalarie IN ({ids_sql})
-              AND DATE BETWEEN ? AND ?
-              AND ModifELEM <> 'suppr'
-              AND Presence = 1
-              AND DAYOFWEEK(DATE) BETWEEN 2 AND 6
-            GROUP BY IDSalarie""",
+            f"""SELECT id_salarie, COUNT(*) AS nb_pres
+            FROM pgt_salarie_decl_presence
+            WHERE id_salarie IN ({ids_sql})
+              AND date BETWEEN ? AND ?
+              AND modif_elem <> 'suppr'
+              AND presence = TRUE
+              AND EXTRACT(DOW FROM date) BETWEEN 1 AND 5
+            GROUP BY id_salarie""",
             (date_debut_ymd, date_fin_ymd),
         )
         for r in rows:
-            sid = _clean_id(_to_int(r.get("IDSalarie")))
-            out[sid] = out.get(sid, 0) + _to_int(r.get("NbPres"))
+            sid = _clean_id(_to_int(r.get("id_salarie")))
+            out[sid] = out.get(sid, 0) + _to_int(r.get("nb_pres"))
 
     # 2. Week-ends : pour chaque salarié × chaque WE où il a signé,
     # vérifier s'il a Presence=1 ce jour-là.
@@ -469,12 +473,12 @@ def _load_nb_jour_pres(
             continue
         for d in weekends:
             row = db_rh.query_one(
-                """SELECT COUNT(*) AS NbPres FROM salarie_decl_presence
-                WHERE IDSalarie = ? AND DATE = ?
-                  AND ModifELEM <> 'suppr' AND Presence = 1""",
+                """SELECT COUNT(*) AS nb_pres FROM pgt_salarie_decl_presence
+                WHERE id_salarie = ? AND date = ?
+                  AND modif_elem <> 'suppr' AND presence = TRUE""",
                 (id_sal, d),
             )
-            if row and _to_int(row.get("NbPres")) > 0:
+            if row and _to_int(row.get("nb_pres")) > 0:
                 out[id_sal] = out.get(id_sal, 0) + 1
 
     return out
@@ -494,15 +498,15 @@ def _load_etat_operateur(
     for chunk in _chunked(all_ids, _IN_CHUNK):
         ids_sql = ",".join(str(i) for i in chunk)
         rows = db_adv.query(
-            f"""SELECT IDetat, Lib_Etat, IDTypeEtat
-            FROM {prefix}_etatContrat
-            WHERE IDetat IN ({ids_sql})"""
+            f"""SELECT id_etat, lib_etat, id_type_etat
+            FROM pgt_{prefix.lower()}_etat_contrat
+            WHERE id_etat IN ({ids_sql})"""
         )
         for r in rows:
-            eid = _to_int(r.get("IDetat"))
+            eid = _to_int(r.get("id_etat"))
             out[eid] = {
-                "lib_etat": r.get("Lib_Etat") or "",
-                "id_type_etat": _to_int(r.get("IDTypeEtat")),
+                "lib_etat": r.get("lib_etat") or "",
+                "id_type_etat": _to_int(r.get("id_type_etat")),
             }
     return out
 
@@ -516,15 +520,15 @@ def _load_sfr_clusters(db_adv, ids_clusters: set[int]) -> dict[int, dict]:
     for chunk in _chunked(all_ids, _IN_CHUNK):
         ids_sql = ",".join(str(i) for i in chunk)
         rows = db_adv.query(
-            f"""SELECT IDSFR_Cluster, CodeVAD, NomCluster
-            FROM SFR_Cluster
-            WHERE IDSFR_Cluster IN ({ids_sql})"""
+            f"""SELECT id_sfr_cluster, code_vad, nom_cluster
+            FROM pgt_sfr_cluster
+            WHERE id_sfr_cluster IN ({ids_sql})"""
         )
         for r in rows:
-            cid = _clean_id(_to_int(r.get("IDSFR_Cluster")))
+            cid = _clean_id(_to_int(r.get("id_sfr_cluster")))
             out[cid] = {
-                "code_vad": r.get("CodeVAD") or "",
-                "nom_cluster": r.get("NomCluster") or "",
+                "code_vad": r.get("code_vad") or "",
+                "nom_cluster": r.get("nom_cluster") or "",
             }
     return out
 
@@ -545,24 +549,24 @@ def _load_contrat_options(
         ids_sql = ",".join(str(i) for i in chunk)
         try:
             rows = db_adv.query(
-                f"""SELECT IDcontrat, OPT_Entretien, OPT_EnergieVerteGaz,
-                    OPT_Reforestation, OPT_Protection, OPT_eFacture, OPT_PDC
-                FROM {prefix}_contrat_Option
-                WHERE IDcontrat IN ({ids_sql})
-                  AND ModifELEM <> 'suppr'"""
+                f"""SELECT id_contrat, opt_entretien, opt_energie_verte_gaz,
+                    opt_reforestation, opt_protection, opt_e_facture, opt_pdc
+                FROM pgt_{prefix.lower()}_contrat_option
+                WHERE id_contrat IN ({ids_sql})
+                  AND modif_elem <> 'suppr'"""
             )
         except Exception:
             # Partenaire sans table _contrat_Option → on retourne vide
             return {}
         for r in rows:
-            cid = _clean_id(_to_int(r.get("IDcontrat")))
+            cid = _clean_id(_to_int(r.get("id_contrat")))
             out[cid] = {
-                "opt_entretien": bool(r.get("OPT_Entretien")),
-                "opt_energie_verte_gaz": bool(r.get("OPT_EnergieVerteGaz")),
-                "opt_reforestation": bool(r.get("OPT_Reforestation")),
-                "opt_protection": bool(r.get("OPT_Protection")),
-                "opt_efacture": bool(r.get("OPT_eFacture")),
-                "opt_pdc": bool(r.get("OPT_PDC")),
+                "opt_entretien": bool(r.get("opt_entretien")),
+                "opt_energie_verte_gaz": bool(r.get("opt_energie_verte_gaz")),
+                "opt_reforestation": bool(r.get("opt_reforestation")),
+                "opt_protection": bool(r.get("opt_protection")),
+                "opt_efacture": bool(r.get("opt_e_facture")),
+                "opt_pdc": bool(r.get("opt_pdc")),
             }
     return out
 
@@ -580,8 +584,8 @@ def _load_heure_from_tk(num_bs_list: list[str]) -> dict[str, str]:
     if not nums:
         return {}
 
-    db_bo = get_connection("ticket_bo")
-    db_tk = get_connection("ticket")
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
     import logging
     logger = logging.getLogger(__name__)
 
@@ -592,39 +596,39 @@ def _load_heure_from_tk(num_bs_list: list[str]) -> dict[str, str]:
             nums_sql = ",".join("'" + n.replace("'", "''") + "'" for n in chunk)
             try:
                 rows = db_bo.query(
-                    f"SELECT {num_col}, IDTK_Liste FROM {table} WHERE {num_col} IN ({nums_sql})"
+                    f"SELECT {num_col}, id_tk_liste FROM {table} WHERE {num_col} IN ({nums_sql})"
                 )
             except Exception as e:
                 logger.warning(f"[heure_tk] {table} failed: {e}")
                 continue
             for r in rows:
                 num = str(r.get(num_col) or "")
-                idtk = _to_int(r.get("IDTK_Liste"))
+                idtk = _to_int(r.get("id_tk_liste"))
                 # Premier hit gagne (SFR prioritaire si la même réf est dans les 2)
                 if num and idtk and num not in num_to_idtk:
                     num_to_idtk[num] = idtk
 
     # 1) Lookup dans les 2 paniers
-    _query_panier("TK_CallSFR_Panier", "NUM")
-    _query_panier("TK_Call_Panier", "NumBS")
+    _query_panier("pgt_tk_call_sfr_panier", "num")
+    _query_panier("pgt_tk_call_panier", "num_bs")
 
     if not num_to_idtk:
         return {}
 
-    # 2) IDTK_Liste → DATECREA via TK_Liste
+    # 2) id_tk_liste → datecrea via TK_Liste
     idtk_to_datecrea: dict[int, str] = {}
     for chunk in _chunked(list(set(num_to_idtk.values())), _IN_CHUNK):
         ids_sql = ",".join(str(i) for i in chunk)
         try:
             rows = db_tk.query(
-                f"SELECT IDTK_Liste, DATECREA FROM TK_Liste WHERE IDTK_Liste IN ({ids_sql})"
+                f"SELECT id_tk_liste, datecrea FROM pgt_tk_liste WHERE id_tk_liste IN ({ids_sql})"
             )
         except Exception as e:
             logger.warning(f"[heure_tk] TK_Liste failed: {e}")
             continue
         for r in rows:
-            idtk = _to_int(r.get("IDTK_Liste"))
-            dc = str(r.get("DATECREA") or "")
+            idtk = _to_int(r.get("id_tk_liste"))
+            dc = str(r.get("datecrea") or "")
             if idtk and dc:
                 idtk_to_datecrea[idtk] = dc
 
@@ -649,7 +653,7 @@ def _load_numbs_in_tk_call_panier(num_bs_list: list[str]) -> set[str]:
     if not nums:
         return set()
 
-    db_bo = get_connection("ticket_bo")
+    db_bo = get_pg_connection("ticket_bo")
     found: set[str] = set()
     import logging
     logger = logging.getLogger(__name__)
@@ -657,13 +661,13 @@ def _load_numbs_in_tk_call_panier(num_bs_list: list[str]) -> set[str]:
         nums_sql = ",".join("'" + n.replace("'", "''") + "'" for n in chunk)
         try:
             rows = db_bo.query(
-                f"SELECT NumBS FROM TK_Call_Panier WHERE NumBS IN ({nums_sql})"
+                f"SELECT num_bs FROM pgt_tk_call_panier WHERE num_bs IN ({nums_sql})"
             )
         except Exception as e:
             logger.warning(f"[tk_call_panier] failed: {e}")
             continue
         for r in rows:
-            n = str(r.get("NumBS") or "")
+            n = str(r.get("num_bs") or "")
             if n:
                 found.add(n)
     return found
@@ -680,14 +684,14 @@ def _load_clients_info(db_adv, ids_clients: set[int]) -> dict[int, dict]:
     for chunk in _chunked(all_ids, _IN_CHUNK):
         ids_sql = ",".join(str(i) for i in chunk)
         rows = db_adv.query(
-            f"""SELECT IDclient, NOM, PRENOM, ADRESSE1, ADRESSE2, CP, VILLE,
-                MAIL, GSM, TEL, DATENAISS, Opt_Partenaire
-            FROM client
-            WHERE IDclient IN ({ids_sql})"""
+            f"""SELECT id_client, nom, prenom, adresse1, adresse2, cp, ville,
+                mail, gsm, tel, date_naiss, opt_partenaire
+            FROM pgt_client
+            WHERE id_client IN ({ids_sql})"""
         )
         for r in rows:
-            cid = _clean_id(_to_int(r.get("IDclient")))
-            naiss_ymd = _to_ymd(r.get("DATENAISS"))
+            cid = _clean_id(_to_int(r.get("id_client")))
+            naiss_ymd = _to_ymd(r.get("date_naiss"))
             age = 0
             if len(naiss_ymd) == 8:
                 try:
@@ -697,18 +701,18 @@ def _load_clients_info(db_adv, ids_clients: set[int]) -> dict[int, dict]:
                     )
                 except Exception:
                     age = 0
-            gsm = (r.get("GSM") or "").strip() or (r.get("TEL") or "").strip()
+            gsm = (r.get("gsm") or "").strip() or (r.get("tel") or "").strip()
             out[cid] = {
-                "nom": r.get("NOM") or "",
-                "prenom": r.get("PRENOM") or "",
-                "adresse1": r.get("ADRESSE1") or "",
-                "adresse2": r.get("ADRESSE2") or "",
-                "cp": r.get("CP") or "",
-                "ville": r.get("VILLE") or "",
-                "mail": r.get("MAIL") or "",
+                "nom": r.get("nom") or "",
+                "prenom": r.get("prenom") or "",
+                "adresse1": r.get("adresse1") or "",
+                "adresse2": r.get("adresse2") or "",
+                "cp": r.get("cp") or "",
+                "ville": r.get("ville") or "",
+                "mail": r.get("mail") or "",
                 "mobile": gsm,
                 "age": age,
-                "opt_partenaire": bool(r.get("Opt_Partenaire")),
+                "opt_partenaire": bool(r.get("opt_partenaire")),
             }
     return out
 
@@ -723,16 +727,16 @@ def _load_orga_descendants(db_rh, root_ids: set[int]) -> set[int]:
 
     # Charger toutes les orgas (petite table)
     all_orgas = db_rh.query(
-        """SELECT idorganigramme, IdPARENT
-        FROM organigramme
-        WHERE ModifELEM <> 'suppr'"""
+        """SELECT idorganigramme, id_parent
+        FROM pgt_organigramme
+        WHERE modif_elem <> 'suppr'"""
     )
 
     # Index parent -> enfants
     children_of: dict[int, list[int]] = {}
     for r in all_orgas:
         oid = _clean_id(_to_int(r.get("idorganigramme")))
-        pid = _clean_id(_to_int(r.get("IdPARENT")))
+        pid = _clean_id(_to_int(r.get("id_parent")))
         if oid:
             children_of.setdefault(pid, []).append(oid)
 
@@ -751,19 +755,19 @@ def _load_orga_descendants(db_rh, root_ids: set[int]) -> set[int]:
 def _load_type_etats(db_adv) -> dict[int, dict]:
     """Charge TypeEtatContrat en mémoire (petite table)."""
     rows = db_adv.query(
-        """SELECT IDTypeEtat, LibType, Couleur_R, Couleur_V, Couleur_B
-        FROM TypeEtatContrat
-        WHERE ModifELEM <> 'suppr'"""
+        """SELECT id_type_etat, lib_type, couleur_r, couleur_v, couleur_b
+        FROM pgt_type_etat_contrat
+        WHERE modif_elem <> 'suppr'"""
     )
     out: dict[int, dict] = {}
     for r in rows:
-        tid = _to_int(r.get("IDTypeEtat"))
+        tid = _to_int(r.get("id_type_etat"))
         out[tid] = {
-            "lib": r.get("LibType") or "",
+            "lib": r.get("lib_type") or "",
             "couleur": _winrgb_to_hex(
-                _to_int(r.get("Couleur_R")),
-                _to_int(r.get("Couleur_V")),
-                _to_int(r.get("Couleur_B")),
+                _to_int(r.get("couleur_r")),
+                _to_int(r.get("couleur_v")),
+                _to_int(r.get("couleur_b")),
             ),
         }
     return out
@@ -786,78 +790,80 @@ def _build_partenaire_sql(
     """
     etat_filter = ""
     if id_type_etat and id_type_etat > 0:
-        etat_filter = f" AND pe.IDTypeEtat = {int(id_type_etat)}"
+        etat_filter = f" AND pe.id_type_etat = {int(id_type_etat)}"
 
-    # SFR_contrat n'a pas de colonne MoisP classique — c'est MoisP_Ra
-    mois_p_col = "MoisP_Ra" if prefix == "SFR" else "MoisP"
+    # SFR_contrat n'a pas de colonne mois_p classique — c'est mois_p_ra
+    mois_p_col = "mois_p_ra" if prefix == "SFR" else "mois_p"
 
-    # Colonnes communes (toujours présentes)
+    # Colonnes communes (toujours présentes), alias en snake_case pour cohérence
+    # avec ce qu'attend la suite du code (r.get("id_contrat"), etc.).
     cols = [
-        "pc.IDcontrat", "pc.IDSalarie", "pc.NumBS", "pc.InfoInterne",
-        "pc.DateSAISIE", "pc.IDproduit", "pc.IDetatContrat",
-        "pc.DateSignature", "pc.nbPoints", "pc.IDclient",
-        "pc.Notation", "pc.NotationInfo",
-        f"pc.{mois_p_col} AS MoisP",
-        "pp.Lib_produit", "pp.PréfixeBDD", "pp.Famille", "pp.SousFAM",
-        "pe.Lib_Etat", "pe.IDTypeEtat", "pe.Lib_EtatVend",
+        "pc.id_contrat", "pc.id_salarie", "pc.num_bs", "pc.info_interne",
+        "pc.date_saisie", "pc.id_produit", "pc.id_etat_contrat",
+        "pc.date_signature", "pc.nb_points", "pc.id_client",
+        "pc.notation", "pc.notation_info",
+        f"pc.{mois_p_col} AS mois_p",
+        "pp.lib_produit", "pp.prefixe_bdd", "pp.famille", "pp.sous_fam",
+        "pe.lib_etat", "pe.id_type_etat", "pe.lib_etat_vend",
     ]
 
     # Colonnes spécifiques par partenaire
     if prefix == "SFR":
         cols += [
-            "pc.TypeVente", "pc.Technologie", "pc.Box8", "pc.Box8Vérif",
-            "pc.HorsCible", "pc.DateRDVTech", "pc.DateRaccActiv",
-            "pc.DateValidation", "pc.DateRésil",
-            "pc.Portabilité", "pc.DatePortabilité",
-            "pc.IDSFR_Cluster", "pc.IDetatSFR",
-            "pc.MoisP_Option", "pc.MoisP_RaDistri", "pc.MoisP_Va", "pc.MoisP_VaDistri",
-            "pc.PayeRaDistri", "pc.PayeVaDistri",
-            "pc.InternetGaranti", "pc.OffreSpeciale", "pc.ParcoursChainé",
-            "pc.PriseExistante", "pc.PriseSaisie",
-            "pc.NumPrise_SFR", "pc.NumPrise_Vend",
-            "pc.MobPropoVend", "pc.InterventionVend",
-            "pc.IssuTkDiff", "pc.RepAppSFR", "pc.Remise", "pc.SelfInstall",
-            "pc.ActivControl", "pc.ProcessingState",
-            "pc.InfoVenteSFR AS InfoPartagee",
+            "pc.type_vente", "pc.technologie", "pc.box8", "pc.box8_verif",
+            "pc.hors_cible", "pc.date_rdv_tech", "pc.date_racc_activ",
+            "pc.date_validation", "pc.date_resil",
+            "pc.portabilite", "pc.date_portabilite",
+            "pc.id_sfr_cluster", "pc.id_etat_sfr",
+            "pc.mois_p_option", "pc.mois_p_ra_distri", "pc.mois_p_va", "pc.mois_p_va_distri",
+            "pc.paye_ra_distri", "pc.paye_va_distri",
+            "pc.internet_garanti", "pc.offre_speciale", "pc.parcours_chaine",
+            "pc.prise_existante", "pc.prise_saisie",
+            "pc.num_prise_sfr", "pc.num_prise_vend",
+            "pc.mob_propo_vend", "pc.intervention_vend",
+            "pc.issu_tk_diff", "pc.rep_app_sfr", "pc.remise", "pc.self_install",
+            "pc.activ_control", "pc.processing_state",
+            "pc.info_vente_sfr AS info_partagee",
         ]
     else:
-        # Non-SFR : InfoPartagée + CodeENR
+        # Non-SFR : info_partagee + code_enr
         cols += [
-            "pc.InfoPartagée AS InfoPartagee",
-            "pc.CodeENR",
+            "pc.info_partagee AS info_partagee",
+            "pc.code_enr",
         ]
 
     if prefix == "OEN":
         cols += [
-            "pc.DateActivation", "pc.IdEtatOEN",
-            "pc.GazCarDeclaree", "pc.GazCarRelevée", "pc.ElecPuissance",
-            "pc.RefClient",
+            "pc.date_activation", "pc.id_etat_oen",
+            "pc.gaz_car_declaree", "pc.gaz_car_relevee", "pc.elec_puissance",
+            "pc.ref_client",
         ]
     elif prefix == "ENI":
         cols += [
-            "pc.GazCarDeclaree", "pc.GazCarRelevée", "pc.ElecPuissance",
-            "pc.GazActif", "pc.ElecActif",
+            "pc.gaz_car_declaree", "pc.gaz_car_relevee", "pc.elec_puissance",
+            "pc.gaz_actif", "pc.elec_actif",
         ]
     elif prefix == "STR":
-        cols += ["pc.Opt_Mandat AS OptNum"]
+        cols += ["pc.opt_mandat AS opt_num"]
     elif prefix == "VAL":
-        cols += ["pc.FormatNumérique AS OptNum"]
+        cols += ["pc.format_numerique AS opt_num"]
     elif prefix == "PRO":
-        cols += ["pc.DateRésil", "pc.DatePrem AS DateValidation"]
+        cols += ["pc.date_resil", "pc.date_prem AS date_validation"]
     elif prefix == "GEP":
         cols += [
-            "pc.ModePaiement", "pc.Pack", "pc.DuréeAb", "pc.RIB_Fourni",
+            "pc.mode_paiement", "pc.pack", "pc.duree_ab", "pc.rib_fourni",
         ]
 
     select_block = ",\n    ".join(cols)
+    pgt = f"pgt_{prefix.lower()}"
 
     return f"""
 SELECT
     {select_block}
-FROM {prefix}_produit pp, {prefix}_etatContrat pe, {prefix}_contrat pc
-WHERE pc.IDproduit = pp.IDproduit
-  AND pc.IDetatContrat = pe.IDetat
-  AND pc.ModifELEM NOT LIKE '%suppr%'
+FROM {pgt}_produit pp, {pgt}_etat_contrat pe, {pgt}_contrat pc
+WHERE pc.id_produit = pp.id_produit
+  AND pc.id_etat_contrat = pe.id_etat
+  AND pc.modif_elem NOT LIKE '%suppr%'
   AND ({cond_salaries})
   AND {crit_date}
   {etat_filter}
@@ -875,9 +881,9 @@ def _cond_salaries_from_segments(segs: list[AffSegment]) -> str:
     if not ids:
         return "1=1"
     if len(ids) == 1:
-        return f"pc.IDSalarie = {next(iter(ids))}"
+        return f"pc.id_salarie = {next(iter(ids))}"
     ids_sql = ",".join(str(i) for i in ids)
-    return f"pc.IDSalarie IN ({ids_sql})"
+    return f"pc.id_salarie IN ({ids_sql})"
 
 
 # ================================================================
@@ -919,8 +925,8 @@ def extract_job_to_parquet(
     id_type_etat = int(params.get("id_type_etat", 0) or 0)
 
     # Préparer les connexions
-    db_rh = get_connection("rh")
-    db_adv = get_connection("adv")
+    db_rh = get_pg_connection("rh")
+    db_adv = get_pg_connection("adv")
 
     # Étape 1 : construire la liste des segments d'affectation
     progress_cb(5, "Calcul des affectations")
@@ -939,15 +945,15 @@ def extract_job_to_parquet(
         pct_start = 15 + int((idx / n_parts) * 70)
         progress_cb(pct_start, f"Extraction {prefix} ({idx + 1}/{n_parts})")
 
-        # Critère de date : SFR spécial (MoisP_Ra), autres (MoisP) en mode 2 ;
-        # mode 1 : DateSignature
+        # Critère de date : SFR spécial (mois_p_ra), autres (mois_p) en mode 2 ;
+        # mode 1 : date_signature
         if mode_date == 2:
             if prefix == "SFR":
-                crit_date = f"pc.MoisP_Ra BETWEEN '{prod_deb}' AND '{prod_fin}'"
+                crit_date = f"pc.mois_p_ra BETWEEN '{prod_deb}' AND '{prod_fin}'"
             else:
-                crit_date = f"pc.MoisP BETWEEN '{prod_deb}' AND '{prod_fin}'"
+                crit_date = f"pc.mois_p BETWEEN '{prod_deb}' AND '{prod_fin}'"
         else:
-            crit_date = f"pc.DateSignature BETWEEN '{prod_deb}' AND '{prod_fin}'"
+            crit_date = f"pc.date_signature BETWEEN '{prod_deb}' AND '{prod_fin}'"
 
         sql = _build_partenaire_sql(prefix, cond_salaries, crit_date, id_type_etat)
         try:
@@ -967,9 +973,9 @@ def extract_job_to_parquet(
     progress_cb(85, f"Enrichissement ({len(all_rows)} contrats)")
 
     # Étape 4 : batch lookups
-    ids_salaries = {_clean_id(_to_int(r.get("IDSalarie"))) for r in all_rows}
+    ids_salaries = {_clean_id(_to_int(r.get("id_salarie"))) for r in all_rows}
     ids_salaries.discard(0)
-    ids_clients = {_clean_id(_to_int(r.get("IDclient"))) for r in all_rows}
+    ids_clients = {_clean_id(_to_int(r.get("id_client"))) for r in all_rows}
     ids_clients.discard(0)
 
     salaries_info = _load_salaries_info(db_rh, ids_salaries)
@@ -984,24 +990,24 @@ def extract_job_to_parquet(
     eni_rows = [r for r in all_rows if r["_prefix"] == "ENI"]
 
     sfr_etats_ope = _load_etat_operateur(
-        db_adv, "SFR", "IDetatSFR",
-        {_to_int(r.get("IDetatSFR")) for r in sfr_rows},
+        db_adv, "SFR", "id_etat_sfr",
+        {_to_int(r.get("id_etat_sfr")) for r in sfr_rows},
     )
     oen_etats_ope = _load_etat_operateur(
-        db_adv, "OEN", "IdEtatOEN",
-        {_to_int(r.get("IdEtatOEN")) for r in oen_rows},
+        db_adv, "OEN", "id_etat_oen",
+        {_to_int(r.get("id_etat_oen")) for r in oen_rows},
     )
     sfr_clusters = _load_sfr_clusters(
         db_adv,
-        {_clean_id(_to_int(r.get("IDSFR_Cluster"))) for r in sfr_rows},
+        {_clean_id(_to_int(r.get("id_sfr_cluster"))) for r in sfr_rows},
     )
     eni_opts = _load_contrat_options(
         db_adv, "ENI",
-        {_clean_id(_to_int(r.get("IDcontrat"))) for r in eni_rows},
+        {_clean_id(_to_int(r.get("id_contrat"))) for r in eni_rows},
     )
     oen_opts = _load_contrat_options(
         db_adv, "OEN",
-        {_clean_id(_to_int(r.get("IDcontrat"))) for r in oen_rows},
+        {_clean_id(_to_int(r.get("id_contrat"))) for r in oen_rows},
     )
 
     # Heure de signature via TK_Liste.DATECREA (cf. WinDev) pour :
@@ -1009,12 +1015,12 @@ def extract_job_to_parquet(
     # - Tout partenaire non-SFR (OEN/ENI/...) : DateSAISIE n'est pas fiable
     nums_for_tk: list[str] = []
     for r in all_rows:
-        nb = r.get("NumBS")
+        nb = r.get("num_bs")
         if not nb:
             continue
         if r["_prefix"] == "SFR":
-            famille = (r.get("Famille") or "").upper()
-            sous_fam = (r.get("SousFAM") or "").upper()
+            famille = (r.get("famille") or "").upper()
+            sous_fam = (r.get("sous_fam") or "").upper()
             if famille == "MOBILE" or "BOX5G" in sous_fam:
                 nums_for_tk.append(str(nb))
         else:
@@ -1023,8 +1029,8 @@ def extract_job_to_parquet(
 
     # Pour OEN/ENI : set des NumBS présents dans TK_Call_Panier — sert à
     # filtrer la base clients du tx de consentement (cf. WinDev StatsOEN/ENI).
-    nums_call = [str(r.get("NumBS")) for r in all_rows
-                 if r["_prefix"] in ("OEN", "ENI") and r.get("NumBS")]
+    nums_call = [str(r.get("num_bs")) for r in all_rows
+                 if r["_prefix"] in ("OEN", "ENI") and r.get("num_bs")]
     in_tk_call: set[str] = _load_numbs_in_tk_call_panier(nums_call)
 
     # Calcul affectation vendeur à la date signature (requête par salarié+date)
@@ -1042,16 +1048,16 @@ def extract_job_to_parquet(
             affect_cache[key] = {}
             return {}
         orga_id = _clean_id(_to_int(row.get("idorganigramme")))
-        parent_id = _clean_id(_to_int(row.get("IdPARENT")))
-        lib = row.get("Lib_ORGA") or ""
+        parent_id = _clean_id(_to_int(row.get("id_parent")))
+        lib = row.get("lib_orga") or ""
         parent_lib = ""
         if parent_id:
             prow = db_rh.query_one(
-                "SELECT Lib_ORGA FROM organigramme WHERE idorganigramme = ?",
+                "SELECT lib_orga FROM pgt_organigramme WHERE idorganigramme = ?",
                 (parent_id,),
             )
             if prow:
-                parent_lib = prow.get("Lib_ORGA") or ""
+                parent_lib = prow.get("lib_orga") or ""
         info = {
             "orga_id": orga_id,
             "equipe": lib,
@@ -1077,12 +1083,12 @@ def extract_job_to_parquet(
     for r in all_rows:
         prefix = r["_prefix"]
         stat_brut[prefix] = stat_brut.get(prefix, 0) + 1
-        id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
-        date_sign_ymd = _to_ymd(r.get("DateSignature"))
+        id_salarie = _clean_id(_to_int(r.get("id_salarie")))
+        date_sign_ymd = _to_ymd(r.get("date_signature"))
         # Pour mode "par mois de paiement", on considère la fin du mois de paiement
         date_c_ymd = date_sign_ymd
         if mode_date == 2:
-            mp = _to_ymd(r.get("MoisP"))
+            mp = _to_ymd(r.get("mois_p"))
             if mp:
                 date_c_ymd = _last_day_of_month(mp)
 
@@ -1113,15 +1119,15 @@ def extract_job_to_parquet(
                 continue
 
         sinfo = salaries_info.get(id_salarie, {})
-        cid = _clean_id(_to_int(r.get("IDclient")))
+        cid = _clean_id(_to_int(r.get("id_client")))
         cinfo = clients_info.get(cid, {})
-        id_te = _to_int(r.get("IDTypeEtat"))
+        id_te = _to_int(r.get("id_type_etat"))
         te = type_etats.get(id_te, {})
-        famille = r.get("Famille") or ""
-        sous_fam = r.get("SousFAM") or ""
+        famille = r.get("famille") or ""
+        sous_fam = r.get("sous_fam") or ""
         type_prod = sous_fam if prefix in ("ENI", "OEN") else famille
 
-        num_bs = r.get("NumBS") or ""
+        num_bs = r.get("num_bs") or ""
         is_ticket = num_bs[:2].upper() == "TK" if num_bs else False
 
         nb_ctt_brut = 0 if is_ticket else 1
@@ -1130,12 +1136,12 @@ def extract_job_to_parquet(
         if not is_ticket:
             if id_te != 3:
                 nb_ctt_hors_rejet = 1
-            elif prefix == "SFR" and _to_int(r.get("IDetatContrat")) == 73:
+            elif prefix == "SFR" and _to_int(r.get("id_etat_contrat")) == 73:
                 nb_ctt_hors_rejet = 1
             if id_te in (5, 8):
                 nb_ctt_paye = 1
 
-        lib_etat_vend = r.get("Lib_EtatVend") or r.get("Lib_Etat") or ""
+        lib_etat_vend = r.get("lib_etat_vend") or r.get("lib_etat") or ""
 
         # Heure signature :
         # - SFR Fibre (Famille != MOBILE et SousFAM ne contient pas BOX5G) :
@@ -1153,7 +1159,7 @@ def extract_job_to_parquet(
         else:
             heure_sign = heure_tk.get(num_bs, "")
         if not heure_sign:
-            ds = r.get("DateSAISIE") or ""
+            ds = r.get("date_saisie") or ""
             if ds:
                 s = str(ds)
                 iso_h = s[11:16] if len(s) >= 16 and s[10] in "T " else ""
@@ -1166,12 +1172,12 @@ def extract_job_to_parquet(
         etat_ope_type_id = 0
         etat_ope_type_lib = ""
         if prefix == "SFR":
-            eo = sfr_etats_ope.get(_to_int(r.get("IDetatSFR")), {})
+            eo = sfr_etats_ope.get(_to_int(r.get("id_etat_sfr")), {})
             etat_ope_lib = eo.get("lib_etat", "")
             etat_ope_type_id = eo.get("id_type_etat", 0)
             etat_ope_type_lib = type_etats.get(etat_ope_type_id, {}).get("lib", "")
         elif prefix == "OEN":
-            eo = oen_etats_ope.get(_to_int(r.get("IdEtatOEN")), {})
+            eo = oen_etats_ope.get(_to_int(r.get("id_etat_oen")), {})
             etat_ope_lib = eo.get("lib_etat", "")
             etat_ope_type_id = eo.get("id_type_etat", 0)
             etat_ope_type_lib = type_etats.get(etat_ope_type_id, {}).get("lib", "")
@@ -1180,50 +1186,50 @@ def extract_job_to_parquet(
         cluster_code = ""
         cluster_nom = ""
         if prefix == "SFR":
-            cl = sfr_clusters.get(_clean_id(_to_int(r.get("IDSFR_Cluster"))), {})
+            cl = sfr_clusters.get(_clean_id(_to_int(r.get("id_sfr_cluster"))), {})
             cluster_code = cl.get("code_vad", "")
             cluster_nom = cl.get("nom_cluster", "")
 
         # Options ENI/OEN
         opts = {}
         if prefix == "ENI":
-            opts = eni_opts.get(_clean_id(_to_int(r.get("IDcontrat"))), {})
+            opts = eni_opts.get(_clean_id(_to_int(r.get("id_contrat"))), {})
         elif prefix == "OEN":
-            opts = oen_opts.get(_clean_id(_to_int(r.get("IDcontrat"))), {})
+            opts = oen_opts.get(_clean_id(_to_int(r.get("id_contrat"))), {})
 
         # Consommation gaz/électricité (ENI/OEN)
         car = 0
         if prefix in ("ENI", "OEN"):
-            car = _to_int(r.get("GazCarDeclaree"))
-            car_relev = _to_int(r.get("GazCarRelevée"))
+            car = _to_int(r.get("gaz_car_declaree"))
+            car_relev = _to_int(r.get("gaz_car_relevee"))
             if car_relev > 0:
                 car = car_relev
-        puissance = _to_int(r.get("ElecPuissance")) if prefix in ("ENI", "OEN") else 0
+        puissance = _to_int(r.get("elec_puissance")) if prefix in ("ENI", "OEN") else 0
 
-        # Date Racc / Activation (SFR = DateRaccActiv ; OEN = DateActivation)
+        # Date Racc / Activation (SFR = date_racc_activ ; OEN = date_activation)
         date_racc_activ = ""
         if prefix == "SFR":
-            date_racc_activ = _iso(r.get("DateRaccActiv"))
+            date_racc_activ = _iso(r.get("date_racc_activ"))
         elif prefix == "OEN":
-            date_racc_activ = _iso(r.get("DateActivation"))
+            date_racc_activ = _iso(r.get("date_activation"))
 
         rows_out.append({
             # Identité + commun
-            "id_contrat": str(_clean_id(_to_int(r.get("IDcontrat")))),
+            "id_contrat": str(_clean_id(_to_int(r.get("id_contrat")))),
             "partenaire": prefix,
             "num_bs": num_bs,
-            "date_signature": _iso(r.get("DateSignature")),
-            "date_saisie": _iso(r.get("DateSAISIE")),
-            "mois_p": _iso(r.get("MoisP")),
+            "date_signature": _iso(r.get("date_signature")),
+            "date_saisie": _iso(r.get("date_saisie")),
+            "mois_p": _iso(r.get("mois_p")),
             "heure_sign": heure_sign,
-            "lib_produit": r.get("Lib_produit") or "",
+            "lib_produit": r.get("lib_produit") or "",
             "type_prod": type_prod,
             "sous_fam": sous_fam,
-            "id_etat_contrat": _to_int(r.get("IDetatContrat")),
+            "id_etat_contrat": _to_int(r.get("id_etat_contrat")),
             "id_type_etat": id_te,
             "lib_type_etat": te.get("lib", ""),
             "couleur_etat": te.get("couleur", ""),
-            "lib_etat": r.get("Lib_Etat") or "",
+            "lib_etat": r.get("lib_etat") or "",
             "lib_etat_vend": lib_etat_vend,
             # OEN/ENI : NumBS présent dans TK_Call_Panier ? (sert au tx consent)
             "in_tk_call_panier": (prefix in ("OEN", "ENI") and num_bs in in_tk_call),
@@ -1254,50 +1260,50 @@ def extract_job_to_parquet(
             "client_age": cinfo.get("age", 0),
             "client_rap_part": cinfo.get("opt_partenaire", False),
             # Valeurs + notation
-            "nb_points": _to_int(r.get("nbPoints")),
+            "nb_points": _to_int(r.get("nb_points")),
             # SFR stocke la notation /5 en BDD, on l'expose /10 (cf. WinDev StatsSFR : Notation*2)
             "notation": (
-                float(r.get("Notation") or 0) * 2
+                float(r.get("notation") or 0) * 2
                 if prefix == "SFR"
-                else float(r.get("Notation") or 0)
+                else float(r.get("notation") or 0)
             ),
-            "notation_info": r.get("NotationInfo") or "",
-            "info_interne": r.get("InfoInterne") or "",
-            "info_partagee": r.get("InfoPartagee") or "",
-            "code_enr": r.get("CodeENR") or "",
+            "notation_info": r.get("notation_info") or "",
+            "info_interne": r.get("info_interne") or "",
+            "info_partagee": r.get("info_partagee") or "",
+            "code_enr": r.get("code_enr") or "",
             # SFR specifique
-            "activ_control": r.get("ActivControl") or "" if prefix == "SFR" else "",
-            "processing_state": r.get("ProcessingState") or "" if prefix == "SFR" else "",
-            "sfr_type_vente": _to_int(r.get("TypeVente")) if prefix == "SFR" else 0,
-            "sfr_technologie": _to_int(r.get("Technologie")) if prefix == "SFR" else 0,
-            "sfr_box8": bool(r.get("Box8")) if prefix == "SFR" else False,
-            "sfr_box8_verif": bool(r.get("Box8Vérif")) if prefix == "SFR" else False,
-            "sfr_hors_cible": bool(r.get("HorsCible")) if prefix == "SFR" else False,
-            "sfr_date_rdv_tech": _iso(r.get("DateRDVTech")) if prefix == "SFR" else "",
+            "activ_control": r.get("activ_control") or "" if prefix == "SFR" else "",
+            "processing_state": r.get("processing_state") or "" if prefix == "SFR" else "",
+            "sfr_type_vente": _to_int(r.get("type_vente")) if prefix == "SFR" else 0,
+            "sfr_technologie": _to_int(r.get("technologie")) if prefix == "SFR" else 0,
+            "sfr_box8": bool(r.get("box8")) if prefix == "SFR" else False,
+            "sfr_box8_verif": bool(r.get("box8_verif")) if prefix == "SFR" else False,
+            "sfr_hors_cible": bool(r.get("hors_cible")) if prefix == "SFR" else False,
+            "sfr_date_rdv_tech": _iso(r.get("date_rdv_tech")) if prefix == "SFR" else "",
             "sfr_date_racc_activ": date_racc_activ,
             "sfr_date_validation": (
-                _iso(r.get("DateValidation")) if prefix in ("SFR", "PRO") else ""
+                _iso(r.get("date_validation")) if prefix in ("SFR", "PRO") else ""
             ),
             "sfr_date_resil": (
-                _iso(r.get("DateRésil")) if prefix in ("SFR", "PRO") else ""
+                _iso(r.get("date_resil")) if prefix in ("SFR", "PRO") else ""
             ),
-            "sfr_portabilite": bool(r.get("Portabilité")) if prefix == "SFR" else False,
-            "sfr_date_portab": _iso(r.get("DatePortabilité")) if prefix == "SFR" else "",
+            "sfr_portabilite": bool(r.get("portabilite")) if prefix == "SFR" else False,
+            "sfr_date_portab": _iso(r.get("date_portabilite")) if prefix == "SFR" else "",
             "sfr_cluster_code": cluster_code,
             "sfr_cluster_nom": cluster_nom,
-            "sfr_mois_p_distrib": _iso(r.get("MoisP_RaDistri")) if prefix == "SFR" else "",
-            "sfr_internet_garanti": bool(r.get("InternetGaranti")) if prefix == "SFR" else False,
-            "sfr_offre_speciale": bool(r.get("OffreSpeciale")) if prefix == "SFR" else False,
-            "sfr_parcours_chaine": bool(r.get("ParcoursChainé")) if prefix == "SFR" else False,
-            "sfr_prise_existante": bool(r.get("PriseExistante")) if prefix == "SFR" else False,
-            "sfr_prise_saisie": bool(r.get("PriseSaisie")) if prefix == "SFR" else False,
-            "sfr_num_prise_sfr": r.get("NumPrise_SFR") or "" if prefix == "SFR" else "",
-            "sfr_num_prise_vend": r.get("NumPrise_Vend") or "" if prefix == "SFR" else "",
+            "sfr_mois_p_distrib": _iso(r.get("mois_p_ra_distri")) if prefix == "SFR" else "",
+            "sfr_internet_garanti": bool(r.get("internet_garanti")) if prefix == "SFR" else False,
+            "sfr_offre_speciale": bool(r.get("offre_speciale")) if prefix == "SFR" else False,
+            "sfr_parcours_chaine": bool(r.get("parcours_chaine")) if prefix == "SFR" else False,
+            "sfr_prise_existante": bool(r.get("prise_existante")) if prefix == "SFR" else False,
+            "sfr_prise_saisie": bool(r.get("prise_saisie")) if prefix == "SFR" else False,
+            "sfr_num_prise_sfr": r.get("num_prise_sfr") or "" if prefix == "SFR" else "",
+            "sfr_num_prise_vend": r.get("num_prise_vend") or "" if prefix == "SFR" else "",
             # ENI/OEN consommation
             "car": car,
             "puissance": puissance,
-            "gaz_actif": bool(r.get("GazActif")) if prefix == "ENI" else False,
-            "elec_actif": bool(r.get("ElecActif")) if prefix == "ENI" else False,
+            "gaz_actif": bool(r.get("gaz_actif")) if prefix == "ENI" else False,
+            "elec_actif": bool(r.get("elec_actif")) if prefix == "ENI" else False,
             # ENI/OEN options (cf table _contrat_Option)
             "opt_demat": bool(opts.get("opt_efacture", False)),  # OPT Démat ≈ OPT_eFacture (à confirmer)
             "opt_maintenance": bool(opts.get("opt_entretien", False)),
@@ -1305,7 +1311,7 @@ def extract_job_to_parquet(
             "opt_reforestation": bool(opts.get("opt_reforestation", False)),
             "opt_protection": bool(opts.get("opt_protection", False)),
             # STR/VAL
-            "opt_num": r.get("OptNum") or "" if prefix in ("STR", "VAL") else "",
+            "opt_num": r.get("opt_num") or "" if prefix in ("STR", "VAL") else "",
             # Compteurs
             "nb_ctt_brut": nb_ctt_brut,
             "nb_ctt_hors_rejet": nb_ctt_hors_rejet,
@@ -1387,36 +1393,36 @@ def extract_job_to_parquet(
 
 
 def _load_partenaires_libs(db_adv) -> dict[str, str]:
-    """Retourne un mapping PréfixeBDD -> Lib_Partenaire (depuis la table Partenaire)."""
+    """Retourne un mapping prefixe_bdd -> lib_partenaire (depuis la table Partenaire)."""
     rows = db_adv.query(
-        """SELECT PréfixeBDD, Lib_Partenaire
-        FROM Partenaire
-        WHERE ModifELEM <> 'suppr' AND PréfixeBDD <> ''"""
+        """SELECT prefixe_bdd, lib_partenaire
+        FROM pgt_partenaire
+        WHERE modif_elem <> 'suppr' AND prefixe_bdd <> ''"""
     )
     out: dict[str, str] = {}
     for r in rows:
-        prefix = (r.get("PréfixeBDD") or "").strip()
-        lib = (r.get("Lib_Partenaire") or "").strip()
+        prefix = (r.get("prefixe_bdd") or "").strip()
+        lib = (r.get("lib_partenaire") or "").strip()
         if prefix:
             out[prefix] = lib or prefix
     return out
 
 
 def _load_partenaires_couleurs(db_adv) -> dict[str, str]:
-    """Retourne un mapping PréfixeBDD -> couleur hex (depuis la table Partenaire)."""
+    """Retourne un mapping prefixe_bdd -> couleur hex (depuis la table Partenaire)."""
     rows = db_adv.query(
-        """SELECT PréfixeBDD, Couleur_R, Couleur_V, Couleur_B
-        FROM Partenaire
-        WHERE ModifELEM <> 'suppr' AND PréfixeBDD <> ''"""
+        """SELECT prefixe_bdd, couleur_r, couleur_v, couleur_b
+        FROM pgt_partenaire
+        WHERE modif_elem <> 'suppr' AND prefixe_bdd <> ''"""
     )
     out: dict[str, str] = {}
     for r in rows:
-        prefix = (r.get("PréfixeBDD") or "").strip()
+        prefix = (r.get("prefixe_bdd") or "").strip()
         if prefix:
             out[prefix] = _winrgb_to_hex(
-                _to_int(r.get("Couleur_R")),
-                _to_int(r.get("Couleur_V")),
-                _to_int(r.get("Couleur_B")),
+                _to_int(r.get("couleur_r")),
+                _to_int(r.get("couleur_v")),
+                _to_int(r.get("couleur_b")),
             )
     return out
 
