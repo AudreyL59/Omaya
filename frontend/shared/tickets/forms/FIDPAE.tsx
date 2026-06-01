@@ -124,8 +124,8 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
         Enregistrer le ticket
       </button>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        {/* Colonne gauche */}
+      <div className="space-y-6 max-w-3xl">
+        {/* Une seule colonne, chaque champ empile verticalement */}
         <div className="space-y-6">
       {/* ÉTAT CIVIL */}
       <Section title="Infos état civil">
@@ -400,20 +400,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Row({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-wrap gap-4 items-end">{children}</div>
+  // Layout en colonne : chaque enfant prend toute la largeur, empile verticalement.
+  return <div className="flex flex-col gap-3">{children}</div>
 }
 
 function Field({
   label,
   children,
-  wide,
 }: {
   label: string
   children: React.ReactNode
   wide?: boolean
 }) {
   return (
-    <div className={`flex flex-col gap-1 ${wide ? 'flex-1 min-w-[300px]' : 'w-52'}`}>
+    <div className="flex flex-col gap-1 w-full">
       <span className="text-xs text-c-ink-soft">{label}</span>
       {children}
     </div>
