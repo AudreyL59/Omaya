@@ -225,7 +225,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             </div>
           </Section>
 
-          <Section title="Coordonnées postales et téléphoniques">
+          <Section title="Coordonnées">
             <Field label="Adresse">
               <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
             </Field>
