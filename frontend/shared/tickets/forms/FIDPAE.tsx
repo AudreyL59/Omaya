@@ -162,44 +162,44 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
         {/* COL 1 : Etat civil + Coordonnees */}
         <div className="space-y-6">
           <Section title="Infos état civil">
-            <Field label="Civilité">
+            <Field labelW="w-20" label="Civilité">
               <ToggleGroup
                 value={Number(form.civilite || 0)}
                 options={[{ v: 1, lib: 'M.' }, { v: 2, lib: 'Mme' }]}
                 onChange={(v) => set('civilite', v)}
               />
             </Field>
-            <Field label="Nom">
+            <Field labelW="w-20" label="Nom">
               <input value={form.nom || ''} onChange={(e) => set('nom', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Époux(se)">
+            <Field labelW="w-20" label="Époux(se)">
               <input value={form.nom_marital || ''} onChange={(e) => set('nom_marital', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Prénom">
+            <Field labelW="w-20" label="Prénom">
               <input value={form.prenom || ''} onChange={(e) => set('prenom', e.target.value)} className={inCls} />
             </Field>
-            <Field label="N° SS">
+            <Field labelW="w-20" label="N° SS">
               <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Nationalité">
+            <Field labelW="w-20" label="Nationalité">
               <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls} />
             </Field>
-            <Field label="CPAM">
+            <Field labelW="w-20" label="CPAM">
               <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Né(e) le">
+            <Field labelW="w-20" label="Né(e) le">
               <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls} />
             </Field>
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-c-ink-soft w-28 shrink-0 text-right">à</span>
+              <span className="text-c-ink-soft w-20 shrink-0 text-right">à</span>
               <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
               <span className="text-c-ink-soft shrink-0">Dép</span>
               <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' !w-12 shrink-0'} />
             </div>
-            <Field label="N° CIN">
+            <Field labelW="w-20" label="N° CIN">
               <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Situation Fam.">
+            <Field labelW="w-20" label="Situation Fam.">
               <select
                 value={form.situation_fam || 0}
                 onChange={(e) => set('situation_fam', Number(e.target.value))}
@@ -210,7 +210,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 ))}
               </select>
             </Field>
-            <div className="flex items-center gap-4 pl-[7.75rem]">
+            <div className="flex items-center gap-4 pl-[5.75rem]">
               <Check label="Avec Enfant" checked={!!form.avec_enfant} onChange={(v) => set('avec_enfant', v)} />
               <span className="text-xs text-c-ink-soft">Nb Enfants</span>
               <input
@@ -220,37 +220,37 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 className={inCls + ' w-16'}
               />
             </div>
-            <div className="pl-[7.75rem]">
+            <div className="pl-[5.75rem]">
               <Check label="Travailleur Handicapé" checked={!!form.travailleur_handi} onChange={(v) => set('travailleur_handi', v)} />
             </div>
           </Section>
 
           <Section title="Coordonnées">
-            <Field label="Adresse">
+            <Field labelW="w-20" label="Adresse">
               <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
             </Field>
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-c-ink-soft w-28 shrink-0 text-right">CP</span>
+              <span className="text-c-ink-soft w-20 shrink-0 text-right">CP</span>
               <input value={form.cp || ''} onChange={(e) => set('cp', e.target.value)} className={inCls + ' !w-16 shrink-0'} />
               <span className="text-c-ink-soft shrink-0">Ville</span>
               <input value={form.ville || ''} onChange={(e) => set('ville', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
             </div>
-            <Field label="Mobile">
+            <Field labelW="w-20" label="Mobile">
               <input value={form.gsm || ''} onChange={(e) => set('gsm', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Mail">
+            <Field labelW="w-20" label="Mail">
               <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
             </Field>
           </Section>
 
           <Section title="Contact en cas d'urgence">
-            <Field label="Identité">
+            <Field labelW="w-20" label="Identité">
               <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Parenté">
+            <Field labelW="w-20" label="Parenté">
               <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
             </Field>
-            <Field label="Tél">
+            <Field labelW="w-20" label="Tél">
               <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
             </Field>
           </Section>
@@ -415,17 +415,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-// Field : libelle a gauche (right-aligned, w-28), input a droite (flex-1).
+// Field : libelle a gauche (right-aligned), input a droite (flex-1).
+// labelW : largeur du libelle (defaut w-28).
 function Field({
   label,
   children,
+  labelW = 'w-28',
 }: {
+  labelW?: string
   label: string
   children: React.ReactNode
 }) {
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className="text-c-ink-soft w-28 shrink-0 text-right">{label}</span>
+      <span className={`text-c-ink-soft ${labelW} shrink-0 text-right`}>{label}</span>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   )
