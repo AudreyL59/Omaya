@@ -24,6 +24,7 @@ validation n'est plus proposée (attribution déjà effectuée).
 """
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -54,17 +55,17 @@ def _fr_date(aaaammjj) -> str:
 def _type_operations() -> list[dict]:
     """Combo « Type Opération » (TypeOperationLivret, base rh)."""
     try:
-        rows = get_connection("rh").query(
-            "SELECT IDTypeOperationLivret, LibOpéation "
-            "FROM TypeOperationLivret WHERE ModifElem NOT LIKE '%suppr%' "
-            "ORDER BY LibOpéation ASC"
+        rows = get_pg_connection("rh").query(
+            "SELECT id_type_operation_livret, lib_opeation "
+            "FROM pgt_type_operation_livret WHERE modif_elem NOT LIKE '%suppr%' "
+            "ORDER BY lib_opeation ASC"
         )
     except Exception:
         return []
     return [
         {
-            "id": _to_int(r.get("IDTypeOperationLivret")),
-            "lib": (r.get("LibOpéation") or "").strip(),
+            "id": _to_int(r.get("id_type_operation_livret")),
+            "lib": (r.get("lib_opeation") or "").strip(),
         }
         for r in rows or []
     ]
@@ -74,21 +75,21 @@ def _challenges() -> list[dict]:
     """Liste des challenges (ChallengeEvenement, base divers) pour le
     select. Libellé enrichi 'Libellé, du JJ/MM/AAAA au JJ/MM/AAAA'."""
     try:
-        rows = get_connection("divers").query(
-            "SELECT IDChallengeEvenement, Libellé, DateDébut, DateFin "
-            "FROM ChallengeEvenement WHERE ModifElem NOT LIKE '%suppr%' "
-            "ORDER BY DateDébut DESC"
+        rows = get_pg_connection("divers").query(
+            "SELECT id_challenge_evenement, libelle, date_debut, date_fin "
+            "FROM pgt_challenge_evenement WHERE modif_elem NOT LIKE '%suppr%' "
+            "ORDER BY date_debut DESC"
         )
     except Exception:
         return []
     out = []
     for r in rows or []:
-        idc = _clean_id(_to_int(r.get("IDChallengeEvenement")))
+        idc = _clean_id(_to_int(r.get("id_challenge_evenement")))
         if not idc:
             continue
-        lib = (r.get("Libellé") or "").strip()
-        d1 = _fr_date(r.get("DateDébut"))
-        d2 = _fr_date(r.get("DateFin"))
+        lib = (r.get("libelle") or "").strip()
+        d1 = _fr_date(r.get("date_debut"))
+        d2 = _fr_date(r.get("date_fin"))
         label = lib
         if d1 and d2:
             label = f"{lib}, du {d1} au {d2}"
@@ -100,27 +101,38 @@ def _challenge_label(id_challenge: int) -> str:
     if not id_challenge:
         return ""
     try:
-        r = get_connection("divers").query_one(
-            "SELECT IDChallengeEvenement, Libellé, DateDébut, DateFin "
-            "FROM ChallengeEvenement WHERE IDChallengeEvenement = ?",
+        r = get_pg_connection("divers").query_one(
+            "SELECT id_challenge_evenement, libelle, date_debut, date_fin "
+            "FROM pgt_challenge_evenement WHERE id_challenge_evenement = ?",
             (int(id_challenge),),
         )
     except Exception:
         return ""
     if not r:
         return ""
-    lib = (r.get("Libellé") or "").strip()
-    d1 = _fr_date(r.get("DateDébut"))
-    d2 = _fr_date(r.get("DateFin"))
+    lib = (r.get("libelle") or "").strip()
+    d1 = _fr_date(r.get("date_debut"))
+    d2 = _fr_date(r.get("date_fin"))
     return f"{lib}, du {d1} au {d2}" if (d1 and d2) else lib
 
 
-def _livret_existant(id_ticket: int) -> dict | None:
-    """salarie_Livret déjà créé pour ce ticket → attribution effectuée."""
+def _livret_existant(id_ticket: int, use_hf: bool = False) -> dict | None:
+    """salarie_Livret déjà créé pour ce ticket → attribution effectuée.
+
+    use_hf=True : utilise HFSQL (pour les checks pre-UPDATE, evite le lag
+    de la sync). use_hf=False (default) : PG (lecture d'affichage).
+    """
     try:
-        return get_connection("rh").query_one(
-            "SELECT IDsalarie_Livret, IDTypeOperationLivret, IDChallenge, "
-            "DateOpération FROM salarie_Livret WHERE IDTK_Liste = ?",
+        db = get_connection("rh") if use_hf else get_pg_connection("rh")
+        if use_hf:
+            return db.query_one(
+                "SELECT IDsalarie_Livret, IDTypeOperationLivret, IDChallenge, "
+                "DateOpération FROM salarie_Livret WHERE IDTK_Liste = ?",
+                (int(id_ticket),),
+            )
+        return db.query_one(
+            "SELECT id_salarie_livret, id_type_operation_livret, id_challenge, "
+            "date_operation FROM pgt_salarie_livret WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
     except Exception:
@@ -128,14 +140,14 @@ def _livret_existant(id_ticket: int) -> dict | None:
 
 
 def _info_attribution(id_ticket: int) -> str:
-    """Mémo texte InfoAttribution (lecture isolée — cf. bridge HFSQL)."""
+    """Mémo texte InfoAttribution (lecture isolée)."""
     try:
-        r = get_connection("ticket_rh").query_one(
-            "SELECT IDTK_Liste, InfoAttribution FROM Tk_DemandeAttExoCash "
-            "WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_rh").query_one(
+            "SELECT id_tk_liste, info_attribution FROM pgt_tk_demande_att_exo_cash "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
-        return ((r.get("InfoAttribution") if r else "") or "").strip()
+        return ((r.get("info_attribution") if r else "") or "").strip()
     except Exception:
         return ""
 
@@ -145,16 +157,16 @@ def _info_attribution(id_ticket: int) -> str:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        "SELECT IDTK_Liste, IDTk_DemandeAttExoCash, IDSalarie, MontantEC "
-        "FROM Tk_DemandeAttExoCash WHERE IDTK_Liste = ?",
+        "SELECT id_tk_liste, id_tk_demande_att_exo_cash, id_salarie, montant_ec "
+        "FROM pgt_tk_demande_att_exo_cash WHERE id_tk_liste = ?",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
-    id_att = _clean_id(_to_int(r.get("IDTk_DemandeAttExoCash")))
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
+    id_att = _clean_id(_to_int(r.get("id_tk_demande_att_exo_cash")))
+    id_salarie = _clean_id(_to_int(r.get("id_salarie")))
 
     salarie_nom = ""
     if id_salarie:
@@ -167,16 +179,16 @@ def load(id_ticket: int) -> dict:
 
     livret = _livret_existant(id_ticket)
     attribuee = bool(livret)
-    type_operation = _to_int(livret.get("IDTypeOperationLivret")) if livret else 0
-    id_challenge = _clean_id(_to_int(livret.get("IDChallenge"))) if livret else 0
-    date_attribution = _windev_to_iso(livret.get("DateOpération")) if livret else ""
+    type_operation = _to_int(livret.get("id_type_operation_livret")) if livret else 0
+    id_challenge = _clean_id(_to_int(livret.get("id_challenge"))) if livret else 0
+    date_attribution = _windev_to_iso(livret.get("date_operation")) if livret else ""
 
     return {
         "found": True,
         "id_att": str(id_att) if id_att else "",
         "id_salarie": str(id_salarie) if id_salarie else "",
         "salarie_nom": salarie_nom,
-        "montant": float(r.get("MontantEC") or 0),
+        "montant": float(r.get("montant_ec") or 0),
         "info_attribution": _info_attribution(id_ticket),
         "type_operation": type_operation,
         "id_challenge": str(id_challenge) if id_challenge else "",
@@ -194,7 +206,8 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
     # --- validation de l'attribution (crédit livret) ---
     if action == "valider":
-        if _livret_existant(id_ticket):
+        # SELECT pre-UPDATE -> garde sur HFSQL pour eviter le lag PG
+        if _livret_existant(id_ticket, use_hf=True):
             return {"ok": False, "error": "Attribution déjà effectuée"}
 
         rh_tk = get_connection("ticket_rh")

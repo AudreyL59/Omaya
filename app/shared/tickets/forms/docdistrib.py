@@ -32,6 +32,7 @@ from app.core.config import (
     MAIL_BO,
 )
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection  # noqa: F401
 from app.shared.notifications.mail import envoi_mail_rh
 from app.shared.notifications.sms import envoi_sms
 

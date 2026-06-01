@@ -7,6 +7,7 @@ ligne sélectionnée).
 """
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection  # noqa: F401  # phase 1 hybride : tout reste HFSQL (read-modify-write critiques)
 
 from ..service import (
     _clean_id,

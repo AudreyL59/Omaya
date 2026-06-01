@@ -30,6 +30,9 @@ from app.core.config import (
     SOFFICE_BIN,
 )
 from app.core.database import get_connection
+# NB phase 1 hybride : ce module manipule des memos binaires HFSQL via le bridge
+# pour la generation du PDF signe — on reste sur HFSQL ici (lectures critiques
+# liees aux ecritures FTP/PDF, pas de migration vers PG en phase 1).
 
 CREATE_NO_WINDOW = 0x08000000
 

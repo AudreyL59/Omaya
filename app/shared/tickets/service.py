@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 # ---------------------------------------------------------------
@@ -114,19 +115,20 @@ def list_type_ids_par_droit(droits: list[str], droit_field: str) -> set[int]:
     cached = _cache_get(_type_ids_cache, cache_key)
     if cached is not None:
         return cached
-    db = get_connection("ticket")
+    db = get_pg_connection("ticket")
+    pg_droit_field = "droit_acces_vend" if droit_field == "DroitAccèsVend" else "droit_acces"
     rows = db.query(
-        f"""SELECT IDTK_TypeDemande, {droit_field}
-        FROM TK_TypeDemande
-        WHERE ModifELEM <> 'suppr'"""
+        f"""SELECT id_tk_type_demande, {pg_droit_field}
+        FROM pgt_tk_type_demande
+        WHERE modif_elem <> 'suppr'"""
     )
     droits_set = set(droits or [])
     out: set[int] = set()
     for r in rows:
-        droit = (r.get(droit_field) or "").strip()
+        droit = (r.get(pg_droit_field) or "").strip()
         if droit and droit not in droits_set:
             continue
-        idt = _clean_id(_to_int(r.get("IDTK_TypeDemande")))
+        idt = _clean_id(_to_int(r.get("id_tk_type_demande")))
         if idt:
             out.add(idt)
     _type_ids_cache[cache_key] = (time.time(), out)
@@ -153,51 +155,49 @@ def list_types_par_droit(droits: list[str], droit_field: str) -> list[dict]:
     cached = _cache_get(_types_cache, cache_key)
     if cached is not None:
         return cached
-    db = get_connection("ticket")
+    db = get_pg_connection("ticket")
 
-    # 1. SELECT des champs simples (pas de mémo). Le champ droit est sélectionné
-    #    directement (sans alias) — le bridge HFSQL ne supporte pas les
-    #    "alias avec accent" sur certaines configs.
+    pg_droit_field = "droit_acces_vend" if droit_field == "DroitAccèsVend" else "droit_acces"
+
+    # 1. SELECT des champs simples (pas de mémo).
     rows = db.query(
-        f"""SELECT IDTK_TypeDemande, Service, {droit_field}
-        FROM TK_TypeDemande
-        WHERE ModifELEM <> 'suppr'
-        ORDER BY Service"""
+        f"""SELECT id_tk_type_demande, service, {pg_droit_field}
+        FROM pgt_tk_type_demande
+        WHERE modif_elem <> 'suppr'
+        ORDER BY service"""
     )
     droits_set = set(droits or [])
     visible: list[tuple[int, str, str]] = []  # (id, service, droit)
     for r in rows:
-        # Le bridge peut renvoyer la clé droit_field telle quelle ou normalisée
-        droit = (r.get(droit_field) or "").strip()
+        droit = (r.get(pg_droit_field) or "").strip()
         if droit and droit not in droits_set:
             continue
-        idt = _clean_id(_to_int(r.get("IDTK_TypeDemande")))
+        idt = _clean_id(_to_int(r.get("id_tk_type_demande")))
         if not idt:
             continue
-        visible.append((idt, (r.get("Service") or "").strip(), droit))
+        visible.append((idt, (r.get("service") or "").strip(), droit))
 
     if not visible:
         return []
 
-    # 2. Fetch séparé des mémos Lib_TypeDemande (texte) et icone (binaire) :
-    #    1 SELECT par mémo et par type (le bridge tronque les mémos en
-    #    multi-colonnes). Parallélisé car chaque query ≈ 400 ms.
+    # 2. Fetch séparé des mémos lib_type_demande (texte) et icone (bytea) :
+    #    le pool PG gère plusieurs connexions, parallélisable comme avant.
     def _fetch_lib(idt: int) -> tuple[int, str]:
         try:
-            db_t = get_connection("ticket")
+            db_t = get_pg_connection("ticket")
             r = db_t.query_one(
-                "SELECT Lib_TypeDemande FROM TK_TypeDemande WHERE IDTK_TypeDemande = ?",
+                "SELECT lib_type_demande FROM pgt_tk_type_demande WHERE id_tk_type_demande = ?",
                 (idt,),
             )
-            return idt, ((r.get("Lib_TypeDemande") if r else "") or "").strip()
+            return idt, ((r.get("lib_type_demande") if r else "") or "").strip()
         except Exception:
             return idt, ""
 
     def _fetch_icone(idt: int) -> tuple[int, str]:
         try:
-            db_t = get_connection("ticket")
+            db_t = get_pg_connection("ticket")
             r = db_t.query_one(
-                "SELECT icone FROM TK_TypeDemande WHERE IDTK_TypeDemande = ?",
+                "SELECT icone FROM pgt_tk_type_demande WHERE id_tk_type_demande = ?",
                 (idt,),
             )
             return idt, _icone_to_data_url(r.get("icone") if r else None)
@@ -234,7 +234,14 @@ def _icone_to_data_url(blob) -> str:
     """Convertit le mémo binaire en data: URL si possible (PNG/JPEG/GIF)."""
     if not blob:
         return ""
-    raw = blob if isinstance(blob, bytes) else None
+    # PG bytea peut revenir en memoryview ou bytes ; HFSQL le renvoie en
+    # base64 dans une str. On supporte les deux.
+    if isinstance(blob, memoryview):
+        raw = bytes(blob)
+    elif isinstance(blob, bytes):
+        raw = blob
+    else:
+        raw = None
     if raw is None and isinstance(blob, str) and blob:
         try:
             raw = base64.b64decode(blob)
@@ -270,16 +277,16 @@ def list_statuts() -> list[dict]:
         ts, val = _statuts_cache
         if time.time() - ts <= _CACHE_TTL_S:
             return val
-    db = get_connection("ticket")
+    db = get_pg_connection("ticket")
     rows = db.query(
-        """SELECT IDTK_Statut, Lib_Statut FROM TK_Statut
-        WHERE ModifELEM <> 'suppr'
-        ORDER BY IDTK_Statut ASC"""
+        """SELECT id_tk_statut, lib_statut FROM pgt_tk_statut
+        WHERE modif_elem <> 'suppr'
+        ORDER BY id_tk_statut ASC"""
     )
     out = [
         {
-            "id_statut": _to_int(r.get("IDTK_Statut")),
-            "lib_statut": (r.get("Lib_Statut") or "").strip(),
+            "id_statut": _to_int(r.get("id_tk_statut")),
+            "lib_statut": (r.get("lib_statut") or "").strip(),
         }
         for r in rows
     ]
@@ -320,42 +327,39 @@ def list_tickets_par_type(
     if not date_au:
         date_au = "30610101000000000"
 
-    db = get_connection("ticket")
-    # NOTE : le bridge HFSQL ne supporte pas les colonnes accentuées entre
-    # guillemets ni les alias avec accent. On utilise donc Cloturée
-    # (sans quotes) dans le SELECT/WHERE et on lit la colonne via
-    # r.get("Cloturée") côté Python.
+    db = get_pg_connection("ticket")
     rows = db.query(
-        f"""SELECT TOP {int(limit)}
-            IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
-            IDTK_TypeDemande, IDTK_Statut, DateReport,
-            Cloturée, DateCloture,
-            ModifDate, modification,
-            OpTraitementStaff
-        FROM TK_Liste
-        WHERE IDTK_TypeDemande = ?
-          AND ModifELEM NOT LIKE '%suppr%'
-          AND Cloturée = ?
-          AND DATECREA BETWEEN ? AND ?
-          AND IDTK_Statut <> 28
-        ORDER BY IDTK_Statut ASC, DATECREA DESC""",
-        (int(id_type_demande), 1 if cloturee else 0, date_du, date_au),
+        f"""SELECT
+            id_tk_liste, date_crea, op_crea, op_dest, service,
+            id_tk_type_demande, id_tk_statut, date_report,
+            cloturee, date_cloture,
+            modif_date, modification,
+            op_traitement_staff
+        FROM pgt_tk_liste
+        WHERE id_tk_type_demande = ?
+          AND modif_elem NOT LIKE '%suppr%'
+          AND cloturee = ?
+          AND date_crea BETWEEN ? AND ?
+          AND id_tk_statut <> 28
+        ORDER BY id_tk_statut ASC, date_crea DESC
+        LIMIT {int(limit)}""",
+        (int(id_type_demande), bool(cloturee), date_du, date_au),
     )
     out: list[dict] = []
     for r in rows:
         out.append({
-            "id_ticket": _str_id(r.get("IDTK_Liste")),
-            "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
-            "service": (r.get("Service") or "").strip(),
-            "id_statut": _to_int(r.get("IDTK_Statut")),
-            "date_crea": _windev_to_iso(r.get("DATECREA")),
-            "op_crea": _str_id(r.get("OPCREA")),
-            "op_dest": _str_id(r.get("OPDEST")),
-            "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
-            "cloturee": bool(r.get("Cloturée")),
-            "date_cloture": _windev_to_iso(r.get("DateCloture")),
-            "date_report": _windev_to_iso(r.get("DateReport")),
-            "modif_date": _windev_to_iso(r.get("ModifDate")),
+            "id_ticket": _str_id(r.get("id_tk_liste")),
+            "id_type_demande": _str_id(r.get("id_tk_type_demande")),
+            "service": (r.get("service") or "").strip(),
+            "id_statut": _to_int(r.get("id_tk_statut")),
+            "date_crea": _windev_to_iso(r.get("date_crea")),
+            "op_crea": _str_id(r.get("op_crea")),
+            "op_dest": _str_id(r.get("op_dest")),
+            "op_traitement_staff": _str_id(r.get("op_traitement_staff")),
+            "cloturee": bool(r.get("cloturee")),
+            "date_cloture": _windev_to_iso(r.get("date_cloture")),
+            "date_report": _windev_to_iso(r.get("date_report")),
+            "modif_date": _windev_to_iso(r.get("modif_date")),
             "modification": bool(r.get("modification")),
         })
     return out
@@ -388,6 +392,10 @@ def list_tickets_modified_since(
         date_du = "20010101000000000"
     if not date_au:
         date_au = "30610101000000000"
+    # POINT D'ATTENTION (phase 1 hybride) : on garde ce SELECT sur HFSQL
+    # car PG a un lag de sync de 15-30 min, ce qui rendrait le long-polling
+    # incapable de detecter les changements recents. A bouger sur PG au
+    # cutover quand HFSQL ne sera plus la source.
     db = get_connection("ticket")
     rows = db.query(
         f"""SELECT TOP {int(limit)}
@@ -438,19 +446,19 @@ def load_salaries_minimal(ids: set[int]) -> dict[int, dict]:
     ids = {i for i in ids if i}
     if not ids:
         return {}
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     ids_sql = ",".join(str(i) for i in ids)
     rows = db.query(
-        f"""SELECT IDSalarie, NOM, PRENOM FROM salarie
-        WHERE IDSalarie IN ({ids_sql})"""
+        f"""SELECT id_salarie, nom, prenom FROM pgt_salarie
+        WHERE id_salarie IN ({ids_sql})"""
     )
     out: dict[int, dict] = {}
     for r in rows:
-        sid = _clean_id(_to_int(r.get("IDSalarie")))
+        sid = _clean_id(_to_int(r.get("id_salarie")))
         if sid:
             out[sid] = {
-                "nom": (r.get("NOM") or "").strip(),
-                "prenom": (r.get("PRENOM") or "").strip(),
+                "nom": (r.get("nom") or "").strip(),
+                "prenom": (r.get("prenom") or "").strip(),
             }
     return out
 
@@ -460,12 +468,13 @@ def search_organigrammes(q: str, limit: int = 30) -> list[dict]:
     search = (q or "").strip()
     if not search:
         return []
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     rows = db.query(
-        f"""SELECT TOP {int(limit)} idorganigramme, Lib_ORGA
-        FROM organigramme
-        WHERE Lib_ORGA LIKE ?
-        ORDER BY Lib_ORGA""",
+        f"""SELECT idorganigramme, lib_orga
+        FROM pgt_organigramme
+        WHERE LOWER(lib_orga) LIKE LOWER(?)
+        ORDER BY lib_orga
+        LIMIT {int(limit)}""",
         (f"%{search}%",),
     )
     out: list[dict] = []
@@ -474,7 +483,7 @@ def search_organigrammes(q: str, limit: int = 30) -> list[dict]:
         if oid:
             out.append({
                 "id_organigramme": str(oid),
-                "lib_orga": (r.get("Lib_ORGA") or "").strip(),
+                "lib_orga": (r.get("lib_orga") or "").strip(),
             })
     return out
 
@@ -484,13 +493,13 @@ def get_organigramme_lib(id_orga: int) -> str:
     if not id_orga:
         return ""
     try:
-        db = get_connection("rh")
+        db = get_pg_connection("rh")
         r = db.query_one(
-            "SELECT idorganigramme, Lib_ORGA FROM organigramme "
+            "SELECT idorganigramme, lib_orga FROM pgt_organigramme "
             "WHERE idorganigramme = ?",
             (int(id_orga),),
         )
-        return ((r.get("Lib_ORGA") if r else "") or "").strip()
+        return ((r.get("lib_orga") if r else "") or "").strip()
     except Exception:
         return ""
 
@@ -502,19 +511,19 @@ def salarie_infos_batch(ids: set[int]) -> dict[int, dict]:
     ids = {i for i in ids if i}
     if not ids:
         return {}
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     ids_sql = ",".join(str(i) for i in ids)
     out: dict[int, dict] = {}
     try:
         for r in db.query(
-            f"SELECT IDSalarie, NOM, PRENOM FROM salarie "
-            f"WHERE IDSalarie IN ({ids_sql})"
+            f"SELECT id_salarie, nom, prenom FROM pgt_salarie "
+            f"WHERE id_salarie IN ({ids_sql})"
         ):
-            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            sid = _clean_id(_to_int(r.get("id_salarie")))
             if sid:
                 out[sid] = {
-                    "nom": (r.get("NOM") or "").strip(),
-                    "prenom": (r.get("PRENOM") or "").strip(),
+                    "nom": (r.get("nom") or "").strip(),
+                    "prenom": (r.get("prenom") or "").strip(),
                     "date_embauche": "",
                     "lib_societe": "",
                 }
@@ -524,18 +533,18 @@ def salarie_infos_batch(ids: set[int]) -> dict[int, dict]:
     emb: dict[int, dict] = {}
     try:
         for r in db.query(
-            f"SELECT IDSalarie, DateDébut, EnActivité, IdSte "
-            f"FROM salarie_embauche WHERE IDSalarie IN ({ids_sql})"
+            f"SELECT id_salarie, date_debut, en_activite, id_ste "
+            f"FROM pgt_salarie_embauche WHERE id_salarie IN ({ids_sql})"
         ):
-            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            sid = _clean_id(_to_int(r.get("id_salarie")))
             if not sid:
                 continue
-            actif = bool(r.get("EnActivité"))
+            actif = bool(r.get("en_activite"))
             prev = emb.get(sid)
             if prev is None or (actif and not prev["actif"]):
                 emb[sid] = {
-                    "date_debut": date_only_to_iso(r.get("DateDébut")),
-                    "id_ste": _clean_id(_to_int(r.get("IdSte"))),
+                    "date_debut": date_only_to_iso(r.get("date_debut")),
+                    "id_ste": _clean_id(_to_int(r.get("id_ste"))),
                     "actif": actif,
                 }
     except Exception:
@@ -543,10 +552,10 @@ def salarie_infos_batch(ids: set[int]) -> dict[int, dict]:
 
     societes: dict[int, str] = {}
     try:
-        for r in db.query("SELECT IdSte, RS_Interne FROM societe"):
-            stid = _clean_id(_to_int(r.get("IdSte")))
+        for r in db.query("SELECT id_ste, rs_interne FROM pgt_societe"):
+            stid = _clean_id(_to_int(r.get("id_ste")))
             if stid:
-                societes[stid] = (r.get("RS_Interne") or "").strip()
+                societes[stid] = (r.get("rs_interne") or "").strip()
     except Exception:
         societes = {}
 
@@ -572,44 +581,44 @@ def search_salaries(q: str, limit: int = 30) -> list[dict]:
     search = (q or "").strip().upper()
     if not search:
         return []
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     base = db.query(
-        f"""SELECT DISTINCT TOP {int(limit)} s.IDSalarie, s.NOM, s.PRENOM
-        FROM salarie s
-        WHERE s.NOM LIKE ?
-        ORDER BY s.NOM, s.PRENOM""",
+        f"""SELECT DISTINCT s.id_salarie, s.nom, s.prenom
+        FROM pgt_salarie s
+        WHERE s.nom LIKE ?
+        ORDER BY s.nom, s.prenom
+        LIMIT {int(limit)}""",
         (f"{search}%",),
     )
     ids = [
-        _clean_id(_to_int(r.get("IDSalarie")))
+        _clean_id(_to_int(r.get("id_salarie")))
         for r in base
-        if _clean_id(_to_int(r.get("IDSalarie")))
+        if _clean_id(_to_int(r.get("id_salarie")))
     ]
     if not ids:
         return []
     ids_sql = ",".join(str(i) for i in ids)
 
-    # salarie_embauche : colonnes accentuées → SELECT brut sans alias.
-    # Multi-embauche possible → on garde en priorité la ligne EnActivité=1.
+    # salarie_embauche : multi-embauche possible → priorité en_activite=TRUE.
     emb_by_id: dict[int, dict] = {}
     try:
         emb_rows = db.query(
-            f"""SELECT IDSalarie, DateDébut, EnActivité, IdTypePoste, IdSte
-            FROM salarie_embauche
-            WHERE IDSalarie IN ({ids_sql})"""
+            f"""SELECT id_salarie, date_debut, en_activite, id_type_poste, id_ste
+            FROM pgt_salarie_embauche
+            WHERE id_salarie IN ({ids_sql})"""
         )
         for r in emb_rows:
-            sid = _clean_id(_to_int(r.get("IDSalarie")))
+            sid = _clean_id(_to_int(r.get("id_salarie")))
             if not sid:
                 continue
-            actif = bool(r.get("EnActivité"))
+            actif = bool(r.get("en_activite"))
             prev = emb_by_id.get(sid)
             if prev is None or (actif and not prev["actif"]):
                 emb_by_id[sid] = {
-                    "date_debut": date_only_to_iso(r.get("DateDébut")),
+                    "date_debut": date_only_to_iso(r.get("date_debut")),
                     "actif": actif,
-                    "id_poste": _clean_id(_to_int(r.get("IdTypePoste"))),
-                    "id_ste": _clean_id(_to_int(r.get("IdSte"))),
+                    "id_poste": _clean_id(_to_int(r.get("id_type_poste"))),
+                    "id_ste": _clean_id(_to_int(r.get("id_ste"))),
                 }
     except Exception:
         emb_by_id = {}
@@ -620,34 +629,34 @@ def search_salaries(q: str, limit: int = 30) -> list[dict]:
         try:
             p_sql = ",".join(str(i) for i in poste_ids)
             for r in db.query(
-                f"SELECT IdTypePoste, Lib_Poste FROM TypePoste "
-                f"WHERE IdTypePoste IN ({p_sql})"
+                f"SELECT id_type_poste, lib_poste FROM pgt_type_poste "
+                f"WHERE id_type_poste IN ({p_sql})"
             ):
-                pid = _clean_id(_to_int(r.get("IdTypePoste")))
+                pid = _clean_id(_to_int(r.get("id_type_poste")))
                 if pid:
-                    postes[pid] = (r.get("Lib_Poste") or "").strip()
+                    postes[pid] = (r.get("lib_poste") or "").strip()
         except Exception:
             postes = {}
 
     societes: dict[int, str] = {}
     try:
-        for r in db.query("SELECT IdSte, RS_Interne FROM societe"):
-            stid = _clean_id(_to_int(r.get("IdSte")))
+        for r in db.query("SELECT id_ste, rs_interne FROM pgt_societe"):
+            stid = _clean_id(_to_int(r.get("id_ste")))
             if stid:
-                societes[stid] = (r.get("RS_Interne") or "").strip()
+                societes[stid] = (r.get("rs_interne") or "").strip()
     except Exception:
         societes = {}
 
     out: list[dict] = []
     for r in base:
-        sid = _clean_id(_to_int(r.get("IDSalarie")))
+        sid = _clean_id(_to_int(r.get("id_salarie")))
         if not sid:
             continue
         e = emb_by_id.get(sid, {})
         out.append({
             "id_salarie": str(sid),
-            "nom": (r.get("NOM") or "").strip(),
-            "prenom": (r.get("PRENOM") or "").strip(),
+            "nom": (r.get("nom") or "").strip(),
+            "prenom": (r.get("prenom") or "").strip(),
             "poste": postes.get(e.get("id_poste", 0), ""),
             "lib_societe": societes.get(e.get("id_ste", 0), ""),
             "date_embauche": e.get("date_debut", ""),
@@ -661,20 +670,24 @@ def search_salaries(q: str, limit: int = 30) -> list[dict]:
 # ---------------------------------------------------------------
 
 def get_lib_type_demande(id_type: int) -> str:
-    """Lib_TypeDemande (mémo) d'un type — fetch isolé (troncature bridge)."""
+    """Lib_TypeDemande (mémo) d'un type — fetch isolé."""
     try:
-        db = get_connection("ticket")
+        db = get_pg_connection("ticket")
         r = db.query_one(
-            "SELECT Lib_TypeDemande FROM TK_TypeDemande WHERE IDTK_TypeDemande = ?",
+            "SELECT lib_type_demande FROM pgt_tk_type_demande WHERE id_tk_type_demande = ?",
             (int(id_type),),
         )
-        return ((r.get("Lib_TypeDemande") if r else "") or "").strip()
+        return ((r.get("lib_type_demande") if r else "") or "").strip()
     except Exception:
         return ""
 
 
 def load_ticket_raw(id_ticket: int) -> dict | None:
-    """Lit une ligne TK_Liste (1 ticket) — mêmes champs que la liste."""
+    """Lit une ligne TK_Liste (1 ticket) — mêmes champs que la liste.
+
+    Garde sur HFSQL : ce read est utilise comme prelude a un UPDATE
+    (apply_ouverture / save_ticket_infos), donc lag PG = incoherence.
+    """
     db = get_connection("ticket")
     r = db.query_one(
         """SELECT IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,

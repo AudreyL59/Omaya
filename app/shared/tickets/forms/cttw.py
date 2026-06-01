@@ -12,6 +12,7 @@ salarie_mutuelle + mutuelle : base rh.
 """
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -127,22 +128,22 @@ def _list_mutuelles() -> list[dict]:
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDSalarie, idDA, contratGénéré,
-            contratValidé, contratSigné, contratAnnul, datesignature,
-            TitreContrat, TypeCttW
-        FROM TK_DemandeCttW
-        WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_salarie, id_da, contrat_genere,
+            contrat_valide, contrat_signe, contrat_annul, datesignature,
+            titre_contrat, type_ctt_w
+        FROM pgt_tk_demande_ctt_w
+        WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
 
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
-    id_da = _clean_id(_to_int(r.get("idDA")))
-    contrat_valide = bool(r.get("contratValidé"))
-    contrat_signe = bool(r.get("contratSigné"))
+    id_salarie = _clean_id(_to_int(r.get("id_salarie")))
+    id_da = _clean_id(_to_int(r.get("id_da")))
+    contrat_valide = bool(r.get("contrat_valide"))
+    contrat_signe = bool(r.get("contrat_signe"))
     # cf. code init WinDev : Plan 2 dès que validé (le PDF signé n'est
     # régénéré QUE si en plus signé).
     plan = 2 if contrat_valide else 1
@@ -154,12 +155,12 @@ def load(id_ticket: int) -> dict:
         "salarie_nom": _salaire_nom(id_salarie),
         "id_da": str(id_da) if id_da else "",
         "da_nom": _salaire_nom(id_da),
-        "titre_contrat": (r.get("TitreContrat") or "").strip(),
-        "type_cttw": (r.get("TypeCttW") or "").strip(),
-        "contrat_genere": bool(r.get("contratGénéré")),
+        "titre_contrat": (r.get("titre_contrat") or "").strip(),
+        "type_cttw": (r.get("type_ctt_w") or "").strip(),
+        "contrat_genere": bool(r.get("contrat_genere")),
         "contrat_valide": contrat_valide,
         "contrat_signe": contrat_signe,
-        "contrat_annul": bool(r.get("contratAnnul")),
+        "contrat_annul": bool(r.get("contrat_annul")),
         "date_signature": date_only_to_iso(r.get("datesignature")),
     }
 

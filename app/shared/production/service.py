@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 # -- Helpers ---------------------------------------------------------
@@ -124,18 +125,23 @@ def priority_for_user(droits: list[str]) -> int:
 
 
 def count_active_jobs(id_salarie_user: int) -> int:
-    """Nombre de jobs actifs (pending + running) pour ce user, hors suppr."""
-    db = get_connection("divers")
+    """Nombre de jobs actifs (pending + running) pour ce user, hors suppr.
+
+    Attention phase 1 hybride : on lit ce compteur sur PG (15-30 min de lag).
+    Un user pourrait donc créer un job juste après la suppression d'un autre
+    sans que le compteur l'ait vu disparaître — anti-DoS, pas critique.
+    """
+    db = get_pg_connection("divers")
     rows = db.query(
-        """SELECT COUNT(*) AS N FROM ProductionExtractionJob
-        WHERE IDSalarieUser = ?
-          AND Statut IN ('pending', 'running')
-          AND ModifELEM <> 'suppr'""",
+        """SELECT COUNT(*) AS n FROM pgt_productionextractionjob
+        WHERE id_salarie_user = ?
+          AND statut IN ('pending', 'running')
+          AND modif_elem <> 'suppr'""",
         (id_salarie_user,),
     )
     if not rows:
         return 0
-    return _to_int((rows[0] or {}).get("N"))
+    return _to_int((rows[0] or {}).get("n"))
 
 
 # -- CRUD jobs ---------------------------------------------------------
@@ -163,7 +169,7 @@ def create_job(
     if current >= quota:
         raise QuotaExceeded(current=current, quota=quota)
 
-    db = get_connection("divers")
+    db = get_connection("divers")  # HFSQL pour les ecritures
     id_job = _new_id()
     now = _now_windev()
     titre = _make_titre(params, user_nom, user_prenom)
@@ -203,17 +209,18 @@ def list_jobs(id_salarie_user: int, limit: int = 50) -> list[dict]:
     Calcule pour chaque job 'pending' sa position dans la file globale
     (priorité supérieure ou plus ancien à priorité égale = devant).
     """
-    db = get_connection("divers")
+    db = get_pg_connection("divers")
     rows = db.query(
-        f"""SELECT TOP {int(limit)}
-            IDProductionExtractionJob, IDSalarieUser, DateCrea,
-            DateDebutTrait, DateFinTrait, Statut, ProgressionPct,
-            ProgressionMsg, NbLignes, DureeS, PathResultat,
-            MessageErreur, Titre, ParamsJSON, Priority
-        FROM ProductionExtractionJob
-        WHERE IDSalarieUser = ?
-          AND ModifELEM <> 'suppr'
-        ORDER BY DateCrea DESC""",
+        f"""SELECT
+            id_production_extraction_job, id_salarie_user, datecrea,
+            date_debut_trait, date_fin_trait, statut, progression_pct,
+            progression_msg, nb_lignes, duree_s, path_resultat,
+            message_erreur, titre, params_json, priority
+        FROM pgt_productionextractionjob
+        WHERE id_salarie_user = ?
+          AND modif_elem <> 'suppr'
+        ORDER BY datecrea DESC
+        LIMIT {int(limit)}""",
         (id_salarie_user,),
     )
     queue = _load_pending_queue()
@@ -225,21 +232,21 @@ def get_job(id_job: int, id_salarie_user: int) -> dict | None:
 
     Inclut la position dans la file si le job est en statut 'pending'.
     """
-    db = get_connection("divers")
+    db = get_pg_connection("divers")
     row = db.query_one(
-        """SELECT IDProductionExtractionJob, IDSalarieUser, DateCrea,
-            DateDebutTrait, DateFinTrait, Statut, ProgressionPct,
-            ProgressionMsg, NbLignes, DureeS, PathResultat,
-            MessageErreur, Titre, ParamsJSON, Priority
-        FROM ProductionExtractionJob
-        WHERE IDProductionExtractionJob = ?
-          AND IDSalarieUser = ?
-          AND ModifELEM <> 'suppr'""",
+        """SELECT id_production_extraction_job, id_salarie_user, datecrea,
+            date_debut_trait, date_fin_trait, statut, progression_pct,
+            progression_msg, nb_lignes, duree_s, path_resultat,
+            message_erreur, titre, params_json, priority
+        FROM pgt_productionextractionjob
+        WHERE id_production_extraction_job = ?
+          AND id_salarie_user = ?
+          AND modif_elem <> 'suppr'""",
         (id_job, id_salarie_user),
     )
     if not row:
         return None
-    queue = _load_pending_queue() if (row.get("Statut") or "") == "pending" else None
+    queue = _load_pending_queue() if (row.get("statut") or "") == "pending" else None
     return _row_to_dict(row, queue)
 
 
@@ -249,18 +256,18 @@ def _load_pending_queue() -> list[tuple[int, int, str]]:
     Retour : list[(id_job, priority, date_crea)] avec ordre = priority DESC,
     date_crea ASC.
     """
-    db = get_connection("divers")
+    db = get_pg_connection("divers")
     rows = db.query(
-        """SELECT IDProductionExtractionJob, Priority, DateCrea
-        FROM ProductionExtractionJob
-        WHERE Statut = 'pending'
-          AND ModifELEM <> 'suppr'"""
+        """SELECT id_production_extraction_job, priority, datecrea
+        FROM pgt_productionextractionjob
+        WHERE statut = 'pending'
+          AND modif_elem <> 'suppr'"""
     )
     items = [
         (
-            _clean_id(_to_int(r.get("IDProductionExtractionJob"))),
-            _to_int(r.get("Priority")),
-            r.get("DateCrea") or "",
+            _clean_id(_to_int(r.get("id_production_extraction_job"))),
+            _to_int(r.get("priority")),
+            r.get("datecrea") or "",
         )
         for r in rows
     ]
@@ -270,8 +277,13 @@ def _load_pending_queue() -> list[tuple[int, int, str]]:
 
 
 def delete_job(id_job: int, id_salarie_user: int) -> bool:
-    """Soft-delete : ModifELEM='suppr'."""
-    db = get_connection("divers")
+    """Soft-delete : ModifELEM='suppr'.
+
+    Le SELECT de vérification reste sur HFSQL car il conditionne l'UPDATE
+    (cohérence : éviter qu'un job tout juste créé en HFSQL et pas encore
+    sync sur PG soit jugé inexistant).
+    """
+    db = get_connection("divers")  # HFSQL pour les ecritures + check
     now = _now_windev()
     # On vérifie d'abord que le job appartient bien à l'utilisateur
     existing = db.query_one(
@@ -302,7 +314,13 @@ def _row_to_dict(
     Si `queue` est fourni (liste des pending triée), calcule la position
     dans la file pour les jobs au statut 'pending' (1-indexed).
     """
-    params_raw = (r.get("ParamsJSON") or "").strip()
+    # params_json arrive de PG en str (text) ou de HFSQL en str.
+    # Sur PG bytea, ce serait memoryview/bytes — ici c'est du text donc str.
+    params_raw_v = r.get("params_json")
+    if isinstance(params_raw_v, (bytes, memoryview)):
+        params_raw = bytes(params_raw_v).decode("utf-8", errors="replace").strip()
+    else:
+        params_raw = (params_raw_v or "").strip()
     params = None
     if params_raw:
         # Compat : d'abord essayer base64 (nouveau format), sinon JSON brut (legacy)
@@ -316,7 +334,7 @@ def _row_to_dict(
                 params = None
 
     # MessageErreur peut être en base64 (stocké par le worker) ou en clair
-    msg_err_raw = (r.get("MessageErreur") or "").strip()
+    msg_err_raw = (r.get("message_erreur") or "").strip()
     msg_err = msg_err_raw
     if msg_err_raw:
         try:
@@ -324,8 +342,8 @@ def _row_to_dict(
         except Exception:
             msg_err = msg_err_raw
 
-    id_job = _clean_id(_to_int(r.get("IDProductionExtractionJob")))
-    statut = r.get("Statut") or ""
+    id_job = _clean_id(_to_int(r.get("id_production_extraction_job")))
+    statut = r.get("statut") or ""
     queue_position = 0
     queue_total = 0
     if queue is not None and statut == "pending":
@@ -337,19 +355,19 @@ def _row_to_dict(
 
     return {
         "id_job": str(id_job),
-        "id_salarie_user": str(_clean_id(_to_int(r.get("IDSalarieUser")))),
-        "date_crea": r.get("DateCrea") or "",
-        "date_debut_trait": r.get("DateDebutTrait") or "",
-        "date_fin_trait": r.get("DateFinTrait") or "",
+        "id_salarie_user": str(_clean_id(_to_int(r.get("id_salarie_user")))),
+        "date_crea": r.get("datecrea") or "",
+        "date_debut_trait": r.get("date_debut_trait") or "",
+        "date_fin_trait": r.get("date_fin_trait") or "",
         "statut": statut,
-        "progression_pct": _to_int(r.get("ProgressionPct")),
-        "progression_msg": r.get("ProgressionMsg") or "",
-        "nb_lignes": _to_int(r.get("NbLignes")),
-        "duree_s": _to_int(r.get("DureeS")),
-        "path_resultat": r.get("PathResultat") or "",
+        "progression_pct": _to_int(r.get("progression_pct")),
+        "progression_msg": r.get("progression_msg") or "",
+        "nb_lignes": _to_int(r.get("nb_lignes")),
+        "duree_s": _to_int(r.get("duree_s")),
+        "path_resultat": r.get("path_resultat") or "",
         "message_erreur": msg_err,
-        "titre": r.get("Titre") or "",
-        "priority": _to_int(r.get("Priority")),
+        "titre": r.get("titre") or "",
+        "priority": _to_int(r.get("priority")),
         "queue_position": queue_position,
         "queue_total": queue_total,
         "params": params,
@@ -360,24 +378,24 @@ def _row_to_dict(
 
 def list_partenaires() -> list[dict]:
     """Liste des partenaires disponibles (table Partenaire dans ADV)."""
-    db = get_connection("adv")
+    db = get_pg_connection("adv")
     rows = db.query(
-        """SELECT Lib_Partenaire, PréfixeBDD, IsActif,
-            Couleur_R, Couleur_V, Couleur_B
-        FROM Partenaire
-        WHERE ModifELEM <> 'suppr'
-          AND PréfixeBDD <> ''
-        ORDER BY IsActif DESC, Lib_Partenaire ASC"""
+        """SELECT lib_partenaire, prefixe_bdd, is_actif,
+            couleur_r, couleur_v, couleur_b
+        FROM pgt_partenaire
+        WHERE modif_elem <> 'suppr'
+          AND prefixe_bdd <> ''
+        ORDER BY is_actif DESC, lib_partenaire ASC"""
     )
     out = []
     for r in rows:
-        r_ = _to_int(r.get("Couleur_R"))
-        g_ = _to_int(r.get("Couleur_V"))
-        b_ = _to_int(r.get("Couleur_B"))
+        r_ = _to_int(r.get("couleur_r"))
+        g_ = _to_int(r.get("couleur_v"))
+        b_ = _to_int(r.get("couleur_b"))
         out.append({
-            "lib": r.get("Lib_Partenaire") or "",
-            "prefix": r.get("PréfixeBDD") or "",
-            "is_actif": bool(r.get("IsActif")),
+            "lib": r.get("lib_partenaire") or "",
+            "prefix": r.get("prefixe_bdd") or "",
+            "is_actif": bool(r.get("is_actif")),
             "couleur_hex": f"#{r_:02X}{g_:02X}{b_:02X}",
         })
     return out
@@ -389,28 +407,29 @@ def search_organigrammes(q: str, limit: int = 20) -> list[dict]:
     if len(q) < 2:
         return []
 
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     rows = db.query(
-        f"""SELECT TOP {int(limit)} idorganigramme, Lib_ORGA, IdPARENT
-        FROM organigramme
-        WHERE ModifELEM <> 'suppr'
-          AND Lib_ORGA LIKE ?
-        ORDER BY Lib_ORGA ASC""",
+        f"""SELECT idorganigramme, lib_orga, id_parent
+        FROM pgt_organigramme
+        WHERE modif_elem <> 'suppr'
+          AND LOWER(lib_orga) LIKE LOWER(?)
+        ORDER BY lib_orga ASC
+        LIMIT {int(limit)}""",
         (f"%{q}%",),
     )
 
     # Charger les parents pour afficher "{Parent} → {Orga}"
-    parent_ids = {_to_int(r.get("IdPARENT")) for r in rows}
+    parent_ids = {_to_int(r.get("id_parent")) for r in rows}
     parent_ids.discard(0)
     parent_libs: dict[int, str] = {}
     if parent_ids:
         ids_sql = ",".join(str(i) for i in parent_ids)
         prows = db.query(
-            f"""SELECT idorganigramme, Lib_ORGA FROM organigramme
+            f"""SELECT idorganigramme, lib_orga FROM pgt_organigramme
             WHERE idorganigramme IN ({ids_sql})"""
         )
         parent_libs = {
-            _to_int(p.get("idorganigramme")): p.get("Lib_ORGA") or ""
+            _to_int(p.get("idorganigramme")): p.get("lib_orga") or ""
             for p in prows
         }
 
@@ -419,10 +438,10 @@ def search_organigrammes(q: str, limit: int = 20) -> list[dict]:
         oid = _clean_id(_to_int(r.get("idorganigramme")))
         if not oid:
             continue
-        pid = _to_int(r.get("IdPARENT"))
+        pid = _to_int(r.get("id_parent"))
         out.append({
             "id_organigramme": str(oid),
-            "lib_orga": r.get("Lib_ORGA") or "",
+            "lib_orga": r.get("lib_orga") or "",
             "parent_lib": parent_libs.get(pid, ""),
         })
     return out
@@ -430,21 +449,21 @@ def search_organigrammes(q: str, limit: int = 20) -> list[dict]:
 
 def list_types_etat() -> list[dict]:
     """Liste des types d'état (TypeEtatContrat dans ADV, table partagée)."""
-    db = get_connection("adv")
+    db = get_pg_connection("adv")
     rows = db.query(
-        """SELECT IDTypeEtat, LibType, Couleur_R, Couleur_V, Couleur_B
-        FROM TypeEtatContrat
-        WHERE ModifELEM <> 'suppr'
-        ORDER BY LibType ASC"""
+        """SELECT id_type_etat, lib_type, couleur_r, couleur_v, couleur_b
+        FROM pgt_type_etat_contrat
+        WHERE modif_elem <> 'suppr'
+        ORDER BY lib_type ASC"""
     )
     out = []
     for r in rows:
-        r_ = _to_int(r.get("Couleur_R"))
-        g_ = _to_int(r.get("Couleur_V"))
-        b_ = _to_int(r.get("Couleur_B"))
+        r_ = _to_int(r.get("couleur_r"))
+        g_ = _to_int(r.get("couleur_v"))
+        b_ = _to_int(r.get("couleur_b"))
         out.append({
-            "id": _to_int(r.get("IDTypeEtat")),
-            "lib": r.get("LibType") or "",
+            "id": _to_int(r.get("id_type_etat")),
+            "lib": r.get("lib_type") or "",
             "couleur_hex": f"#{r_:02X}{g_:02X}{b_:02X}",
         })
     return out

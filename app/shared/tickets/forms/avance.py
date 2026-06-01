@@ -19,6 +19,7 @@ import tempfile
 
 from app.core.config import FTP_GESTION_RH_PATH
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -46,24 +47,29 @@ def _salaire_nom(sid: int) -> str:
 
 def _preuve(id_demande: int):
     """(data_url, octets) du mémo binaire PreuveVirement.
-    SELECT clé + mémo (un SELECT du seul mémo binaire casse le JSON)."""
+
+    Lecture sur PG (bytea). PG bytea revient en memoryview/bytes.
+    """
     if not id_demande:
         return "", None
     try:
-        db = get_connection("ticket_bo")
+        db = get_pg_connection("ticket_bo")
         r = db.query_one(
-            "SELECT IDTK_DemandeAvance, PreuveVirement FROM TK_DemandeAvance "
-            "WHERE IDTK_DemandeAvance = ?",
+            "SELECT id_tk_demande_avance, preuve_virement FROM pgt_tk_demande_avance "
+            "WHERE id_tk_demande_avance = ?",
             (int(id_demande),),
         )
-        v = r.get("PreuveVirement") if r else None
+        v = r.get("preuve_virement") if r else None
         url = _icone_to_data_url(v)
         raw = None
         if v:
             try:
-                raw = v if isinstance(v, bytes) else base64.b64decode(
-                    str(v).split(",", 1)[-1]
-                )
+                if isinstance(v, memoryview):
+                    raw = bytes(v)
+                elif isinstance(v, bytes):
+                    raw = v
+                else:
+                    raw = base64.b64decode(str(v).split(",", 1)[-1])
             except Exception:
                 raw = None
         return url, raw
@@ -72,29 +78,29 @@ def _preuve(id_demande: int):
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDTK_DemandeAvance, Bénéficiaire, Montant,
-            DemandeValidée, DATEPAIEMENT
-        FROM TK_DemandeAvance WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_tk_demande_avance, beneficiaire, montant,
+            demande_validee, date_paiement
+        FROM pgt_tk_demande_avance WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
 
-    id_demande = _clean_id(_to_int(r.get("IDTK_DemandeAvance")))
-    benef = _clean_id(_to_int(r.get("Bénéficiaire")))
+    id_demande = _clean_id(_to_int(r.get("id_tk_demande_avance")))
+    benef = _clean_id(_to_int(r.get("beneficiaire")))
     preuve_url, _ = _preuve(id_demande)
 
     # salarie_avance.DateEffective (base rh) -> Date du virement
     date_virement = ""
     try:
-        sa = get_connection("rh").query_one(
-            "SELECT IDsalarie_avance, DateEffective FROM salarie_avance "
-            "WHERE IDTK_Liste = ?",
+        sa = get_pg_connection("rh").query_one(
+            "SELECT id_salarie_avance, date_effective FROM pgt_salarie_avance "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
-        date_virement = date_only_to_iso(sa.get("DateEffective")) if sa else ""
+        date_virement = date_only_to_iso(sa.get("date_effective")) if sa else ""
     except Exception:
         date_virement = ""
 
@@ -103,10 +109,10 @@ def load(id_ticket: int) -> dict:
         "id_demande": str(id_demande) if id_demande else "",
         "benef_id": str(benef) if benef else "",
         "benef_nom": _salaire_nom(benef),
-        "montant": r.get("Montant") or 0,
-        "mois_paiement": (r.get("DATEPAIEMENT") or "").strip(),
+        "montant": r.get("montant") or 0,
+        "mois_paiement": (r.get("date_paiement") or "").strip(),
         "date_virement": date_virement,
-        "demande_validee": bool(r.get("DemandeValidée")),
+        "demande_validee": bool(r.get("demande_validee")),
         "preuve_url": preuve_url,
         "has_preuve": bool(preuve_url),
     }

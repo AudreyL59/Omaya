@@ -20,6 +20,7 @@ Spécificités vs CttW :
 """
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -170,22 +171,22 @@ def _resp_orga_gsm(id_salarie: int) -> str:
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDdemandeContratW, IDSalarie, idDistrib,
-            IDsociete_docCourtage, contratGénéré, contratValidé,
-            contratSigné, contratAnnul, datesignature, TitreContrat
-        FROM TK_DemandeCttCourtage WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_demande_contrat_w, id_salarie, id_distrib,
+            id_societe_doc_courtage, contrat_genere, contrat_valide,
+            contrat_signe, contrat_annul, datesignature, titre_contrat
+        FROM pgt_tk_demande_ctt_courtage WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
 
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
-    id_distrib = _clean_id(_to_int(r.get("idDistrib")))
-    id_societe_doc = _to_int(r.get("IDsociete_docCourtage"))
-    contrat_valide = bool(r.get("contratValidé"))
-    contrat_signe = bool(r.get("contratSigné"))
+    id_salarie = _clean_id(_to_int(r.get("id_salarie")))
+    id_distrib = _clean_id(_to_int(r.get("id_distrib")))
+    id_societe_doc = _to_int(r.get("id_societe_doc_courtage"))
+    contrat_valide = bool(r.get("contrat_valide"))
+    contrat_signe = bool(r.get("contrat_signe"))
     plan = 2 if contrat_valide else 1
 
     info_doc = _doc_courtage_info(id_societe_doc)
@@ -197,14 +198,14 @@ def load(id_ticket: int) -> dict:
         "salarie_nom": _salaire_nom(id_salarie),
         "id_distrib": str(id_distrib) if id_distrib else "",
         "da_nom": _salaire_nom(id_distrib),
-        "titre_contrat": (r.get("TitreContrat") or "").strip(),
+        "titre_contrat": (r.get("titre_contrat") or "").strip(),
         "lib_document": info_doc["lib_document"],
         "lib_groupe": info_doc["lib_groupe"],
         "test_attest": info_doc["test_attest"],
-        "contrat_genere": bool(r.get("contratGénéré")),
+        "contrat_genere": bool(r.get("contrat_genere")),
         "contrat_valide": contrat_valide,
         "contrat_signe": contrat_signe,
-        "contrat_annul": bool(r.get("contratAnnul")),
+        "contrat_annul": bool(r.get("contrat_annul")),
         "date_signature": date_only_to_iso(r.get("datesignature")),
     }
 

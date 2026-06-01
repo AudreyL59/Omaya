@@ -12,6 +12,7 @@ import os
 import tempfile
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
@@ -25,33 +26,28 @@ from ..service import (
 
 
 def _photo_data_url(id_ligne: int) -> str:
-    """Mémo PHOTO d'une ligne → data URL.
-
-    NB : on SELECT aussi la clé. Un SELECT ne contenant QUE le mémo
-    binaire fait planter le bridge (HEnregistrementVersJSON renvoie un
-    objet vide → injection base64 → JSON invalide `{,"PHOTO":...}`).
-    """
+    """Mémo PHOTO d'une ligne → data URL (PG bytea)."""
     try:
-        db = get_connection("ticket_bo")
+        db = get_pg_connection("ticket_bo")
         r = db.query_one(
-            "SELECT IDTK_DemandeCartePRO, PHOTO FROM TK_DemandeCartePRO "
-            "WHERE IDTK_DemandeCartePRO = ?",
+            "SELECT id_tk_demande_carte_pro, photo FROM pgt_tk_demande_carte_pro "
+            "WHERE id_tk_demande_carte_pro = ?",
             (int(id_ligne),),
         )
-        return _icone_to_data_url(r.get("PHOTO") if r else None)
+        return _icone_to_data_url(r.get("photo") if r else None)
     except Exception:
         return ""
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_bo")
+    db = get_pg_connection("ticket_bo")
     try:
         rows = db.query(
-            """SELECT IDTK_DemandeCartePRO, IDSalarie, NumSuivi
-            FROM TK_DemandeCartePRO
-            WHERE IDTK_Liste = ?
-              AND ModifElem NOT LIKE '%suppr%'
-            ORDER BY dateCrea""",
+            """SELECT id_tk_demande_carte_pro, id_salarie, num_suivi
+            FROM pgt_tk_demande_carte_pro
+            WHERE id_tk_liste = ?
+              AND modif_elem NOT LIKE '%suppr%'
+            ORDER BY date_crea""",
             (int(id_ticket),),
         )
     except Exception:
@@ -60,16 +56,16 @@ def load(id_ticket: int) -> dict:
     sal_ids: set[int] = set()
     base: list[dict] = []
     for r in rows:
-        idl = _clean_id(_to_int(r.get("IDTK_DemandeCartePRO")))
+        idl = _clean_id(_to_int(r.get("id_tk_demande_carte_pro")))
         if not idl:
             continue
-        sid = _clean_id(_to_int(r.get("IDSalarie")))
+        sid = _clean_id(_to_int(r.get("id_salarie")))
         if sid:
             sal_ids.add(sid)
         base.append({
             "id": str(idl),
             "id_salarie": str(sid) if sid else "",
-            "num_suivi": (r.get("NumSuivi") or "").strip(),
+            "num_suivi": (r.get("num_suivi") or "").strip(),
         })
 
     infos = salarie_infos_batch(sal_ids)
@@ -143,7 +139,9 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
                 "TK_DemandeCartePRO", "IDTK_DemandeCartePRO",
                 int(id_ligne), "PHOTO", tmp,
             )
-            # Si la photo du salarié est vide → on l'y recopie (cf. WinDev)
+            # Si la photo du salarié est vide → on l'y recopie (cf. WinDev).
+            # Le check de la photo se fait sur HFSQL (pre-attach) pour eviter
+            # le lag PG, l'attach_memo reste HFSQL.
             if id_salarie:
                 db_rh = get_connection("rh")
                 sp = db_rh.query_one(

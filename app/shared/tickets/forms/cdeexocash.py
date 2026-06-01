@@ -15,6 +15,7 @@ Fonctionnalités :
 """
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -39,83 +40,163 @@ CATEG_POUR = {1: "Femme", 2: "Homme", 3: "H/F"}
 # Helpers cross-DB
 # --------------------------------------------------------------------
 
-def _lots_catalogue(ids: set[int] | None = None) -> dict[int, dict]:
+def _lots_catalogue(ids: set[int] | None = None, use_hf: bool = False) -> dict[int, dict]:
     """Retourne {IDExoCashLot: {libfam, marque, liblot, categ, montant,
     montant_solde, en_solde, stock, sur_commande}} depuis ExoCashLot +
-    ExoCashFamilleLot (base divers). Si ids fourni, filtre."""
-    db = get_connection("divers")
+    ExoCashFamilleLot (base divers). Si ids fourni, filtre.
+
+    use_hf=True : pour les checks pre-UPDATE (validation, add_lot...),
+    car le stock change frequemment. use_hf=False : affichage (PG ok).
+    """
+    if use_hf:
+        db = get_connection("divers")
+        where = ""
+        if ids:
+            ids_ok = {int(i) for i in ids if i}
+            if not ids_ok:
+                return {}
+            where = " WHERE IDExoCashLot IN (" + ",".join(str(i) for i in ids_ok) + ")"
+        out: dict[int, dict] = {}
+        fams: dict[int, str] = {}
+        try:
+            for r in db.query("SELECT IDExoCashFamilleLot, LibFamilleLot "
+                              "FROM ExoCashFamilleLot"):
+                fams[_to_int(r.get("IDExoCashFamilleLot"))] = (
+                    r.get("LibFamilleLot") or ""
+                ).strip()
+        except Exception:
+            pass
+        try:
+            rows = db.query(
+                "SELECT IDExoCashLot, IDExoCashFamilleLot, Marque, LibLot, "
+                "Catégorie, Montant, MontantSolde, EnSolde, Stock, SurCommande "
+                "FROM ExoCashLot" + where
+            )
+        except Exception:
+            rows = []
+        for r in rows or []:
+            try:
+                idl = _clean_id(_to_int(r.get("IDExoCashLot")))
+                if not idl:
+                    continue
+                categ = _to_int(r.get("Catégorie"))
+                out[idl] = {
+                    "id": idl,
+                    "id_famille": _to_int(r.get("IDExoCashFamilleLot")),
+                    "libfam": fams.get(_to_int(r.get("IDExoCashFamilleLot")), ""),
+                    "marque": str(r.get("Marque") or "").strip(),
+                    "liblot": str(r.get("LibLot") or "").strip(),
+                    "categ": categ,
+                    "pour": CATEG_POUR.get(categ, ""),
+                    "montant": float(r.get("Montant") or 0),
+                    "montant_solde": float(r.get("MontantSolde") or 0),
+                    "en_solde": bool(r.get("EnSolde")),
+                    "stock": _to_int(r.get("Stock")),
+                    "sur_commande": bool(r.get("SurCommande")),
+                }
+            except Exception:
+                continue
+        return out
+
+    # PG (lecture d'affichage)
+    db = get_pg_connection("divers")
     where = ""
     if ids:
         ids_ok = {int(i) for i in ids if i}
         if not ids_ok:
             return {}
-        where = " WHERE IDExoCashLot IN (" + ",".join(str(i) for i in ids_ok) + ")"
+        where = " WHERE id_exo_cash_lot IN (" + ",".join(str(i) for i in ids_ok) + ")"
     out: dict[int, dict] = {}
     fams: dict[int, str] = {}
     try:
-        for r in db.query("SELECT IDExoCashFamilleLot, LibFamilleLot "
-                          "FROM ExoCashFamilleLot"):
-            fams[_to_int(r.get("IDExoCashFamilleLot"))] = (
-                r.get("LibFamilleLot") or ""
+        for r in db.query("SELECT id_exo_cash_famille_lot, lib_famille_lot "
+                          "FROM pgt_exo_cash_famille_lot"):
+            fams[_to_int(r.get("id_exo_cash_famille_lot"))] = (
+                r.get("lib_famille_lot") or ""
             ).strip()
     except Exception:
         pass
     try:
         rows = db.query(
-            "SELECT IDExoCashLot, IDExoCashFamilleLot, Marque, LibLot, "
-            "Catégorie, Montant, MontantSolde, EnSolde, Stock, SurCommande "
-            "FROM ExoCashLot" + where
+            "SELECT id_exo_cash_lot, id_exo_cash_famille_lot, marque, lib_lot, "
+            "categorie, montant, montant_solde, en_solde, stock, sur_commande "
+            "FROM pgt_exo_cash_lot" + where
         )
     except Exception:
         rows = []
     for r in rows or []:
         try:
-            idl = _clean_id(_to_int(r.get("IDExoCashLot")))
+            idl = _clean_id(_to_int(r.get("id_exo_cash_lot")))
             if not idl:
                 continue
-            categ = _to_int(r.get("Catégorie"))
+            categ = _to_int(r.get("categorie"))
             out[idl] = {
                 "id": idl,
-                "id_famille": _to_int(r.get("IDExoCashFamilleLot")),
-                "libfam": fams.get(_to_int(r.get("IDExoCashFamilleLot")), ""),
-                "marque": str(r.get("Marque") or "").strip(),
-                "liblot": str(r.get("LibLot") or "").strip(),
+                "id_famille": _to_int(r.get("id_exo_cash_famille_lot")),
+                "libfam": fams.get(_to_int(r.get("id_exo_cash_famille_lot")), ""),
+                "marque": str(r.get("marque") or "").strip(),
+                "liblot": str(r.get("lib_lot") or "").strip(),
                 "categ": categ,
                 "pour": CATEG_POUR.get(categ, ""),
-                "montant": float(r.get("Montant") or 0),
-                "montant_solde": float(r.get("MontantSolde") or 0),
-                "en_solde": bool(r.get("EnSolde")),
-                "stock": _to_int(r.get("Stock")),
-                "sur_commande": bool(r.get("SurCommande")),
+                "montant": float(r.get("montant") or 0),
+                "montant_solde": float(r.get("montant_solde") or 0),
+                "en_solde": bool(r.get("en_solde")),
+                "stock": _to_int(r.get("stock")),
+                "sur_commande": bool(r.get("sur_commande")),
             }
         except Exception:
             continue
     return out
 
 
-def _panier_lignes(id_ticket: int) -> list[dict]:
-    rh = get_connection("ticket_rh")
-    try:
-        rows = rh.query(
-            """SELECT IDTK_CdeExoCashLot, IDExoCashLot, Qté, NumSuivi,
-                MontantPayé
-            FROM TK_CdeExoCashLot
-            WHERE ModifElem NOT LIKE '%suppr%' AND IDTK_Liste = ?""",
-            (int(id_ticket),),
-        )
-    except Exception:
-        return []
-    lines = [
-        {
-            "id_panier": str(_clean_id(_to_int(r.get("IDTK_CdeExoCashLot")))),
-            "id_lot": _clean_id(_to_int(r.get("IDExoCashLot"))),
-            "qte": _to_int(r.get("Qté")),
-            "num_suivi": (r.get("NumSuivi") or "").strip(),
-            "montant_unitaire": float(r.get("MontantPayé") or 0),
-        }
-        for r in rows or []
-    ]
-    cat = _lots_catalogue({l["id_lot"] for l in lines})
+def _panier_lignes(id_ticket: int, use_hf: bool = False) -> list[dict]:
+    """Lignes du panier. use_hf=True pour la validation (read-then-write)."""
+    if use_hf:
+        rh = get_connection("ticket_rh")
+        try:
+            rows = rh.query(
+                """SELECT IDTK_CdeExoCashLot, IDExoCashLot, Qté, NumSuivi,
+                    MontantPayé
+                FROM TK_CdeExoCashLot
+                WHERE ModifElem NOT LIKE '%suppr%' AND IDTK_Liste = ?""",
+                (int(id_ticket),),
+            )
+        except Exception:
+            return []
+        lines = [
+            {
+                "id_panier": str(_clean_id(_to_int(r.get("IDTK_CdeExoCashLot")))),
+                "id_lot": _clean_id(_to_int(r.get("IDExoCashLot"))),
+                "qte": _to_int(r.get("Qté")),
+                "num_suivi": (r.get("NumSuivi") or "").strip(),
+                "montant_unitaire": float(r.get("MontantPayé") or 0),
+            }
+            for r in rows or []
+        ]
+        cat = _lots_catalogue({l["id_lot"] for l in lines}, use_hf=True)
+    else:
+        rh = get_pg_connection("ticket_rh")
+        try:
+            rows = rh.query(
+                """SELECT id_tk_cde_exo_cash_lot, id_exo_cash_lot, qte, num_suivi,
+                    montant_paye
+                FROM pgt_tk_cde_exo_cash_lot
+                WHERE modif_elem NOT LIKE '%suppr%' AND id_tk_liste = ?""",
+                (int(id_ticket),),
+            )
+        except Exception:
+            return []
+        lines = [
+            {
+                "id_panier": str(_clean_id(_to_int(r.get("id_tk_cde_exo_cash_lot")))),
+                "id_lot": _clean_id(_to_int(r.get("id_exo_cash_lot"))),
+                "qte": _to_int(r.get("qte")),
+                "num_suivi": (r.get("num_suivi") or "").strip(),
+                "montant_unitaire": float(r.get("montant_paye") or 0),
+            }
+            for r in rows or []
+        ]
+        cat = _lots_catalogue({l["id_lot"] for l in lines})
     for l in lines:
         info = cat.get(l["id_lot"], {})
         l["libfam"] = info.get("libfam", "")
@@ -131,48 +212,48 @@ def _panier_lignes(id_ticket: int) -> list[dict]:
 
 def _envois(id_ticket: int) -> list[dict]:
     try:
-        rows = get_connection("ticket_rh").query(
-            """SELECT IDTK_CdeExoCashEnvoi, NumSuivi, dateEnvoi, Transporteur
-            FROM TK_CdeExoCashEnvoi
-            WHERE ModifElem <> 'suppr' AND IDTK_Liste = ?""",
+        rows = get_pg_connection("ticket_rh").query(
+            """SELECT id_tk_cde_exo_cash_envoi, num_suivi, date_envoi, transporteur,
+                adresse_livraison
+            FROM pgt_tk_cde_exo_cash_envoi
+            WHERE modif_elem <> 'suppr' AND id_tk_liste = ?""",
             (int(id_ticket),),
         )
     except Exception:
         return []
     out = []
     for r in rows or []:
-        ide = _clean_id(_to_int(r.get("IDTK_CdeExoCashEnvoi")))
+        ide = _clean_id(_to_int(r.get("id_tk_cde_exo_cash_envoi")))
         out.append({
             "id_envoi": str(ide),
-            "num_suivi": (r.get("NumSuivi") or "").strip(),
-            "date_envoi": date_only_to_iso(r.get("dateEnvoi")),
-            "transporteur": (r.get("Transporteur") or "").strip(),
+            "num_suivi": (r.get("num_suivi") or "").strip(),
+            "date_envoi": date_only_to_iso(r.get("date_envoi")),
+            "transporteur": (r.get("transporteur") or "").strip(),
+            "adresse": (r.get("adresse_livraison") or "").strip(),
         })
-    # AdresseLivraison via SELECT isolé (mémo)
-    for e in out:
-        try:
-            r = get_connection("ticket_rh").query_one(
-                "SELECT IDTK_CdeExoCashEnvoi, AdresseLivraison "
-                "FROM TK_CdeExoCashEnvoi "
-                "WHERE IDTK_CdeExoCashEnvoi = ?",
-                (int(e["id_envoi"]),),
-            )
-            e["adresse"] = ((r.get("AdresseLivraison") if r else "") or "").strip()
-        except Exception:
-            e["adresse"] = ""
     return out
 
 
-def _solde_exocash(id_salarie: int) -> float:
-    """Somme crédit - débit (salarie_Livret rh) pour le salarié."""
+def _solde_exocash(id_salarie: int, use_hf: bool = False) -> float:
+    """Somme crédit - débit (salarie_Livret rh) pour le salarié.
+
+    use_hf=True : pour le check pre-validation (lecture critique, pas de lag).
+    """
     if not id_salarie:
         return 0.0
     try:
-        r = get_connection("rh").query_one(
-            "SELECT SUM(MontantCrédit) AS c, SUM(MontantDébit) AS d "
-            "FROM salarie_Livret WHERE IDSalarie = ?",
-            (int(id_salarie),),
-        )
+        if use_hf:
+            r = get_connection("rh").query_one(
+                "SELECT SUM(MontantCrédit) AS c, SUM(MontantDébit) AS d "
+                "FROM salarie_Livret WHERE IDSalarie = ?",
+                (int(id_salarie),),
+            )
+        else:
+            r = get_pg_connection("rh").query_one(
+                "SELECT SUM(montant_credit) AS c, SUM(montant_debit) AS d "
+                "FROM pgt_salarie_livret WHERE id_salarie = ?",
+                (int(id_salarie),),
+            )
         return float((r.get("c") or 0)) - float((r.get("d") or 0))
     except Exception:
         return 0.0
@@ -184,24 +265,24 @@ def _adresse_salarie(id_salarie: int) -> str:
     if not id_salarie:
         return ""
     try:
-        rh = get_connection("rh")
+        rh = get_pg_connection("rh")
         i = load_salaries_minimal({int(id_salarie)}).get(int(id_salarie), {})
         nom = i.get("nom", "")
         prenom = i.get("prenom", "")
         nom_pre = f"{nom} {prenom[:1].upper() + prenom[1:].lower() if prenom else ''}".strip()
         c = rh.query_one(
-            "SELECT IDSalarie, Adresse1, ADRESSE2, CP, Ville "
-            "FROM salarie_coordonnées WHERE IDSalarie = ?",
+            "SELECT id_salarie, adresse1, adresse2, cp, ville "
+            "FROM pgt_salarie_coordonnees WHERE id_salarie = ?",
             (int(id_salarie),),
         )
         if not c:
             return nom_pre
-        parts = [nom_pre, (c.get("Adresse1") or "").strip()]
-        a2 = (c.get("ADRESSE2") or "").strip()
+        parts = [nom_pre, (c.get("adresse1") or "").strip()]
+        a2 = (c.get("adresse2") or "").strip()
         if a2:
             parts.append(a2)
         parts.append(
-            f"{(c.get('CP') or '').strip()} {(c.get('Ville') or '').strip()}"
+            f"{(c.get('cp') or '').strip()} {(c.get('ville') or '').strip()}"
             .strip()
         )
         return "\n".join(p for p in parts if p)
@@ -214,18 +295,18 @@ def _adresse_salarie(id_salarie: int) -> str:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDTK_CdeExoCash, IDSalarie, DateCommande,
-            CommandeValidée, DateValidation, OpéValidation
-        FROM TK_CdeExoCash WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_tk_cde_exo_cash, id_salarie, date_commande,
+            commande_validee, date_validation, ope_validation
+        FROM pgt_tk_cde_exo_cash WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
-    id_cde = _clean_id(_to_int(r.get("IDTK_CdeExoCash")))
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
-    op_valid = _clean_id(_to_int(r.get("OpéValidation")))
+    id_cde = _clean_id(_to_int(r.get("id_tk_cde_exo_cash")))
+    id_salarie = _clean_id(_to_int(r.get("id_salarie")))
+    op_valid = _clean_id(_to_int(r.get("ope_validation")))
     op_valid_nom = ""
     if op_valid:
         i = load_salaries_minimal({op_valid}).get(op_valid, {})
@@ -246,9 +327,9 @@ def load(id_ticket: int) -> dict:
         "salarie_nom": (
             lambda i: f"{i.get('nom', '')} {(i.get('prenom') or '')[:1].upper() + (i.get('prenom') or '')[1:].lower() if i.get('prenom') else ''}".strip()
         )(load_salaries_minimal({id_salarie}).get(id_salarie, {})),
-        "date_commande": _windev_to_iso(r.get("DateCommande")),
-        "commande_validee": bool(r.get("CommandeValidée")),
-        "date_validation": _windev_to_iso(r.get("DateValidation")),
+        "date_commande": _windev_to_iso(r.get("date_commande")),
+        "commande_validee": bool(r.get("commande_validee")),
+        "date_validation": _windev_to_iso(r.get("date_validation")),
         "op_validation_nom": op_valid_nom,
         "panier": panier,
         "envois": _envois(id_ticket),
@@ -276,7 +357,8 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         if not cur:
             return {"ok": False, "error": "Commande introuvable"}
         id_cde = _clean_id(_to_int(cur.get("IDTK_CdeExoCash")))
-        lot = _lots_catalogue({id_lot}).get(id_lot)
+        # Lecture du lot pre-INSERT -> HFSQL pour avoir le montant/stock a jour
+        lot = _lots_catalogue({id_lot}, use_hf=True).get(id_lot)
         if not lot:
             return {"ok": False, "error": "Lot introuvable"}
         montant = (
@@ -411,11 +493,12 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             return {"ok": False, "error": "Commande introuvable"}
         id_salarie = _clean_id(_to_int(cur.get("IDSalarie")))
 
-        panier = _panier_lignes(int(id_ticket))
+        # Lectures pre-validation -> HFSQL pour eviter le lag PG
+        panier = _panier_lignes(int(id_ticket), use_hf=True)
         if not panier:
             return {"ok": False, "error": "Le panier est vide"}
         montant_total = sum(l["montant_total"] for l in panier)
-        solde = _solde_exocash(id_salarie)
+        solde = _solde_exocash(id_salarie, use_hf=True)
         if montant_total > solde:
             return {"ok": False,
                     "error": "Solde ExoCash insuffisant pour valider"}
@@ -453,7 +536,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         div = get_connection("divers")
         for l in panier:
             try:
-                lot = _lots_catalogue({l["id_lot"]}).get(l["id_lot"])
+                lot = _lots_catalogue({l["id_lot"]}, use_hf=True).get(l["id_lot"])
                 if not lot:
                     continue
                 if not lot["sur_commande"]:
@@ -520,6 +603,7 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         )
         if not cur:
             return {"ok": False, "error": "Commande introuvable"}
+        # actualiser_solde sert juste a rafraichir l'affichage -> PG ok
         return {"ok": True, "solde": _solde_exocash(
             _clean_id(_to_int(cur.get("IDSalarie")))
         )}

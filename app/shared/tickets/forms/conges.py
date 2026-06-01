@@ -23,6 +23,7 @@ from datetime import date, datetime, timedelta
 
 from app.core.config import FTP_GESTION_RH_PATH
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 from ..service import (
@@ -52,15 +53,15 @@ _DEFAULT_TYPE_ABS_AUTRE = 14
 
 def _types_absence() -> list[dict]:
     try:
-        db = get_connection("rh")
+        db = get_pg_connection("rh")
         return [
             {
-                "id": _to_int(r.get("IDTypeAbsence")),
-                "lib": (r.get("Lib_Absence") or "").strip(),
+                "id": _to_int(r.get("id_type_absence")),
+                "lib": (r.get("lib_absence") or "").strip(),
             }
             for r in db.query(
-                "SELECT IDTypeAbsence, Lib_Absence FROM TypeAbsence "
-                "ORDER BY Lib_Absence"
+                "SELECT id_type_absence, lib_absence FROM pgt_type_absence "
+                "ORDER BY lib_absence"
             )
         ]
     except Exception:

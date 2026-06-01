@@ -14,6 +14,7 @@ from datetime import datetime
 
 from app.core.config import DOCS_URL
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
 
@@ -58,85 +59,85 @@ def lister_sessions() -> list[dict]:
     Liste les sessions de recrutement actives (IDprevRecrutEtat = 2 ou 6)
     à partir d'aujourd'hui, avec le nom de ville + recruteur + lieu.
     """
-    db_rec = get_connection("recrutement")
-    db_rh = get_connection("rh")
-    db_divers = get_connection("divers")
+    db_rec = get_pg_connection("recrutement")
+    db_rh = get_pg_connection("rh")
+    db_divers = get_pg_connection("divers")
     today = _today_windev()
 
     rows = db_rec.query(
-        """SELECT IDprevisionRecrut, dateSession, IDCommunesFrance,
-            IdRecruteur, IDcvLieuRdv
-        FROM prevRecrut
-        WHERE (IDprevRecrutEtat = 6 OR IDprevRecrutEtat = 2)
-          AND LEFT(dateSession, 8) >= ?
-        ORDER BY dateSession ASC""",
+        """SELECT id_prevision_recrut, date_session, id_communes_france,
+            id_recruteur, id_cv_lieu_rdv
+        FROM pgt_prev_recrut
+        WHERE (id_prev_recrut_etat = 6 OR id_prev_recrut_etat = 2)
+          AND LEFT(date_session, 8) >= ?
+        ORDER BY date_session ASC""",
         (today,),
     )
 
     if not rows:
         return []
 
-    commune_ids = {_to_int(r.get("IDCommunesFrance")) for r in rows}
+    commune_ids = {_to_int(r.get("id_communes_france")) for r in rows}
     commune_ids.discard(0)
     communes_map: dict[int, str] = {}
     if commune_ids:
         ids_sql = ",".join(str(i) for i in commune_ids)
         crows = db_divers.query(
-            f"SELECT IDCommunesFrance, NomVille FROM CommunesFrance "
-            f"WHERE IDCommunesFrance IN ({ids_sql})"
+            f"SELECT id_communes_france, nom_ville FROM pgt_communes_france "
+            f"WHERE id_communes_france IN ({ids_sql})"
         )
         for c in crows:
-            communes_map[_to_int(c.get("IDCommunesFrance"))] = c.get("NomVille") or ""
+            communes_map[_to_int(c.get("id_communes_france"))] = c.get("nom_ville") or ""
 
     # Noms recruteurs
-    rec_ids = {_to_int(r.get("IdRecruteur")) for r in rows}
+    rec_ids = {_to_int(r.get("id_recruteur")) for r in rows}
     rec_ids.discard(0)
     rec_map: dict[int, str] = {}
     if rec_ids:
         ids_sql = ",".join(str(i) for i in rec_ids)
         rrows = db_rh.query(
-            f"SELECT IDSalarie, NOM, PRENOM FROM salarie WHERE IDSalarie IN ({ids_sql})"
+            f"SELECT id_salarie, nom, prenom FROM pgt_salarie WHERE id_salarie IN ({ids_sql})"
         )
         for r in rrows:
-            nom = r.get("NOM") or ""
-            prenom = (r.get("PRENOM") or "").capitalize()
-            rec_map[_to_int(r.get("IDSalarie"))] = f"{nom} {prenom}".strip()
+            nom = r.get("nom") or ""
+            prenom = (r.get("prenom") or "").capitalize()
+            rec_map[_to_int(r.get("id_salarie"))] = f"{nom} {prenom}".strip()
 
     result = []
     for r in rows:
-        ville = communes_map.get(_to_int(r.get("IDCommunesFrance")), "")
-        ds = r.get("dateSession") or ""
+        ville = communes_map.get(_to_int(r.get("id_communes_france")), "")
+        ds = r.get("date_session") or ""
         if "-" in ds:
             date_disp = f"{ds[8:10]}/{ds[5:7]}/{ds[0:4]}"
         elif ds and len(ds) >= 8:
             date_disp = f"{ds[6:8]}/{ds[4:6]}/{ds[0:4]}"
         else:
             date_disp = ds
-        id_recruteur = _to_int(r.get("IdRecruteur"))
+        id_recruteur = _to_int(r.get("id_recruteur"))
         result.append({
-            "id_prevision_recrut": str(_to_int(r.get("IDprevisionRecrut"))),
+            "id_prevision_recrut": str(_to_int(r.get("id_prevision_recrut"))),
             "date_session": ds,
             "nom_ville": ville,
             "label": f"{date_disp} - {ville}".strip(" -"),
             "id_recruteur": str(id_recruteur),
             "recruteur_nom": rec_map.get(id_recruteur, ""),
-            "id_lieu_rdv": _to_int(r.get("IDcvLieuRdv")),
+            "id_lieu_rdv": _to_int(r.get("id_cv_lieu_rdv")),
         })
     return result
 
 
 def lister_lieux_rdv() -> list[dict]:
     """Liste les lieux de RDV actifs (hors Visio qui est un cas spécial ID=1)."""
-    db = get_connection("recrutement")
+    db = get_pg_connection("recrutement")
     rows = db.query(
-        """SELECT IDcvLieuRdv, Lib_Lieu FROM cvLieuRdv
-        WHERE IsActif = 1 AND ModifELEM NOT LIKE '%suppr%'
-        ORDER BY Lib_Lieu ASC"""
+        """SELECT id_cv_lieu_rdv, lib_lieu FROM pgt_cv_lieu_rdv
+        WHERE is_actif = TRUE AND modif_elem NOT LIKE '%suppr%'
+        ORDER BY lib_lieu ASC"""
     )
     return [
         {
-            "id_cv_lieu_rdv": _to_int(r.get("IDcvLieuRdv")),
-            "lib_lieu": r.get("Lib_Lieu") or "",
+            "id_cv_lieu_rdv": _to_int(r.get("id_cv_lieu_rdv")),
+            "lib_lieu": r.get("lib_lieu") or "",
         }
         for r in rows
     ]
@@ -144,13 +145,13 @@ def lister_lieux_rdv() -> list[dict]:
 
 def info_lieu_rdv(id_lieu: int) -> dict | None:
     """Infos d'un lieu de RDV (adresse + CP/Ville via JOIN CommunesFrance)."""
-    db_rec = get_connection("recrutement")
-    db_divers = get_connection("divers")
+    db_rec = get_pg_connection("recrutement")
+    db_divers = get_pg_connection("divers")
 
     row = db_rec.query_one(
-        """SELECT IDcvLieuRdv, Lib_Lieu, ADRESSE1, ADRESSE2, IDCommunesFrance,
+        """SELECT id_cv_lieu_rdv, lib_lieu, adresse1, adresse2, id_communes_france,
             latitude_deg, longitude_deg
-        FROM cvLieuRdv WHERE IDcvLieuRdv = ?""",
+        FROM pgt_cv_lieu_rdv WHERE id_cv_lieu_rdv = ?""",
         (id_lieu,),
     )
     if not row:
@@ -158,21 +159,21 @@ def info_lieu_rdv(id_lieu: int) -> dict | None:
 
     cp = ""
     ville = ""
-    id_commune = _to_int(row.get("IDCommunesFrance"))
+    id_commune = _to_int(row.get("id_communes_france"))
     if id_commune:
         c = db_divers.query_one(
-            "SELECT CodePostal, NomVille FROM CommunesFrance WHERE IDCommunesFrance = ?",
+            "SELECT code_postal, nom_ville FROM pgt_communes_france WHERE id_communes_france = ?",
             (id_commune,),
         )
         if c:
-            cp = c.get("CodePostal") or ""
-            ville = c.get("NomVille") or ""
+            cp = c.get("code_postal") or ""
+            ville = c.get("nom_ville") or ""
 
     return {
-        "id_cv_lieu_rdv": _to_int(row.get("IDcvLieuRdv")),
-        "lib_lieu": row.get("Lib_Lieu") or "",
-        "adresse1": row.get("ADRESSE1") or "",
-        "adresse2": row.get("ADRESSE2") or "",
+        "id_cv_lieu_rdv": _to_int(row.get("id_cv_lieu_rdv")),
+        "lib_lieu": row.get("lib_lieu") or "",
+        "adresse1": row.get("adresse1") or "",
+        "adresse2": row.get("adresse2") or "",
         "cp": cp,
         "nom_ville": ville,
         "latitude": float(row.get("latitude_deg") or 0),
@@ -182,20 +183,20 @@ def info_lieu_rdv(id_lieu: int) -> dict | None:
 
 def lister_salons_visio(id_salarie: int) -> list[dict]:
     """Liste les salons visio d'un recruteur."""
-    db = get_connection("recrutement")
+    db = get_pg_connection("recrutement")
     rows = db.query(
-        """SELECT DISTINCT sv.IDSalonVisio, tsv.Lib_Salon
-        FROM SalonVisio sv
-        INNER JOIN TypeSalonVisio tsv ON tsv.IDTypeSalonVisio = sv.IDTypeSalonVisio
-        WHERE sv.ModifELEM NOT LIKE '%suppr%'
-          AND sv.IDSalarie = ?
-        ORDER BY tsv.Lib_Salon ASC""",
+        """SELECT DISTINCT sv.id_salon_visio, tsv.lib_salon
+        FROM pgt_salon_visio sv
+        INNER JOIN pgt_type_salon_visio tsv ON tsv.id_type_salon_visio = sv.id_type_salon_visio
+        WHERE sv.modif_elem NOT LIKE '%suppr%'
+          AND sv.id_salarie = ?
+        ORDER BY tsv.lib_salon ASC""",
         (id_salarie,),
     )
     return [
         {
-            "id_salon_visio": str(_to_int(r.get("IDSalonVisio"))),
-            "lib_salon": r.get("Lib_Salon") or "",
+            "id_salon_visio": str(_to_int(r.get("id_salon_visio"))),
+            "lib_salon": r.get("lib_salon") or "",
         }
         for r in rows
     ]
@@ -203,23 +204,23 @@ def lister_salons_visio(id_salarie: int) -> list[dict]:
 
 def info_salon_visio(id_salon: int) -> dict | None:
     """Infos d'un salon visio (lien, id, mdp)."""
-    db = get_connection("recrutement")
+    db = get_pg_connection("recrutement")
     row = db.query_one(
-        """SELECT sv.IDSalonVisio, tsv.Lib_Salon, sv.LienSalon, sv.IdSalon, sv.MpdSalon
-        FROM SalonVisio sv
-        INNER JOIN TypeSalonVisio tsv ON tsv.IDTypeSalonVisio = sv.IDTypeSalonVisio
-        WHERE sv.ModifELEM NOT LIKE '%suppr%'
-          AND sv.IDSalonVisio = ?""",
+        """SELECT sv.id_salon_visio, tsv.lib_salon, sv.lien_salon, sv.id_salon, sv.mpd_salon
+        FROM pgt_salon_visio sv
+        INNER JOIN pgt_type_salon_visio tsv ON tsv.id_type_salon_visio = sv.id_type_salon_visio
+        WHERE sv.modif_elem NOT LIKE '%suppr%'
+          AND sv.id_salon_visio = ?""",
         (id_salon,),
     )
     if not row:
         return None
     return {
-        "id_salon_visio": str(_to_int(row.get("IDSalonVisio"))),
-        "lib_salon": row.get("Lib_Salon") or "",
-        "lien": row.get("LienSalon") or "",
-        "id_reunion": row.get("IdSalon") or "",
-        "mdp": row.get("MpdSalon") or "",
+        "id_salon_visio": str(_to_int(row.get("id_salon_visio"))),
+        "lib_salon": row.get("lib_salon") or "",
+        "lien": row.get("lien_salon") or "",
+        "id_reunion": row.get("id_salon") or "",
+        "mdp": row.get("mpd_salon") or "",
     }
 
 
@@ -242,31 +243,32 @@ def planifier_rdv(
     """
     Planifie un RDV : CvSuivi + AgendaEvénement + SMS optionnel.
     """
-    db_rec = get_connection("recrutement")
-    db_rh = get_connection("rh")
-    db_divers = get_connection("divers")
+    db_rec_hf = get_connection("recrutement")  # HFSQL pour les ecritures
+    db_rec_pg = get_pg_connection("recrutement")  # PG pour les lectures
+    db_rh = get_pg_connection("rh")
+    db_divers = get_pg_connection("divers")
 
     # Récup CV
-    cv = db_rec.query_one(
-        """SELECT NOM, PRENOM, GSM, MAIL, IDcvposte, IDcvsource, IdElemSource,
-            PermisB, Véhicule, Adresse, IDCommunesFrance
-        FROM cvtheque WHERE IDcvtheque = ?""",
+    cv = db_rec_pg.query_one(
+        """SELECT nom, prenom, gsm, mail, id_cvposte, id_cvsource, id_elem_source,
+            permis_b, vehicule, adresse, id_communes_france
+        FROM pgt_cvtheque WHERE id_cvtheque = ?""",
         (id_cvtheque,),
     )
     if not cv:
         raise ValueError("CV introuvable")
 
-    nom_cand = cv.get("NOM") or ""
-    prenom_cand = (cv.get("PRENOM") or "").capitalize()
+    nom_cand = cv.get("nom") or ""
+    prenom_cand = (cv.get("prenom") or "").capitalize()
 
     # Nom recruteur
     rec = db_rh.query_one(
-        "SELECT NOM, PRENOM FROM salarie WHERE IDSalarie = ?",
+        "SELECT nom, prenom FROM pgt_salarie WHERE id_salarie = ?",
         (id_recruteur,),
     )
     if not rec:
         raise ValueError("Recruteur introuvable")
-    nom_recruteur = f"{rec.get('NOM') or ''} {(rec.get('PRENOM') or '').capitalize()}".strip()
+    nom_recruteur = f"{rec.get('nom') or ''} {(rec.get('prenom') or '').capitalize()}".strip()
 
     # DateHeure RDV
     try:
@@ -286,31 +288,31 @@ def planifier_rdv(
     date_fin_iso = date_fin_obj.strftime("%Y-%m-%d %H:%M:%S")
 
     # Adresse complète du candidat
-    adresse_cand = cv.get("Adresse") or ""
-    id_commune_cand = _to_int(cv.get("IDCommunesFrance"))
+    adresse_cand = cv.get("adresse") or ""
+    id_commune_cand = _to_int(cv.get("id_communes_france"))
     if id_commune_cand:
         c = db_divers.query_one(
-            "SELECT CodePostal, NomVille, CodePays FROM CommunesFrance WHERE IDCommunesFrance = ?",
+            "SELECT code_postal, nom_ville, code_pays FROM pgt_communes_france WHERE id_communes_france = ?",
             (id_commune_cand,),
         )
         if c:
-            adresse_cand += f", {c.get('CodePostal') or ''} {c.get('NomVille') or ''} - {c.get('CodePays') or 'FR'}"
+            adresse_cand += f", {c.get('code_postal') or ''} {c.get('nom_ville') or ''} - {c.get('code_pays') or 'FR'}"
 
     # Source label
-    id_cv_source = _to_int(cv.get("IDcvsource"))
-    id_elem_source = _to_int(cv.get("IdElemSource"))
+    id_cv_source = _to_int(cv.get("id_cvsource"))
+    id_elem_source = _to_int(cv.get("id_elem_source"))
     sources_map = {1: "Cooptation", 2: "Annonceurs"}
     source_label = sources_map.get(id_cv_source, "")
     if id_cv_source == 1 and id_elem_source:
         vend = db_rh.query_one(
-            "SELECT NOM, PRENOM FROM salarie WHERE IDSalarie = ?", (id_elem_source,)
+            "SELECT nom, prenom FROM pgt_salarie WHERE id_salarie = ?", (id_elem_source,)
         )
         if vend:
-            source_label += f" de {vend.get('NOM') or ''} {(vend.get('PRENOM') or '').capitalize()}"
+            source_label += f" de {vend.get('nom') or ''} {(vend.get('prenom') or '').capitalize()}"
 
     # Poste label
     poste_map = {0: "---sans profil---", 1: "VRP Énergie", 10: "Technicien Fibre", 13: "Commercial Fibre"}
-    poste_label = poste_map.get(_to_int(cv.get("IDcvposte")), f"Poste #{_to_int(cv.get('IDcvposte'))}")
+    poste_label = poste_map.get(_to_int(cv.get("id_cvposte")), f"Poste #{_to_int(cv.get('id_cvposte'))}")
 
     # IdCvLieux : si Visio → 1, sinon = id_lieu_rdv
     id_cv_lieux = 1 if type_entretien == "Visio" else id_lieu_rdv
@@ -319,11 +321,11 @@ def planifier_rdv(
     titre = f"RDV : {nom_cand} {prenom_cand}"
     contenu = (
         f"Profil : {poste_label}\n"
-        f"Permis : {'Oui' if cv.get('PermisB') else 'Non'}\n"
-        f"Véhicule :  {'Oui' if cv.get('Véhicule') else 'Non'}\n"
+        f"Permis : {'Oui' if cv.get('permis_b') else 'Non'}\n"
+        f"Véhicule :  {'Oui' if cv.get('vehicule') else 'Non'}\n"
         f"Adresse :  {adresse_cand}\n"
-        f"Tél :  {cv.get('GSM') or ''}\n"
-        f"Mail : {cv.get('MAIL') or ''}\n"
+        f"Tél :  {cv.get('gsm') or ''}\n"
+        f"Mail : {cv.get('mail') or ''}\n"
         f"Source : {source_label}\n"
     )
 
@@ -336,7 +338,7 @@ def planifier_rdv(
     obs_suivi = f"RDV pris avec {nom_recruteur}"
     obs_safe = obs_suivi.replace("'", "''")
 
-    db_rec.query(
+    db_rec_hf.query(
         f"""INSERT INTO CvSuivi (
             IDCvSuivi, IDcvtheque, Datecrea, OPCREA, IdCvStatut,
             TypeElem, IdElem, Observation, ModifDate, ModifOp, ModifElem
@@ -350,7 +352,7 @@ def planifier_rdv(
     titre_safe = titre.replace("'", "''")
     contenu_safe = contenu.replace("'", "''")
 
-    db_rec.query(
+    db_rec_hf.query(
         f"""INSERT INTO AgendaEvénement (
             IDAgendaEvénement, IDSalarie, IDCvSuivi, IDCatégorie,
             Titre, Contenu, DateDébut, DateFin,
@@ -368,7 +370,7 @@ def planifier_rdv(
 
     # SMS optionnel
     sms_result = ""
-    if envoyer_sms and cv.get("GSM"):
+    if envoyer_sms and cv.get("gsm"):
         # Construction du texte SMS selon type
         lieu_texte = ""
         if type_entretien == "Physique" and id_lieu_rdv:
@@ -403,7 +405,7 @@ def planifier_rdv(
             f"{lieu_texte}"
         )
 
-        gsm_clean = _format_tel(cv.get("GSM"))
+        gsm_clean = _format_tel(cv.get("gsm"))
         if gsm_clean:
             sms_result = envoi_sms(texte_sms, gsm_clean)
 

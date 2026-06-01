@@ -25,23 +25,24 @@ from app.core.config import (
     FTP_USER,
 )
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 from ..service import _clean_id, _to_int
 from . import cttw  # réutilisation du bloc mutuelle (load + save)
 
 
 def _casier_judiciaire(id_salarie: int) -> bool:
-    """salarie_embauche.CJ_envoyé (base rh) — lecture seule."""
+    """salarie_embauche.cj_envoye (base rh) — lecture seule."""
     if not id_salarie:
         return False
     try:
-        db = get_connection("rh")
+        db = get_pg_connection("rh")
         r = db.query_one(
-            "SELECT IDSalarie, CJ_envoyé FROM salarie_embauche "
-            "WHERE IDSalarie = ?",
+            "SELECT id_salarie, cj_envoye FROM pgt_salarie_embauche "
+            "WHERE id_salarie = ?",
             (int(id_salarie),),
         )
-        return bool(r.get("CJ_envoyé")) if r else False
+        return bool(r.get("cj_envoye")) if r else False
     except Exception:
         return False
 

@@ -11,6 +11,7 @@ import struct
 from datetime import datetime
 
 from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 
 def _to_int_safe(v) -> int:
@@ -58,23 +59,23 @@ def _format_tel(tel: str) -> str:
 
 def lister_cooptations_du_jour(id_salarie: int) -> list[dict]:
     """Liste des cooptations saisies par l'utilisateur aujourd'hui."""
-    db = get_connection("recrutement")
+    db = get_pg_connection("recrutement")
     today = _today_windev()
 
     rows = db.query(
-        """SELECT NOM, PRENOM, DateSAISIE
-        FROM cvtheque
-        WHERE Opé_SAISIE = ?
-          AND LEFT(DateSAISIE, 8) >= ?
-        ORDER BY DateSAISIE DESC""",
+        """SELECT nom, prenom, date_saisie
+        FROM pgt_cvtheque
+        WHERE ope_saisie = ?
+          AND LEFT(date_saisie, 8) >= ?
+        ORDER BY date_saisie DESC""",
         (id_salarie, today),
     )
 
     return [
         {
-            "nom": r.get("NOM") or "",
-            "prenom": r.get("PRENOM") or "",
-            "date_saisie": r.get("DateSAISIE") or "",
+            "nom": r.get("nom") or "",
+            "prenom": r.get("prenom") or "",
+            "date_saisie": r.get("date_saisie") or "",
         }
         for r in rows
     ]
@@ -90,9 +91,9 @@ def _orga_descendants(db, root_ids: set[int]) -> set[int]:
     while frontier:
         ids_sql = ",".join(str(i) for i in frontier)
         rows = db.query(
-            f"""SELECT idorganigramme FROM organigramme
-            WHERE IdPARENT IN ({ids_sql})
-              AND ModifELEM NOT LIKE '%suppr%'"""
+            f"""SELECT idorganigramme FROM pgt_organigramme
+            WHERE id_parent IN ({ids_sql})
+              AND modif_elem NOT LIKE '%suppr%'"""
         )
         next_frontier = set()
         for r in rows:
@@ -121,26 +122,26 @@ def rechercher_vendeurs(
     if not search:
         return []
 
-    db = get_connection("rh")
+    db = get_pg_connection("rh")
     today = _today_windev()
     like_pattern = f"{search}%"
 
     # Acces global : recherche sur tous les salariés actifs
     if acces_global:
         rows = db.query(
-            """SELECT DISTINCT s.IDSalarie, s.NOM, s.PRENOM
-            FROM salarie s
-            INNER JOIN salarie_embauche se ON s.IDSalarie = se.IDSalarie
-            WHERE se.EnActivité = 1
-              AND s.NOM LIKE ?
-            ORDER BY s.NOM, s.PRENOM""",
+            """SELECT DISTINCT s.id_salarie, s.nom, s.prenom
+            FROM pgt_salarie s
+            INNER JOIN pgt_salarie_embauche se ON s.id_salarie = se.id_salarie
+            WHERE se.en_activite = TRUE
+              AND s.nom LIKE ?
+            ORDER BY s.nom, s.prenom""",
             (like_pattern,),
         )
         return [
             {
-                "id_salarie": str(_to_int_safe(r.get("IDSalarie"))),
-                "nom": r.get("NOM") or "",
-                "prenom": r.get("PRENOM") or "",
+                "id_salarie": str(_to_int_safe(r.get("id_salarie"))),
+                "nom": r.get("nom") or "",
+                "prenom": r.get("prenom") or "",
                 "poste": "",
             }
             for r in rows
@@ -148,10 +149,10 @@ def rechercher_vendeurs(
 
     # 1. Récupérer les organigrammes actifs du user
     orga_rows = db.query(
-        """SELECT DISTINCT idorganigramme FROM salarie_organigramme
-        WHERE IDSalarie = ?
-          AND ModifELEM NOT LIKE '%suppr%'
-          AND LEFT(DateDébut, 8) <= ?""",
+        """SELECT DISTINCT idorganigramme FROM pgt_salarie_organigramme
+        WHERE id_salarie = ?
+          AND modif_elem NOT LIKE '%suppr%'
+          AND LEFT(date_debut, 8) <= ?""",
         (id_salarie_user, today),
     )
     orga_ids = {int(r.get("idorganigramme") or 0) for r in orga_rows}
@@ -164,17 +165,17 @@ def rechercher_vendeurs(
     if not orga_ids:
         # Fallback : tous les salariés actifs (si pas d'orga active pour le user)
         rows = db.query(
-            "SELECT DISTINCT s.IDSalarie, s.NOM, s.PRENOM FROM salarie s "
-            "INNER JOIN salarie_embauche se ON s.IDSalarie = se.IDSalarie "
-            "WHERE se.EnActivité = 1 AND s.NOM LIKE ? "
-            "ORDER BY s.NOM, s.PRENOM",
+            "SELECT DISTINCT s.id_salarie, s.nom, s.prenom FROM pgt_salarie s "
+            "INNER JOIN pgt_salarie_embauche se ON s.id_salarie = se.id_salarie "
+            "WHERE se.en_activite = TRUE AND s.nom LIKE ? "
+            "ORDER BY s.nom, s.prenom",
             (like_pattern,),
         )
         return [
             {
-                "id_salarie": str(_to_int_safe(r.get("IDSalarie"))),
-                "nom": r.get("NOM") or "",
-                "prenom": r.get("PRENOM") or "",
+                "id_salarie": str(_to_int_safe(r.get("id_salarie"))),
+                "nom": r.get("nom") or "",
+                "prenom": r.get("prenom") or "",
                 "poste": "",
             }
             for r in rows
@@ -183,24 +184,24 @@ def rechercher_vendeurs(
 
     # 2. Lister les salariés actifs des mêmes orgas, dont le nom commence par `search`
     rows = db.query(
-        f"""SELECT DISTINCT s.IDSalarie, s.NOM, s.PRENOM
-        FROM salarie s
-        INNER JOIN salarie_embauche se ON s.IDSalarie = se.IDSalarie
-        INNER JOIN salarie_organigramme so ON s.IDSalarie = so.IDSalarie
-        WHERE so.ModifELEM NOT LIKE '%suppr%'
-          AND LEFT(so.DateDébut, 8) <= ?
+        f"""SELECT DISTINCT s.id_salarie, s.nom, s.prenom
+        FROM pgt_salarie s
+        INNER JOIN pgt_salarie_embauche se ON s.id_salarie = se.id_salarie
+        INNER JOIN pgt_salarie_organigramme so ON s.id_salarie = so.id_salarie
+        WHERE so.modif_elem NOT LIKE '%suppr%'
+          AND LEFT(so.date_debut, 8) <= ?
           AND so.idorganigramme IN ({orga_ids_sql})
-          AND se.EnActivité = 1
-          AND s.NOM LIKE ?
-        ORDER BY s.NOM, s.PRENOM""",
+          AND se.en_activite = TRUE
+          AND s.nom LIKE ?
+        ORDER BY s.nom, s.prenom""",
         (today, like_pattern),
     )
 
     return [
         {
-            "id_salarie": str(_to_int_safe(r.get("IDSalarie"))),
-            "nom": r.get("NOM") or "",
-            "prenom": r.get("PRENOM") or "",
+            "id_salarie": str(_to_int_safe(r.get("id_salarie"))),
+            "nom": r.get("nom") or "",
+            "prenom": r.get("prenom") or "",
             "poste": "",
         }
         for r in rows
