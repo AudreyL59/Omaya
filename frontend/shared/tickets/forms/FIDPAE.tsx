@@ -255,8 +255,10 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
           </Section>
         </div>
 
-        {/* COL 2 : Embauche */}
-        <div className="space-y-6">
+        {/* COL 2+3 : Embauche + Documents en haut (sous-grid 2 cols),
+            puis PDF viewer span pleine largeur en dessous */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Section title="Infos embauche">
             <Field label="Date Début">
               <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
@@ -295,10 +297,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
               />
             </div>
           </Section>
-        </div>
 
-        {/* COL 3 : liste Documents + viewer PDF (sous la liste) */}
-        <div className="space-y-3">
           <Section title="Documents">
             {(form.documents || []).length === 0 ? (
               <div className="text-sm text-c-ink-faint">Aucun document.</div>
@@ -322,6 +321,9 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
               </ul>
             )}
           </Section>
+          </div>
+
+          {/* PDF viewer span pleine largeur de col 2+3 */}
           <div className="min-h-[600px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
             {docLoading ? (
               <div className="h-full flex items-center justify-center py-10">
