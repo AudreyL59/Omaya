@@ -217,7 +217,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 type="number"
                 value={form.nb_enfants || 0}
                 onChange={(e) => set('nb_enfants', Number(e.target.value))}
-                className={inCls + ' w-16'}
+                className={inCls + ' !w-12 shrink-0'}
               />
             </div>
             <div className="pl-[5.75rem]">
