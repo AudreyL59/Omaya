@@ -194,7 +194,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
               <span className="text-c-ink-soft w-28 shrink-0 text-right">à</span>
               <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
               <span className="text-c-ink-soft shrink-0">Dép</span>
-              <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-12'} />
+              <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' !w-12 shrink-0'} />
             </div>
             <Field label="N° CIN">
               <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
