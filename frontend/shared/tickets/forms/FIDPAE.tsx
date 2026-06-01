@@ -156,9 +156,9 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
         </button>
       </div>
 
-      {/* Grid : 2 cols formulaire à gauche, 1 col documents à droite */}
+      {/* Grid : 2 cols formulaire a gauche, 1 col documents (liste) a droite */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Colonne gauche : formulaire (span 2/3) */}
+        {/* Colonne gauche (span 2) : 4 sections en grid 2x2 + PDF viewer en dessous */}
         <div className="xl:col-span-2 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* ÉTAT CIVIL */}
@@ -179,32 +179,27 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
               <Field label="Prénom">
                 <input value={form.prenom || ''} onChange={(e) => set('prenom', e.target.value)} className={inCls} />
               </Field>
-              <FieldRow>
-                <Field label="N° SS">
-                  <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls} />
-                </Field>
-                <Field label="Nat.">
-                  <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls} />
-                </Field>
-              </FieldRow>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-c-ink-soft w-28 shrink-0 text-right">N° SS</span>
+                <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+                <span className="text-c-ink-soft shrink-0">Nat.</span>
+                <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls + ' w-20'} />
+              </div>
               <Field label="CPAM">
                 <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
               </Field>
-              <FieldRow>
-                <Field label="Né(e) le">
-                  <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls} />
-                </Field>
-                <Field label="à">
-                  <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls} />
-                </Field>
-                <Field label="Dép">
-                  <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-16'} />
-                </Field>
-              </FieldRow>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-c-ink-soft w-28 shrink-0 text-right">Né(e) le</span>
+                <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+                <span className="text-c-ink-soft shrink-0">à</span>
+                <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+                <span className="text-c-ink-soft shrink-0">Dép</span>
+                <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-16'} />
+              </div>
               <Field label="N° CIN">
                 <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
               </Field>
-              <Field label="Situation Familiale">
+              <Field label="Situation Fam.">
                 <select
                   value={form.situation_fam || 0}
                   onChange={(e) => set('situation_fam', Number(e.target.value))}
@@ -215,7 +210,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                   ))}
                 </select>
               </Field>
-              <div className="flex items-center gap-4 pl-32">
+              <div className="flex items-center gap-4 pl-[7.75rem]">
                 <Check label="Avec Enfant" checked={!!form.avec_enfant} onChange={(v) => set('avec_enfant', v)} />
                 <span className="text-xs text-c-ink-soft">Nb Enfants</span>
                 <input
@@ -225,7 +220,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                   className={inCls + ' w-16'}
                 />
               </div>
-              <div className="pl-32">
+              <div className="pl-[7.75rem]">
                 <Check label="Travailleur Handicapé" checked={!!form.travailleur_handi} onChange={(v) => set('travailleur_handi', v)} />
               </div>
             </Section>
@@ -235,13 +230,13 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
               <Field label="Date Début">
                 <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
               </Field>
-              <div className="flex items-center gap-3 pl-32">
+              <div className="flex items-center gap-3 pl-[7.75rem]">
                 <Check label="Adhère à la mutuelle" checked={!!form.mutuelle} onChange={(v) => set('mutuelle', v)} />
               </div>
               <Field label="Date adhésion">
                 <input type="date" value={form.mutdate || ''} onChange={(e) => set('mutdate', e.target.value)} disabled={!form.mutuelle} className={inCls} />
               </Field>
-              <div className="flex items-center gap-3 pl-32">
+              <div className="flex items-center gap-3 pl-[7.75rem]">
                 <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
                 {form.coopte && (
                   <PickerBtn
@@ -251,7 +246,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                   />
                 )}
               </div>
-              <div className="flex items-center gap-3 pl-32">
+              <div className="flex items-center gap-3 pl-[7.75rem]">
                 <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
                 {form.jodirecte && (
                   <PickerBtn
@@ -261,7 +256,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                   />
                 )}
               </div>
-              <div className="pl-32">
+              <div className="pl-[7.75rem]">
                 <PickerBtn
                   icon={<Users className="w-4 h-4 text-c-brand" />}
                   label={form.lib_equipe || "Choisir l'équipe"}
@@ -269,83 +264,86 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 />
               </div>
             </Section>
+
+            {/* COORDONNÉES (1 col) */}
+            <Section title="Coordonnées postales et téléphoniques">
+              <Field label="Adresse">
+                <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
+              </Field>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-c-ink-soft w-28 shrink-0 text-right">CP</span>
+                <input value={form.cp || ''} onChange={(e) => set('cp', e.target.value)} className={inCls + ' w-24'} />
+                <span className="text-c-ink-soft shrink-0">Ville</span>
+                <input value={form.ville || ''} onChange={(e) => set('ville', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
+              </div>
+              <Field label="Mobile">
+                <input value={form.gsm || ''} onChange={(e) => set('gsm', e.target.value)} className={inCls} />
+              </Field>
+              <Field label="Mail">
+                <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
+              </Field>
+            </Section>
+
+            {/* CONTACT URGENCE (1 col) */}
+            <Section title="Contact en cas d'urgence">
+              <Field label="Identité">
+                <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
+              </Field>
+              <Field label="Parenté">
+                <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
+              </Field>
+              <Field label="Tél">
+                <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
+              </Field>
+            </Section>
           </div>
 
-          {/* COORDONNÉES (span 2 sous-colonnes) */}
-          <Section title="Coordonnées postales et téléphoniques">
-            <Field label="Adresse">
-              <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
-            </Field>
-            <FieldRow>
-              <Field label="CP">
-                <input value={form.cp || ''} onChange={(e) => set('cp', e.target.value)} className={inCls + ' w-24'} />
-              </Field>
-              <Field label="Ville">
-                <input value={form.ville || ''} onChange={(e) => set('ville', e.target.value)} className={inCls} />
-              </Field>
-            </FieldRow>
-            <Field label="Mobile">
-              <input value={form.gsm || ''} onChange={(e) => set('gsm', e.target.value)} className={inCls} />
-            </Field>
-            <Field label="Mail">
-              <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
-            </Field>
-          </Section>
-
-          {/* CONTACT URGENCE (span 2 sous-colonnes) */}
-          <Section title="Contact en cas d'urgence">
-            <Field label="Identité">
-              <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
-            </Field>
-            <Field label="Parenté">
-              <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
-            </Field>
-            <Field label="Tél">
-              <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
-            </Field>
-          </Section>
+          {/* VIEWER PDF : pleine largeur 2/3 (span 2 cols outer) */}
+          <div>
+            <h3 className="text-sm font-semibold text-c-brand-strong uppercase tracking-wide mb-3">
+              Aperçu document
+            </h3>
+            <div className="min-h-[600px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
+              {docLoading ? (
+                <div className="h-full flex items-center justify-center py-10">
+                  <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
+                </div>
+              ) : !docUrl ? (
+                <div className="h-full flex items-center justify-center text-c-ink-faint text-sm py-10">
+                  Sélectionne un document à droite pour l'aperçu.
+                </div>
+              ) : docMime.startsWith('image/') ? (
+                <img src={docUrl} alt={docName} className="w-full h-full object-contain" />
+              ) : (
+                <iframe src={docUrl} title={docName} className="w-full h-[600px]" />
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Colonne droite : Documents (fixe) */}
+        {/* Colonne droite (1/3) : liste Documents seulement */}
         <div>
           <Section title="Documents">
             {(form.documents || []).length === 0 ? (
               <div className="text-sm text-c-ink-faint">Aucun document.</div>
             ) : (
-              <div className="space-y-3">
-                <ul className="border border-c-line rounded-lg divide-y divide-c-line-soft overflow-hidden">
-                  {(form.documents as any[]).map((d) => (
-                    <li key={d.id}>
-                      <button
-                        onClick={() => openDoc(d.nom_fichier)}
-                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
-                          docName === d.nom_fichier
-                            ? 'bg-c-brand-soft'
-                            : 'hover:bg-c-surface-soft'
-                        }`}
-                      >
-                        <FileText className="w-4 h-4 text-c-brand shrink-0" />
-                        <span className="truncate">{d.nom || d.nom_fichier}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <div className="min-h-[500px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
-                  {docLoading ? (
-                    <div className="h-full flex items-center justify-center py-10">
-                      <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
-                    </div>
-                  ) : !docUrl ? (
-                    <div className="h-full flex items-center justify-center text-c-ink-faint text-sm py-10">
-                      Sélectionne un document pour l'aperçu.
-                    </div>
-                  ) : docMime.startsWith('image/') ? (
-                    <img src={docUrl} alt={docName} className="w-full h-full object-contain" />
-                  ) : (
-                    <iframe src={docUrl} title={docName} className="w-full h-[500px]" />
-                  )}
-                </div>
-              </div>
+              <ul className="border border-c-line rounded-lg divide-y divide-c-line-soft overflow-hidden">
+                {(form.documents as any[]).map((d) => (
+                  <li key={d.id}>
+                    <button
+                      onClick={() => openDoc(d.nom_fichier)}
+                      className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
+                        docName === d.nom_fichier
+                          ? 'bg-c-brand-soft'
+                          : 'hover:bg-c-surface-soft'
+                      }`}
+                    >
+                      <FileText className="w-4 h-4 text-c-brand shrink-0" />
+                      <span className="truncate">{d.nom || d.nom_fichier}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </Section>
         </div>
@@ -437,13 +435,6 @@ function Field({
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   )
-}
-
-// FieldRow : plusieurs Field cote-a-cote sur la meme ligne, partageant la
-// largeur. Le 1er Field garde son label-gauche, les suivants aussi mais
-// avec label plus petit (auto).
-function FieldRow({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center gap-3 text-sm">{children}</div>
 }
 
 // Toggle M./Mme (et toute option a 2-3 valeurs).
