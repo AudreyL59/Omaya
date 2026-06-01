@@ -241,9 +241,21 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
               <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
             </Field>
           </Section>
+
+          <Section title="Contact en cas d'urgence">
+            <Field label="Identité">
+              <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Parenté">
+              <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Tél">
+              <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
+            </Field>
+          </Section>
         </div>
 
-        {/* COL 2 : Embauche + Urgence */}
+        {/* COL 2 : Embauche */}
         <div className="space-y-6">
           <Section title="Infos embauche">
             <Field label="Date Début">
@@ -282,18 +294,6 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 onClick={() => setPicker('equipe')}
               />
             </div>
-          </Section>
-
-          <Section title="Contact en cas d'urgence">
-            <Field label="Identité">
-              <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
-            </Field>
-            <Field label="Parenté">
-              <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
-            </Field>
-            <Field label="Tél">
-              <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
-            </Field>
           </Section>
         </div>
 
