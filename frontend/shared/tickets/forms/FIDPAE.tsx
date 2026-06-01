@@ -178,12 +178,12 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             <Field label="Prénom">
               <input value={form.prenom || ''} onChange={(e) => set('prenom', e.target.value)} className={inCls} />
             </Field>
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-c-ink-soft w-28 shrink-0 text-right">N° SS</span>
-              <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
-              <span className="text-c-ink-soft shrink-0">Nat.</span>
-              <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls + ' w-20'} />
-            </div>
+            <Field label="N° SS">
+              <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Nationalité">
+              <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls} />
+            </Field>
             <Field label="CPAM">
               <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
             </Field>
