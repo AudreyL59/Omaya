@@ -275,27 +275,38 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 className={inCls + ' flex-1 min-w-0'}
               />
             </div>
-            <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
-            {form.coopte && (
+            <div className="flex items-center gap-3">
+              <div className="w-28 shrink-0">
+                <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
+              </div>
+              {form.coopte && (
+                <PickerBtn
+                  icon={<UserPlus className="w-4 h-4 text-c-brand" />}
+                  label={form.coopteur_nom || 'Choisir le coopteur'}
+                  onClick={() => setPicker('coopteur')}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-28 shrink-0">
+                <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
+              </div>
+              {form.jodirecte && (
+                <PickerBtn
+                  icon={<UserPlus className="w-4 h-4 text-c-brand" />}
+                  label={form.jocoopteur_nom || 'Choisir le coopteur JO'}
+                  onClick={() => setPicker('jocoopteur')}
+                />
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-28 shrink-0" />
               <PickerBtn
-                icon={<UserPlus className="w-4 h-4 text-c-brand" />}
-                label={form.coopteur_nom || 'Choisir le coopteur'}
-                onClick={() => setPicker('coopteur')}
+                icon={<Users className="w-4 h-4 text-c-brand" />}
+                label={form.lib_equipe || "Choisir l'équipe"}
+                onClick={() => setPicker('equipe')}
               />
-            )}
-            <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
-            {form.jodirecte && (
-              <PickerBtn
-                icon={<UserPlus className="w-4 h-4 text-c-brand" />}
-                label={form.jocoopteur_nom || 'Choisir le coopteur JO'}
-                onClick={() => setPicker('jocoopteur')}
-              />
-            )}
-            <PickerBtn
-              icon={<Users className="w-4 h-4 text-c-brand" />}
-              label={form.lib_equipe || "Choisir l'équipe"}
-              onClick={() => setPicker('equipe')}
-            />
+            </div>
           </Section>
 
           <Section title="Documents">
@@ -497,7 +508,7 @@ function PickerBtn({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong bg-white text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
+      className="flex-1 min-w-0 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong bg-white text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
     >
       {icon}
       <span className="truncate">{label}</span>
