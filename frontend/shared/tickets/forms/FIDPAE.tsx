@@ -187,13 +187,14 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             <Field label="CPAM">
               <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
             </Field>
+            <Field label="Né(e) le">
+              <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls} />
+            </Field>
             <div className="flex items-center gap-3 text-sm">
-              <span className="text-c-ink-soft w-28 shrink-0 text-right">Né(e) le</span>
-              <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
-              <span className="text-c-ink-soft shrink-0">à</span>
+              <span className="text-c-ink-soft w-28 shrink-0 text-right">à</span>
               <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls + ' flex-1 min-w-0'} />
               <span className="text-c-ink-soft shrink-0">Dép</span>
-              <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-16'} />
+              <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-14'} />
             </div>
             <Field label="N° CIN">
               <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
