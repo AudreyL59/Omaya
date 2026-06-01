@@ -264,12 +264,17 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             <Field label="Date Début">
               <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
             </Field>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 text-sm">
               <Check label="Adhère à la mutuelle" checked={!!form.mutuelle} onChange={(v) => set('mutuelle', v)} />
+              <span className="text-c-ink-soft shrink-0">Date</span>
+              <input
+                type="date"
+                value={form.mutdate || ''}
+                onChange={(e) => set('mutdate', e.target.value)}
+                disabled={!form.mutuelle}
+                className={inCls + ' flex-1 min-w-0'}
+              />
             </div>
-            <Field label="Date adhésion">
-              <input type="date" value={form.mutdate || ''} onChange={(e) => set('mutdate', e.target.value)} disabled={!form.mutuelle} className={inCls} />
-            </Field>
             <div className="flex items-center gap-3">
               <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
               {form.coopte && (
