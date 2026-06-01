@@ -199,7 +199,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
             <Field labelW="w-20" label="N° CIN">
               <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
             </Field>
-            <Field labelW="w-20" label="Situation Fam.">
+            <Field labelW="w-20" label="Sit. Fam.">
               <select
                 value={form.situation_fam || 0}
                 onChange={(e) => set('situation_fam', Number(e.target.value))}
