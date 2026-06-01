@@ -1207,7 +1207,7 @@ def extract_job_to_parquet(
         puissance = _to_int(r.get("elec_puissance")) if prefix in ("ENI", "OEN") else 0
 
         # Date Racc / Activation (SFR = date_racc_activ ; OEN = date_activation)
-        date_racc_activ IS NULL
+        date_racc_activ = ""
         if prefix == "SFR":
             date_racc_activ = _iso(r.get("date_racc_activ"))
         elif prefix == "OEN":
