@@ -190,15 +190,31 @@ export default function FIRDVTech({ apiBase, getToken, idTicket }: FIProps) {
           <Field label="Prénom" value={cl.prenom} />
           <Field label="Adresse 1" value={cl.adresse1} />
           <Field label="Adresse 2" value={cl.adresse2} />
-          <div className="grid grid-cols-3 gap-2">
-            <Field label="CP" value={cl.cp} />
-            <div className="col-span-2">
-              <Field label="Ville" value={cl.ville} />
-            </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-c-ink-soft w-28 shrink-0">CP / Ville</span>
+            <input
+              readOnly
+              value={cl.cp || ''}
+              className="w-20 shrink-0 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-c-surface-soft text-c-ink"
+            />
+            <input
+              readOnly
+              value={cl.ville || ''}
+              className="flex-1 min-w-0 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-c-surface-soft text-c-ink"
+            />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Tél" value={cl.tel} />
-            <Field label="Mobile" value={cl.mobile} />
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-c-ink-soft w-28 shrink-0">Tél / Mobile</span>
+            <input
+              readOnly
+              value={cl.tel || ''}
+              className="flex-1 min-w-0 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-c-surface-soft text-c-ink"
+            />
+            <input
+              readOnly
+              value={cl.mobile || ''}
+              className="flex-1 min-w-0 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-c-surface-soft text-c-ink"
+            />
           </div>
           <Field label="Mail" value={cl.mail} />
         </div>
@@ -207,30 +223,39 @@ export default function FIRDVTech({ apiBase, getToken, idTicket }: FIProps) {
           <h3 className="text-sm font-semibold text-c-brand-strong uppercase tracking-wide">
             Infos contrat
           </h3>
-          <Field label="Date Signature" value={ct.date_signature} />
+          <Field labelW="w-36" label="Date Signature" value={ct.date_signature} />
           <Field
+            labelW="w-36"
             label="Date RDV Tech"
             value={`${ct.date_rdv_tech || ''}  (${ct.periode_rdv_lib || ''})`.trim()}
           />
-          <Field label="Type Vente" value={ct.type_vente_lib} />
-          <Field label="Cluster" value={ct.cluster_lib} />
-          <Field label="État vente Vendeur" value={ct.etat_vendeur_lib} />
-          <Field label="État vente SFR" value={String(ct.id_etat_sfr || '')} />
-          <Field label="Offre" value={ct.offre_lib} />
+          <Field labelW="w-36" label="Type Vente" value={ct.type_vente_lib} />
+          <Field labelW="w-36" label="Cluster" value={ct.cluster_lib} />
+          <Field labelW="w-36" label="État Vendeur" value={ct.etat_vendeur_lib} />
+          <Field labelW="w-36" label="État SFR" value={String(ct.id_etat_sfr || '')} />
+          <Field labelW="w-36" label="Offre" value={ct.offre_lib} />
         </div>
       </div>
     </div>
   )
 }
 
-function Field({ label, value }: { label: string; value?: string }) {
+function Field({
+  label,
+  value,
+  labelW = 'w-28',
+}: {
+  label: string
+  value?: string
+  labelW?: string
+}) {
   return (
     <div className="flex items-center gap-2 text-sm">
-      <span className="text-c-ink-soft w-28 shrink-0">{label}</span>
+      <span className={`text-c-ink-soft ${labelW} shrink-0`}>{label}</span>
       <input
         readOnly
         value={value || ''}
-        className="flex-1 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-c-surface-soft text-c-ink"
+        className="flex-1 min-w-0 px-2 py-1 border border-c-line-strong rounded-md text-sm bg-c-surface-soft text-c-ink"
       />
     </div>
   )
