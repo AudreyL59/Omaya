@@ -10,6 +10,7 @@ import FIAttExoCash from './FIAttExoCash'
 import FIAvance from './FIAvance'
 import FICartePro from './FICartePro'
 import FICdeExoCash from './FICdeExoCash'
+import FICodeVendeur from './FICodeVendeur'
 import FIConges from './FIConges'
 import FICttCourtage from './FICttCourtage'
 import FICttW from './FICttW'
@@ -59,5 +60,7 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '33': FIFactureDR,   // Facture BO
   '34': FIUlease,      // Signature Doc ULEASE
   '35': FIUleasePVLivRest, // PV Liv/Rest ULEASE
+  '38': FICodeVendeur, // Demande Code Vendeur
+  '39': FICodeVendeur, // Désactivation Code Vendeur
   '40': FICttWDemande, // Contrat W - Demande
 }

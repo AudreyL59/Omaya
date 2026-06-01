@@ -657,10 +657,18 @@ def get_tickets_router(droit_field: str) -> APIRouter:
     async def upload_ticket_form_file(
         id_ticket: str,
         file: UploadFile = File(...),
+        id_type_photo_dpae: str = Query(""),
+        lib_type_doc: str = Query(""),
         user: UserToken = Depends(get_current_user),
     ):
         """Ajoute une PJ au ticket (FTP). Disponible si le handler du
-        type implémente upload_file()."""
+        type implémente upload_file().
+
+        Les query params optionnels `id_type_photo_dpae` et `lib_type_doc`
+        sont transmis aux handlers qui en ont besoin (cf. code_vendeur)
+        via le kwarg `extras`. Les handlers historiques ignorent simplement
+        ce kwarg s'ils n'ont pas la signature étendue.
+        """
         _id_type, handler = _handler_for(id_ticket)
         if handler is None or not hasattr(handler, "upload_file"):
             raise HTTPException(400, "Pas d'ajout de PJ pour ce type")
@@ -670,10 +678,25 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             f"name={file.filename!r} size={len(content)}",
             flush=True,
         )
+        extras = {
+            "id_type_photo_dpae": id_type_photo_dpae,
+            "lib_type_doc": lib_type_doc,
+            "user_id": int(user.id_salarie),
+        }
         try:
-            res = handler.upload_file(
-                int(id_ticket), file.filename or "fichier", content
-            )
+            # Compat : handlers historiques n'acceptent pas `extras`.
+            import inspect
+
+            sig = inspect.signature(handler.upload_file)
+            if "extras" in sig.parameters:
+                res = handler.upload_file(
+                    int(id_ticket), file.filename or "fichier", content,
+                    extras=extras,
+                )
+            else:
+                res = handler.upload_file(
+                    int(id_ticket), file.filename or "fichier", content,
+                )
         except Exception as e:
             import traceback
 

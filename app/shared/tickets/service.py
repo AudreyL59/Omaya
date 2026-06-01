@@ -320,12 +320,18 @@ def list_tickets_par_type(
     Retour : list de dicts bruts. Les libellés (lib_statut, op_dest_nom...)
     et l'Info (DonneInfoTicket) sont enrichis par l'appelant.
     """
-    # Bornes WinDev : si pas de date fournie, on prend 2001-01-01 → 3061-01-01
-    # (au format compact YYYYMMDDHHMMSSmmm 17 chars).
+    # Bornes : si pas de date fournie, on prend 2001-01-01 → 3061-01-01.
+    # PG strict refuse le format compact HFSQL (YYYYMMDDHHMMSSmmm 17 chars),
+    # donc on convertit en ISO. Si l'appelant fournit du compact, on convertit
+    # aussi (via _windev_to_iso qui detecte les 2 formats).
     if not date_du:
-        date_du = "20010101000000000"
+        date_du = "2001-01-01 00:00:00"
+    else:
+        date_du = _windev_to_iso(date_du)
     if not date_au:
-        date_au = "30610101000000000"
+        date_au = "3061-01-01 00:00:00"
+    else:
+        date_au = _windev_to_iso(date_au)
 
     db = get_pg_connection("ticket")
     rows = db.query(
@@ -339,7 +345,7 @@ def list_tickets_par_type(
         WHERE id_tk_type_demande = ?
           AND modif_elem NOT LIKE '%suppr%'
           AND cloturee = ?
-          AND date_crea BETWEEN ? AND ?
+          AND date_crea BETWEEN ?::timestamp AND ?::timestamp
           AND id_tk_statut <> 28
         ORDER BY id_tk_statut ASC, date_crea DESC
         LIMIT {int(limit)}""",

@@ -17,6 +17,7 @@ from . import (
     avance,
     cartepro,
     cdeexocash,
+    code_vendeur,
     conges,
     cttcourtage,
     cttw,
@@ -60,5 +61,7 @@ FORM_HANDLERS: dict[int, object] = {
     33: facturedr,    # Facture BO (FI_FactureDR)
     34: ulease,       # Signature Doc ULEASE (FI_DocUlease)
     35: ulease_pv,    # PV Liv/Rest ULEASE (FI_UleasePVLivRest)
+    38: code_vendeur,  # Demande Code Vendeur (FI_DemandeCodeVendeur)
+    39: code_vendeur,  # Désactivation Code Vendeur (FI_DemandeCodeVendeur)
     40: cttw_demande,  # Contrat W - Demande
 }
