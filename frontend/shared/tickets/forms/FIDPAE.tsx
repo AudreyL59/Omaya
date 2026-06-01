@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FileText, Loader2, Save, UserPlus, Users } from 'lucide-react'
+import {
+  FileText,
+  Loader2,
+  Play,
+  Printer,
+  RefreshCw,
+  Save,
+  UserPlus,
+  Users,
+} from 'lucide-react'
 
 import type { FIProps } from './index'
 import SearchPicker, { type PickerItem } from './SearchPicker'
@@ -109,226 +118,238 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
   const situOptions: Record<string, string> =
     form.situation_fam_options || {}
 
+  const placeholderAction = (label: string) =>
+    showToast(`${label} : bientôt disponible.`, 'info')
+
   return (
-    <div className="space-y-6">
-      <button
-        onClick={enregistrer}
-        disabled={saving}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
-      >
-        {saving ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <Save className="w-4 h-4" />
-        )}
-        Enregistrer le ticket
-      </button>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Col 1 : etat civil */}
-        <div className="space-y-6">
-      {/* ÉTAT CIVIL */}
-      <Section title="Infos état civil">
-        <Row>
-          <Field label="Civilité">
-            <select
-              value={form.civilite || 0}
-              onChange={(e) => set('civilite', Number(e.target.value))}
-              className={selCls}
-            >
-              <option value={0}>—</option>
-              <option value={1}>M.</option>
-              <option value={2}>Mme</option>
-            </select>
-          </Field>
-          <Field label="Nom">
-            <input value={form.nom || ''} onChange={(e) => set('nom', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Nom marital / Époux(se)">
-            <input value={form.nom_marital || ''} onChange={(e) => set('nom_marital', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Prénom">
-            <input value={form.prenom || ''} onChange={(e) => set('prenom', e.target.value)} className={inCls} />
-          </Field>
-        </Row>
-        <Row>
-          <Field label="N° SS">
-            <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Nationalité">
-            <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="CPAM">
-            <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="N° CIN">
-            <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
-          </Field>
-        </Row>
-        <Row>
-          <Field label="Né(e) le">
-            <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="à (lieu)">
-            <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Dép. naiss.">
-            <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls} />
-          </Field>
-          <Field label="Situation familiale">
-            <select
-              value={form.situation_fam || 0}
-              onChange={(e) => set('situation_fam', Number(e.target.value))}
-              className={selCls}
-            >
-              {Object.entries(situOptions).map(([k, v]) => (
-                <option key={k} value={Number(k)}>{v}</option>
-              ))}
-            </select>
-          </Field>
-        </Row>
-        <Row>
-          <Check label="Avec enfant" checked={!!form.avec_enfant} onChange={(v) => set('avec_enfant', v)} />
-          <Field label="Nb enfants">
-            <input type="number" value={form.nb_enfants || 0} onChange={(e) => set('nb_enfants', Number(e.target.value))} className={inCls} />
-          </Field>
-          <Check label="Travailleur handicapé" checked={!!form.travailleur_handi} onChange={(v) => set('travailleur_handi', v)} />
-        </Row>
-      </Section>
-        </div>
-
-        {/* Col 2 : coordonnees + contact urgence */}
-        <div className="space-y-6">
-      {/* COORDONNÉES */}
-      <Section title="Coordonnées postales et téléphoniques">
-        <Row>
-          <Field label="Adresse" wide>
-            <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
-          </Field>
-        </Row>
-        <Row>
-          <Field label="CP">
-            <input value={form.cp || ''} onChange={(e) => set('cp', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Ville">
-            <input value={form.ville || ''} onChange={(e) => set('ville', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Mobile">
-            <input value={form.gsm || ''} onChange={(e) => set('gsm', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Mail">
-            <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
-          </Field>
-        </Row>
-      </Section>
-
-      {/* CONTACT URGENCE */}
-      <Section title="Contact en cas d'urgence">
-        <Row>
-          <Field label="Identité">
-            <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Parenté">
-            <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
-          </Field>
-          <Field label="Tél">
-            <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
-          </Field>
-        </Row>
-      </Section>
-        </div>
-
-        {/* Col 3 : embauche */}
-        <div className="space-y-6">
-      {/* EMBAUCHE */}
-      <Section title="Infos embauche">
-        <Row>
-          <Field label="Date début">
-            <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
-          </Field>
-          <Check label="Adhère à la mutuelle" checked={!!form.mutuelle} onChange={(v) => set('mutuelle', v)} />
-          <Field label="Date adhésion mutuelle">
-            <input type="date" value={form.mutdate || ''} onChange={(e) => set('mutdate', e.target.value)} disabled={!form.mutuelle} className={inCls} />
-          </Field>
-        </Row>
-        <Row>
-          <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
-          {form.coopte && (
-            <PickerBtn
-              icon={<UserPlus className="w-4 h-4 text-c-brand" />}
-              label={form.coopteur_nom || 'Choisir le coopteur'}
-              onClick={() => setPicker('coopteur')}
-            />
-          )}
-          <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
-          {form.jodirecte && (
-            <PickerBtn
-              icon={<UserPlus className="w-4 h-4 text-c-brand" />}
-              label={form.jocoopteur_nom || 'Choisir le coopteur JO'}
-              onClick={() => setPicker('jocoopteur')}
-            />
-          )}
-        </Row>
-        <Row>
-          <PickerBtn
-            icon={<Users className="w-4 h-4 text-c-brand" />}
-            label={form.lib_equipe || "Choisir l'équipe"}
-            onClick={() => setPicker('equipe')}
-          />
-        </Row>
-      </Section>
-        </div>
+    <div className="space-y-4">
+      {/* Top bar actions */}
+      <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-c-line">
+        <button
+          onClick={enregistrer}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Enregistrer le ticket
+        </button>
+        <button
+          onClick={() => placeholderAction('Démarrer la DPAE')}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-c-brand-strong text-white text-sm font-semibold hover:brightness-110 transition-all"
+        >
+          <Play className="w-4 h-4" />
+          Démarrer la DPAE
+        </button>
+        <button
+          onClick={() => placeholderAction('Attest Info à Imprimer')}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong bg-white text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
+        >
+          <Printer className="w-4 h-4 text-c-ink-soft" />
+          Attest Info à Imprimer
+        </button>
+        <button
+          onClick={() => placeholderAction('Régénérer Att Info')}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong bg-white text-sm text-c-ink hover:bg-c-brand-soft transition-colors"
+        >
+          <RefreshCw className="w-4 h-4 text-c-ink-soft" />
+          Régénérer Att Info
+        </button>
       </div>
 
-      {/* DOCUMENTS */}
-      <Section title="Documents">
-        {(form.documents || []).length === 0 ? (
-          <div className="text-sm text-c-ink-faint">Aucun document.</div>
-        ) : (
-          <div className="flex gap-4">
-            <ul className="w-72 shrink-0 border border-c-line rounded-lg divide-y divide-c-line-soft overflow-hidden">
-              {(form.documents as any[]).map((d) => (
-                <li key={d.id}>
-                  <button
-                    onClick={() => openDoc(d.nom_fichier)}
-                    className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
-                      docName === d.nom_fichier
-                        ? 'bg-c-brand-soft'
-                        : 'hover:bg-c-surface-soft'
-                    }`}
-                  >
-                    <FileText className="w-4 h-4 text-c-brand shrink-0" />
-                    <span className="truncate">{d.nom || d.nom_fichier}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="flex-1 min-h-[480px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
-              {docLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
-                </div>
-              ) : !docUrl ? (
-                <div className="h-full flex items-center justify-center text-c-ink-faint text-sm">
-                  Sélectionne un document pour l'aperçu.
-                </div>
-              ) : docMime.startsWith('image/') ? (
-                <img
-                  src={docUrl}
-                  alt={docName}
-                  className="w-full h-full object-contain"
+      {/* Grid : 2 cols formulaire à gauche, 1 col documents à droite */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Colonne gauche : formulaire (span 2/3) */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* ÉTAT CIVIL */}
+            <Section title="Infos état civil">
+              <Field label="Civilité">
+                <ToggleGroup
+                  value={Number(form.civilite || 0)}
+                  options={[{ v: 1, lib: 'M.' }, { v: 2, lib: 'Mme' }]}
+                  onChange={(v) => set('civilite', v)}
                 />
-              ) : (
-                <iframe
-                  src={docUrl}
-                  title={docName}
-                  className="w-full h-[480px]"
+              </Field>
+              <Field label="Nom">
+                <input value={form.nom || ''} onChange={(e) => set('nom', e.target.value)} className={inCls} />
+              </Field>
+              <Field label="Époux(se)">
+                <input value={form.nom_marital || ''} onChange={(e) => set('nom_marital', e.target.value)} className={inCls} />
+              </Field>
+              <Field label="Prénom">
+                <input value={form.prenom || ''} onChange={(e) => set('prenom', e.target.value)} className={inCls} />
+              </Field>
+              <FieldRow>
+                <Field label="N° SS">
+                  <input value={form.numss || ''} onChange={(e) => set('numss', e.target.value)} className={inCls} />
+                </Field>
+                <Field label="Nat.">
+                  <input value={form.nationalite || ''} onChange={(e) => set('nationalite', e.target.value)} className={inCls} />
+                </Field>
+              </FieldRow>
+              <Field label="CPAM">
+                <input value={form.cpam || ''} onChange={(e) => set('cpam', e.target.value)} className={inCls} />
+              </Field>
+              <FieldRow>
+                <Field label="Né(e) le">
+                  <input type="date" value={form.dnaiss || ''} onChange={(e) => set('dnaiss', e.target.value)} className={inCls} />
+                </Field>
+                <Field label="à">
+                  <input value={form.lnaiss || ''} onChange={(e) => set('lnaiss', e.target.value)} className={inCls} />
+                </Field>
+                <Field label="Dép">
+                  <input type="number" value={form.depnaiss || 0} onChange={(e) => set('depnaiss', Number(e.target.value))} className={inCls + ' w-16'} />
+                </Field>
+              </FieldRow>
+              <Field label="N° CIN">
+                <input value={form.numcin || ''} onChange={(e) => set('numcin', e.target.value)} className={inCls} />
+              </Field>
+              <Field label="Situation Familiale">
+                <select
+                  value={form.situation_fam || 0}
+                  onChange={(e) => set('situation_fam', Number(e.target.value))}
+                  className={selCls}
+                >
+                  {Object.entries(situOptions).map(([k, v]) => (
+                    <option key={k} value={Number(k)}>{v}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex items-center gap-4 pl-32">
+                <Check label="Avec Enfant" checked={!!form.avec_enfant} onChange={(v) => set('avec_enfant', v)} />
+                <span className="text-xs text-c-ink-soft">Nb Enfants</span>
+                <input
+                  type="number"
+                  value={form.nb_enfants || 0}
+                  onChange={(e) => set('nb_enfants', Number(e.target.value))}
+                  className={inCls + ' w-16'}
                 />
-              )}
-            </div>
+              </div>
+              <div className="pl-32">
+                <Check label="Travailleur Handicapé" checked={!!form.travailleur_handi} onChange={(v) => set('travailleur_handi', v)} />
+              </div>
+            </Section>
+
+            {/* INFOS EMBAUCHE */}
+            <Section title="Infos embauche">
+              <Field label="Date Début">
+                <input type="date" value={form.date_debut || ''} onChange={(e) => set('date_debut', e.target.value)} className={inCls} />
+              </Field>
+              <div className="flex items-center gap-3 pl-32">
+                <Check label="Adhère à la mutuelle" checked={!!form.mutuelle} onChange={(v) => set('mutuelle', v)} />
+              </div>
+              <Field label="Date adhésion">
+                <input type="date" value={form.mutdate || ''} onChange={(e) => set('mutdate', e.target.value)} disabled={!form.mutuelle} className={inCls} />
+              </Field>
+              <div className="flex items-center gap-3 pl-32">
+                <Check label="Coopté" checked={!!form.coopte} onChange={(v) => set('coopte', v)} />
+                {form.coopte && (
+                  <PickerBtn
+                    icon={<UserPlus className="w-4 h-4 text-c-brand" />}
+                    label={form.coopteur_nom || 'Choisir le coopteur'}
+                    onClick={() => setPicker('coopteur')}
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-3 pl-32">
+                <Check label="JO Directe" checked={!!form.jodirecte} onChange={(v) => set('jodirecte', v)} />
+                {form.jodirecte && (
+                  <PickerBtn
+                    icon={<UserPlus className="w-4 h-4 text-c-brand" />}
+                    label={form.jocoopteur_nom || 'Choisir le coopteur JO'}
+                    onClick={() => setPicker('jocoopteur')}
+                  />
+                )}
+              </div>
+              <div className="pl-32">
+                <PickerBtn
+                  icon={<Users className="w-4 h-4 text-c-brand" />}
+                  label={form.lib_equipe || "Choisir l'équipe"}
+                  onClick={() => setPicker('equipe')}
+                />
+              </div>
+            </Section>
           </div>
-        )}
-      </Section>
+
+          {/* COORDONNÉES (span 2 sous-colonnes) */}
+          <Section title="Coordonnées postales et téléphoniques">
+            <Field label="Adresse">
+              <input value={form.adresse1 || ''} onChange={(e) => set('adresse1', e.target.value)} className={inCls} />
+            </Field>
+            <FieldRow>
+              <Field label="CP">
+                <input value={form.cp || ''} onChange={(e) => set('cp', e.target.value)} className={inCls + ' w-24'} />
+              </Field>
+              <Field label="Ville">
+                <input value={form.ville || ''} onChange={(e) => set('ville', e.target.value)} className={inCls} />
+              </Field>
+            </FieldRow>
+            <Field label="Mobile">
+              <input value={form.gsm || ''} onChange={(e) => set('gsm', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Mail">
+              <input value={form.mail || ''} onChange={(e) => set('mail', e.target.value)} className={inCls} />
+            </Field>
+          </Section>
+
+          {/* CONTACT URGENCE (span 2 sous-colonnes) */}
+          <Section title="Contact en cas d'urgence">
+            <Field label="Identité">
+              <input value={form.urgnom || ''} onChange={(e) => set('urgnom', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Parenté">
+              <input value={form.urglien || ''} onChange={(e) => set('urglien', e.target.value)} className={inCls} />
+            </Field>
+            <Field label="Tél">
+              <input value={form.urgtel || ''} onChange={(e) => set('urgtel', e.target.value)} className={inCls} />
+            </Field>
+          </Section>
+        </div>
+
+        {/* Colonne droite : Documents (fixe) */}
+        <div>
+          <Section title="Documents">
+            {(form.documents || []).length === 0 ? (
+              <div className="text-sm text-c-ink-faint">Aucun document.</div>
+            ) : (
+              <div className="space-y-3">
+                <ul className="border border-c-line rounded-lg divide-y divide-c-line-soft overflow-hidden">
+                  {(form.documents as any[]).map((d) => (
+                    <li key={d.id}>
+                      <button
+                        onClick={() => openDoc(d.nom_fichier)}
+                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
+                          docName === d.nom_fichier
+                            ? 'bg-c-brand-soft'
+                            : 'hover:bg-c-surface-soft'
+                        }`}
+                      >
+                        <FileText className="w-4 h-4 text-c-brand shrink-0" />
+                        <span className="truncate">{d.nom || d.nom_fichier}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="min-h-[500px] border border-c-line rounded-lg bg-c-surface-soft overflow-hidden">
+                  {docLoading ? (
+                    <div className="h-full flex items-center justify-center py-10">
+                      <Loader2 className="w-5 h-5 text-c-ink-icon animate-spin" />
+                    </div>
+                  ) : !docUrl ? (
+                    <div className="h-full flex items-center justify-center text-c-ink-faint text-sm py-10">
+                      Sélectionne un document pour l'aperçu.
+                    </div>
+                  ) : docMime.startsWith('image/') ? (
+                    <img src={docUrl} alt={docName} className="w-full h-full object-contain" />
+                  ) : (
+                    <iframe src={docUrl} title={docName} className="w-full h-[500px]" />
+                  )}
+                </div>
+              </div>
+            )}
+          </Section>
+        </div>
+      </div>
 
       {picker === 'coopteur' && (
         <SearchPicker
@@ -397,28 +418,60 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="text-sm font-semibold text-c-brand-strong uppercase tracking-wide mb-3">
         {title}
       </h3>
-      <div className="space-y-3">{children}</div>
+      <div className="space-y-2">{children}</div>
     </div>
   )
 }
 
-function Row({ children }: { children: React.ReactNode }) {
-  // Layout en colonne : chaque enfant prend toute la largeur, empile verticalement.
-  return <div className="flex flex-col gap-3">{children}</div>
-}
-
+// Field : libelle a gauche (right-aligned, w-28), input a droite (flex-1).
 function Field({
   label,
   children,
 }: {
   label: string
   children: React.ReactNode
-  wide?: boolean
 }) {
   return (
-    <div className="flex flex-col gap-1 w-full">
-      <span className="text-xs text-c-ink-soft">{label}</span>
-      {children}
+    <div className="flex items-center gap-3 text-sm">
+      <span className="text-c-ink-soft w-28 shrink-0 text-right">{label}</span>
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  )
+}
+
+// FieldRow : plusieurs Field cote-a-cote sur la meme ligne, partageant la
+// largeur. Le 1er Field garde son label-gauche, les suivants aussi mais
+// avec label plus petit (auto).
+function FieldRow({ children }: { children: React.ReactNode }) {
+  return <div className="flex items-center gap-3 text-sm">{children}</div>
+}
+
+// Toggle M./Mme (et toute option a 2-3 valeurs).
+function ToggleGroup({
+  value,
+  options,
+  onChange,
+}: {
+  value: number
+  options: { v: number; lib: string }[]
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-c-line-strong overflow-hidden">
+      {options.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          onClick={() => onChange(o.v)}
+          className={`px-4 py-1 text-sm transition-colors ${
+            value === o.v
+              ? 'bg-c-brand text-white'
+              : 'bg-white text-c-ink hover:bg-c-brand-soft'
+          }`}
+        >
+          {o.lib}
+        </button>
+      ))}
     </div>
   )
 }
