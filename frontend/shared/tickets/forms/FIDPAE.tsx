@@ -299,8 +299,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
                 />
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-28 shrink-0" />
+            <div className="flex">
               <PickerBtn
                 icon={<Users className="w-4 h-4 text-c-brand" />}
                 label={form.lib_equipe || "Choisir l'équipe"}
