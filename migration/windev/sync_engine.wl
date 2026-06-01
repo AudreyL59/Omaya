@@ -289,7 +289,7 @@ PROCEDURE INTERNE SyncIncremental(LOCAL sSchema, sTableHF, sTablePG is string, .
     nPos  is int = 0
 
     // Init jauge pour cette table
-    nTotal is int = HNbEnr(sTableHF)
+    nTotal is int = SafeNbEnr(sTableHF)
     Jauge1..Libellé = sSchema + "." + sTableHF + " (" + nTotal + " lignes)"
     Jauge1..BorneMin = 0
     Jauge1..BorneMax = Max(nTotal, 1)
@@ -331,7 +331,7 @@ PROCEDURE INTERNE SyncFullReload(LOCAL sSchema, sTableHF, sTablePG is string, ..
                         LOCAL tabCols is array of STColMap, ...
                         LOCAL sColPK_HF, sColPK_PG is string)
     // Init jauge pour cette table
-    nTotal is int = HNbEnr(sTableHF)
+    nTotal is int = SafeNbEnr(sTableHF)
     Jauge1..Libellé = sSchema + "." + sTableHF + " (" + nTotal + " lignes, full-reload)"
     Jauge1..BorneMin = 0
     Jauge1..BorneMax = Max(nTotal, 1)
@@ -365,6 +365,51 @@ PROCEDURE INTERNE SyncFullReload(LOCAL sSchema, sTableHF, sTablePG is string, ..
 END
 
 // =============================================================================
+//  COMPTAGE ENREGISTREMENTS TOLERANT (renvoie 0 sur erreur)
+// =============================================================================
+
+PROCEDURE INTERNE SafeNbEnr(LOCAL sFile is string) : int
+    nRes is int = 0
+    WHEN EXCEPTION IN
+        nRes = HNbEnr(sFile)
+    DO
+        LogAction("[WARN] HNbEnr KO sur " + sFile + " : " + ExceptionInfo() + " (jauge en mode indetermine)")
+        nRes = 0
+    END
+    RESULT nRes
+END
+
+// =============================================================================
+//  AFFECTATION DATE TOLERANTE
+// =============================================================================
+// Une rubrique "date" cote HFSQL peut contenir :
+//   - une vraie Date vide ("00000000" interne -> "0000-01-01" en PG -> erreur)
+//   - un texte mal formate ("24/01/20") -> DateVersChaine plante avec une exception
+//   - "0000-01-01" deja en chaine, ou autres surprises
+// On encapsule l'affectation dans un WHEN EXCEPTION isole : si quoi que ce
+// soit echoue, on ne touche pas a la colonne cible -> reste NULL apres HRAZ.
+
+PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string)
+    WHEN EXCEPTION IN
+        // Premier filtre brut sur la chaine (sans appeler DateVersChaine qui plante
+        // sur l'annee 0000). Si on detecte un marqueur de date vide -> skip.
+        sValSrc is string = "" + {sFileHF + "." + sColHF}
+        bEmpty is boolean = (sValSrc = "" ...
+                          OR sValSrc = "00000000" ...
+                          OR sValSrc = "0000-00-00" ...
+                          OR sValSrc = "0000-01-01" ...
+                          OR sValSrc = "00/00/0000" ...
+                          OR sValSrc = "01/01/0000" ...
+                          OR Gauche(sValSrc, 4) = "0000")
+        IF NOT bEmpty THEN
+            {sFilePG + "." + sColPG} = {sFileHF + "." + sColHF}
+        END
+    DO
+        // affectation impossible (texte mal forme, annee invalide...) -> on laisse NULL
+    END
+END
+
+// =============================================================================
 //  UPSERT D'UNE LIGNE (copie record-a-record par indirection)
 // =============================================================================
 
@@ -382,9 +427,19 @@ PROCEDURE INTERNE UpsertRow(LOCAL sTablePG is string, ...
             HReset(sTablePG)
         END
 
-        // Copie de tous les champs par indirection
+        // Copie de tous les champs par indirection.
+        // Cas special : pour les types date/timestamp/time, HFSQL renvoie
+        // "00000000" sur une rubrique vide -> PG refuse en strict. On detecte
+        // ET on retombe sur un WHEN EXCEPTION : si l'affectation plante quand
+        // meme, on positionne NULL et on continue.
         FOR EACH col OF tabCols
-            {sTablePG + "." + col.pg_column} = {sTableHF + "." + col.hfsql_column}
+            IF col.pg_type = "date" OR col.pg_type = "timestamp" OR col.pg_type = "time" THEN
+                // Delegue a une proc dediee : isole le WHEN EXCEPTION pour ne
+                // pas faire planter toute la ligne sur une date pourrie.
+                TryAssignDate(sTablePG, col.pg_column, sTableHF, col.hfsql_column)
+            ELSE
+                {sTablePG + "." + col.pg_column} = {sTableHF + "." + col.hfsql_column}
+            END
         END
 
         IF bFound THEN
@@ -438,3 +493,23 @@ END
 // Pour explorer le mapping : ouvre migration/mapping/columns.csv
 // Schemas disponibles : adv, divers, recrutement, rh, scool, ticket, ticket_bo,
 // ticket_dpae, ticket_rh, ulease
+SyncAllTables()
+//
+//TestSyncOneTable("rh", "salarie_coordonnees")
+//TestSyncOneTable("rh", "salarie_embauche")
+//TestSyncOneTable("rh", "TypePoste")
+//TestSyncOneTable("rh", "salarie_droitAccès")
+//TestSyncOneTable("rh", "TypeDroitAccès")
+//TestSyncOneTable("rh", "TypeOrga")
+//TestSyncOneTable("rh", "TypeOrga")
+//TestSyncOneTable("rh", "TypeProduit")
+//TestSyncOneTable("rh", "TypeProduit_Partenaire")
+//TestSyncOneTable("rh", "TypeSortieSalarie")
+//TestSyncOneTable("rh", "TypeHoraireTravail")
+//TestSyncOneTable("rh", "TypeAbsence")
+//TestSyncOneTable("rh", "societe")
+//TestSyncOneTable("rh", "organigramme")
+//TestSyncOneTable("recrutement", "CvAnnonceur")
+//TestSyncOneTable("recrutement", "CvSource")
+//TestSyncOneTable("divers", "communes_france")
+//TestSyncOneTable("adv", "Partenaire")
