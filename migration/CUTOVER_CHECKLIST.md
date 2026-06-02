@@ -69,6 +69,15 @@ immédiate. Au cutover (HFSQL absent), elles **doivent** lire PG :
    - `get_job` (idem)
    - `_load_pending_queue` (calcul de position dans la file)
 
+2bis. **`app/intranets/call/fibre/services/tickets.py`** (et `energie` une fois dupliqué) :
+   - `list_tickets_en_cours` lit `SuiviTicketCall` (cache maintenu par l'exe
+     externe) puis SELECT par PK. Pourquoi : la query directe sur TK_Liste
+     avec les filtres business (Cloturée=0 + ModifELEM NOT LIKE + statut <>...)
+     timeout 14s+ via le pont HFSQL faute d'index utilisable. **Au cutover
+     PG**, on bascule sur une query directe — avec un index PG sur
+     (id_tk_type_demande, datecrea) ce sera rapide et on pourra
+     **décommissionner l'exe externe `SuiviTicketCall`**.
+
 3. **Tous les forms tickets** : les helpers `_xxx_info`, `_xxx_mail`, `_xxx_gsm`,
    `load_*` partagés avec `save_*` (read-modify-write). À auditer fichier par
    fichier — la règle est simple : si la donnée vient d'être écrite en HFSQL
