@@ -184,13 +184,18 @@ def _load_affectations(db_rh, id_salaries: set[int]) -> dict[int, dict]:
     ids_sql = ",".join(str(i) for i in id_salaries if i)
     if not ids_sql:
         return {}
+    # IMPORTANT : on filtre WHERE so.IDSalarie IN (...) pour ne charger que les
+    # salaries qui nous interessent. Sans ce filtre, un TOP 1000 pourrait
+    # tronquer arbitrairement et laisser certains salaries sans affectation
+    # (bug : equipe vide dans le tableau du bas, stats agences faussees).
     rows = db_rh.query(
-        f"""SELECT TOP 1000
+        f"""SELECT
             so.IDSalarie, so.IDOrganigramme, o.Lib_ORGA AS lib_orga,
             o.IdPARENT AS id_orga_parent
         FROM Salarie_Organigramme so
         INNER JOIN Organigramme o ON o.IDOrganigramme = so.IDOrganigramme
-        WHERE so.ModifELEM NOT LIKE '%suppr%'
+        WHERE so.IDSalarie IN ({ids_sql})
+          AND so.ModifELEM NOT LIKE '%suppr%'
           AND (so.DateFin = '' OR so.DateFin >= ?)
         ORDER BY so.DateDébut DESC""",
         (_today_compact(),),
