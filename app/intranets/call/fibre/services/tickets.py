@@ -672,7 +672,9 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
             "cp": call["cp"],
             "ville": call["ville"],
             "nom_vendeur": f"{sal['nom']} {_capitalize(sal['prenom'])}".strip(),
-            "agence": aff["lib_orga"],
+            # "agence" = libelle complet "PARENT_Lib => Lib" (transposition WinDev :
+            # affectationVendeurByDate renvoie le format hierarchique).
+            "agence": aff.get("lib_equipe") or aff.get("lib_orga", ""),
             "lib_statut": lib_statut_force,
             "ref_appel": call["ref_appel"],
             "nb_offres": len(panier),
