@@ -7,12 +7,18 @@ Le résultat est échangé via un fichier JSON temporaire.
 """
 
 import json
+import os
 import subprocess
+import sys
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
 from app.core.config import HFSQL_BRIDGE_PATH
+
+# Logging des durees HFSQL si BRIDGE_LOG_TIMING=1 (env var).
+_LOG_TIMING = os.environ.get("BRIDGE_LOG_TIMING") == "1"
 
 CREATE_NO_WINDOW = 0x08000000
 
@@ -86,6 +92,7 @@ def execute_query(
             stdin=subprocess.DEVNULL,
             creationflags=CREATE_NO_WINDOW,
         )
+        _t0 = time.monotonic()
         try:
             stdout_b, stderr_b = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -165,7 +172,13 @@ def execute_query(
 
         # Aplatir les lignes (HEnregistrementVersJSON ajoute un wrapper)
         rows = data.get("rows", [])
-        return [_flatten_row(row) for row in rows]
+        result = [_flatten_row(row) for row in rows]
+        if _LOG_TIMING:
+            dur = time.monotonic() - _t0
+            # Tronque le SQL a 80 chars + remplace les sauts de ligne pour log
+            sql_short = " ".join(sql.split())[:120]
+            print(f"[HFSQL] {dur:.2f}s ({len(result)} rows) {database}: {sql_short}", file=sys.stderr, flush=True)
+        return result
 
     finally:
         if result_file.exists():
