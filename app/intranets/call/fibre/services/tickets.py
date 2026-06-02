@@ -932,8 +932,5 @@ def load_page(user_id: int, user_id_poste: int, jour: str | None = None) -> dict
         "tickets_traites": traites_clean,
         "stats": stats,
         "serveur_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        # last_modif desactive : le frontend utilise setInterval (pas le long
-        # polling), donc cette info n'est plus consommee. Eviter 2 queries
-        # MAX(ModifDate) qui coutaient 10s par chargement.
-        "last_modif": "",
+        "last_modif": get_last_modif_call_fibre(),
     }

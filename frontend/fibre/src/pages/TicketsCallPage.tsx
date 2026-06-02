@@ -86,9 +86,11 @@ const API_BASE = '/api/call/fibre'
 // Intervalle de refresh auto (en ms). On utilise un simple polling court a la
 // place du long polling /tickets/live (qui timeout sur MAX(ModifDate) en
 // HFSQL sans index adequat). A reactiver au cutover PG si besoin.
-// 10s : depuis qu'on lit le HFSQL local OVH (et plus l'interne via VPN),
-// chaque GET /tickets est rapide. On peut se permettre un refresh frequent.
-const REFRESH_INTERVAL_MS = 10_000
+// Long polling : /tickets/live attend max 25s qu'un ticket bouge cote
+// serveur, puis renvoie la page complete. Detection ~instantanee.
+// Si timeout sans changement -> on relance immediatement.
+// Pas d'interval cote client (juste une boucle qui relance des qu'elle
+// recoit une reponse).
 
 export default function TicketsCallPage() {
   const [data, setData] = useState<PageData | null>(null)
@@ -96,6 +98,7 @@ export default function TicketsCallPage() {
   const [clientNow, setClientNow] = useState('')
   // Date du champ de saisie au-dessus du tableau du BAS (defaut = today).
   const [jourBas, setJourBas] = useState(() => new Date().toISOString().slice(0, 10))
+  const lastModifRef = useRef('')
   const stoppedRef = useRef(false)
   const jourBasRef = useRef(jourBas)
 
@@ -103,9 +106,44 @@ export default function TicketsCallPage() {
     jourBasRef.current = jourBas
   }, [jourBas])
 
-  // Refresh : fait un GET /tickets avec la date actuelle.
-  // Appele au mount + a chaque interval + sur action user (bouton Search).
-  const refetch = useCallback(async () => {
+  // Long polling : boucle infinie tant que le composant est monte.
+  // Premier appel sans `since` -> renvoie la page immediatement.
+  // Appels suivants : attend max 25s qu'un changement survienne.
+  const poll = useCallback(async () => {
+    while (!stoppedRef.current) {
+      try {
+        const since = encodeURIComponent(lastModifRef.current)
+        const jour = encodeURIComponent(jourBasRef.current)
+        const r = await fetch(
+          `${API_BASE}/tickets/live?since=${since}&jour=${jour}`,
+          { headers: { Authorization: `Bearer ${getToken()}` } },
+        )
+        if (!r.ok) {
+          // 401/500 : pause 5s avant retry pour ne pas spammer
+          await new Promise((res) => setTimeout(res, 5000))
+          continue
+        }
+        const body = await r.json()
+        if (body.changed && body.page) {
+          if (!stoppedRef.current) {
+            setData(body.page)
+            lastModifRef.current = body.last_modif
+            setClientNow(new Date().toLocaleString('fr-FR'))
+          }
+        } else {
+          // Pas de changement detecte -> on memorise le dernier "ping" et on relance
+          lastModifRef.current = body.last_modif || lastModifRef.current
+        }
+      } catch {
+        await new Promise((res) => setTimeout(res, 3000))
+      } finally {
+        if (!stoppedRef.current) setLoading(false)
+      }
+    }
+  }, [])
+
+  // Refetch immediat (declenche par l'user quand il change la date du tableau bas)
+  const refetchNow = useCallback(async () => {
     try {
       const jour = encodeURIComponent(jourBasRef.current)
       const r = await fetch(`${API_BASE}/tickets?jour=${jour}`, {
@@ -113,32 +151,22 @@ export default function TicketsCallPage() {
       })
       if (r.ok) {
         const page = await r.json()
-        if (!stoppedRef.current) {
-          setData(page)
-          setClientNow(new Date().toLocaleString('fr-FR'))
-        }
+        setData(page)
+        lastModifRef.current = page.last_modif
+        setClientNow(new Date().toLocaleString('fr-FR'))
       }
     } catch {
-      // ignore (next interval will retry)
-    } finally {
-      if (!stoppedRef.current) {
-        setLoading(false)
-      }
+      // ignore
     }
   }, [])
 
-  // Mount : refetch immediat + setInterval pour le refresh periodique
   useEffect(() => {
     stoppedRef.current = false
-    refetch()
-    const id = setInterval(refetch, REFRESH_INTERVAL_MS)
+    poll()
     return () => {
       stoppedRef.current = true
-      clearInterval(id)
     }
-  }, [refetch])
-
-  const refetchNow = refetch
+  }, [poll])
 
   if (loading) {
     return (
