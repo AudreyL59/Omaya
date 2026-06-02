@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends
 
 from app.core.auth.dependencies import require_intranet
+from app.intranets.call.fibre.menu import router as menu_router
 
 router = APIRouter(
     prefix="/call/fibre",
     tags=["call-fibre"],
     dependencies=[Depends(require_intranet("call_fibre"))],
 )
+
+# Menu dynamique
+router.include_router(menu_router)
 
 
 @router.get("/ping")

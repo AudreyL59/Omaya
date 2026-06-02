@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  web.config du SOUS-DOSSIER /ce (Application IIS Call Energie).
+  Destination : D:\Sites\intracall.omaya.fr\www\ce\web.config
+  Role : SPA fallback pour React Router.
+  Pre-requis : module IIS "URL Rewrite" installe.
+
+  Note : la regle de reverse proxy /api -> uvicorn est dans le web.config de la RACINE du site
+  (cf. deploy/web.config.intracall).
+-->
+<configuration>
+  <system.webServer>
+    <rewrite>
+      <rules>
+        <!-- SPA fallback : toute URL sous /ce/ qui ne correspond pas a un fichier reel -> index.html -->
+        <rule name="SPAFallback" stopProcessing="true">
+          <match url=".*" />
+          <conditions logicalGrouping="MatchAll">
+            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
+            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
+          </conditions>
+          <action type="Rewrite" url="/ce/index.html" />
+        </rule>
+      </rules>
+    </rewrite>
+  </system.webServer>
+</configuration>
