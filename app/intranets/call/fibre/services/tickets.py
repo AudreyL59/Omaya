@@ -929,26 +929,24 @@ def _orga_descendants(db_rh, id_orga_racine: int) -> set[int]:
 # --- Endpoint unifie : tout en 1 seul appel -------------------------------
 
 def get_last_modif_call_fibre() -> str:
-    """Max(ModifDate) sur les tickets Call Fibre des 7 derniers jours.
+    """Token de change-detection sur les tickets Call Fibre.
 
-    Approxime un "changement detecte" : si cette valeur augmente, c'est qu'un
-    ticket a ete cree/modifie/cloture/verouille -> on rafraichit la page.
+    Concatene :
+    - Max(ModifDate) sur TK_Liste + TK_CallSFR (7 derniers jours) -> couvre
+      creation / cloture / changement de statut.
+    - Hash du contenu de `SuiviTicketCall` (IdEncours + IdAppelEnCours) ->
+      couvre le verrou ope (l'exe externe MAJ uniquement cette table quand
+      un ope prend / lache un appel, sans toucher au ModifDate de TK_Liste).
 
-    Limite a 7 jours pour eviter un timeout sur la table TK_Liste complete
-    (qui n'a pas d'index sur IDTK_TypeDemande + ModifDate).
-    Tout changement sur un ticket plus vieux que 7 jours sera quand meme vu
-    car ModifDate est mis a jour au moment du changement -> il rentre dans
-    la fenetre des 7 jours a ce moment-la.
-
-    Cross-base impossible : on regarde TK_Liste WHERE TypeDemande=20 (base
-    ticket) ET TK_CallSFR (base ticket_bo). En pratique, TK_CallSFR ne
-    contient que des Call Fibre donc le filtre TypeDemande n'est pas
-    necessaire.
+    Format : "MAX_MODIF#HASH". On compare avec `!=` cote wait_for_change
+    (pas `>`) car le hash change non-monotonique.
     """
+    import hashlib
     from datetime import timedelta
     cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y%m%d000000000")
     db_ticket = get_connection("ticket")
     db_bo = get_connection("ticket_bo")
+    db_divers = get_connection("divers")
     r1 = db_ticket.query(
         """SELECT MAX(ModifDate) AS max_modif FROM TK_Liste
         WHERE IDTK_TypeDemande = ?
@@ -962,15 +960,29 @@ def get_last_modif_call_fibre() -> str:
     )
     m1 = _iso((r1[0] or {}).get("max_modif")) if r1 else ""
     m2 = _iso((r2[0] or {}).get("max_modif")) if r2 else ""
-    return max(m1, m2)
+    max_modif = max(m1, m2)
+
+    # Capture le verrou ope (IdEncours/IdAppelEnCours change quand un ope
+    # prend ou lache un appel).
+    r3 = db_divers.query(
+        "SELECT IdEncours, IdAppelEnCours FROM SuiviTicketCall WHERE TypeCall = 'FIBRE'"
+    )
+    suivi_blob = ""
+    if r3:
+        s = r3[0] or {}
+        suivi_blob = (s.get("IdEncours") or "") + "|" + (s.get("IdAppelEnCours") or "")
+    suivi_hash = hashlib.md5(suivi_blob.encode("utf-8", errors="ignore")).hexdigest()[:12]
+    return f"{max_modif}#{suivi_hash}"
 
 
 def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 1.0) -> tuple[bool, str]:
     """Long polling : attend qu'un changement survienne sur Call Fibre.
 
-    Renvoie (changed, latest_modif_iso).
-    - changed = True si la max(ModifDate) a depasse `since` avant le timeout.
+    Renvoie (changed, latest_token).
+    - changed = True si le token (max_modif#hash_suivi) a change avant timeout.
     - changed = False si timeout atteint.
+
+    On compare avec `!=` (pas `>`) car la partie hash n'est pas monotone.
 
     Si `since` est vide, retourne immediatement (changed=True) pour forcer
     un chargement initial.
@@ -982,7 +994,7 @@ def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: floa
     latest = ""
     while True:
         latest = get_last_modif_call_fibre()
-        if latest and latest > since:
+        if latest and latest != since:
             return True, latest
         if time.monotonic() >= deadline:
             return False, latest
