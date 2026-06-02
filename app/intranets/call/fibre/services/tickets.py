@@ -190,8 +190,8 @@ def _load_affectations(db_rh, id_salaries: set[int]) -> dict[int, dict]:
         FROM Salarie_Organigramme so
         INNER JOIN Organigramme o ON o.IDOrganigramme = so.IDOrganigramme
         WHERE so.ModifELEM NOT LIKE '%suppr%'
-          AND (so.Date_Fin = '' OR so.Date_Fin >= ?)
-        ORDER BY so.Date_Debut DESC""",
+          AND (so.DateFin = '' OR so.DateFin >= ?)
+        ORDER BY so.DateDébut DESC""",
         (_today_compact(),),
     )
     # Recuperer en plus le lib_orga des parents
@@ -361,10 +361,13 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
 
     # 2. TK_CallSFR pour ces IDs
     ids_sql = ",".join(str(i) for i in by_id.keys())
+    # Note: TicketDiff n'existe pas comme colonne dans TK_CallSFR (verifie
+    # contre le descriptif xlsx + mapping CSV). C'est probablement calcule
+    # cote WinDev (procedure ou flag derive). Hardcode False pour l'instant.
     rows_call = db_bo.query(
         f"""SELECT
             IDTK_Liste, IDSalarie, CivilitéClient, NomClient, NomMaritalClient,
-            PrenomClient, CP, VILLE, AppelEnCours, OpéAppel, TicketDiff
+            PrenomClient, CP, VILLE, AppelEnCours, OpéAppel
         FROM TK_CallSFR
         WHERE IDTK_Liste IN ({ids_sql})
           AND ModifELEM NOT LIKE '%suppr%'"""
@@ -395,10 +398,11 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
                     continue
             except ValueError:
                 pass
-        # Filtre TicketDiff masque pour idPoste = 20
-        ticket_diff = bool(r.get("TicketDiff"))
-        if ticket_diff and user_id_poste == ID_POSTE_MASQUE_DIFF:
-            continue
+        # Filtre TicketDiff : colonne pas trouvee dans TK_CallSFR (cf. xlsx +
+        # mapping CSV). A confirmer cote user : peut-etre dans un autre fichier
+        # ou calcule en WinDev. Pour l'instant : ticket_diff = False -> aucun
+        # ticket masque par ce filtre.
+        ticket_diff = False
 
         id_salarie = _to_int(r.get("IDSalarie"))
         salaries_to_load.add(id_salarie)
