@@ -913,24 +913,40 @@ def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: floa
         time.sleep(poll_interval)
 
 
-def load_page(user_id: int, user_id_poste: int, jour: str | None = None) -> dict:
-    """Charge tout ce qu'il faut pour la page principale Call Fibre.
+def load_page_en_cours(user_id: int, user_id_poste: int) -> dict:
+    """Charge UNIQUEMENT le tableau du haut + token last_modif.
 
-    Equivalent du `MaPage()` WinDev. Renvoie :
-    - tickets_en_cours (haut)
-    - tickets_traites (bas)
-    - stats (compteurs globaux + agences)
-    - serveur_now (pour le bandeau "derniere verif ...")
+    Rapide (~5 queries) -> affichage immediat de la page.
+    Le tableau du bas + stats sont charges separement (load_page_traites).
     """
     en_cours = list_tickets_en_cours(user_id, user_id_poste)
-    traites = list_tickets_traites(jour)
-    stats = compute_stats(traites)
-    # Nettoyer les champs prives "_xxx" avant de renvoyer au client
-    traites_clean = [{k: v for k, v in t.items() if not k.startswith("_")} for t in traites]
     return {
         "tickets_en_cours": en_cours,
-        "tickets_traites": traites_clean,
-        "stats": stats,
         "serveur_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "last_modif": get_last_modif_call_fibre(),
     }
+
+
+def load_page_traites(jour: str | None = None) -> dict:
+    """Charge le tableau du bas + stats agences.
+
+    Plus lent (paniers, offres, agences, ~10 queries). Appele en background
+    par le frontend apres l'affichage des en cours.
+    """
+    traites = list_tickets_traites(jour)
+    stats = compute_stats(traites)
+    traites_clean = [{k: v for k, v in t.items() if not k.startswith("_")} for t in traites]
+    return {
+        "tickets_traites": traites_clean,
+        "stats": stats,
+    }
+
+
+def load_page(user_id: int, user_id_poste: int, jour: str | None = None) -> dict:
+    """Charge tout (en cours + traites + stats). Garde pour compatibilite.
+
+    Pref : load_page_en_cours() + load_page_traites() pour servir en 2 temps.
+    """
+    p1 = load_page_en_cours(user_id, user_id_poste)
+    p2 = load_page_traites(jour)
+    return {**p1, **p2}

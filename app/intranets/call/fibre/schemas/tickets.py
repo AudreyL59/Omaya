@@ -98,19 +98,36 @@ class StatsGlobales(BaseModel):
     nb_mobile_fox: int = 0
 
 
+class TicketsEnCoursResponse(BaseModel):
+    """Reponse rapide : tableau du haut + serveur_now + last_modif.
+
+    Charge en premier au mount (~5 queries HFSQL).
+    """
+    tickets_en_cours: list[TicketEnCours]
+    serveur_now: str              # ISO YYYY-MM-DD HH:MM:SS
+    last_modif: str = ""          # token pour /tickets/live
+
+
+class TicketsTraitesResponse(BaseModel):
+    """Reponse plus lente : tableau du bas + stats.
+
+    Charge en arriere-plan apres l'affichage des en cours.
+    """
+    tickets_traites: list[TicketTraite]
+    stats: StatsGlobales
+
+
 class TicketsPageResponse(BaseModel):
-    """Reponse globale de l'endpoint qui charge la page (1 seul appel pour tout)."""
+    """Reponse globale (full) : en-cours + traites + stats. Compatibilite."""
     tickets_en_cours: list[TicketEnCours]
     tickets_traites: list[TicketTraite]
     stats: StatsGlobales
-    # Horodatage pour le footer "Derniere verif intranet le ..."
-    serveur_now: str              # ISO YYYY-MM-DD HH:MM:SS
-    # Token a renvoyer dans `since` lors du prochain appel /tickets/live.
+    serveur_now: str
     last_modif: str = ""
 
 
 class TicketsLiveResponse(BaseModel):
-    """Reponse du long polling /tickets/live."""
-    changed: bool                 # True si un ticket a bouge depuis `since`
-    page: TicketsPageResponse | None = None  # rempli uniquement si changed=True
-    last_modif: str = ""          # token a renvoyer au prochain appel
+    """Long polling : ne renvoie QUE les en-cours pour rester rapide."""
+    changed: bool
+    page: TicketsEnCoursResponse | None = None
+    last_modif: str = ""

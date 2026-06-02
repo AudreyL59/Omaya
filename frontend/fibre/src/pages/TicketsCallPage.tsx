@@ -73,12 +73,15 @@ interface Stats {
   nb_mobile_fox: number
 }
 
-interface PageData {
+interface EnCoursPayload {
   tickets_en_cours: TicketEnCours[]
-  tickets_traites: TicketTraite[]
-  stats: Stats
   serveur_now: string
   last_modif: string
+}
+
+interface TraitesPayload {
+  tickets_traites: TicketTraite[]
+  stats: Stats
 }
 
 const API_BASE = '/api/call/fibre'
@@ -93,10 +96,12 @@ const API_BASE = '/api/call/fibre'
 // recoit une reponse).
 
 export default function TicketsCallPage() {
-  const [data, setData] = useState<PageData | null>(null)
-  const [loading, setLoading] = useState(true)
+  // 2 etats separes : on affiche les "en cours" des qu'on les a, sans
+  // attendre les "traites" + stats (chargement plus long).
+  const [enCours, setEnCours] = useState<EnCoursPayload | null>(null)
+  const [traites, setTraites] = useState<TraitesPayload | null>(null)
+  const [loadingTraites, setLoadingTraites] = useState(true)
   const [clientNow, setClientNow] = useState('')
-  // Date du champ de saisie au-dessus du tableau du BAS (defaut = today).
   const [jourBas, setJourBas] = useState(() => new Date().toISOString().slice(0, 10))
   const lastModifRef = useRef('')
   const stoppedRef = useRef(false)
@@ -106,107 +111,130 @@ export default function TicketsCallPage() {
     jourBasRef.current = jourBas
   }, [jourBas])
 
-  // Long polling : boucle infinie tant que le composant est monte.
-  // Premier appel sans `since` -> renvoie la page immediatement.
-  // Appels suivants : attend max 25s qu'un changement survienne.
+  // Helper: fetch les en-cours (initial + long polling)
+  const fetchEnCours = useCallback(async () => {
+    const r = await fetch(`${API_BASE}/tickets/en-cours`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!r.ok) return null
+    return (await r.json()) as EnCoursPayload
+  }, [])
+
+  // Helper: fetch les traites + stats (background + sur changement de date)
+  const fetchTraites = useCallback(async (jour: string) => {
+    setLoadingTraites(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/traites?jour=${encodeURIComponent(jour)}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (r.ok) {
+        const data = (await r.json()) as TraitesPayload
+        if (!stoppedRef.current) setTraites(data)
+      }
+    } finally {
+      if (!stoppedRef.current) setLoadingTraites(false)
+    }
+  }, [])
+
+  // Long polling sur les EN COURS uniquement (le bas est rafraichi separement).
   const poll = useCallback(async () => {
     while (!stoppedRef.current) {
       try {
         const since = encodeURIComponent(lastModifRef.current)
-        const jour = encodeURIComponent(jourBasRef.current)
-        const r = await fetch(
-          `${API_BASE}/tickets/live?since=${since}&jour=${jour}`,
-          { headers: { Authorization: `Bearer ${getToken()}` } },
-        )
+        const r = await fetch(`${API_BASE}/tickets/live?since=${since}`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
         if (!r.ok) {
-          // 401/500 : pause 5s avant retry pour ne pas spammer
           await new Promise((res) => setTimeout(res, 5000))
           continue
         }
         const body = await r.json()
         if (body.changed && body.page) {
           if (!stoppedRef.current) {
-            setData(body.page)
+            setEnCours(body.page)
             lastModifRef.current = body.last_modif
             setClientNow(new Date().toLocaleString('fr-FR'))
+            // Quand un ticket bouge cote serveur, rafraichir aussi les traites
+            // (un ticket peut etre passe de "en cours" a "traite").
+            fetchTraites(jourBasRef.current)
           }
         } else {
-          // Pas de changement detecte -> on memorise le dernier "ping" et on relance
           lastModifRef.current = body.last_modif || lastModifRef.current
         }
       } catch {
         await new Promise((res) => setTimeout(res, 3000))
-      } finally {
-        if (!stoppedRef.current) setLoading(false)
       }
     }
-  }, [])
+  }, [fetchTraites])
 
-  // Refetch immediat (declenche par l'user quand il change la date du tableau bas)
+  // Refetch traites a la demande (changement de date par l'user)
   const refetchNow = useCallback(async () => {
-    try {
-      const jour = encodeURIComponent(jourBasRef.current)
-      const r = await fetch(`${API_BASE}/tickets?jour=${jour}`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      })
-      if (r.ok) {
-        const page = await r.json()
-        setData(page)
-        lastModifRef.current = page.last_modif
-        setClientNow(new Date().toLocaleString('fr-FR'))
-      }
-    } catch {
-      // ignore
-    }
-  }, [])
+    await fetchTraites(jourBasRef.current)
+  }, [fetchTraites])
 
+  // Mount : 1. fetch en-cours en priorite (affichage immediat),
+  //         2. fetch traites en parallele,
+  //         3. demarre le long polling.
   useEffect(() => {
     stoppedRef.current = false
-    poll()
+    ;(async () => {
+      const p1 = fetchEnCours().then((p) => {
+        if (p && !stoppedRef.current) {
+          setEnCours(p)
+          lastModifRef.current = p.last_modif
+          setClientNow(new Date().toLocaleString('fr-FR'))
+        }
+      })
+      const p2 = fetchTraites(jourBasRef.current)
+      // Demarre le polling apres que l'en-cours soit charge (pour avoir un last_modif)
+      await p1
+      poll()
+      await p2
+    })()
     return () => {
       stoppedRef.current = true
     }
-  }, [poll])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  if (loading) {
+  // Affichage progressif :
+  // - Tant qu'on n'a pas les en-cours, on montre un loader plein ecran.
+  // - Des qu'on les a, on affiche le haut + un placeholder pour le bas.
+  if (!enCours) {
     return (
       <div className="h-full flex items-center justify-center">
         <Loader2 className="w-6 h-6 text-c-brand animate-spin" />
       </div>
     )
   }
-  if (!data) {
-    return (
-      <div className="h-full flex items-center justify-center text-c-ink-faint">
-        Aucune donnée.
-      </div>
-    )
-  }
+
+  const stats = traites?.stats
+  const traitesRows = traites?.tickets_traites || []
 
   return (
     <div className="p-6 space-y-4">
-      {/* Header : titre + 4 stats globales */}
+      {/* Header : titre + 4 stats globales (apparaissent quand traites charge) */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-c-ink">Call SFR</h1>
         <div className="flex items-center gap-3">
-          <StatCircle label="Paniers validés" value={data.stats.paniers_valides} />
-          <StatCircle label="Offres Fibre THD" value={data.stats.offres_fibre_thd} />
-          <StatCircle label="CQ Fibre Validés" value={data.stats.cq_fibre_valides} />
-          <StatCircle label="Mobiles Validés" value={data.stats.mobiles_valides} />
+          <StatCircle label="Paniers validés" value={stats?.paniers_valides ?? 0} />
+          <StatCircle label="Offres Fibre THD" value={stats?.offres_fibre_thd ?? 0} />
+          <StatCircle label="CQ Fibre Validés" value={stats?.cq_fibre_valides ?? 0} />
+          <StatCircle label="Mobiles Validés" value={stats?.mobiles_valides ?? 0} />
         </div>
       </div>
 
       {/* Bandeau dernière vérif */}
       <div className="text-xs text-c-ink-faint">
         Dernière vérif intranet le {clientNow}, dernier calcul serveur le{' '}
-        {data.serveur_now}
+        {enCours.serveur_now}
       </div>
 
       {/* Tableau du HAUT : tickets à traiter */}
       <SectionHeader title="Tickets Call à traiter" right={<HautActions />} />
-      <TableEnCours rows={data.tickets_en_cours} />
+      <TableEnCours rows={enCours.tickets_en_cours} />
 
-      {/* Tableau du BAS : tickets traités du jour */}
+      {/* Tableau du BAS : tickets traités du jour (placeholder pendant chargement) */}
       <SectionHeader
         title="Tickets Call traités du jour"
         right={
@@ -217,10 +245,17 @@ export default function TicketsCallPage() {
           />
         }
       />
-      <TableTraites rows={data.tickets_traites} />
+      {loadingTraites && !traites ? (
+        <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm flex items-center justify-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Chargement des tickets traités...
+        </div>
+      ) : (
+        <TableTraites rows={traitesRows} />
+      )}
 
-      {/* Footer : stats par agence */}
-      <FooterAgences stats={data.stats} />
+      {/* Footer : stats par agence (apparait quand traites charge) */}
+      {stats && <FooterAgences stats={stats} />}
     </div>
   )
 }
