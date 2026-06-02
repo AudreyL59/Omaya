@@ -689,23 +689,37 @@ def _orga_descendants(db_rh, id_orga_racine: int) -> set[int]:
 # --- Endpoint unifie : tout en 1 seul appel -------------------------------
 
 def get_last_modif_call_fibre() -> str:
-    """Max(ModifDate) sur les tickets Call Fibre, format ISO 'YYYY-MM-DD HH:MM:SS'.
+    """Max(ModifDate) sur les tickets Call Fibre des 7 derniers jours.
 
     Approxime un "changement detecte" : si cette valeur augmente, c'est qu'un
     ticket a ete cree/modifie/cloture/verouille -> on rafraichit la page.
 
+    Limite a 7 jours pour eviter un timeout sur la table TK_Liste complete
+    (qui n'a pas d'index sur IDTK_TypeDemande + ModifDate).
+    Tout changement sur un ticket plus vieux que 7 jours sera quand meme vu
+    car ModifDate est mis a jour au moment du changement -> il rentre dans
+    la fenetre des 7 jours a ce moment-la.
+
     Cross-base impossible : on regarde TK_Liste WHERE TypeDemande=20 (base
-    ticket) ET TK_CallSFR (base ticket_bo, sans filtre). Le 2eme peut etre
-    plus large mais en pratique TK_CallSFR ne contient que des Call Fibre.
+    ticket) ET TK_CallSFR (base ticket_bo). En pratique, TK_CallSFR ne
+    contient que des Call Fibre donc le filtre TypeDemande n'est pas
+    necessaire.
     """
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y%m%d000000000")
     db_ticket = get_connection("ticket")
     db_bo = get_connection("ticket_bo")
     r1 = db_ticket.query(
         """SELECT MAX(ModifDate) AS max_modif FROM TK_Liste
-        WHERE IDTK_TypeDemande = ?""",
-        (IDTK_TYPE_DEMANDE_CALL_FIBRE,),
+        WHERE IDTK_TypeDemande = ?
+          AND ModifDate > ?""",
+        (IDTK_TYPE_DEMANDE_CALL_FIBRE, cutoff),
     )
-    r2 = db_bo.query("SELECT MAX(ModifDate) AS max_modif FROM TK_CallSFR")
+    r2 = db_bo.query(
+        """SELECT MAX(ModifDate) AS max_modif FROM TK_CallSFR
+        WHERE ModifDate > ?""",
+        (cutoff,),
+    )
     m1 = _iso((r1[0] or {}).get("max_modif")) if r1 else ""
     m2 = _iso((r2[0] or {}).get("max_modif")) if r2 else ""
     return max(m1, m2)
