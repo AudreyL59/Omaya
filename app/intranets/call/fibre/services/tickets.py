@@ -326,17 +326,33 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     if not ids:
         return []
 
-    # 2. SELECT par cle primaire dans TK_Liste (rapide car IDTK_Liste est PK)
+    # 2. SELECT par cle primaire dans TK_Liste (rapide car IDTK_Liste est PK).
+    # On re-applique les filtres business car le cache SuiviTicketCall peut etre
+    # obsolete (l'exe externe tourne periodiquement, un ticket peut avoir change
+    # de statut entre 2 runs).
     ids_sql = ",".join(str(i) for i in ids)
-    rows_liste = db_ticket.query(
+    rows_liste_raw = db_ticket.query(
         f"""SELECT
             IDTK_Liste     AS id_tk_liste,
             Datecrea       AS date_crea,
             OPCrea         AS op_crea,
-            IDTK_Statut    AS id_tk_statut
+            IDTK_Statut    AS id_tk_statut,
+            Cloturée       AS cloturee,
+            ModifELEM      AS modif_elem
         FROM TK_Liste
         WHERE IDTK_Liste IN ({ids_sql})"""
     )
+    # Filtres business (transposition exacte WinDev) :
+    rows_liste = [
+        r for r in rows_liste_raw
+        if not bool(r.get("cloturee"))
+        and "suppr" not in (r.get("modif_elem") or "").lower()
+        and _to_int(r.get("id_tk_statut")) not in (18, 28)
+        and (
+            _to_int(r.get("id_tk_statut")) < 14
+            or _to_int(r.get("id_tk_statut")) == 34
+        )
+    ]
     # Chargement TK_Statut (~30 rows, statique) pour enrichir Lib_Statut
     statut_rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
     statuts: dict[int, str] = {
