@@ -330,6 +330,8 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     # On re-applique les filtres business car le cache SuiviTicketCall peut etre
     # obsolete (l'exe externe tourne periodiquement, un ticket peut avoir change
     # de statut entre 2 runs).
+    # Filtre Datecrea > today_00 (transposition WinDev TK_Liste.Datecrea > {ParamdateCrea}).
+    today_00 = _date.today().strftime("%Y%m%d000000000")
     ids_sql = ",".join(str(i) for i in ids)
     rows_liste_raw = db_ticket.query(
         f"""SELECT
@@ -340,7 +342,9 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
             Cloturée       AS cloturee,
             ModifELEM      AS modif_elem
         FROM TK_Liste
-        WHERE IDTK_Liste IN ({ids_sql})"""
+        WHERE IDTK_Liste IN ({ids_sql})
+          AND Datecrea > ?""",
+        (today_00,),
     )
     # Filtres business (transposition exacte WinDev) :
     rows_liste = [
