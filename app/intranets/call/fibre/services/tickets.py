@@ -297,13 +297,21 @@ def _parse_id_encours(s: str) -> list[int]:
 def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     """Liste les tickets Call Fibre a traiter (= tableau du haut).
 
-    HFSQL n'a pas d'index utilisable sur TK_Liste(TypeDemande, Datecrea) ->
-    n'importe quelle query WHERE timeout 60s. Workaround : on utilise le
-    cache `SuiviTicketCall` (table maintenue par l'exe externe) qui contient
-    la liste des IDs des tickets en cours. On SELECT ensuite par cle
-    primaire (ultra rapide).
+    Query directe sur TK_Liste avec les filtres business WinDev en SQL.
+    Plus de dependance a SuiviTicketCall (exe externe) maintenant que le
+    pont HFSQL local OVH est rapide. Si la query devient lente (table TK_Liste
+    croit), reactiver le cache SuiviTicketCall en re-rolling vers le commit
+    precedent.
 
     Filtres business (transposition exacte WinDev) :
+    - IDTK_TypeDemande = 20 (Call Fibre)
+    - Cloturée = 0
+    - ModifELEM ne contient pas 'suppr'
+    - IDTK_Statut != 18 et != 28
+    - (IDTK_Statut < 14 OR IDTK_Statut = 34)
+    - Datecrea > today 00:00:00
+
+    Filtres specifiques user (post-filter Python) :
     - OPCrea = 6 masque sauf si user_id = 6 (formation)
     - Datecrea > today 23:59:59 masque sauf user_id = 6 (tickets futurs)
     - TicketDiff = True masque si user_id_poste = 20
@@ -312,52 +320,24 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     db_bo = get_connection("ticket_bo")
     db_rh = get_connection("rh")
     db_adv = get_connection("adv")
-    db_divers = get_connection("divers")
 
-    # 1. Lit le cache SuiviTicketCall pour TypeCall='FIBRE'
-    rows_cache = db_divers.query(
-        """SELECT IdEncours, IdAppelEnCours FROM SuiviTicketCall
-        WHERE TypeCall = 'FIBRE'"""
-    )
-    if not rows_cache:
-        return []
-    id_encours_raw = (rows_cache[0] or {}).get("IdEncours") or ""
-    id_appel_raw = (rows_cache[0] or {}).get("IdAppelEnCours") or ""
-    ids = _parse_id_encours(id_encours_raw)
-    if not ids:
-        return []
-
-    # 2. SELECT par cle primaire dans TK_Liste (rapide car IDTK_Liste est PK).
-    # On re-applique les filtres business car le cache SuiviTicketCall peut etre
-    # obsolete (l'exe externe tourne periodiquement, un ticket peut avoir change
-    # de statut entre 2 runs).
-    # Filtre Datecrea > today_00 (transposition WinDev TK_Liste.Datecrea > {ParamdateCrea}).
     today_00 = _date.today().strftime("%Y%m%d000000000")
-    ids_sql = ",".join(str(i) for i in ids)
-    rows_liste_raw = db_ticket.query(
-        f"""SELECT
+    rows_liste = db_ticket.query(
+        """SELECT
             IDTK_Liste     AS id_tk_liste,
             Datecrea       AS date_crea,
             OPCrea         AS op_crea,
-            IDTK_Statut    AS id_tk_statut,
-            Cloturée       AS cloturee,
-            ModifELEM      AS modif_elem
+            IDTK_Statut    AS id_tk_statut
         FROM TK_Liste
-        WHERE IDTK_Liste IN ({ids_sql})
+        WHERE IDTK_TypeDemande = ?
+          AND Cloturée = 0
+          AND ModifELEM NOT LIKE '%suppr%'
+          AND IDTK_Statut <> 18
+          AND IDTK_Statut <> 28
+          AND (IDTK_Statut < 14 OR IDTK_Statut = 34)
           AND Datecrea > ?""",
-        (today_00,),
+        (IDTK_TYPE_DEMANDE_CALL_FIBRE, today_00),
     )
-    # Filtres business (transposition exacte WinDev) :
-    rows_liste = [
-        r for r in rows_liste_raw
-        if not bool(r.get("cloturee"))
-        and "suppr" not in (r.get("modif_elem") or "").lower()
-        and _to_int(r.get("id_tk_statut")) not in (18, 28)
-        and (
-            _to_int(r.get("id_tk_statut")) < 14
-            or _to_int(r.get("id_tk_statut")) == 34
-        )
-    ]
     # Chargement TK_Statut (referentiel statique, cache module 10min)
     statuts = _load_tk_statut(db_ticket)
     if not rows_liste:
