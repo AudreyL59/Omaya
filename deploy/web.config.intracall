@@ -23,9 +23,6 @@
 -->
 <configuration>
   <system.webServer>
-    <!-- ARR : pas de buffering (utile si futur SSE). -->
-    <proxy enabled="true" responseBufferLimit="0" />
-
     <rewrite>
       <rules>
         <!-- Reverse proxy /api/* -> uvicorn. Backend sans prefixe /api. -->
