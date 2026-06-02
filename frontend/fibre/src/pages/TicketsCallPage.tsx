@@ -613,8 +613,8 @@ function AgenceCard({ agence }: { agence: StatAgence }) {
   )
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 font-semibold">{children}</th>
+function Th({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <th className={`px-3 py-2 font-semibold ${className}`}>{children}</th>
 }
 
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
