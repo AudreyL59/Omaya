@@ -216,13 +216,40 @@ def _check_premier_contrat(db_adv, id_salarie: int, date_avant: str) -> bool:
 
 # --- Tableau du HAUT : tickets a traiter ----------------------------------
 
+def _parse_id_encours(s: str) -> list[int]:
+    """Parse SuiviTicketCall.IdEncours : chaine d'IDs separes par RC, format
+    'id-xxx' (on prend la partie avant le '-').
+
+    WinDev : `pour toute chaîne IDTk de ListeTkEncoursTesté séparée par RC`
+    + `ExtraitChaîne(IDTk, 1, "-")`.
+    """
+    if not s:
+        return []
+    out: list[int] = []
+    for line in s.replace("\r\n", "\n").split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        # Prend la partie avant le '-' si present, sinon l'ID complet.
+        if "-" in line:
+            line = line.split("-", 1)[0]
+        try:
+            out.append(int(line))
+        except ValueError:
+            continue
+    return out
+
+
 def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     """Liste les tickets Call Fibre a traiter (= tableau du haut).
 
+    HFSQL n'a pas d'index utilisable sur TK_Liste(TypeDemande, Datecrea) ->
+    n'importe quelle query WHERE timeout 60s. Workaround : on utilise le
+    cache `SuiviTicketCall` (table maintenue par l'exe externe) qui contient
+    la liste des IDs des tickets en cours. On SELECT ensuite par cle
+    primaire (ultra rapide).
+
     Filtres business (transposition exacte WinDev) :
-    - TypeDemande = 20 (Call Fibre)
-    - Pas dans la liste des statuts "traites" (BETWEEN 14 AND 19 sauf 18, 28)
-    - ModifELEM ne contient pas 'suppr'
     - OPCrea = 6 masque sauf si user_id = 6 (formation)
     - Datecrea > today 23:59:59 masque sauf user_id = 6 (tickets futurs)
     - TicketDiff = True masque si user_id_poste = 20
@@ -231,36 +258,32 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     db_bo = get_connection("ticket_bo")
     db_rh = get_connection("rh")
     db_adv = get_connection("adv")
+    db_divers = get_connection("divers")
 
-    # 1. TK_Liste minimal : 2 filtres SARG-able uniquement (egalites simples
-    # sur colonnes potentiellement indexees). Le reste est filtre en Python.
-    # En particulier ModifELEM NOT LIKE '%suppr%' et IDTK_Statut <> X interdisent
-    # l'usage d'index -> remplaces par post-filter Python.
-    today_00 = _date.today().strftime("%Y%m%d000000000")
+    # 1. Lit le cache SuiviTicketCall pour TypeCall='FIBRE'
+    rows_cache = db_divers.query(
+        """SELECT IdEncours, IdAppelEnCours FROM SuiviTicketCall
+        WHERE TypeCall = 'FIBRE'"""
+    )
+    if not rows_cache:
+        return []
+    id_encours_raw = (rows_cache[0] or {}).get("IdEncours") or ""
+    id_appel_raw = (rows_cache[0] or {}).get("IdAppelEnCours") or ""
+    ids = _parse_id_encours(id_encours_raw)
+    if not ids:
+        return []
+
+    # 2. SELECT par cle primaire dans TK_Liste (rapide car IDTK_Liste est PK)
+    ids_sql = ",".join(str(i) for i in ids)
     rows_liste = db_ticket.query(
-        """SELECT
+        f"""SELECT
             IDTK_Liste     AS id_tk_liste,
             Datecrea       AS date_crea,
             OPCrea         AS op_crea,
-            IDTK_Statut    AS id_tk_statut,
-            Cloturée       AS cloturee,
-            ModifELEM      AS modif_elem
+            IDTK_Statut    AS id_tk_statut
         FROM TK_Liste
-        WHERE IDTK_TypeDemande = ?
-          AND Datecrea > ?""",
-        (IDTK_TYPE_DEMANDE_CALL_FIBRE, today_00),
+        WHERE IDTK_Liste IN ({ids_sql})"""
     )
-    # Post-filter en Python (rapide : les rows restantes sont peu nombreuses)
-    rows_liste = [
-        r for r in rows_liste
-        if not bool(r.get("cloturee"))
-        and "suppr" not in (r.get("modif_elem") or "").lower()
-        and _to_int(r.get("id_tk_statut")) not in (18, 28)
-        and (
-            _to_int(r.get("id_tk_statut")) < 14
-            or _to_int(r.get("id_tk_statut")) == 34
-        )
-    ]
     # Chargement TK_Statut (~30 rows, statique) pour enrichir Lib_Statut
     statut_rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
     statuts: dict[int, str] = {
