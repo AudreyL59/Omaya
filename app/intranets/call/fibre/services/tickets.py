@@ -132,10 +132,11 @@ def _parse_dt(v) -> datetime | None:
             return datetime.strptime(s[:14], "%Y%m%d%H%M%S")
         except ValueError:
             pass
-    # ISO avec heure+sec
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+    # ISO avec heure+sec. ATTENTION : len("%Y-%m-%d %H:%M:%S") == 17 mais
+    # la chaine rendue fait 19 chars -> on hardcode la longueur de slice.
+    for fmt, length in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16)):
         try:
-            return datetime.strptime(s[:len(fmt)], fmt)
+            return datetime.strptime(s[:length], fmt)
         except ValueError:
             continue
     # Compact date seule "20260602"
