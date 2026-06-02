@@ -70,9 +70,6 @@ class TicketTraite(BaseModel):
     vendeur_distrib: bool
     premier_contrat: bool
     delai_depasse: bool
-    # DEBUG TEMPORAIRE (a retirer une fois le bug delai_depasse identifie)
-    debug_nds: str = ""
-    debug_diff_h: int = -1
 
 
 class StatAgence(BaseModel):
