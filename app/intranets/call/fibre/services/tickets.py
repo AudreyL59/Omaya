@@ -112,6 +112,47 @@ def _to_int(v) -> int:
         return 0
 
 
+def _parse_dt(v) -> datetime | None:
+    """Parse robuste d'une date(time) HFSQL sous plusieurs formats.
+
+    Retourne None si non parsable. Gere : datetime natif, ISO avec espace ou
+    T, format compact HFSQL "YYYYMMDDHHMMSS...", date seule, etc.
+    """
+    if v is None or v == "":
+        return v if isinstance(v, datetime) else None
+    if isinstance(v, datetime):
+        return v
+    s = str(v).strip()
+    if not s or s.startswith("0000"):
+        return None
+    s = s.replace("T", " ")
+    # Compact HFSQL "20260602100000000"
+    if len(s) >= 14 and s[:14].isdigit():
+        try:
+            return datetime.strptime(s[:14], "%Y%m%d%H%M%S")
+        except ValueError:
+            pass
+    # ISO avec heure+sec
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s[:len(fmt)], fmt)
+        except ValueError:
+            continue
+    # Compact date seule "20260602"
+    if len(s) == 8 and s.isdigit():
+        try:
+            return datetime.strptime(s, "%Y%m%d")
+        except ValueError:
+            pass
+    # ISO date seule
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        try:
+            return datetime.strptime(s[:10], "%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
 def _str_id(v) -> str:
     """ID 8 octets -> str (cf. feedback_ids_8octets_string)."""
     return str(_to_int(v))
@@ -609,6 +650,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
                 "type_vente": _to_int(p.get("TypeVente")),
                 "num": (p.get("NUM") or "").strip(),
                 "num_date_saisie": _iso(p.get("Num_DateSaisie")),
+                # Brut pour le calcul de delai (evite la perte d'info via _iso)
+                "_num_date_saisie_raw": p.get("Num_DateSaisie"),
                 "statut_prod": _to_int(p.get("StatutProd")),
                 "lib_offre": offre_libs.get(_to_int(p.get("IDOffres_SFR")), ""),
             })
@@ -652,15 +695,13 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
                         offres_fibre_txt += " - Mig"
                 elif off["type"] == "MOBILE":
                     nb_mobile_valide += 1
-            # Delai prise num : si Num_DateSaisie > date_crea + 1h
-            if off["num_date_saisie"]:
-                try:
-                    dt_saisie = datetime.strptime(off["num_date_saisie"][:19], "%Y-%m-%d %H:%M:%S")
-                    dt_crea = datetime.strptime(_iso(tk["date_crea"])[:19], "%Y-%m-%d %H:%M:%S")
-                    if (dt_saisie - dt_crea).total_seconds() >= 3600:
-                        delai_depasse = True
-                except ValueError:
-                    pass
+            # Delai prise num : si Num_DateSaisie >= date_crea + 1h
+            # (transposition exacte WinDev : DateHeureDifference -> Milieu(9,2) >= 1)
+            dt_saisie = _parse_dt(off.get("_num_date_saisie_raw"))
+            if dt_saisie is not None:
+                dt_crea = _parse_dt(tk["date_crea"])
+                if dt_crea is not None and (dt_saisie - dt_crea).total_seconds() >= 3600:
+                    delai_depasse = True
 
         premier_contrat = False
         if not sal["vendeur_distrib"]:
