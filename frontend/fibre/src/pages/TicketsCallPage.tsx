@@ -14,7 +14,17 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, FileSpreadsheet, Eye, Search } from 'lucide-react'
+import {
+  Loader2,
+  FileSpreadsheet,
+  Eye,
+  Search,
+  Phone,
+  User,
+  Smartphone,
+  Zap,
+  Check,
+} from 'lucide-react'
 import { getToken } from '@/api'
 
 interface TicketEnCours {
@@ -213,15 +223,34 @@ export default function TicketsCallPage() {
 
   return (
     <div className="p-6 space-y-4">
-      {/* Header : titre + 4 stats globales (apparaissent quand traites charge) */}
+      {/* Header : Logo + titre + 4 cercles de stats */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-c-ink">Call SFR</h1>
         <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center shadow">
+            <Phone className="w-6 h-6 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold text-c-ink">Call SFR</h1>
+        </div>
+        <div className="flex items-center gap-6">
           <StatCircle label="Paniers validés" value={stats?.paniers_valides ?? 0} />
           <StatCircle label="Offres Fibre THD" value={stats?.offres_fibre_thd ?? 0} />
           <StatCircle label="CQ Fibre Validés" value={stats?.cq_fibre_valides ?? 0} />
           <StatCircle label="Mobiles Validés" value={stats?.mobiles_valides ?? 0} />
         </div>
+      </div>
+
+      {/* Onglets Ticket Call / Ticket RET (RET = placeholder pour l'instant) */}
+      <div className="flex border-b border-c-line">
+        <button className="px-6 py-2 text-sm font-semibold border-b-2 border-c-brand text-c-ink">
+          Ticket Call
+        </button>
+        <button
+          className="px-6 py-2 text-sm font-semibold text-c-ink-faint cursor-not-allowed"
+          title="À venir"
+          disabled
+        >
+          Ticket RET
+        </button>
       </div>
 
       {/* Bandeau dernière vérif */}
@@ -264,11 +293,11 @@ export default function TicketsCallPage() {
 
 function StatCircle({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex flex-col items-center">
-      <div className="w-16 h-16 rounded-full border-2 border-c-brand flex items-center justify-center text-lg font-bold text-c-brand">
+    <div className="flex flex-col items-center min-w-[80px]">
+      <div className="w-16 h-16 rounded-full border-[3px] border-c-brand flex items-center justify-center text-xl font-bold text-c-brand bg-white">
         {value}
       </div>
-      <div className="text-xs text-c-ink-soft mt-1 text-center max-w-[80px]">
+      <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
         {label}
       </div>
     </div>
@@ -344,7 +373,7 @@ function BasActions({
 function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
   if (!rows.length) {
     return (
-      <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm">
+      <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm bg-white">
         Aucun ticket en cours.
       </div>
     )
@@ -352,7 +381,7 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
   return (
     <div className="border border-c-line rounded-md overflow-x-auto bg-white">
       <table className="w-full text-xs">
-        <thead className="bg-c-surface-soft">
+        <thead className="bg-gray-50 border-b border-c-line">
           <tr className="text-left text-c-ink-soft">
             <Th>Appel en cours par</Th>
             <Th>Commande faite le</Th>
@@ -361,12 +390,16 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
             <Th>Ville</Th>
             <Th>Commercial</Th>
             <Th>Équipe</Th>
-            <Th>Non Prod</Th>
+            <Th className="text-center">FDV Int</Th>
+            <Th className="text-center">Non Prod</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((t) => {
-            // Coloration ligne (cf. WinDev)
+            // Coloration ligne (transposition exacte WinDev) :
+            //  - Si AppelEnCours : fond ORANGE PASTEL (un opé a pris le ticket)
+            //  - Si IDTK_Statut = 34 : texte BLEU RVB(0,102,254)
+            //  - Si TicketDiff : texte ROUGE
             const bg = t.appel_en_cours ? 'bg-orange-100' : 'bg-white'
             const textColor =
               t.id_tk_statut === 34
@@ -377,18 +410,24 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
             return (
               <tr
                 key={t.id}
-                className={`${bg} ${textColor} border-t border-c-line-soft hover:bg-c-brand-soft cursor-pointer`}
+                className={`${bg} ${textColor} border-t border-c-line-soft hover:bg-c-brand-soft/50 cursor-pointer transition-colors`}
               >
                 <Td>{t.ope_appel_nom}</Td>
                 <Td>{shortDateTime(t.date_crea)}</Td>
-                <Td>{t.nom_client}</Td>
+                <Td className="font-medium">{t.nom_client}</Td>
                 <Td>{t.cp}</Td>
                 <Td>{t.ville}</Td>
                 <Td>{t.nom_vendeur}</Td>
-                <Td>{t.lib_equipe}</Td>
-                <Td>
+                <Td className="text-c-ink-soft">{t.lib_equipe}</Td>
+                <Td className="text-center">
+                  {t.fdv_interne && <Check className="w-4 h-4 text-c-brand inline" />}
+                </Td>
+                <Td className="text-center">
                   {t.non_prod && (
-                    <span className="inline-block w-3 h-3 rounded-full bg-green-500" />
+                    <span
+                      className="inline-block w-3 h-3 rounded-full bg-green-500"
+                      title="Premier contrat du vendeur"
+                    />
                   )}
                 </Td>
               </tr>
@@ -403,7 +442,7 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
 function TableTraites({ rows }: { rows: TicketTraite[] }) {
   if (!rows.length) {
     return (
-      <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm">
+      <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm bg-white">
         Aucun ticket traité aujourd'hui.
       </div>
     )
@@ -411,7 +450,7 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
   return (
     <div className="border border-c-line rounded-md overflow-x-auto bg-white">
       <table className="w-full text-xs">
-        <thead className="bg-c-surface-soft">
+        <thead className="bg-gray-50 border-b border-c-line">
           <tr className="text-left text-c-ink-soft">
             <Th>Commande faite le</Th>
             <Th>Client</Th>
@@ -420,13 +459,17 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
             <Th>Commercial</Th>
             <Th>Agence</Th>
             <Th>État</Th>
-            <Th>NB Offres</Th>
-            <Th>NB Fibre Valide</Th>
-            <Th>NB Mobile Valide</Th>
+            <Th className="text-center">NB Offres</Th>
+            <Th className="text-center">NB Fibre Valide</Th>
+            <Th className="text-center">NB Mobile Valide</Th>
           </tr>
         </thead>
         <tbody>
           {rows.map((t) => {
+            // Coloration ligne (WinDev) :
+            //  - VendeurDistrib : fond GRIS (vendeur du reseau distrib externe)
+            //  - 1er contrat du vendeur : fond VERT
+            //  - delai NUM > 1h apres Datecrea : fond ROUGE
             const bg = t.vendeur_distrib
               ? 'bg-gray-100'
               : t.premier_contrat
@@ -437,18 +480,18 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
             return (
               <tr
                 key={t.id}
-                className={`${bg} border-t border-c-line-soft hover:bg-c-brand-soft cursor-pointer`}
+                className={`${bg} border-t border-c-line-soft hover:bg-c-brand-soft/50 cursor-pointer transition-colors`}
               >
                 <Td>{shortDateTime(t.date_crea)}</Td>
-                <Td>{t.nom_client}</Td>
+                <Td className="font-medium">{t.nom_client}</Td>
                 <Td>{t.cp}</Td>
                 <Td>{t.ville}</Td>
                 <Td>{t.nom_vendeur}</Td>
-                <Td>{t.agence}</Td>
+                <Td className="text-c-ink-soft">{t.agence}</Td>
                 <Td>{t.lib_statut}</Td>
-                <Td className="text-right">{t.nb_offres}</Td>
-                <Td className="text-right">{t.nb_fibre_valide}</Td>
-                <Td className="text-right">{t.nb_mobile_valide}</Td>
+                <Td className="text-center"><CountBadge value={t.nb_offres} /></Td>
+                <Td className="text-center"><CountBadge value={t.nb_fibre_valide} variant="brand" /></Td>
+                <Td className="text-center"><CountBadge value={t.nb_mobile_valide} variant="brand" /></Td>
               </tr>
             )
           })}
@@ -458,50 +501,80 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
   )
 }
 
-function FooterAgences({ stats }: { stats: Stats }) {
+function CountBadge({ value, variant = 'neutral' }: { value: number; variant?: 'neutral' | 'brand' }) {
+  if (!value) {
+    return <span className="text-c-ink-faint">—</span>
+  }
+  const cls =
+    variant === 'brand'
+      ? 'bg-c-brand text-white'
+      : 'bg-gray-100 text-c-ink'
   return (
-    <div className="border-t border-c-line pt-4 mt-2">
-      <div className="text-xs text-c-ink-soft mb-2">Détail SFR Fibre par agence</div>
-      <div className="flex items-center gap-4 overflow-x-auto">
-        <AgenceTotal label="Tot Interne" fibre={stats.agences_internes.reduce((s, a) => s + a.nb_fibre, 0)} mobile={stats.agences_internes.reduce((s, a) => s + a.nb_mobile, 0)} />
-        {stats.agences_internes.map((a) => (
-          <AgenceCard key={a.id_orga} agence={a} />
-        ))}
-        <AgenceTotal label="Tot Power" fibre={stats.nb_fibre_power} mobile={stats.nb_mobile_power} />
-        <AgenceTotal label="Tot Fox" fibre={stats.nb_fibre_fox} mobile={stats.nb_mobile_fox} />
+    <span className={`inline-block min-w-[28px] px-1.5 py-0.5 rounded-md text-xs font-semibold ${cls}`}>
+      {value}
+    </span>
+  )
+}
+
+function FooterAgences({ stats }: { stats: Stats }) {
+  const totInterneFibre = stats.agences_internes.reduce((s, a) => s + a.nb_fibre, 0)
+  const totInterneMobile = stats.agences_internes.reduce((s, a) => s + a.nb_mobile, 0)
+
+  return (
+    <div className="border-t border-c-line pt-4 mt-4">
+      <div className="text-xs text-c-ink-soft mb-3 font-medium uppercase tracking-wide">
+        Détail SFR Fibre par agence
+      </div>
+      <div className="flex items-stretch gap-2 overflow-x-auto">
+        {/* Colonne gauche : Tot Interne / Tot Power / Tot Fox */}
+        <div className="flex flex-col gap-1 shrink-0 pr-3 border-r border-c-line">
+          <TotalRow label="Tot Interne" fibre={totInterneFibre} mobile={totInterneMobile} />
+          <TotalRow label="Tot Power" fibre={stats.nb_fibre_power} mobile={stats.nb_mobile_power} />
+          <TotalRow label="Tot Fox" fibre={stats.nb_fibre_fox} mobile={stats.nb_mobile_fox} />
+        </div>
+        {/* Agences internes : 6 cartes horizontales */}
+        <div className="flex items-center gap-3 overflow-x-auto pl-2">
+          {stats.agences_internes.map((a) => (
+            <AgenceCard key={a.id_orga} agence={a} />
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
-function AgenceTotal({ label, fibre, mobile }: { label: string; fibre: number; mobile: number }) {
+function TotalRow({ label, fibre, mobile }: { label: string; fibre: number; mobile: number }) {
   return (
-    <div className="flex flex-col items-center shrink-0">
-      <div className="text-xs text-c-ink-soft">{label}</div>
-      <div className="flex items-center gap-2 text-xs">
-        <span className="px-2 py-0.5 rounded-md bg-c-brand-soft text-c-brand font-semibold">
-          F {fibre}
-        </span>
-        <span className="px-2 py-0.5 rounded-md bg-c-brand-soft text-c-brand font-semibold">
-          M {mobile}
-        </span>
-      </div>
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-c-ink-soft w-20 shrink-0">{label}</span>
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-c-brand-soft text-c-brand text-[11px] font-semibold min-w-[40px]">
+        <Zap className="w-3 h-3" />{fibre}
+      </span>
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-c-brand-soft text-c-brand text-[11px] font-semibold min-w-[40px]">
+        <Smartphone className="w-3 h-3" />{mobile}
+      </span>
     </div>
   )
 }
 
 function AgenceCard({ agence }: { agence: StatAgence }) {
+  // Le nom contient souvent "Agence XXX/SFR" -> on extrait XXX pour le label compact
+  const label = agence.lib_orga.replace(/^Agence\s+/i, '').replace(/\/SFR$/i, '')
   return (
-    <div className="flex flex-col items-center shrink-0 px-2">
-      <div className="w-10 h-10 rounded-full bg-c-surface-soft border border-c-line flex items-center justify-center text-xs text-c-ink-soft">
-        {agence.lib_orga.slice(0, 2).toUpperCase()}
+    <div className="flex flex-col items-center shrink-0 px-1.5">
+      <div className="w-11 h-11 rounded-full bg-gray-100 border border-c-line flex items-center justify-center">
+        <User className="w-5 h-5 text-c-ink-soft" />
       </div>
-      <div className="text-[10px] text-c-ink-soft mt-1 max-w-[80px] truncate">
-        {agence.lib_orga}
+      <div className="text-[10px] text-c-ink-soft mt-1 text-center max-w-[80px] truncate font-medium">
+        {label}
       </div>
-      <div className="flex items-center gap-1 text-[10px] mt-0.5">
-        <span className="text-c-brand font-semibold">F{agence.nb_fibre}</span>
-        <span className="text-c-brand font-semibold">M{agence.nb_mobile}</span>
+      <div className="flex items-center gap-1 mt-0.5">
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-c-brand font-semibold">
+          <Zap className="w-2.5 h-2.5" />{agence.nb_fibre}
+        </span>
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-c-brand font-semibold">
+          <Smartphone className="w-2.5 h-2.5" />{agence.nb_mobile}
+        </span>
       </div>
     </div>
   )
