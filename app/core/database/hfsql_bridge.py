@@ -44,6 +44,7 @@ def execute_query(
     database: str,
     sql: str,
     connection_name: str = "",
+    timeout: int = 60,
 ) -> list[dict]:
     """
     Exécute une requête SQL sur HFSQL via le bridge WinDev.
@@ -86,10 +87,10 @@ def execute_query(
             creationflags=CREATE_NO_WINDOW,
         )
         try:
-            stdout_b, stderr_b = proc.communicate(timeout=30)
+            stdout_b, stderr_b = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
-            raise HFSQLError("Bridge timeout (30s)")
+            raise HFSQLError(f"Bridge timeout ({timeout}s)")
 
         if not result_file.exists():
             # Décode stdout/stderr pour donner un maximum d'infos

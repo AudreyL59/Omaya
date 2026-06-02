@@ -232,32 +232,35 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     db_rh = get_connection("rh")
     db_adv = get_connection("adv")
 
-    # 1. TK_Liste (base ticket). On evite le JOIN avec TK_Statut (souvent lent
-    # en HFSQL via le pont), on chargera Lib_Statut en memoire ensuite.
-    # Filtres business exacts WinDev :
-    #   IDTK_TypeDemande = 20
-    #   Cloturée = 0
-    #   ModifELEM ne contient pas 'suppr'
-    #   IDTK_Statut != 18 et != 28
-    #   (IDTK_Statut < 14 OR IDTK_Statut = 34)
-    #   Datecrea > today 00:00:00 (= tickets du jour uniquement)
+    # 1. TK_Liste minimal : 2 filtres SARG-able uniquement (egalites simples
+    # sur colonnes potentiellement indexees). Le reste est filtre en Python.
+    # En particulier ModifELEM NOT LIKE '%suppr%' et IDTK_Statut <> X interdisent
+    # l'usage d'index -> remplaces par post-filter Python.
     today_00 = _date.today().strftime("%Y%m%d000000000")
     rows_liste = db_ticket.query(
         """SELECT
             IDTK_Liste     AS id_tk_liste,
             Datecrea       AS date_crea,
             OPCrea         AS op_crea,
-            IDTK_Statut    AS id_tk_statut
+            IDTK_Statut    AS id_tk_statut,
+            Cloturée       AS cloturee,
+            ModifELEM      AS modif_elem
         FROM TK_Liste
         WHERE IDTK_TypeDemande = ?
-          AND Cloturée = 0
-          AND ModifELEM NOT LIKE '%suppr%'
-          AND IDTK_Statut <> 18
-          AND IDTK_Statut <> 28
-          AND (IDTK_Statut < 14 OR IDTK_Statut = 34)
           AND Datecrea > ?""",
         (IDTK_TYPE_DEMANDE_CALL_FIBRE, today_00),
     )
+    # Post-filter en Python (rapide : les rows restantes sont peu nombreuses)
+    rows_liste = [
+        r for r in rows_liste
+        if not bool(r.get("cloturee"))
+        and "suppr" not in (r.get("modif_elem") or "").lower()
+        and _to_int(r.get("id_tk_statut")) not in (18, 28)
+        and (
+            _to_int(r.get("id_tk_statut")) < 14
+            or _to_int(r.get("id_tk_statut")) == 34
+        )
+    ]
     # Chargement TK_Statut (~30 rows, statique) pour enrichir Lib_Statut
     statut_rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
     statuts: dict[int, str] = {
