@@ -232,7 +232,8 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     db_rh = get_connection("rh")
     db_adv = get_connection("adv")
 
-    # 1. TK_Liste + TK_Statut (base ticket).
+    # 1. TK_Liste (base ticket). On evite le JOIN avec TK_Statut (souvent lent
+    # en HFSQL via le pont), on chargera Lib_Statut en memoire ensuite.
     # Filtres business exacts WinDev :
     #   IDTK_TypeDemande = 20
     #   Cloturée = 0
@@ -243,35 +244,40 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     today_00 = _date.today().strftime("%Y%m%d000000000")
     rows_liste = db_ticket.query(
         """SELECT
-            tl.IDTK_Liste     AS id_tk_liste,
-            tl.Datecrea       AS date_crea,
-            tl.OPCrea         AS op_crea,
-            tl.IDTK_Statut    AS id_tk_statut,
-            ts.Lib_Statut     AS lib_statut
-        FROM TK_Liste tl
-        INNER JOIN TK_Statut ts ON ts.IDTK_Statut = tl.IDTK_Statut
-        WHERE tl.IDTK_TypeDemande = ?
-          AND tl.Cloturée = 0
-          AND tl.ModifELEM NOT LIKE '%suppr%'
-          AND tl.IDTK_Statut <> 18
-          AND tl.IDTK_Statut <> 28
-          AND (tl.IDTK_Statut < 14 OR tl.IDTK_Statut = 34)
-          AND tl.Datecrea > ?""",
+            IDTK_Liste     AS id_tk_liste,
+            Datecrea       AS date_crea,
+            OPCrea         AS op_crea,
+            IDTK_Statut    AS id_tk_statut
+        FROM TK_Liste
+        WHERE IDTK_TypeDemande = ?
+          AND Cloturée = 0
+          AND ModifELEM NOT LIKE '%suppr%'
+          AND IDTK_Statut <> 18
+          AND IDTK_Statut <> 28
+          AND (IDTK_Statut < 14 OR IDTK_Statut = 34)
+          AND Datecrea > ?""",
         (IDTK_TYPE_DEMANDE_CALL_FIBRE, today_00),
     )
+    # Chargement TK_Statut (~30 rows, statique) pour enrichir Lib_Statut
+    statut_rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
+    statuts: dict[int, str] = {
+        _to_int(r.get("IDTK_Statut")): (r.get("Lib_Statut") or "").strip()
+        for r in statut_rows
+    }
     if not rows_liste:
         return []
 
-    # Map IDTK_Liste -> infos TK_Liste
+    # Map IDTK_Liste -> infos TK_Liste (avec Lib_Statut depuis cache)
     by_id: dict[int, dict] = {}
     for r in rows_liste:
         id_tk = _to_int(r.get("id_tk_liste"))
+        id_statut = _to_int(r.get("id_tk_statut"))
         by_id[id_tk] = {
             "id_tk_liste": id_tk,
             "date_crea": r.get("date_crea") or "",
             "op_crea": _to_int(r.get("op_crea")),
-            "id_tk_statut": _to_int(r.get("id_tk_statut")),
-            "lib_statut": (r.get("lib_statut") or "").strip(),
+            "id_tk_statut": id_statut,
+            "lib_statut": statuts.get(id_statut, ""),
         }
 
     # 2. TK_CallSFR pour ces IDs
@@ -399,30 +405,36 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
     statuts_traites_sql = ",".join(str(s) for s in STATUTS_TRAITES)
     rows_liste = db_ticket.query(
         f"""SELECT
-            tl.IDTK_Liste     AS id_tk_liste,
-            tl.Datecrea       AS date_crea,
-            tl.IDTK_Statut    AS id_tk_statut,
-            ts.Lib_Statut     AS lib_statut
-        FROM TK_Liste tl
-        INNER JOIN TK_Statut ts ON ts.IDTK_Statut = tl.IDTK_Statut
-        WHERE tl.IDTK_TypeDemande = ?
-          AND tl.ModifELEM NOT LIKE '%suppr%'
-          AND tl.IDTK_Statut IN ({statuts_traites_sql})
-          AND LEFT(tl.Datecrea, 8) = ?
-        ORDER BY tl.Datecrea ASC""",
+            IDTK_Liste     AS id_tk_liste,
+            Datecrea       AS date_crea,
+            IDTK_Statut    AS id_tk_statut
+        FROM TK_Liste
+        WHERE IDTK_TypeDemande = ?
+          AND ModifELEM NOT LIKE '%suppr%'
+          AND IDTK_Statut IN ({statuts_traites_sql})
+          AND LEFT(Datecrea, 8) = ?
+        ORDER BY Datecrea ASC""",
         (IDTK_TYPE_DEMANDE_CALL_FIBRE, j),
     )
     if not rows_liste:
         return []
 
+    # TK_Statut une fois (cache memoire)
+    statut_rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
+    statuts: dict[int, str] = {
+        _to_int(r.get("IDTK_Statut")): (r.get("Lib_Statut") or "").strip()
+        for r in statut_rows
+    }
+
     by_id: dict[int, dict] = {}
     for r in rows_liste:
         id_tk = _to_int(r.get("id_tk_liste"))
+        id_statut = _to_int(r.get("id_tk_statut"))
         by_id[id_tk] = {
             "id_tk_liste": id_tk,
             "date_crea": r.get("date_crea") or "",
-            "id_tk_statut": _to_int(r.get("id_tk_statut")),
-            "lib_statut": (r.get("lib_statut") or "").strip(),
+            "id_tk_statut": id_statut,
+            "lib_statut": statuts.get(id_statut, ""),
         }
 
     # TK_CallSFR pour ces IDs
