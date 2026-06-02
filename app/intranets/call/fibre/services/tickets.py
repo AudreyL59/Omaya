@@ -234,13 +234,13 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
 
     # 1. TK_Liste + TK_Statut (base ticket).
     # Filtres business exacts WinDev :
+    #   IDTK_TypeDemande = 20
     #   Cloturée = 0
     #   ModifELEM ne contient pas 'suppr'
     #   IDTK_Statut != 18 et != 28
     #   (IDTK_Statut < 14 OR IDTK_Statut = 34)
-    # (le filtre Datecrea > {ParamdateCrea} de WinDev n'est pas applique ici :
-    #  il sert dans le cache SuiviTicketCall pour limiter le scope, mais en
-    #  remplaçant le cache on prend tous les tickets non clotures.)
+    #   Datecrea > today 00:00:00 (= tickets du jour uniquement)
+    today_00 = _date.today().strftime("%Y%m%d000000000")
     rows_liste = db_ticket.query(
         """SELECT
             tl.IDTK_Liste     AS id_tk_liste,
@@ -255,8 +255,9 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
           AND tl.ModifELEM NOT LIKE '%suppr%'
           AND tl.IDTK_Statut <> 18
           AND tl.IDTK_Statut <> 28
-          AND (tl.IDTK_Statut < 14 OR tl.IDTK_Statut = 34)""",
-        (IDTK_TYPE_DEMANDE_CALL_FIBRE,),
+          AND (tl.IDTK_Statut < 14 OR tl.IDTK_Statut = 34)
+          AND tl.Datecrea > ?""",
+        (IDTK_TYPE_DEMANDE_CALL_FIBRE, today_00),
     )
     if not rows_liste:
         return []

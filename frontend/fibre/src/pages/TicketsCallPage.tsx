@@ -87,20 +87,30 @@ export default function TicketsCallPage() {
   const [data, setData] = useState<PageData | null>(null)
   const [loading, setLoading] = useState(true)
   const [clientNow, setClientNow] = useState('')
+  // Date du champ de saisie au-dessus du tableau du BAS (defaut = today).
+  // Quand l'user change la date, on refetch la page avec ce jour.
+  const [jourBas, setJourBas] = useState(() => new Date().toISOString().slice(0, 10))
   // garde le last_modif pour le polling — useRef pour eviter de re-creer le poll
   const lastModifRef = useRef('')
   const stoppedRef = useRef(false)
+  const jourBasRef = useRef(jourBas)
+
+  // Re-sync ref a chaque changement de date (pour que le polling l'utilise)
+  useEffect(() => {
+    jourBasRef.current = jourBas
+  }, [jourBas])
 
   // Long polling : boucle infinie tant que le composant est monte.
+  // jourBasRef permet d'envoyer la date a jour sans relancer la boucle.
   const poll = useCallback(async () => {
     while (!stoppedRef.current) {
       try {
         const since = encodeURIComponent(lastModifRef.current)
-        const r = await fetch(`${API_BASE}/tickets/live?since=${since}`, {
+        const jour = encodeURIComponent(jourBasRef.current)
+        const r = await fetch(`${API_BASE}/tickets/live?since=${since}&jour=${jour}`, {
           headers: { Authorization: `Bearer ${getToken()}` },
         })
         if (!r.ok) {
-          // 401/500 : on attend 5s avant de retenter pour ne pas spammer
           await new Promise((res) => setTimeout(res, 5000))
           continue
         }
@@ -110,15 +120,32 @@ export default function TicketsCallPage() {
           lastModifRef.current = body.last_modif
           setClientNow(new Date().toLocaleString('fr-FR'))
         } else {
-          // Timeout sans changement : on relance immediatement.
           lastModifRef.current = body.last_modif || lastModifRef.current
         }
       } catch {
-        // Erreur reseau : pause 3s puis retry
         await new Promise((res) => setTimeout(res, 3000))
       } finally {
         setLoading(false)
       }
+    }
+  }, [])
+
+  // Refetch immediat quand l'user change la date du tableau du bas
+  // (sans attendre le prochain polling).
+  const refetchNow = useCallback(async () => {
+    try {
+      const jour = encodeURIComponent(jourBasRef.current)
+      const r = await fetch(`${API_BASE}/tickets?jour=${jour}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (r.ok) {
+        const page = await r.json()
+        setData(page)
+        lastModifRef.current = page.last_modif
+        setClientNow(new Date().toLocaleString('fr-FR'))
+      }
+    } catch {
+      // ignore
     }
   }, [])
 
@@ -169,7 +196,16 @@ export default function TicketsCallPage() {
       <TableEnCours rows={data.tickets_en_cours} />
 
       {/* Tableau du BAS : tickets traités du jour */}
-      <SectionHeader title="Tickets Call traités du jour" right={<BasActions />} />
+      <SectionHeader
+        title="Tickets Call traités du jour"
+        right={
+          <BasActions
+            date={jourBas}
+            onChangeDate={setJourBas}
+            onApply={refetchNow}
+          />
+        }
+      />
       <TableTraites rows={data.tickets_traites} />
 
       {/* Footer : stats par agence */}
@@ -221,18 +257,30 @@ function HautActions() {
   )
 }
 
-function BasActions() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+function BasActions({
+  date,
+  onChangeDate,
+  onApply,
+}: {
+  date: string
+  onChangeDate: (d: string) => void
+  onApply: () => void
+}) {
   return (
     <>
       <span className="text-xs text-c-ink-soft">Date</span>
       <input
         type="date"
         value={date}
-        onChange={(e) => setDate(e.target.value)}
+        onChange={(e) => onChangeDate(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && onApply()}
         className="px-2 py-1 border border-c-line-strong rounded-md text-xs"
       />
-      <button className="flex items-center gap-2 px-2 py-1 rounded-md border border-c-line-strong text-xs hover:bg-c-brand-soft">
+      <button
+        onClick={onApply}
+        className="flex items-center gap-2 px-2 py-1 rounded-md border border-c-line-strong text-xs hover:bg-c-brand-soft"
+        title="Appliquer la date"
+      >
         <Search className="w-3.5 h-3.5" />
       </button>
       <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-600 text-white text-sm font-semibold hover:brightness-110">
