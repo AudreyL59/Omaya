@@ -22,7 +22,9 @@ import {
   Phone,
   User,
   Smartphone,
-  Zap,
+  Globe,
+  ChevronLeft,
+  ChevronRight,
   Check,
 } from 'lucide-react'
 import { getToken } from '@/api'
@@ -519,25 +521,46 @@ function CountBadge({ value, variant = 'neutral' }: { value: number; variant?: '
 function FooterAgences({ stats }: { stats: Stats }) {
   const totInterneFibre = stats.agences_internes.reduce((s, a) => s + a.nb_fibre, 0)
   const totInterneMobile = stats.agences_internes.reduce((s, a) => s + a.nb_mobile, 0)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const scrollBy = (dir: 1 | -1) => {
+    if (!scrollRef.current) return
+    scrollRef.current.scrollBy({ left: dir * 240, behavior: 'smooth' })
+  }
 
   return (
     <div className="border-t border-c-line pt-4 mt-4">
-      <div className="text-xs text-c-ink-soft mb-3 font-medium uppercase tracking-wide">
-        Détail SFR Fibre par agence
-      </div>
-      <div className="flex items-stretch gap-2 overflow-x-auto">
-        {/* Colonne gauche : Tot Interne / Tot Power / Tot Fox */}
-        <div className="flex flex-col gap-1 shrink-0 pr-3 border-r border-c-line">
+      <div className="flex items-center gap-4">
+        {/* Colonne gauche : 3 lignes Tot avec globe + chiffre + smartphone + chiffre */}
+        <div className="flex flex-col gap-1.5 shrink-0 pr-2">
           <TotalRow label="Tot Interne" fibre={totInterneFibre} mobile={totInterneMobile} />
           <TotalRow label="Tot Power" fibre={stats.nb_fibre_power} mobile={stats.nb_mobile_power} />
           <TotalRow label="Tot Fox" fibre={stats.nb_fibre_fox} mobile={stats.nb_mobile_fox} />
         </div>
-        {/* Agences internes : 6 cartes horizontales */}
-        <div className="flex items-center gap-3 overflow-x-auto pl-2">
+
+        {/* Carrousel d'agences */}
+        <button
+          onClick={() => scrollBy(-1)}
+          className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+          aria-label="Defiler à gauche"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <div
+          ref={scrollRef}
+          className="flex items-center gap-6 overflow-x-auto flex-1 px-2 scroll-smooth"
+          style={{ scrollbarWidth: 'thin' }}
+        >
           {stats.agences_internes.map((a) => (
             <AgenceCard key={a.id_orga} agence={a} />
           ))}
         </div>
+        <button
+          onClick={() => scrollBy(1)}
+          className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+          aria-label="Defiler à droite"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
       </div>
     </div>
   )
@@ -546,35 +569,45 @@ function FooterAgences({ stats }: { stats: Stats }) {
 function TotalRow({ label, fibre, mobile }: { label: string; fibre: number; mobile: number }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="text-c-ink-soft w-20 shrink-0">{label}</span>
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-c-brand-soft text-c-brand text-[11px] font-semibold min-w-[40px]">
-        <Zap className="w-3 h-3" />{fibre}
-      </span>
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-c-brand-soft text-c-brand text-[11px] font-semibold min-w-[40px]">
-        <Smartphone className="w-3 h-3" />{mobile}
-      </span>
+      <span className="font-semibold text-c-ink w-20 text-right">{label}</span>
+      <Globe className="w-4 h-4 text-c-ink-soft" />
+      <span className="font-bold text-c-ink min-w-[18px] text-center">{fibre}</span>
+      <Smartphone className="w-4 h-4 text-c-ink-soft" />
+      <span className="font-bold text-c-ink min-w-[18px] text-center">{mobile}</span>
     </div>
   )
 }
 
 function AgenceCard({ agence }: { agence: StatAgence }) {
-  // Le nom contient souvent "Agence XXX/SFR" -> on extrait XXX pour le label compact
-  const label = agence.lib_orga.replace(/^Agence\s+/i, '').replace(/\/SFR$/i, '')
   return (
-    <div className="flex flex-col items-center shrink-0 px-1.5">
-      <div className="w-11 h-11 rounded-full bg-gray-100 border border-c-line flex items-center justify-center">
-        <User className="w-5 h-5 text-c-ink-soft" />
+    <div className="flex flex-col items-center shrink-0">
+      <div className="flex items-center gap-2">
+        {/* Logo agence (gimmick) ou fallback User icon */}
+        <div className="w-14 h-14 rounded-full border border-c-line bg-white overflow-hidden flex items-center justify-center shrink-0">
+          {agence.gimmick_url ? (
+            <img
+              src={agence.gimmick_url}
+              alt={agence.lib_orga}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <User className="w-6 h-6 text-c-ink-soft" />
+          )}
+        </div>
+        {/* Compteurs Fibre / Mobile en colonne verticale */}
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-c-ink-soft" />
+            <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_fibre}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Smartphone className="w-3.5 h-3.5 text-c-ink-soft" />
+            <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_mobile}</span>
+          </div>
+        </div>
       </div>
-      <div className="text-[10px] text-c-ink-soft mt-1 text-center max-w-[80px] truncate font-medium">
-        {label}
-      </div>
-      <div className="flex items-center gap-1 mt-0.5">
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-c-brand font-semibold">
-          <Zap className="w-2.5 h-2.5" />{agence.nb_fibre}
-        </span>
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-c-brand font-semibold">
-          <Smartphone className="w-2.5 h-2.5" />{agence.nb_mobile}
-        </span>
+      <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium whitespace-nowrap">
+        {agence.lib_orga}
       </div>
     </div>
   )

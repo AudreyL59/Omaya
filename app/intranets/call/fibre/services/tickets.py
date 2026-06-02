@@ -12,6 +12,7 @@ et TK_CallSFR/TK_CallSFR_Panier dans 'ticket_bo'. On fait 2 queries puis on
 joint en Python sur IDTK_Liste.
 """
 
+import base64
 import time
 from datetime import date as _date, datetime
 from typing import Any
@@ -757,6 +758,9 @@ def compute_stats(tickets_traites: list[dict], db_rh=None) -> dict:
                     elif id_orga_vendeur in agence_to_descendants[ID_ORGA_FOX]:
                         nb_mobile_fox += 1
 
+    # Enrichit avec lib_orga reel + gimmick_url (Societe.GUIMMICK)
+    agences_meta = _load_agences_meta(db_rh)
+
     return {
         "paniers_valides": paniers_valides,
         "offres_fibre_thd": offres_fibre_thd,
@@ -765,12 +769,12 @@ def compute_stats(tickets_traites: list[dict], db_rh=None) -> dict:
         "agences_internes": [
             {
                 "id_orga": str(id_orga),
-                "lib_orga": lib,
+                "lib_orga": agences_meta.get(id_orga, {}).get("lib_orga") or lib_default,
                 "nb_fibre": nb_fibre_internes.get(id_orga, 0),
                 "nb_mobile": nb_mobile_internes.get(id_orga, 0),
-                "gimmick_url": "",  # a remplir plus tard via Societe.GUIMMICK
+                "gimmick_url": agences_meta.get(id_orga, {}).get("gimmick_url", ""),
             }
-            for (id_orga, lib) in AGENCES_INTERNES
+            for (id_orga, lib_default) in AGENCES_INTERNES
         ],
         "nb_fibre_power": nb_fibre_power,
         "nb_mobile_power": nb_mobile_power,
@@ -789,6 +793,74 @@ _ORGA_CACHE_TTL = 300.0  # 5 minutes
 _TK_STATUT_CACHE: dict[int, str] | None = None
 _TK_STATUT_CACHE_AT: float = 0.0
 _TK_STATUT_CACHE_TTL = 600.0  # 10 minutes
+
+# Cache module : libelles + gimmicks (logos Societe) des agences internes.
+# Les ids sont hardcodes (AGENCES_INTERNES), les libelles changent rarement.
+_AGENCES_META_CACHE: dict[int, dict] | None = None
+_AGENCES_META_AT: float = 0.0
+_AGENCES_META_TTL = 600.0  # 10 minutes
+
+
+def _load_agences_meta(db_rh) -> dict[int, dict]:
+    """Charge {id_orga: {"lib_orga", "gimmick_url"}} pour les agences internes.
+
+    Reprend la logique WinDev : Organigramme.IdSte -> Societe.GUIMMICK
+    (image binaire) encode en base64 -> data URL utilisable cote frontend.
+    Cache 10min.
+    """
+    global _AGENCES_META_CACHE, _AGENCES_META_AT
+    now = time.monotonic()
+    if _AGENCES_META_CACHE is not None and now - _AGENCES_META_AT < _AGENCES_META_TTL:
+        return _AGENCES_META_CACHE
+
+    ids = [a[0] for a in AGENCES_INTERNES]
+    ids_sql = ",".join(str(i) for i in ids)
+    orga_rows = db_rh.query(
+        f"SELECT IDOrganigramme, Lib_ORGA, IdSte FROM Organigramme WHERE IDOrganigramme IN ({ids_sql})"
+    )
+    orga_to_lib: dict[int, str] = {}
+    ste_to_orga: dict[int, int] = {}
+    for r in orga_rows:
+        id_orga = _to_int(r.get("IDOrganigramme"))
+        id_ste = _to_int(r.get("IdSte"))
+        orga_to_lib[id_orga] = (r.get("Lib_ORGA") or "").strip()
+        if id_ste:
+            ste_to_orga[id_ste] = id_orga
+
+    gimmicks_by_orga: dict[int, str] = {}
+    if ste_to_orga:
+        ste_ids_sql = ",".join(str(i) for i in ste_to_orga.keys())
+        ste_rows = db_rh.query(
+            f"SELECT IdSte, GUIMMICK FROM Societe WHERE IdSte IN ({ste_ids_sql})"
+        )
+        for s in ste_rows:
+            id_ste = _to_int(s.get("IdSte"))
+            raw = s.get("GUIMMICK")
+            if not raw:
+                continue
+            # Le pont HFSQL renvoie en general des binaires deja en string b64
+            # (json-friendly). Mais on couvre aussi bytes/memoryview au cas ou.
+            if isinstance(raw, memoryview):
+                raw = bytes(raw)
+            if isinstance(raw, (bytes, bytearray)):
+                b64 = base64.b64encode(raw).decode("ascii")
+            else:
+                b64 = str(raw)
+            id_orga = ste_to_orga.get(id_ste, 0)
+            if id_orga:
+                # Type d'image inconnu (BMP, PNG, JPG selon stockage WinDev).
+                # 'image/*' marche dans le navigateur grace au content sniffing.
+                gimmicks_by_orga[id_orga] = f"data:image/png;base64,{b64}"
+
+    _AGENCES_META_CACHE = {
+        id_orga: {
+            "lib_orga": orga_to_lib.get(id_orga, ""),
+            "gimmick_url": gimmicks_by_orga.get(id_orga, ""),
+        }
+        for id_orga in ids
+    }
+    _AGENCES_META_AT = now
+    return _AGENCES_META_CACHE
 
 
 def _load_tk_statut(db_ticket) -> dict[int, str]:
