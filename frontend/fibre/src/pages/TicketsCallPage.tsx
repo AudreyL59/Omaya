@@ -365,7 +365,7 @@ function DashboardCard({
 function StatCircle({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex flex-col items-center min-w-[80px]">
-      <div className="w-16 h-16 rounded-full border-[3px] border-c-brand flex items-center justify-center text-xl font-bold text-c-brand bg-white">
+      <div className="w-16 h-16 rounded-full border-[3px] border-c-ink flex items-center justify-center text-xl font-bold text-c-ink bg-white">
         {value}
       </div>
       <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
