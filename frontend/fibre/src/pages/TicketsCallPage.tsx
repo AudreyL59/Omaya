@@ -225,21 +225,12 @@ export default function TicketsCallPage() {
 
   return (
     <div className="p-6 space-y-4">
-      {/* Header : Logo + titre + 4 cercles de stats */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center shadow">
-            <Phone className="w-6 h-6 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-c-ink">Call SFR</h1>
-        </div>
-        <div className="flex items-center gap-6">
-          <StatCircle label="Paniers validés" value={stats?.paniers_valides ?? 0} />
-          <StatCircle label="Offres Fibre THD" value={stats?.offres_fibre_thd ?? 0} />
-          <StatCircle label="CQ Fibre Validés" value={stats?.cq_fibre_valides ?? 0} />
-          <StatCircle label="Mobiles Validés" value={stats?.mobiles_valides ?? 0} />
-        </div>
-      </div>
+      {/* DASHBOARD EN HAUT : titre + 4 stats + agences (Interne/Power/Fox + carrousel) */}
+      <DashboardCard
+        clientNow={clientNow}
+        serveurNow={enCours.serveur_now}
+        stats={stats}
+      />
 
       {/* Onglets Ticket Call / Ticket RET (RET = placeholder pour l'instant) */}
       <div className="flex border-b border-c-line">
@@ -253,12 +244,6 @@ export default function TicketsCallPage() {
         >
           Ticket RET
         </button>
-      </div>
-
-      {/* Bandeau dernière vérif */}
-      <div className="text-xs text-c-ink-faint">
-        Dernière vérif intranet le {clientNow}, dernier calcul serveur le{' '}
-        {enCours.serveur_now}
       </div>
 
       {/* Tableau du HAUT : tickets à traiter */}
@@ -284,9 +269,93 @@ export default function TicketsCallPage() {
       ) : (
         <TableTraites rows={traitesRows} />
       )}
+    </div>
+  )
+}
 
-      {/* Footer : stats par agence (apparait quand traites charge) */}
-      {stats && <FooterAgences stats={stats} />}
+// --- Dashboard (haut de page : titre + stats globales + stats agences) -----
+
+function DashboardCard({
+  clientNow,
+  serveurNow,
+  stats,
+}: {
+  clientNow: string
+  serveurNow: string
+  stats: Stats | undefined
+}) {
+  const totInterneFibre = stats?.agences_internes.reduce((s, a) => s + a.nb_fibre, 0) ?? 0
+  const totInterneMobile = stats?.agences_internes.reduce((s, a) => s + a.nb_mobile, 0) ?? 0
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const scrollBy = (dir: 1 | -1) => {
+    if (!scrollRef.current) return
+    scrollRef.current.scrollBy({ left: dir * 240, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-c-line p-5 space-y-5">
+      {/* Header : Logo + titre + 4 cercles de stats */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center shadow">
+            <Phone className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-c-ink leading-tight">Call SFR</h1>
+            <p className="text-[11px] text-c-ink-faint">
+              Dernière vérif {clientNow || '—'} · serveur {serveurNow || '—'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-6">
+          <StatCircle label="Paniers validés" value={stats?.paniers_valides ?? 0} />
+          <StatCircle label="Offres Fibre THD" value={stats?.offres_fibre_thd ?? 0} />
+          <StatCircle label="CQ Fibre Validés" value={stats?.cq_fibre_valides ?? 0} />
+          <StatCircle label="Mobiles Validés" value={stats?.mobiles_valides ?? 0} />
+        </div>
+      </div>
+
+      {/* Séparateur */}
+      <div className="border-t border-c-line-soft" />
+
+      {/* Bloc agences : 3 totaux à gauche + carrousel à droite */}
+      {stats ? (
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-1.5 shrink-0 pr-4 border-r border-c-line-soft">
+            <TotalRow label="Tot Interne" fibre={totInterneFibre} mobile={totInterneMobile} />
+            <TotalRow label="Tot Power" fibre={stats.nb_fibre_power} mobile={stats.nb_mobile_power} />
+            <TotalRow label="Tot Fox" fibre={stats.nb_fibre_fox} mobile={stats.nb_mobile_fox} />
+          </div>
+          <button
+            onClick={() => scrollBy(-1)}
+            className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+            aria-label="Defiler à gauche"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div
+            ref={scrollRef}
+            className="flex items-center gap-6 overflow-x-auto flex-1 px-2 scroll-smooth"
+            style={{ scrollbarWidth: 'thin' }}
+          >
+            {stats.agences_internes.map((a) => (
+              <AgenceCard key={a.id_orga} agence={a} />
+            ))}
+          </div>
+          <button
+            onClick={() => scrollBy(1)}
+            className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+            aria-label="Defiler à droite"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-center gap-2 text-c-ink-faint text-xs py-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          Chargement des stats agences...
+        </div>
+      )}
     </div>
   )
 }
@@ -515,54 +584,6 @@ function CountBadge({ value, variant = 'neutral' }: { value: number; variant?: '
     <span className={`inline-block min-w-[28px] px-1.5 py-0.5 rounded-md text-xs font-semibold ${cls}`}>
       {value}
     </span>
-  )
-}
-
-function FooterAgences({ stats }: { stats: Stats }) {
-  const totInterneFibre = stats.agences_internes.reduce((s, a) => s + a.nb_fibre, 0)
-  const totInterneMobile = stats.agences_internes.reduce((s, a) => s + a.nb_mobile, 0)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
-  const scrollBy = (dir: 1 | -1) => {
-    if (!scrollRef.current) return
-    scrollRef.current.scrollBy({ left: dir * 240, behavior: 'smooth' })
-  }
-
-  return (
-    <div className="border-t border-c-line pt-4 mt-4">
-      <div className="flex items-center gap-4">
-        {/* Colonne gauche : 3 lignes Tot avec globe + chiffre + smartphone + chiffre */}
-        <div className="flex flex-col gap-1.5 shrink-0 pr-2">
-          <TotalRow label="Tot Interne" fibre={totInterneFibre} mobile={totInterneMobile} />
-          <TotalRow label="Tot Power" fibre={stats.nb_fibre_power} mobile={stats.nb_mobile_power} />
-          <TotalRow label="Tot Fox" fibre={stats.nb_fibre_fox} mobile={stats.nb_mobile_fox} />
-        </div>
-
-        {/* Carrousel d'agences */}
-        <button
-          onClick={() => scrollBy(-1)}
-          className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
-          aria-label="Defiler à gauche"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div
-          ref={scrollRef}
-          className="flex items-center gap-6 overflow-x-auto flex-1 px-2 scroll-smooth"
-          style={{ scrollbarWidth: 'thin' }}
-        >
-          {stats.agences_internes.map((a) => (
-            <AgenceCard key={a.id_orga} agence={a} />
-          ))}
-        </div>
-        <button
-          onClick={() => scrollBy(1)}
-          className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
-          aria-label="Defiler à droite"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      </div>
-    </div>
   )
 }
 
