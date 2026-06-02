@@ -681,6 +681,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
         offres_fibre_txt = ""
         lib_statut_force = tk["lib_statut"]
         delai_depasse = False
+        debug_max_nds_raw = ""  # TEMPORAIRE pour debug
+        debug_diff_h = -1
 
         for off in panier:
             if off["statut_prod"] in (1, 3):
@@ -697,11 +699,17 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
                     nb_mobile_valide += 1
             # Delai prise num : si Num_DateSaisie >= date_crea + 1h
             # (transposition exacte WinDev : DateHeureDifference -> Milieu(9,2) >= 1)
-            dt_saisie = _parse_dt(off.get("_num_date_saisie_raw"))
+            nds_raw = off.get("_num_date_saisie_raw")
+            if nds_raw and str(nds_raw).strip() and not str(nds_raw).startswith("0000"):
+                debug_max_nds_raw = str(nds_raw)
+            dt_saisie = _parse_dt(nds_raw)
             if dt_saisie is not None:
                 dt_crea = _parse_dt(tk["date_crea"])
-                if dt_crea is not None and (dt_saisie - dt_crea).total_seconds() >= 3600:
-                    delai_depasse = True
+                if dt_crea is not None:
+                    diff_s = (dt_saisie - dt_crea).total_seconds()
+                    debug_diff_h = max(debug_diff_h, int(diff_s // 3600))
+                    if diff_s >= 3600:
+                        delai_depasse = True
 
         premier_contrat = False
         if not sal["vendeur_distrib"]:
@@ -730,6 +738,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
             "vendeur_distrib": sal["vendeur_distrib"],
             "premier_contrat": premier_contrat,
             "delai_depasse": delai_depasse,
+            "debug_nds": debug_max_nds_raw,
+            "debug_diff_h": debug_diff_h,
             # On expose le panier brut pour le calcul de stats par agence dans la
             # foulee (eviter de re-quetter).
             "_panier": panier,

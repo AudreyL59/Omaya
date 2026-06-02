@@ -63,6 +63,8 @@ interface TicketTraite {
   vendeur_distrib: boolean
   premier_contrat: boolean
   delai_depasse: boolean
+  debug_nds?: string
+  debug_diff_h?: number
 }
 
 interface StatAgence {
@@ -519,6 +521,8 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
             <Th className="text-center">NB Offres</Th>
             <Th className="text-center">NB Fibre Valide</Th>
             <Th className="text-center">NB Mobile Valide</Th>
+            <Th className="text-center">DBG NDS</Th>
+            <Th className="text-center">DBG ΔH</Th>
           </tr>
         </thead>
         <tbody>
@@ -549,6 +553,8 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
                 <Td className="text-center"><CountBadge value={t.nb_offres} /></Td>
                 <Td className="text-center"><CountBadge value={t.nb_fibre_valide} variant="brand" /></Td>
                 <Td className="text-center"><CountBadge value={t.nb_mobile_valide} variant="brand" /></Td>
+                <Td className="text-[10px] text-c-ink-soft">{t.debug_nds || '—'}</Td>
+                <Td className="text-center text-[10px] text-c-ink-soft">{t.debug_diff_h ?? -1}</Td>
               </tr>
             )
           })}
