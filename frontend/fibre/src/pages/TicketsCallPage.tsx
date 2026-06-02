@@ -86,7 +86,9 @@ const API_BASE = '/api/call/fibre'
 // Intervalle de refresh auto (en ms). On utilise un simple polling court a la
 // place du long polling /tickets/live (qui timeout sur MAX(ModifDate) en
 // HFSQL sans index adequat). A reactiver au cutover PG si besoin.
-const REFRESH_INTERVAL_MS = 10_000
+// 30s : chaque GET /tickets coute ~30s en HFSQL via VPN OVH<->interne.
+// Avec 10s on empilait les requetes -> file infinie. A reduire au cutover PG.
+const REFRESH_INTERVAL_MS = 30_000
 
 export default function TicketsCallPage() {
   const [data, setData] = useState<PageData | null>(null)

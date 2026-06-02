@@ -357,12 +357,8 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
             or _to_int(r.get("id_tk_statut")) == 34
         )
     ]
-    # Chargement TK_Statut (~30 rows, statique) pour enrichir Lib_Statut
-    statut_rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
-    statuts: dict[int, str] = {
-        _to_int(r.get("IDTK_Statut")): (r.get("Lib_Statut") or "").strip()
-        for r in statut_rows
-    }
+    # Chargement TK_Statut (referentiel statique, cache module 10min)
+    statuts = _load_tk_statut(db_ticket)
     if not rows_liste:
         return []
 
@@ -527,12 +523,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
     if not rows_liste:
         return []
 
-    # TK_Statut une fois (cache memoire)
-    statut_rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
-    statuts: dict[int, str] = {
-        _to_int(r.get("IDTK_Statut")): (r.get("Lib_Statut") or "").strip()
-        for r in statut_rows
-    }
+    # TK_Statut (referentiel statique, cache module 10min)
+    statuts = _load_tk_statut(db_ticket)
 
     by_id: dict[int, dict] = {}
     for r in rows_liste:
@@ -793,6 +785,26 @@ _ORGA_CHILDREN_CACHE: dict[int, list[int]] | None = None
 _ORGA_CACHE_AT: float = 0.0
 _ORGA_CACHE_TTL = 300.0  # 5 minutes
 
+# Cache module : TK_Statut (referentiel statique, 39 rows).
+_TK_STATUT_CACHE: dict[int, str] | None = None
+_TK_STATUT_CACHE_AT: float = 0.0
+_TK_STATUT_CACHE_TTL = 600.0  # 10 minutes
+
+
+def _load_tk_statut(db_ticket) -> dict[int, str]:
+    """Charge TK_Statut (referentiel statique). Cache 10 minutes."""
+    global _TK_STATUT_CACHE, _TK_STATUT_CACHE_AT
+    now = time.monotonic()
+    if _TK_STATUT_CACHE is not None and now - _TK_STATUT_CACHE_AT < _TK_STATUT_CACHE_TTL:
+        return _TK_STATUT_CACHE
+    rows = db_ticket.query("SELECT IDTK_Statut, Lib_Statut FROM TK_Statut")
+    _TK_STATUT_CACHE = {
+        _to_int(r.get("IDTK_Statut")): (r.get("Lib_Statut") or "").strip()
+        for r in rows
+    }
+    _TK_STATUT_CACHE_AT = now
+    return _TK_STATUT_CACHE
+
 
 def _load_orga_children_map(db_rh) -> dict[int, list[int]]:
     """Charge la table Organigramme complete et construit la map parent->enfants.
@@ -920,5 +932,8 @@ def load_page(user_id: int, user_id_poste: int, jour: str | None = None) -> dict
         "tickets_traites": traites_clean,
         "stats": stats,
         "serveur_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "last_modif": get_last_modif_call_fibre(),
+        # last_modif desactive : le frontend utilise setInterval (pas le long
+        # polling), donc cette info n'est plus consommee. Eviter 2 queries
+        # MAX(ModifDate) qui coutaient 10s par chargement.
+        "last_modif": "",
     }
