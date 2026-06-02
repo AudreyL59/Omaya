@@ -524,15 +524,15 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
         <tbody>
           {rows.map((t) => {
             // Coloration ligne (WinDev) :
+            //  - delai NUM >= 1h apres Datecrea : fond ROUGE (priorite max)
             //  - VendeurDistrib : fond GRIS (vendeur du reseau distrib externe)
             //  - 1er contrat du vendeur : fond VERT
-            //  - delai NUM > 1h apres Datecrea : fond ROUGE
-            const bg = t.vendeur_distrib
-              ? 'bg-gray-100'
-              : t.premier_contrat
-                ? 'bg-green-100'
-                : t.delai_depasse
-                  ? 'bg-red-100'
+            const bg = t.delai_depasse
+              ? 'bg-red-100'
+              : t.vendeur_distrib
+                ? 'bg-gray-100'
+                : t.premier_contrat
+                  ? 'bg-green-100'
                   : 'bg-white'
             return (
               <tr
