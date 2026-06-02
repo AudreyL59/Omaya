@@ -186,7 +186,7 @@ def _load_affectations(db_rh, id_salaries: set[int]) -> dict[int, dict]:
     rows = db_rh.query(
         f"""SELECT TOP 1000
             so.IDSalarie, so.IDOrganigramme, o.Lib_ORGA AS lib_orga,
-            o.IDOrganigramme_Parent AS id_orga_parent
+            o.IdPARENT AS id_orga_parent
         FROM Salarie_Organigramme so
         INNER JOIN Organigramme o ON o.IDOrganigramme = so.IDOrganigramme
         WHERE so.ModifELEM NOT LIKE '%suppr%'
@@ -787,11 +787,11 @@ def _load_orga_children_map(db_rh) -> dict[int, list[int]]:
     ):
         return _ORGA_CHILDREN_CACHE
     rows = db_rh.query(
-        "SELECT IDOrganigramme, IDOrganigramme_Parent FROM Organigramme"
+        "SELECT IDOrganigramme, IdPARENT FROM Organigramme"
     )
     children: dict[int, list[int]] = {}
     for r in rows:
-        parent = _to_int(r.get("IDOrganigramme_Parent"))
+        parent = _to_int(r.get("IdPARENT"))
         child = _to_int(r.get("IDOrganigramme"))
         if parent and child:
             children.setdefault(parent, []).append(child)
