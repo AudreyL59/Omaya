@@ -963,7 +963,7 @@ def get_last_modif_call_fibre() -> str:
     return max(m1, m2)
 
 
-def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 1.0) -> tuple[bool, str]:
+def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 0.3) -> tuple[bool, str]:
     """Long polling : attend qu'un changement survienne sur Call Fibre.
 
     Renvoie (changed, latest_modif_iso).
