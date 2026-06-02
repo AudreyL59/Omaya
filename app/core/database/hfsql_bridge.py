@@ -89,7 +89,31 @@ def execute_query(
         try:
             stdout_b, stderr_b = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            proc.kill()
+            # Nettoyage robuste : sur timeout, kill simple ne suffit pas toujours
+            # (Dll_ODBC.exe peut survivre avec un lock HFSQL ouvert). On force
+            # avec taskkill /T qui tue toute la process tree.
+            try:
+                proc.kill()
+                proc.wait(timeout=3)
+            except Exception:
+                pass
+            if proc.poll() is None:
+                # Toujours vivant -> taskkill brutal sur le PID + ses enfants
+                try:
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                        timeout=5,
+                        capture_output=True,
+                        creationflags=CREATE_NO_WINDOW,
+                    )
+                except Exception:
+                    pass
+            # Nettoyer le fichier de resultat temporaire
+            try:
+                if result_file.exists():
+                    result_file.unlink()
+            except Exception:
+                pass
             raise HFSQLError(f"Bridge timeout ({timeout}s)")
 
         if not result_file.exists():

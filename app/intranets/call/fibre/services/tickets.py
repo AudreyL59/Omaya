@@ -204,6 +204,9 @@ def _check_premier_contrat(db_adv, id_salarie: int, date_avant: str) -> bool:
 
     Equivalent du test WinDev "1er contrat -> coloration verte".
     `date_avant` doit etre au format HFSQL compact YYYYMMDD.
+
+    DEPRECATED : 1 query par appel -> N+1 si beaucoup de tickets.
+    Preferer _load_premiers_contrats() qui batch toutes les verifications.
     """
     rows = db_adv.query(
         """SELECT TOP 1 IDcontrat FROM SFR_contrat
@@ -212,6 +215,31 @@ def _check_premier_contrat(db_adv, id_salarie: int, date_avant: str) -> bool:
         (id_salarie, date_avant),
     )
     return not rows
+
+
+def _load_premiers_contrats(db_adv, id_salaries: set[int]) -> dict[int, str]:
+    """Pour chaque vendeur, retourne la date de son 1er contrat SFR
+    (MIN(datesignature), format compact YYYYMMDD). Vide si jamais signe.
+
+    1 seule query au lieu de N. Utiliser ensuite avec :
+        is_premier = (date_ticket < date_premier_contrat) or pas dans le dict
+    """
+    if not id_salaries:
+        return {}
+    ids_sql = ",".join(str(i) for i in id_salaries if i)
+    if not ids_sql:
+        return {}
+    rows = db_adv.query(
+        f"""SELECT IDSalarie, MIN(datesignature) AS min_date
+        FROM SFR_contrat
+        WHERE IDSalarie IN ({ids_sql})
+        GROUP BY IDSalarie"""
+    )
+    out: dict[int, str] = {}
+    for r in rows:
+        d = str(r.get("min_date") or "")[:8]
+        out[_to_int(r.get("IDSalarie"))] = d
+    return out
 
 
 # --- Tableau du HAUT : tickets a traiter ----------------------------------
@@ -370,6 +398,12 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     # 4. Resolve noms vendeur + ope appel + affectations
     salaries = _load_salaries(db_rh, salaries_to_load)
     affectations = _load_affectations(db_rh, salaries_to_load)
+    # Batch des premiers contrats SFR (1 query au lieu de N)
+    sal_non_distrib_ids = {
+        tk["id_salarie"] for tk in enriched
+        if not salaries.get(tk["id_salarie"], {}).get("vendeur_distrib")
+    }
+    premiers_contrats = _load_premiers_contrats(db_adv, sal_non_distrib_ids)
 
     # 5. Construire la liste finale + non_prod
     out: list[dict] = []
@@ -378,11 +412,13 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
         aff = affectations.get(tk["id_salarie"], {"lib_equipe": ""})
         ope_appel_sal = salaries.get(tk["ope_appel_id"], {"nom": "", "prenom": ""})
 
+        # non_prod = 1er contrat (= aucun SFR_contrat signe avant date_ticket)
         non_prod = False
         if not sal["vendeur_distrib"]:
             date_avant = _iso(tk["date_crea"])[:10].replace("-", "")
-            if date_avant:
-                non_prod = _check_premier_contrat(db_adv, tk["id_salarie"], date_avant)
+            min_date = premiers_contrats.get(tk["id_salarie"], "")
+            # non_prod = True si pas de contrat OU 1er contrat est apres/egal a date_avant
+            non_prod = (not min_date) or (min_date >= date_avant)
 
         out.append({
             "id": _str_id(tk["id_tk_liste"]),
@@ -535,6 +571,12 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
 
     salaries = _load_salaries(db_rh, salaries_to_load)
     affectations = _load_affectations(db_rh, salaries_to_load)
+    # Batch premiers contrats (1 query au lieu de N)
+    sal_non_distrib_ids = {
+        sid for sid in salaries_to_load
+        if not salaries.get(sid, {}).get("vendeur_distrib")
+    }
+    premiers_contrats = _load_premiers_contrats(db_adv, sal_non_distrib_ids)
 
     # Construction finale
     out: list[dict] = []
@@ -578,10 +620,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
         premier_contrat = False
         if not sal["vendeur_distrib"]:
             date_avant = _iso(tk["date_crea"])[:10].replace("-", "")
-            if date_avant:
-                premier_contrat = _check_premier_contrat(
-                    db_adv, call["id_salarie"], date_avant
-                )
+            min_date = premiers_contrats.get(call["id_salarie"], "")
+            premier_contrat = (not min_date) or (min_date >= date_avant)
 
         out.append({
             "id": _str_id(id_tk),
@@ -700,28 +740,54 @@ def compute_stats(tickets_traites: list[dict], db_rh=None) -> dict:
     }
 
 
+# Cache module : organigramme complet (parents -> enfants) charge 1 fois,
+# expire au bout de 5 minutes. Evite le N+1 BFS pour chaque appel a la page.
+_ORGA_CHILDREN_CACHE: dict[int, list[int]] | None = None
+_ORGA_CACHE_AT: float = 0.0
+_ORGA_CACHE_TTL = 300.0  # 5 minutes
+
+
+def _load_orga_children_map(db_rh) -> dict[int, list[int]]:
+    """Charge la table Organigramme complete et construit la map parent->enfants.
+
+    Cache 5 minutes. Pour 1 appel a la page on charge 1 fois maxi.
+    """
+    global _ORGA_CHILDREN_CACHE, _ORGA_CACHE_AT
+    now = time.monotonic()
+    if (
+        _ORGA_CHILDREN_CACHE is not None
+        and now - _ORGA_CACHE_AT < _ORGA_CACHE_TTL
+    ):
+        return _ORGA_CHILDREN_CACHE
+    rows = db_rh.query(
+        "SELECT IDOrganigramme, IDOrganigramme_Parent FROM Organigramme"
+    )
+    children: dict[int, list[int]] = {}
+    for r in rows:
+        parent = _to_int(r.get("IDOrganigramme_Parent"))
+        child = _to_int(r.get("IDOrganigramme"))
+        if parent and child:
+            children.setdefault(parent, []).append(child)
+    _ORGA_CHILDREN_CACHE = children
+    _ORGA_CACHE_AT = now
+    return children
+
+
 def _orga_descendants(db_rh, id_orga_racine: int) -> set[int]:
     """Retourne l'ID racine + tous ses descendants dans Organigramme.
 
     Equivalent de la fonction WinDev `ListeOrgaComplet(id, Vrai)`.
+    Utilise un cache module pour eviter N queries par appel.
     """
+    children = _load_orga_children_map(db_rh)
     out: set[int] = {id_orga_racine}
     to_visit: list[int] = [id_orga_racine]
-    safety = 200  # garde-fou
-    while to_visit and safety > 0:
-        safety -= 1
+    while to_visit:
         cur = to_visit.pop(0)
-        rows = db_rh.query(
-            """SELECT IDOrganigramme FROM Organigramme
-            WHERE IDOrganigramme_Parent = ?
-              AND ModifELEM NOT LIKE '%suppr%'""",
-            (cur,),
-        )
-        for r in rows:
-            child = _to_int(r.get("IDOrganigramme"))
-            if child and child not in out:
-                out.add(child)
-                to_visit.append(child)
+        for c in children.get(cur, []):
+            if c not in out:
+                out.add(c)
+                to_visit.append(c)
     return out
 
 
