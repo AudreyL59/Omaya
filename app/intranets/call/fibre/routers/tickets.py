@@ -33,9 +33,12 @@ def get_tickets_page(
     - stats (4 compteurs + stats par agence interne/externe)
     - last_modif : token a renvoyer dans /tickets/live?since=...
     """
+    # TODO id_type_poste : pas present dans UserToken pour l'instant.
+    # Le filtre TicketDiff (poste 20) est donc desactive. A reactiver en
+    # ajoutant id_type_poste au JWT (via app/core/auth/service.py).
     return svc.load_page(
         user_id=user.id_salarie,
-        user_id_poste=user.id_type_poste or 0,
+        user_id_poste=0,
         jour=jour,
     )
 
@@ -57,19 +60,11 @@ def get_tickets_live(
         description="Timeout du long polling en secondes (max 55).",
     ),
 ):
-    """Long polling : attend qu'un ticket bouge puis renvoie la page complete.
+    """Long polling (DESACTIVE cote frontend pour l'instant, voir TicketsCallPage).
 
-    Cote client :
-    1. Premier appel sans `since` -> renvoie immediatement la page + last_modif
-    2. Appels suivants avec `since=<last_modif precedent>` -> attend max `timeout`s
-       qu'un changement survienne :
-       - Si oui : changed=True, page rempli, last_modif mis a jour
-       - Si non (timeout) : changed=False, last_modif inchange. Le client peut
-         relancer immediatement.
-
-    Note IIS : le timeout par defaut est 25s pour rester confortablement sous
-    la limite ARR (2 min). Si tu changes le timeout, verifie aussi la config
-    ARR (proxy timeout).
+    Le SELECT MAX(ModifDate) sur TK_Liste timeout en HFSQL (pas d'index
+    adequat). Le frontend utilise setInterval(/tickets) a la place.
+    Cet endpoint reste disponible pour reactivation au cutover PG.
     """
     changed, latest = svc.wait_for_change(since, timeout_seconds=timeout)
     if not changed:
@@ -77,7 +72,7 @@ def get_tickets_live(
 
     page = svc.load_page(
         user_id=user.id_salarie,
-        user_id_poste=user.id_type_poste or 0,
+        user_id_poste=0,
         jour=jour,
     )
     return {"changed": True, "page": page, "last_modif": page["last_modif"]}
