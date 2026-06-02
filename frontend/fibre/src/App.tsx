@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from '@/pages/LoginPage'
-import DashboardPage from '@/pages/DashboardPage'
 import TicketsCallPage from '@/pages/TicketsCallPage'
 import { DialogHost } from '@shared/ui/dialog'
 import Layout from '@/components/Layout'
@@ -25,7 +24,7 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<DashboardPage />} />
+          <Route index element={<Navigate to="/tickets-call" replace />} />
           <Route path="tickets-call" element={<TicketsCallPage />} />
         </Route>
 

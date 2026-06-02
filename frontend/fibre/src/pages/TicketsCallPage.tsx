@@ -232,17 +232,10 @@ export default function TicketsCallPage() {
         stats={stats}
       />
 
-      {/* Onglets Ticket Call / Ticket RET (RET = placeholder pour l'instant) */}
+      {/* Onglet Ticket Call (RET retire) */}
       <div className="flex border-b border-c-line">
         <button className="px-6 py-2 text-sm font-semibold border-b-2 border-c-brand text-c-ink">
           Ticket Call
-        </button>
-        <button
-          className="px-6 py-2 text-sm font-semibold text-c-ink-faint cursor-not-allowed"
-          title="À venir"
-          disabled
-        >
-          Ticket RET
         </button>
       </div>
 
