@@ -244,6 +244,7 @@ export default function TicketsCallPage() {
             date={jourBas}
             onChangeDate={setJourBas}
             onApply={refetchNow}
+            rows={traitesRows}
           />
         }
       />
@@ -393,17 +394,24 @@ function BasActions({
   date,
   onChangeDate,
   onApply,
+  rows,
 }: {
   date: string
   onChangeDate: (d: string) => void
   onApply: () => void
+  rows: TicketTraite[]
 }) {
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
     setExporting(true)
     try {
       const r = await fetch(`${API_BASE}/tickets/traites/export?jour=${encodeURIComponent(date)}`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ tickets: rows }),
       })
       if (!r.ok) {
         alert("Export Excel : échec (" + r.status + ")")

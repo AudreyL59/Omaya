@@ -1062,8 +1062,12 @@ def load_page_en_cours(user_id: int, user_id_poste: int) -> dict:
     }
 
 
-def export_traites_xlsx(jour: str | None = None) -> bytes:
+def export_traites_xlsx(jour: str | None = None, traites: list[dict] | None = None) -> bytes:
     """Genere un fichier .xlsx du tableau des tickets traites du jour.
+
+    Si `traites` est fourni (par exemple recu en POST depuis le frontend qui
+    a deja les donnees en cache), on saute la requete HFSQL (~5s).
+    Sinon on recharge tout via list_tickets_traites().
 
     Coloration des lignes identique a l'UI :
     - delai_depasse : ROUGE (priorite max, match WinDev)
@@ -1075,7 +1079,8 @@ def export_traites_xlsx(jour: str | None = None) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
-    traites = list_tickets_traites(jour)
+    if traites is None:
+        traites = list_tickets_traites(jour)
     j_label = (jour or _date.today().isoformat()).replace("-", "/")
 
     wb = Workbook()

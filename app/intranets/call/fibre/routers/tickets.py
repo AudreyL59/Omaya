@@ -10,7 +10,7 @@ Stratégie de chargement de la page principale (transposition WinDev) :
 
 from datetime import date as _date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
@@ -56,16 +56,22 @@ def get_tickets_page(
     return svc.load_page(user_id=user.id_salarie, user_id_poste=0, jour=jour)
 
 
-@router.get("/tickets/traites/export")
+@router.post("/tickets/traites/export")
 def export_tickets_traites(
     user: UserToken = Depends(get_current_user),
     jour: str | None = Query(None, description="YYYY-MM-DD. Defaut = today."),
+    payload: dict = Body(default_factory=dict),
 ):
     """Export Excel du tableau des tickets traites du jour.
 
+    POST : le frontend envoie les rows deja chargees dans `payload.tickets`,
+    on saute la requete HFSQL pour generer le xlsx en ~50ms.
+    Si le payload est vide, on rappelle list_tickets_traites() (fallback lent).
+
     Couleurs de lignes preservees (rouge / gris / vert / blanc).
     """
-    xlsx_bytes = svc.export_traites_xlsx(jour=jour)
+    rows = payload.get("tickets") if isinstance(payload, dict) else None
+    xlsx_bytes = svc.export_traites_xlsx(jour=jour, traites=rows)
     j = (jour or _date.today().isoformat()).replace("-", "")
     filename = f"tickets_call_fibre_{j}.xlsx"
     return Response(
