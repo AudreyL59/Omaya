@@ -732,8 +732,10 @@ def compute_stats(tickets_traites: list[dict], db_rh=None) -> dict:
         for off in t.get("_panier", []):
             if off["statut_prod"] not in (1, 3):
                 continue
-            paniers_valides += 1
+            # WinDev : ComptPanierValidtest++ est UNIQUEMENT dans le cas FIBRE
+            # (pas pour MOBILE). C'est compteur des "paniers Fibre valides".
             if off["type"] == "FIBRE":
+                paniers_valides += 1
                 if off["num"]:
                     offres_fibre_thd += 1
                     # Attribution par agence
