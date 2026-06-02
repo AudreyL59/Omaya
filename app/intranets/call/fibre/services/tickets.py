@@ -1,0 +1,758 @@
+"""
+Service Call Fibre - tickets a traiter / traites du jour / stats agences.
+
+Transposition de la fenetre principale WinDev Call SFR.
+
+ETAPE 1 = lecture+ecriture sur HFSQL via get_connection().
+Au cutover (octobre 2026), remplacer par get_pg_connection() + reecrire les
+queries (pgt_*, snake_case, LIMIT au lieu de TOP, etc.).
+
+Cross-base SQL impossible via le pont : TK_Liste/TK_Statut sont dans 'ticket'
+et TK_CallSFR/TK_CallSFR_Panier dans 'ticket_bo'. On fait 2 queries puis on
+joint en Python sur IDTK_Liste.
+"""
+
+import time
+from datetime import date as _date, datetime
+from typing import Any
+
+from app.core.database import get_connection
+
+
+# --- Constantes business (hardcodes comme WinDev) -------------------------
+
+IDTK_TYPE_DEMANDE_CALL_FIBRE = 20  # IDTK_TypeDemande pour les Call Fibre
+IDTK_STATUT_BLEU = 34  # statut affiche en bleu dans le tableau du haut
+
+# Statuts du tableau du BAS (tickets "traites" du jour).
+# Source : code WinDev `AfficherTkTraitésDiff` : BETWEEN 14 AND 19 sauf 18 et 28.
+STATUTS_TRAITES = (14, 15, 16, 17, 19)  # 18 et 28 exclus
+
+# Statut special "tk en cours mais a afficher en bleu" (cf. WinDev).
+# Inclu dans le tableau du haut via OR explicite.
+IDTK_STATUT_BLEU_EN_COURS = 34
+
+# Agences "internes" (codees en dur cote WinDev).
+# Tuple (id_orga_racine, libelle_affichage).
+AGENCES_INTERNES: list[tuple[int, str]] = [
+    (64, "Agence CD"),
+    (20260402170805658, "Agence Duval Caen"),
+    (20191203164626234, "Agence JR"),
+    (20210906121249525, "Agence Le Mans"),
+    (20260402142812484, "Agence Brosset Tours"),
+    (20260402165637765, "Agence Poitiers"),
+]
+
+# Agences externes (reseau distrib).
+ID_ORGA_POWER = 20180131091629815
+ID_ORGA_FOX = 20230105145730716
+
+# Filtre special "formation" : si OPCrea=6 et user_id != 6, on masque.
+ID_OPE_FORMATION = 6
+
+# Filtre special "TicketDiff masque pour le poste 20" (a confirmer cote metier).
+ID_POSTE_MASQUE_DIFF = 20
+
+
+# --- Helpers ---------------------------------------------------------------
+
+def _civilite_to_prefix(civ: int) -> str:
+    """Civilite 1 = M., autre = Mme (transposition exacte du code WinDev)."""
+    return "M." if (civ or 0) <= 1 else "Mme"
+
+
+def _capitalize(s: str) -> str:
+    """Capitalise comme WinDev Capitalise() : 1ere lettre uppercase, reste lowercase."""
+    if not s:
+        return ""
+    return s[0].upper() + s[1:].lower()
+
+
+def _format_nom_client(civ: int, nom: str, nom_marital: str, prenom: str) -> str:
+    """'M. NOM ép MARITAL Prenom' (transposition exacte WinDev)."""
+    parts = [_civilite_to_prefix(civ), (nom or "").strip()]
+    if (nom_marital or "").strip():
+        parts.append(f"ép {nom_marital.strip()}")
+    parts.append(_capitalize((prenom or "").strip()))
+    return " ".join(p for p in parts if p)
+
+
+def _format_ville(ville: str) -> str:
+    """Coupe la partie '(...)' a la fin si presente."""
+    if not ville:
+        return ""
+    if "(" in ville:
+        return ville.split("(")[0].strip()
+    return ville.strip()
+
+
+def _iso(v) -> str:
+    """datetime ou chaine HFSQL compact -> 'YYYY-MM-DD HH:MM:SS'."""
+    if not v:
+        return ""
+    if isinstance(v, (datetime,)):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    s = str(v).strip()
+    if not s or s.startswith("0000"):
+        return ""
+    # Compact HFSQL "20260602093015000"
+    if len(s) >= 14 and s[:8].isdigit() and s[8:14].isdigit():
+        return f"{s[0:4]}-{s[4:6]}-{s[6:8]} {s[8:10]}:{s[10:12]}:{s[12:14]}"
+    # ISO deja
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:19]
+    return s
+
+
+def _to_int(v) -> int:
+    try:
+        return int(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _str_id(v) -> str:
+    """ID 8 octets -> str (cf. feedback_ids_8octets_string)."""
+    return str(_to_int(v))
+
+
+def _today_compact() -> str:
+    """Date du jour au format HFSQL YYYYMMDD (pour LEFT(Datecrea, 8) = ?)."""
+    return _date.today().strftime("%Y%m%d")
+
+
+# --- Caches en memoire (vendeur, orga, contrats) --------------------------
+# Ces helpers sont appeles plusieurs fois par appel. On cache localement
+# pour eviter de re-requeter HFSQL.
+
+def _load_salaries(db_rh, ids: set[int]) -> dict[int, dict]:
+    """Charge nom/prenom/VendeurDistrib pour une liste d'IDs salaries."""
+    if not ids:
+        return {}
+    ids_sql = ",".join(str(i) for i in ids if i)
+    if not ids_sql:
+        return {}
+    rows = db_rh.query(
+        f"""SELECT IDSalarie, Nom, Prenom, VendeurDistrib
+        FROM Salarie
+        WHERE IDSalarie IN ({ids_sql})"""
+    )
+    out: dict[int, dict] = {}
+    for r in rows:
+        out[_to_int(r.get("IDSalarie"))] = {
+            "nom": (r.get("Nom") or "").strip(),
+            "prenom": (r.get("Prenom") or "").strip(),
+            "vendeur_distrib": bool(r.get("VendeurDistrib")),
+        }
+    return out
+
+
+def _load_affectations(db_rh, id_salaries: set[int]) -> dict[int, dict]:
+    """Pour chaque salarie, retourne l'orga d'affectation actuelle (lib + parent.lib).
+
+    Note : on prend l'affectation la plus recente sans condition de date_fin.
+    Au plus proche du `affectationVendeur` WinDev (mais simplifie).
+    """
+    if not id_salaries:
+        return {}
+    ids_sql = ",".join(str(i) for i in id_salaries if i)
+    if not ids_sql:
+        return {}
+    rows = db_rh.query(
+        f"""SELECT TOP 1000
+            so.IDSalarie, so.IDOrganigramme, o.Lib_ORGA AS lib_orga,
+            o.IDOrganigramme_Parent AS id_orga_parent
+        FROM Salarie_Organigramme so
+        INNER JOIN Organigramme o ON o.IDOrganigramme = so.IDOrganigramme
+        WHERE so.ModifELEM NOT LIKE '%suppr%'
+          AND (so.Date_Fin = '' OR so.Date_Fin >= ?)
+        ORDER BY so.Date_Debut DESC""",
+        (_today_compact(),),
+    )
+    # Recuperer en plus le lib_orga des parents
+    parent_ids = {_to_int(r.get("id_orga_parent")) for r in rows}
+    parent_ids.discard(0)
+    parents: dict[int, str] = {}
+    if parent_ids:
+        parent_ids_sql = ",".join(str(i) for i in parent_ids)
+        prows = db_rh.query(
+            f"""SELECT IDOrganigramme, Lib_ORGA FROM Organigramme
+            WHERE IDOrganigramme IN ({parent_ids_sql})"""
+        )
+        for pr in prows:
+            parents[_to_int(pr.get("IDOrganigramme"))] = (pr.get("Lib_ORGA") or "").strip()
+
+    # On garde la 1re ligne par salarie (la plus recente grace au ORDER BY DESC)
+    out: dict[int, dict] = {}
+    for r in rows:
+        id_sal = _to_int(r.get("IDSalarie"))
+        if id_sal in out:
+            continue
+        parent_lib = parents.get(_to_int(r.get("id_orga_parent")), "")
+        lib = (r.get("lib_orga") or "").strip()
+        out[id_sal] = {
+            "id_orga": _to_int(r.get("IDOrganigramme")),
+            "lib_orga": lib,
+            "parent_lib": parent_lib,
+            "lib_equipe": f"{parent_lib} => {lib}" if parent_lib else lib,
+        }
+    return out
+
+
+def _check_premier_contrat(db_adv, id_salarie: int, date_avant: str) -> bool:
+    """True si le vendeur n'a pas de SFR_contrat signe avant date_avant.
+
+    Equivalent du test WinDev "1er contrat -> coloration verte".
+    `date_avant` doit etre au format HFSQL compact YYYYMMDD.
+    """
+    rows = db_adv.query(
+        """SELECT TOP 1 IDcontrat FROM SFR_contrat
+        WHERE IDSalarie = ?
+          AND LEFT(datesignature, 8) < ?""",
+        (id_salarie, date_avant),
+    )
+    return not rows
+
+
+# --- Tableau du HAUT : tickets a traiter ----------------------------------
+
+def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
+    """Liste les tickets Call Fibre a traiter (= tableau du haut).
+
+    Filtres business (transposition exacte WinDev) :
+    - TypeDemande = 20 (Call Fibre)
+    - Pas dans la liste des statuts "traites" (BETWEEN 14 AND 19 sauf 18, 28)
+    - ModifELEM ne contient pas 'suppr'
+    - OPCrea = 6 masque sauf si user_id = 6 (formation)
+    - Datecrea > today 23:59:59 masque sauf user_id = 6 (tickets futurs)
+    - TicketDiff = True masque si user_id_poste = 20
+    """
+    db_ticket = get_connection("ticket")
+    db_bo = get_connection("ticket_bo")
+    db_rh = get_connection("rh")
+    db_adv = get_connection("adv")
+
+    # 1. TK_Liste + TK_Statut (base ticket).
+    # Filtres business exacts WinDev :
+    #   Cloturée = 0
+    #   ModifELEM ne contient pas 'suppr'
+    #   IDTK_Statut != 18 et != 28
+    #   (IDTK_Statut < 14 OR IDTK_Statut = 34)
+    # (le filtre Datecrea > {ParamdateCrea} de WinDev n'est pas applique ici :
+    #  il sert dans le cache SuiviTicketCall pour limiter le scope, mais en
+    #  remplaçant le cache on prend tous les tickets non clotures.)
+    rows_liste = db_ticket.query(
+        """SELECT
+            tl.IDTK_Liste     AS id_tk_liste,
+            tl.Datecrea       AS date_crea,
+            tl.OPCrea         AS op_crea,
+            tl.IDTK_Statut    AS id_tk_statut,
+            ts.Lib_Statut     AS lib_statut
+        FROM TK_Liste tl
+        INNER JOIN TK_Statut ts ON ts.IDTK_Statut = tl.IDTK_Statut
+        WHERE tl.IDTK_TypeDemande = ?
+          AND tl.Cloturée = 0
+          AND tl.ModifELEM NOT LIKE '%suppr%'
+          AND tl.IDTK_Statut <> 18
+          AND tl.IDTK_Statut <> 28
+          AND (tl.IDTK_Statut < 14 OR tl.IDTK_Statut = 34)""",
+        (IDTK_TYPE_DEMANDE_CALL_FIBRE,),
+    )
+    if not rows_liste:
+        return []
+
+    # Map IDTK_Liste -> infos TK_Liste
+    by_id: dict[int, dict] = {}
+    for r in rows_liste:
+        id_tk = _to_int(r.get("id_tk_liste"))
+        by_id[id_tk] = {
+            "id_tk_liste": id_tk,
+            "date_crea": r.get("date_crea") or "",
+            "op_crea": _to_int(r.get("op_crea")),
+            "id_tk_statut": _to_int(r.get("id_tk_statut")),
+            "lib_statut": (r.get("lib_statut") or "").strip(),
+        }
+
+    # 2. TK_CallSFR pour ces IDs
+    ids_sql = ",".join(str(i) for i in by_id.keys())
+    rows_call = db_bo.query(
+        f"""SELECT
+            IDTK_Liste, IDSalarie, CivilitéClient, NomClient, NomMaritalClient,
+            PrenomClient, CP, VILLE, AppelEnCours, OpéAppel, TicketDiff
+        FROM TK_CallSFR
+        WHERE IDTK_Liste IN ({ids_sql})
+          AND ModifELEM NOT LIKE '%suppr%'"""
+    )
+
+    # 3. Filtres business + format
+    today_2359 = datetime.combine(_date.today(), datetime.max.time())
+    salaries_to_load: set[int] = set()
+    enriched: list[dict] = []
+
+    for r in rows_call:
+        id_tk = _to_int(r.get("IDTK_Liste"))
+        tk = by_id.get(id_tk)
+        if not tk:
+            continue
+        op_crea = tk["op_crea"]
+
+        # Filtre formation (OPCrea = 6)
+        if op_crea == ID_OPE_FORMATION and user_id != ID_OPE_FORMATION:
+            continue
+        # Filtre tickets futurs
+        date_crea_raw = tk["date_crea"]
+        date_crea_iso = _iso(date_crea_raw)
+        if date_crea_iso:
+            try:
+                dt = datetime.strptime(date_crea_iso[:19], "%Y-%m-%d %H:%M:%S")
+                if dt > today_2359 and user_id != ID_OPE_FORMATION:
+                    continue
+            except ValueError:
+                pass
+        # Filtre TicketDiff masque pour idPoste = 20
+        ticket_diff = bool(r.get("TicketDiff"))
+        if ticket_diff and user_id_poste == ID_POSTE_MASQUE_DIFF:
+            continue
+
+        id_salarie = _to_int(r.get("IDSalarie"))
+        salaries_to_load.add(id_salarie)
+        ope_appel_id = _to_int(r.get("OpéAppel"))
+        if ope_appel_id:
+            salaries_to_load.add(ope_appel_id)
+
+        enriched.append({
+            **tk,
+            "id_salarie": id_salarie,
+            "civilite": _to_int(r.get("CivilitéClient")),
+            "nom": r.get("NomClient") or "",
+            "nom_marital": r.get("NomMaritalClient") or "",
+            "prenom": r.get("PrenomClient") or "",
+            "cp": (r.get("CP") or "").strip(),
+            "ville": _format_ville(r.get("VILLE") or ""),
+            "appel_en_cours": bool(r.get("AppelEnCours")),
+            "ope_appel_id": ope_appel_id,
+            "ticket_diff": ticket_diff,
+        })
+
+    # 4. Resolve noms vendeur + ope appel + affectations
+    salaries = _load_salaries(db_rh, salaries_to_load)
+    affectations = _load_affectations(db_rh, salaries_to_load)
+
+    # 5. Construire la liste finale + non_prod
+    out: list[dict] = []
+    for tk in enriched:
+        sal = salaries.get(tk["id_salarie"], {"nom": "", "prenom": "", "vendeur_distrib": False})
+        aff = affectations.get(tk["id_salarie"], {"lib_equipe": ""})
+        ope_appel_sal = salaries.get(tk["ope_appel_id"], {"nom": "", "prenom": ""})
+
+        non_prod = False
+        if not sal["vendeur_distrib"]:
+            date_avant = _iso(tk["date_crea"])[:10].replace("-", "")
+            if date_avant:
+                non_prod = _check_premier_contrat(db_adv, tk["id_salarie"], date_avant)
+
+        out.append({
+            "id": _str_id(tk["id_tk_liste"]),
+            "date_crea": _iso(tk["date_crea"]),
+            "nom_client": _format_nom_client(
+                tk["civilite"], tk["nom"], tk["nom_marital"], tk["prenom"]
+            ),
+            "cp": tk["cp"],
+            "ville": tk["ville"],
+            "nom_vendeur": f"{sal['nom']} {_capitalize(sal['prenom'])}".strip(),
+            "lib_equipe": aff["lib_equipe"],
+            "lib_statut": tk["lib_statut"],
+            "id_tk_statut": tk["id_tk_statut"],
+            "fdv_interne": not sal["vendeur_distrib"],
+            "non_prod": non_prod,
+            "appel_en_cours": tk["appel_en_cours"],
+            "ope_appel_nom": (
+                f"{ope_appel_sal['nom']} {_capitalize(ope_appel_sal['prenom'])}".strip()
+                if tk["appel_en_cours"] else ""
+            ),
+            "ticket_diff": tk["ticket_diff"],
+        })
+
+    # Tri DateCrea ASC (comme WinDev)
+    out.sort(key=lambda t: t["date_crea"])
+    return out
+
+
+# --- Tableau du BAS : tickets traites du jour -----------------------------
+
+def list_tickets_traites(jour: str | None = None) -> list[dict]:
+    """Liste les tickets Call Fibre traites a la date donnee (defaut = aujourd'hui).
+
+    `jour` : format ISO 'YYYY-MM-DD' ou compact 'YYYYMMDD'. None = today.
+    """
+    if jour:
+        j = jour.replace("-", "")
+    else:
+        j = _today_compact()
+
+    db_ticket = get_connection("ticket")
+    db_bo = get_connection("ticket_bo")
+    db_rh = get_connection("rh")
+    db_adv = get_connection("adv")
+
+    statuts_traites_sql = ",".join(str(s) for s in STATUTS_TRAITES)
+    rows_liste = db_ticket.query(
+        f"""SELECT
+            tl.IDTK_Liste     AS id_tk_liste,
+            tl.Datecrea       AS date_crea,
+            tl.IDTK_Statut    AS id_tk_statut,
+            ts.Lib_Statut     AS lib_statut
+        FROM TK_Liste tl
+        INNER JOIN TK_Statut ts ON ts.IDTK_Statut = tl.IDTK_Statut
+        WHERE tl.IDTK_TypeDemande = ?
+          AND tl.ModifELEM NOT LIKE '%suppr%'
+          AND tl.IDTK_Statut IN ({statuts_traites_sql})
+          AND LEFT(tl.Datecrea, 8) = ?
+        ORDER BY tl.Datecrea ASC""",
+        (IDTK_TYPE_DEMANDE_CALL_FIBRE, j),
+    )
+    if not rows_liste:
+        return []
+
+    by_id: dict[int, dict] = {}
+    for r in rows_liste:
+        id_tk = _to_int(r.get("id_tk_liste"))
+        by_id[id_tk] = {
+            "id_tk_liste": id_tk,
+            "date_crea": r.get("date_crea") or "",
+            "id_tk_statut": _to_int(r.get("id_tk_statut")),
+            "lib_statut": (r.get("lib_statut") or "").strip(),
+        }
+
+    # TK_CallSFR pour ces IDs
+    ids_sql = ",".join(str(i) for i in by_id.keys())
+    rows_call = db_bo.query(
+        f"""SELECT
+            IDtk_CallSFR, IDTK_Liste, IDSalarie, CivilitéClient, NomClient,
+            NomMaritalClient, PrenomClient, CP, VILLE, RefAppel
+        FROM TK_CallSFR
+        WHERE IDTK_Liste IN ({ids_sql})
+          AND ModifELEM NOT LIKE '%suppr%'"""
+    )
+
+    # Map id_call -> tk_liste + collect salarie ids
+    call_by_id_tk: dict[int, dict] = {}
+    id_calls: list[int] = []
+    salaries_to_load: set[int] = set()
+    for r in rows_call:
+        id_tk = _to_int(r.get("IDTK_Liste"))
+        id_call = _to_int(r.get("IDtk_CallSFR"))
+        if id_tk not in by_id:
+            continue
+        salaries_to_load.add(_to_int(r.get("IDSalarie")))
+        id_calls.append(id_call)
+        call_by_id_tk[id_tk] = {
+            "id_call": id_call,
+            "id_salarie": _to_int(r.get("IDSalarie")),
+            "civilite": _to_int(r.get("CivilitéClient")),
+            "nom": r.get("NomClient") or "",
+            "nom_marital": r.get("NomMaritalClient") or "",
+            "prenom": r.get("PrenomClient") or "",
+            "cp": (r.get("CP") or "").strip(),
+            "ville": _format_ville(r.get("VILLE") or ""),
+            "ref_appel": (r.get("RefAppel") or "").strip(),
+        }
+
+    # Panier (offres)
+    paniers: dict[int, list[dict]] = {}
+    if id_calls:
+        # TK_CallSFR_Panier (base ticket_bo) JOIN SFR_OffresProvad (adv).
+        # Cross-base impossible -> 2 queries puis join Python.
+        ids_call_sql = ",".join(str(i) for i in id_calls)
+        rows_p = db_bo.query(
+            f"""SELECT IDtk_CallSFR, IDOffres_SFR, TYPE, TypeVente, NUM,
+                Num_DateSaisie, StatutProd
+            FROM TK_CallSFR_Panier
+            WHERE IDtk_CallSFR IN ({ids_call_sql})
+              AND ModifELEM NOT LIKE '%suppr%'"""
+        )
+        # Lib_Offre via SFR_OffresProvad
+        offre_ids = {_to_int(p.get("IDOffres_SFR")) for p in rows_p}
+        offre_ids.discard(0)
+        offre_libs: dict[int, str] = {}
+        if offre_ids:
+            oids = ",".join(str(i) for i in offre_ids)
+            rows_off = db_adv.query(
+                f"""SELECT IDOffres_SFR, Lib_Offre FROM SFR_OffresProvad
+                WHERE IDOffres_SFR IN ({oids})"""
+            )
+            for o in rows_off:
+                offre_libs[_to_int(o.get("IDOffres_SFR"))] = (o.get("Lib_Offre") or "").strip()
+        for p in rows_p:
+            id_call = _to_int(p.get("IDtk_CallSFR"))
+            paniers.setdefault(id_call, []).append({
+                "type": (p.get("TYPE") or "").strip(),
+                "type_vente": _to_int(p.get("TypeVente")),
+                "num": (p.get("NUM") or "").strip(),
+                "num_date_saisie": _iso(p.get("Num_DateSaisie")),
+                "statut_prod": _to_int(p.get("StatutProd")),
+                "lib_offre": offre_libs.get(_to_int(p.get("IDOffres_SFR")), ""),
+            })
+
+    salaries = _load_salaries(db_rh, salaries_to_load)
+    affectations = _load_affectations(db_rh, salaries_to_load)
+
+    # Construction finale
+    out: list[dict] = []
+    for id_tk, tk in by_id.items():
+        call = call_by_id_tk.get(id_tk)
+        if not call:
+            continue
+        sal = salaries.get(call["id_salarie"], {"nom": "", "prenom": "", "vendeur_distrib": False})
+        aff = affectations.get(call["id_salarie"], {"lib_equipe": "", "lib_orga": ""})
+        panier = paniers.get(call["id_call"], [])
+
+        nb_fibre_valide = 0
+        nb_mobile_valide = 0
+        offres_fibre_txt = ""
+        lib_statut_force = tk["lib_statut"]
+        delai_depasse = False
+
+        for off in panier:
+            if off["statut_prod"] in (1, 3):
+                if off["type"] == "FIBRE":
+                    nb_fibre_valide += 1
+                    offres_fibre_txt += f"\n{off['lib_offre']}"
+                    if off["num"]:
+                        lib_statut_force = "Tk Call - Num BS SFR renseigné"
+                    if off["type_vente"] in (1, 2):
+                        offres_fibre_txt += " - CQ"
+                    else:
+                        offres_fibre_txt += " - Mig"
+                elif off["type"] == "MOBILE":
+                    nb_mobile_valide += 1
+            # Delai prise num : si Num_DateSaisie > date_crea + 1h
+            if off["num_date_saisie"]:
+                try:
+                    dt_saisie = datetime.strptime(off["num_date_saisie"][:19], "%Y-%m-%d %H:%M:%S")
+                    dt_crea = datetime.strptime(_iso(tk["date_crea"])[:19], "%Y-%m-%d %H:%M:%S")
+                    if (dt_saisie - dt_crea).total_seconds() >= 3600:
+                        delai_depasse = True
+                except ValueError:
+                    pass
+
+        premier_contrat = False
+        if not sal["vendeur_distrib"]:
+            date_avant = _iso(tk["date_crea"])[:10].replace("-", "")
+            if date_avant:
+                premier_contrat = _check_premier_contrat(
+                    db_adv, call["id_salarie"], date_avant
+                )
+
+        out.append({
+            "id": _str_id(id_tk),
+            "date_crea": _iso(tk["date_crea"]),
+            "nom_client": _format_nom_client(
+                call["civilite"], call["nom"], call["nom_marital"], call["prenom"]
+            ),
+            "cp": call["cp"],
+            "ville": call["ville"],
+            "nom_vendeur": f"{sal['nom']} {_capitalize(sal['prenom'])}".strip(),
+            "agence": aff["lib_orga"],
+            "lib_statut": lib_statut_force,
+            "ref_appel": call["ref_appel"],
+            "nb_offres": len(panier),
+            "nb_fibre_valide": nb_fibre_valide,
+            "nb_mobile_valide": nb_mobile_valide,
+            "col_offres_fibre": offres_fibre_txt.strip(),
+            "vendeur_distrib": sal["vendeur_distrib"],
+            "premier_contrat": premier_contrat,
+            "delai_depasse": delai_depasse,
+            # On expose le panier brut pour le calcul de stats par agence dans la
+            # foulee (eviter de re-quetter).
+            "_panier": panier,
+            "_id_salarie": call["id_salarie"],
+            "_lib_orga": aff["lib_orga"],
+        })
+
+    return out
+
+
+# --- Stats : 4 compteurs globaux + stats par agence -----------------------
+
+def compute_stats(tickets_traites: list[dict], db_rh=None) -> dict:
+    """Calcule les 4 compteurs principaux + les stats par agence interne/externe.
+
+    Prend en entree la liste des tickets traites (telle que retournee par
+    list_tickets_traites). Itere une fois, ne refait pas de query.
+    """
+    if db_rh is None:
+        db_rh = get_connection("rh")
+
+    paniers_valides = 0
+    offres_fibre_thd = 0
+    cq_fibre_valides = 0
+    mobiles_valides = 0
+
+    # Charger tous les organigrammes "descendants" des agences hardcodees pour
+    # savoir si un vendeur appartient a l'une d'elles. On charge largement.
+    agence_to_descendants: dict[int, set[int]] = {}
+    all_agence_ids = {a[0] for a in AGENCES_INTERNES} | {ID_ORGA_POWER, ID_ORGA_FOX}
+    for id_orga in all_agence_ids:
+        agence_to_descendants[id_orga] = _orga_descendants(db_rh, id_orga)
+
+    nb_fibre_internes: dict[int, int] = {a[0]: 0 for a in AGENCES_INTERNES}
+    nb_mobile_internes: dict[int, int] = {a[0]: 0 for a in AGENCES_INTERNES}
+    nb_fibre_power = 0
+    nb_mobile_power = 0
+    nb_fibre_fox = 0
+    nb_mobile_fox = 0
+
+    # Resolver orga d'affectation par vendeur
+    aff = _load_affectations(db_rh, {t["_id_salarie"] for t in tickets_traites})
+
+    for t in tickets_traites:
+        id_orga_vendeur = aff.get(t["_id_salarie"], {}).get("id_orga", 0)
+        for off in t.get("_panier", []):
+            if off["statut_prod"] not in (1, 3):
+                continue
+            paniers_valides += 1
+            if off["type"] == "FIBRE":
+                if off["num"]:
+                    offres_fibre_thd += 1
+                    # Attribution par agence
+                    for id_agence in nb_fibre_internes:
+                        if id_orga_vendeur in agence_to_descendants[id_agence]:
+                            nb_fibre_internes[id_agence] += 1
+                            break
+                    else:
+                        if id_orga_vendeur in agence_to_descendants[ID_ORGA_POWER]:
+                            nb_fibre_power += 1
+                        elif id_orga_vendeur in agence_to_descendants[ID_ORGA_FOX]:
+                            nb_fibre_fox += 1
+                if off["type_vente"] in (1, 2):
+                    cq_fibre_valides += 1
+            elif off["type"] == "MOBILE":
+                mobiles_valides += 1
+                for id_agence in nb_mobile_internes:
+                    if id_orga_vendeur in agence_to_descendants[id_agence]:
+                        nb_mobile_internes[id_agence] += 1
+                        break
+                else:
+                    if id_orga_vendeur in agence_to_descendants[ID_ORGA_POWER]:
+                        nb_mobile_power += 1
+                    elif id_orga_vendeur in agence_to_descendants[ID_ORGA_FOX]:
+                        nb_mobile_fox += 1
+
+    return {
+        "paniers_valides": paniers_valides,
+        "offres_fibre_thd": offres_fibre_thd,
+        "cq_fibre_valides": cq_fibre_valides,
+        "mobiles_valides": mobiles_valides,
+        "agences_internes": [
+            {
+                "id_orga": str(id_orga),
+                "lib_orga": lib,
+                "nb_fibre": nb_fibre_internes.get(id_orga, 0),
+                "nb_mobile": nb_mobile_internes.get(id_orga, 0),
+                "gimmick_url": "",  # a remplir plus tard via Societe.GUIMMICK
+            }
+            for (id_orga, lib) in AGENCES_INTERNES
+        ],
+        "nb_fibre_power": nb_fibre_power,
+        "nb_mobile_power": nb_mobile_power,
+        "nb_fibre_fox": nb_fibre_fox,
+        "nb_mobile_fox": nb_mobile_fox,
+    }
+
+
+def _orga_descendants(db_rh, id_orga_racine: int) -> set[int]:
+    """Retourne l'ID racine + tous ses descendants dans Organigramme.
+
+    Equivalent de la fonction WinDev `ListeOrgaComplet(id, Vrai)`.
+    """
+    out: set[int] = {id_orga_racine}
+    to_visit: list[int] = [id_orga_racine]
+    safety = 200  # garde-fou
+    while to_visit and safety > 0:
+        safety -= 1
+        cur = to_visit.pop(0)
+        rows = db_rh.query(
+            """SELECT IDOrganigramme FROM Organigramme
+            WHERE IDOrganigramme_Parent = ?
+              AND ModifELEM NOT LIKE '%suppr%'""",
+            (cur,),
+        )
+        for r in rows:
+            child = _to_int(r.get("IDOrganigramme"))
+            if child and child not in out:
+                out.add(child)
+                to_visit.append(child)
+    return out
+
+
+# --- Endpoint unifie : tout en 1 seul appel -------------------------------
+
+def get_last_modif_call_fibre() -> str:
+    """Max(ModifDate) sur les tickets Call Fibre, format ISO 'YYYY-MM-DD HH:MM:SS'.
+
+    Approxime un "changement detecte" : si cette valeur augmente, c'est qu'un
+    ticket a ete cree/modifie/cloture/verouille -> on rafraichit la page.
+
+    Cross-base impossible : on regarde TK_Liste WHERE TypeDemande=20 (base
+    ticket) ET TK_CallSFR (base ticket_bo, sans filtre). Le 2eme peut etre
+    plus large mais en pratique TK_CallSFR ne contient que des Call Fibre.
+    """
+    db_ticket = get_connection("ticket")
+    db_bo = get_connection("ticket_bo")
+    r1 = db_ticket.query(
+        """SELECT MAX(ModifDate) AS max_modif FROM TK_Liste
+        WHERE IDTK_TypeDemande = ?""",
+        (IDTK_TYPE_DEMANDE_CALL_FIBRE,),
+    )
+    r2 = db_bo.query("SELECT MAX(ModifDate) AS max_modif FROM TK_CallSFR")
+    m1 = _iso((r1[0] or {}).get("max_modif")) if r1 else ""
+    m2 = _iso((r2[0] or {}).get("max_modif")) if r2 else ""
+    return max(m1, m2)
+
+
+def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 1.0) -> tuple[bool, str]:
+    """Long polling : attend qu'un changement survienne sur Call Fibre.
+
+    Renvoie (changed, latest_modif_iso).
+    - changed = True si la max(ModifDate) a depasse `since` avant le timeout.
+    - changed = False si timeout atteint.
+
+    Si `since` est vide, retourne immediatement (changed=True) pour forcer
+    un chargement initial.
+    """
+    if not since:
+        return True, get_last_modif_call_fibre()
+
+    deadline = time.monotonic() + timeout_seconds
+    latest = ""
+    while True:
+        latest = get_last_modif_call_fibre()
+        if latest and latest > since:
+            return True, latest
+        if time.monotonic() >= deadline:
+            return False, latest
+        time.sleep(poll_interval)
+
+
+def load_page(user_id: int, user_id_poste: int, jour: str | None = None) -> dict:
+    """Charge tout ce qu'il faut pour la page principale Call Fibre.
+
+    Equivalent du `MaPage()` WinDev. Renvoie :
+    - tickets_en_cours (haut)
+    - tickets_traites (bas)
+    - stats (compteurs globaux + agences)
+    - serveur_now (pour le bandeau "derniere verif ...")
+    """
+    en_cours = list_tickets_en_cours(user_id, user_id_poste)
+    traites = list_tickets_traites(jour)
+    stats = compute_stats(traites)
+    # Nettoyer les champs prives "_xxx" avant de renvoyer au client
+    traites_clean = [{k: v for k, v in t.items() if not k.startswith("_")} for t in traites]
+    return {
+        "tickets_en_cours": en_cours,
+        "tickets_traites": traites_clean,
+        "stats": stats,
+        "serveur_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_modif": get_last_modif_call_fibre(),
+    }

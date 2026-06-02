@@ -36,6 +36,12 @@ def get_menu(user: UserToken = Depends(get_current_user)):
             "visible": True,
         },
         {
+            "key": "tickets_call",
+            "label": "Tickets Call",
+            "route": "/tickets-call",
+            "visible": True,
+        },
+        {
             "key": "mon_compte",
             "label": "Mon Compte",
             "route": "/mon-compte",
