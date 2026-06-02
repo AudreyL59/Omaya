@@ -6,9 +6,9 @@ $ErrorActionPreference = "Stop"
 # --- Variables a adapter --------------------------------------------------
 $ProjectRoot = "D:\Claude\Projet Omaya"
 $FrontendDir = "$ProjectRoot\frontend\energie"
-$TargetDir   = "D:\Sites\intracall.omaya.fr\www\ce"
+$TargetDir   = "D:\Sites\IntraCall\www\ce"
 $WebConfig   = "$ProjectRoot\deploy\web.config.ce"
-$RootConfig  = "D:\Sites\intracall.omaya.fr\www\web.config"
+$RootConfig  = "D:\Sites\IntraCall\www\web.config"
 
 # --- Build ----------------------------------------------------------------
 Push-Location $FrontendDir
@@ -55,4 +55,4 @@ Write-Host ""
 Write-Host "Si premier deploiement : n'oublie pas de creer l'Application IIS dediee :" -ForegroundColor Cyan
 Write-Host "  New-WebAppPool -Name OmayaCallEnergiePool" -ForegroundColor DarkGray
 Write-Host "  Set-ItemProperty -Path 'IIS:\AppPools\OmayaCallEnergiePool' -Name 'managedRuntimeVersion' -Value ''" -ForegroundColor DarkGray
-Write-Host "  New-WebApplication -Site 'intracall.omaya.fr' -Name 'ce' -PhysicalPath '$TargetDir' -ApplicationPool 'OmayaCallEnergiePool'" -ForegroundColor DarkGray
+Write-Host "  New-WebApplication -Site 'IntraCall - Site WEBDEV client' -Name 'ce' -PhysicalPath '$TargetDir' -ApplicationPool 'OmayaCallEnergiePool'" -ForegroundColor DarkGray

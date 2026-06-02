@@ -1,14 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  web.config de la RACINE du site IIS intracall.omaya.fr.
-  Destination : D:\Sites\intracall.omaya.fr\www\web.config
+  web.config de la RACINE du site IIS "IntraCall - Site WEBDEV client"
+  (binding intracall.omaya.fr).
+  Destination : D:\Sites\IntraCall\www\web.config
 
   Roles :
     - Reverse proxy /api/* -> uvicorn 127.0.0.1:8000 (FastAPI, sans prefixe /api)
-    - Tous les autres chemins sur la RACINE renvoient 404 (securite par
-      obscurite : pas de mention des intranets cote racine).
-    - Les Applications IIS /cf et /ce ont leur propre web.config qui prend
-      le dessus pour les chemins sous-jacents.
+    - Headers de securite (X-Content-Type-Options, Referrer-Policy)
+
+  Le contenu legacy WEBDEV (Clients/, ValidationClient/, index.html vide)
+  reste servi normalement par IIS. La racine "/" sert l'index.html existant
+  qui est vide (0 octets) -> page blanche, l'utilisateur n'a rien a voir
+  cote racine.
+
+  Les Applications IIS /cf et /ce ont leur propre web.config qui leur
+  applique le SPA fallback de React Router.
 
   Pre-requis :
     - Modules IIS installes : URL Rewrite + Application Request Routing (ARR)
@@ -19,7 +25,6 @@
   <system.webServer>
     <!-- ARR : pas de buffering (utile si futur SSE). -->
     <proxy enabled="true" responseBufferLimit="0" />
-    <urlCompression doDynamicCompression="false" doStaticCompression="true" />
 
     <rewrite>
       <rules>
@@ -32,27 +37,8 @@
             <set name="HTTP_X_FORWARDED_HOST" value="{HTTP_HOST}" />
           </serverVariables>
         </rule>
-
-        <!-- Securite par obscurite : tout ce qui n'est pas /api et qui n'est
-             pas servi par une Application IIS (/cf, /ce) renvoie 404.
-             Les Applications IIS court-circuitent cette regle car elles ont
-             leur propre web.config qui matche avant que la requete remonte ici. -->
-        <rule name="HideRoot" stopProcessing="true">
-          <match url=".*" />
-          <conditions logicalGrouping="MatchAll">
-            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
-            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
-          </conditions>
-          <action type="CustomResponse" statusCode="404" statusReason="Not Found" statusDescription="Not Found" />
-        </rule>
       </rules>
     </rewrite>
-
-    <!-- Empeche l'enumeration de dossier -->
-    <directoryBrowse enabled="false" />
-
-    <!-- Pas de defaultDocument : si on arrive sur /, la regle HideRoot renvoie 404. -->
-    <defaultDocument enabled="false" />
 
     <security>
       <requestFiltering>

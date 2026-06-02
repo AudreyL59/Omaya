@@ -6,9 +6,9 @@ $ErrorActionPreference = "Stop"
 # --- Variables a adapter --------------------------------------------------
 $ProjectRoot = "D:\Claude\Projet Omaya"
 $FrontendDir = "$ProjectRoot\frontend\fibre"
-$TargetDir   = "D:\Sites\intracall.omaya.fr\www\cf"
+$TargetDir   = "D:\Sites\IntraCall\www\cf"
 $WebConfig   = "$ProjectRoot\deploy\web.config.cf"
-$RootConfig  = "D:\Sites\intracall.omaya.fr\www\web.config"
+$RootConfig  = "D:\Sites\IntraCall\www\web.config"
 
 # --- Build ----------------------------------------------------------------
 Push-Location $FrontendDir
@@ -55,4 +55,4 @@ Write-Host ""
 Write-Host "Si premier deploiement : n'oublie pas de creer l'Application IIS dediee :" -ForegroundColor Cyan
 Write-Host "  New-WebAppPool -Name OmayaCallFibrePool" -ForegroundColor DarkGray
 Write-Host "  Set-ItemProperty -Path 'IIS:\AppPools\OmayaCallFibrePool' -Name 'managedRuntimeVersion' -Value ''" -ForegroundColor DarkGray
-Write-Host "  New-WebApplication -Site 'intracall.omaya.fr' -Name 'cf' -PhysicalPath '$TargetDir' -ApplicationPool 'OmayaCallFibrePool'" -ForegroundColor DarkGray
+Write-Host "  New-WebApplication -Site 'IntraCall - Site WEBDEV client' -Name 'cf' -PhysicalPath '$TargetDir' -ApplicationPool 'OmayaCallFibrePool'" -ForegroundColor DarkGray
