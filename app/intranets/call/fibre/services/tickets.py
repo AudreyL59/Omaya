@@ -126,14 +126,19 @@ def _today_compact() -> str:
 # pour eviter de re-requeter HFSQL.
 
 def _load_salaries(db_rh, ids: set[int]) -> dict[int, dict]:
-    """Charge nom/prenom/VendeurDistrib pour une liste d'IDs salaries."""
+    """Charge nom/prenom pour une liste d'IDs salaries.
+
+    Note : VendeurDistrib n'est PAS une colonne de la table Salarie. C'est
+    une donnee derivee (calculee depuis l'orga d'affectation = descendant
+    de Power/Fox). Voir _enrich_vendeur_distrib() pour l'enrichissement.
+    """
     if not ids:
         return {}
     ids_sql = ",".join(str(i) for i in ids if i)
     if not ids_sql:
         return {}
     rows = db_rh.query(
-        f"""SELECT IDSalarie, Nom, Prenom, VendeurDistrib
+        f"""SELECT IDSalarie, Nom, Prenom
         FROM Salarie
         WHERE IDSalarie IN ({ids_sql})"""
     )
@@ -142,9 +147,29 @@ def _load_salaries(db_rh, ids: set[int]) -> dict[int, dict]:
         out[_to_int(r.get("IDSalarie"))] = {
             "nom": (r.get("Nom") or "").strip(),
             "prenom": (r.get("Prenom") or "").strip(),
-            "vendeur_distrib": bool(r.get("VendeurDistrib")),
+            "vendeur_distrib": False,  # rempli par _enrich_vendeur_distrib
         }
     return out
+
+
+def _enrich_vendeur_distrib(
+    salaries: dict[int, dict],
+    affectations: dict[int, dict],
+    db_rh,
+) -> None:
+    """Calcule en place le flag vendeur_distrib pour chaque salarie.
+
+    Un vendeur est "distrib" (= externe) si son orga d'affectation est un
+    descendant de Power ou Fox. Cette info etait portee par la colonne
+    Salarie.VendeurDistrib en WinDev (peut-etre denormalisee via la
+    procedure DonneInfoSalarié).
+    """
+    power_set = _orga_descendants(db_rh, ID_ORGA_POWER)
+    fox_set = _orga_descendants(db_rh, ID_ORGA_FOX)
+    distrib_orgas = power_set | fox_set
+    for id_sal, sal in salaries.items():
+        id_orga = affectations.get(id_sal, {}).get("id_orga", 0)
+        sal["vendeur_distrib"] = id_orga in distrib_orgas
 
 
 def _load_affectations(db_rh, id_salaries: set[int]) -> dict[int, dict]:
@@ -398,6 +423,7 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     # 4. Resolve noms vendeur + ope appel + affectations
     salaries = _load_salaries(db_rh, salaries_to_load)
     affectations = _load_affectations(db_rh, salaries_to_load)
+    _enrich_vendeur_distrib(salaries, affectations, db_rh)
     # Batch des premiers contrats SFR (1 query au lieu de N)
     sal_non_distrib_ids = {
         tk["id_salarie"] for tk in enriched
@@ -571,6 +597,7 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
 
     salaries = _load_salaries(db_rh, salaries_to_load)
     affectations = _load_affectations(db_rh, salaries_to_load)
+    _enrich_vendeur_distrib(salaries, affectations, db_rh)
     # Batch premiers contrats (1 query au lieu de N)
     sal_non_distrib_ids = {
         sid for sid in salaries_to_load
