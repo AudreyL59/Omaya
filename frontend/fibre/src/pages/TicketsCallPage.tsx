@@ -398,6 +398,30 @@ function BasActions({
   onChangeDate: (d: string) => void
   onApply: () => void
 }) {
+  const [exporting, setExporting] = useState(false)
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/traites/export?jour=${encodeURIComponent(date)}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        alert("Export Excel : échec (" + r.status + ")")
+        return
+      }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `tickets_call_fibre_${date.replace(/-/g, '')}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } finally {
+      setExporting(false)
+    }
+  }
   return (
     <>
       <span className="text-xs text-c-ink-soft">Date</span>
@@ -415,8 +439,16 @@ function BasActions({
       >
         <Search className="w-3.5 h-3.5" />
       </button>
-      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-600 text-white text-sm font-semibold hover:brightness-110">
-        <FileSpreadsheet className="w-4 h-4" />
+      <button
+        onClick={handleExport}
+        disabled={exporting}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-600 text-white text-sm font-semibold hover:brightness-110 disabled:opacity-60"
+      >
+        {exporting ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <FileSpreadsheet className="w-4 h-4" />
+        )}
         Export Excel
       </button>
       <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-c-brand text-white text-sm font-semibold hover:brightness-110">

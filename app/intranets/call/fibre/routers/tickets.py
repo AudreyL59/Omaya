@@ -8,7 +8,10 @@ Stratégie de chargement de la page principale (transposition WinDev) :
    sur le tableau du haut (en cours uniquement).
 """
 
+from datetime import date as _date
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -51,6 +54,25 @@ def get_tickets_page(
 ):
     """[COMPAT] Charge tout en 1 appel. Prefer /tickets/en-cours + /traites."""
     return svc.load_page(user_id=user.id_salarie, user_id_poste=0, jour=jour)
+
+
+@router.get("/tickets/traites/export")
+def export_tickets_traites(
+    user: UserToken = Depends(get_current_user),
+    jour: str | None = Query(None, description="YYYY-MM-DD. Defaut = today."),
+):
+    """Export Excel du tableau des tickets traites du jour.
+
+    Couleurs de lignes preservees (rouge / gris / vert / blanc).
+    """
+    xlsx_bytes = svc.export_traites_xlsx(jour=jour)
+    j = (jour or _date.today().isoformat()).replace("-", "")
+    filename = f"tickets_call_fibre_{j}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/tickets/live", response_model=TicketsLiveResponse)

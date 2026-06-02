@@ -1062,6 +1062,94 @@ def load_page_en_cours(user_id: int, user_id_poste: int) -> dict:
     }
 
 
+def export_traites_xlsx(jour: str | None = None) -> bytes:
+    """Genere un fichier .xlsx du tableau des tickets traites du jour.
+
+    Coloration des lignes identique a l'UI :
+    - delai_depasse : ROUGE (priorite max, match WinDev)
+    - vendeur_distrib : GRIS
+    - premier_contrat : VERT
+    - default : blanc
+    """
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    traites = list_tickets_traites(jour)
+    j_label = (jour or _date.today().isoformat()).replace("-", "/")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Tickets traites"
+
+    headers = [
+        "Commande faite le", "Client", "CP", "Ville", "Commercial",
+        "Agence", "Etat", "NB Offres", "NB Fibre Valide", "NB Mobile Valide",
+        "Ref Appel", "Offres Fibre",
+    ]
+    ws.append(headers)
+
+    header_fill = PatternFill("solid", fgColor="1F3A5F")
+    header_font = Font(bold=True, color="FFFFFF")
+    for col_idx, _ in enumerate(headers, 1):
+        c = ws.cell(row=1, column=col_idx)
+        c.fill = header_fill
+        c.font = header_font
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Couleurs (match UI bg-red-100 / bg-gray-100 / bg-green-100)
+    fill_red = PatternFill("solid", fgColor="FECACA")    # ~ red-200
+    fill_gray = PatternFill("solid", fgColor="E5E7EB")   # ~ gray-200
+    fill_green = PatternFill("solid", fgColor="BBF7D0")  # ~ green-200
+
+    for t in traites:
+        row = [
+            _iso(t.get("date_crea"))[:16] if t.get("date_crea") else "",
+            t.get("nom_client", ""),
+            t.get("cp", ""),
+            t.get("ville", ""),
+            t.get("nom_vendeur", ""),
+            t.get("agence", ""),
+            t.get("lib_statut", ""),
+            t.get("nb_offres", 0),
+            t.get("nb_fibre_valide", 0),
+            t.get("nb_mobile_valide", 0),
+            t.get("ref_appel", ""),
+            t.get("col_offres_fibre", ""),
+        ]
+        ws.append(row)
+        # Coloration ligne (priorite WinDev : rouge > gris > vert)
+        if t.get("delai_depasse"):
+            fill = fill_red
+        elif t.get("vendeur_distrib"):
+            fill = fill_gray
+        elif t.get("premier_contrat"):
+            fill = fill_green
+        else:
+            fill = None
+        if fill is not None:
+            for col_idx in range(1, len(headers) + 1):
+                ws.cell(row=ws.max_row, column=col_idx).fill = fill
+
+    # Largeurs de colonnes approximatives
+    widths = [17, 28, 8, 22, 22, 50, 28, 11, 16, 18, 14, 50]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    # Titre dans la ligne 0 (insertion)
+    ws.insert_rows(1)
+    ws.cell(row=1, column=1, value=f"Tickets Call Fibre traites du {j_label}").font = Font(bold=True, size=14)
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+    ws.freeze_panes = "A3"
+
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
 def load_page_traites(jour: str | None = None) -> dict:
     """Charge le tableau du bas + stats agences.
 
