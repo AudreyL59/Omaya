@@ -137,8 +137,8 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   const [selectedPanierId, setSelectedPanierId] = useState('')
   const [docCin, setDocCin] = useState<DocRef>({ url: '', kind: '' })
   const [docKbis, setDocKbis] = useState<DocRef>({ url: '', kind: '' })
-  const [docJustif, setDocJustif] = useState<DocRef>({ url: '', kind: '' })
-  const [viewerOpen, setViewerOpen] = useState<null | 'cin' | 'kbis' | 'justif'>(null)
+  const [docClarif, setDocClarif] = useState<DocRef>({ url: '', kind: '' })
+  const [viewerOpen, setViewerOpen] = useState<null | 'cin' | 'kbis' | 'clarif'>(null)
   // States editables
   const [editClient, setEditClient] = useState<FicheClient | null>(null)
   const [editVente, setEditVente] = useState<FicheVente | null>(null)
@@ -154,7 +154,7 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
     setData(null)
     setDocCin({ url: '', kind: '' })
     setDocKbis({ url: '', kind: '' })
-    setDocJustif({ url: '', kind: '' })
+    setDocClarif({ url: '', kind: '' })
     ;(async () => {
       try {
         const r = await fetch(`${API_BASE}/tickets/${idTicket}/fiche`, {
@@ -185,7 +185,6 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
           .then((docs) => {
             if (docs?.cin) setDocCin(docs.cin)
             if (docs?.kbis) setDocKbis(docs.kbis)
-            if (docs?.justif) setDocJustif(docs.justif)
           })
           .catch(() => { /* silencieux */ })
       } catch {
@@ -212,6 +211,25 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
     () => (selectedPanierId ? editOffres[selectedPanierId] || null : null),
     [editOffres, selectedPanierId],
   )
+
+  // Lazy load clarif PDF quand on selectionne une ligne OEN
+  const isSelectedOEN = selectedOffre?.partenaire.toUpperCase() === 'OEN'
+  useEffect(() => {
+    if (!isSelectedOEN || !selectedPanierId) {
+      setDocClarif({ url: '', kind: '' })
+      return
+    }
+    let cancelled = false
+    fetch(`${API_BASE}/tickets/panier/${selectedPanierId}/clarification`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setDocClarif(d)
+      })
+      .catch(() => { /* silencieux */ })
+    return () => { cancelled = true }
+  }, [isSelectedOEN, selectedPanierId])
 
   const patchOffre = (id: string, patch: Partial<FicheOffre>) => {
     setEditOffres((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
@@ -308,12 +326,12 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   const viewerDoc: DocRef =
     viewerOpen === 'cin' ? docCin
     : viewerOpen === 'kbis' ? docKbis
-    : viewerOpen === 'justif' ? docJustif
+    : viewerOpen === 'clarif' ? docClarif
     : { url: '', kind: '' }
   const viewerTitle =
     viewerOpen === 'cin' ? "Carte d'identité"
     : viewerOpen === 'kbis' ? 'KBIS'
-    : viewerOpen === 'justif' ? 'Justificatif de domicile'
+    : viewerOpen === 'clarif' ? 'Fiche de clarification'
     : ''
 
   return (
@@ -370,10 +388,8 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 onClientChange={(patch) => setEditClient((c) => (c ? { ...c, ...patch } : c))}
                 cinAvailable={!!docCin.url}
                 kbisAvailable={!!docKbis.url}
-                justifAvailable={!!docJustif.url}
                 onOpenCin={() => setViewerOpen('cin')}
                 onOpenKbis={() => setViewerOpen('kbis')}
-                onOpenJustif={() => setViewerOpen('justif')}
               />
               <ColonneCentre
                 data={data}
@@ -399,6 +415,8 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 }}
                 onSaveOffre={() => selectedOffre && handleSaveOffre(selectedOffre)}
                 savingOffre={savingOffre}
+                clarifAvailable={!!docClarif.url}
+                onOpenClarif={() => setViewerOpen('clarif')}
               />
             </div>
           )}
@@ -434,20 +452,16 @@ function ColonneGauche({
   onClientChange,
   cinAvailable,
   kbisAvailable,
-  justifAvailable,
   onOpenCin,
   onOpenKbis,
-  onOpenJustif,
 }: {
   data: FicheData
   client: FicheClient
   onClientChange: (patch: Partial<FicheClient>) => void
   cinAvailable: boolean
   kbisAvailable: boolean
-  justifAvailable: boolean
   onOpenCin: () => void
   onOpenKbis: () => void
-  onOpenJustif: () => void
 }) {
   const c = client
   const v = data.vendeur
@@ -507,20 +521,7 @@ function ColonneGauche({
             </div>
           </div>
           <Field label="Email" type="email" value={c.email} onChange={(v) => onClientChange({ email: v })} />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Mobile 1" value={c.mobile1} muted={!data.is_my_call} />
-            <div className="flex items-end">
-              <button
-                onClick={onOpenJustif}
-                disabled={!justifAvailable}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border border-c-line hover:bg-c-brand-soft text-xs text-c-ink-soft disabled:opacity-40 disabled:cursor-not-allowed"
-                title={justifAvailable ? 'Voir le justificatif' : 'Aucun justificatif'}
-              >
-                <ScrollText className="w-3.5 h-3.5" />
-                Justificatif
-              </button>
-            </div>
-          </div>
+          <Field label="Mobile 1" value={c.mobile1} muted={!data.is_my_call} />
 
           <div className="pt-2 space-y-2">
             <Toggle label="Le client est d'accord pour être rappelé immédiatement par le Call" value={c.opt_rappel} />
@@ -715,6 +716,8 @@ function ColonneDroite({
   onSaveStatutAuto,
   onSaveOffre,
   savingOffre,
+  clarifAvailable,
+  onOpenClarif,
 }: {
   data: FicheData
   offre: FicheOffre | null
@@ -722,6 +725,8 @@ function ColonneDroite({
   onSaveStatutAuto: (newStatut: number) => void
   onSaveOffre: () => void
   savingOffre: boolean
+  clarifAvailable: boolean
+  onOpenClarif: () => void
 }) {
   if (!offre) {
     return (
@@ -742,6 +747,8 @@ function ColonneDroite({
         onOffreChange={onOffreChange}
         onSaveOffre={onSaveOffre}
         savingOffre={savingOffre}
+        clarifAvailable={clarifAvailable}
+        onOpenClarif={onOpenClarif}
       />
 
       {/* Statut Vente (auto-save) - commun a tous les partenaires */}
@@ -773,12 +780,16 @@ function PartenaireBlock({
   onOffreChange,
   onSaveOffre,
   savingOffre,
+  clarifAvailable,
+  onOpenClarif,
 }: {
   data: FicheData
   offre: FicheOffre
   onOffreChange: (patch: Partial<FicheOffre>) => void
   onSaveOffre: () => void
   savingOffre: boolean
+  clarifAvailable: boolean
+  onOpenClarif: () => void
 }) {
   const p = offre.partenaire.toUpperCase()
   const partenaireLabel = offre.partenaire_lib || offre.partenaire || 'Partenaire'
@@ -790,8 +801,21 @@ function PartenaireBlock({
         <span className="text-sm font-bold text-emerald-700">{partenaireLabel}</span>
       </div>
 
-      {/* Credentials Ohm Energie (OEN uniquement) */}
-      {p === 'OEN' && <OhmCredentials login={data.ohm_login} mdp={data.ohm_mdp} />}
+      {/* Credentials Ohm Energie + bouton fiche clarification (OEN uniquement) */}
+      {p === 'OEN' && (
+        <>
+          <OhmCredentials login={data.ohm_login} mdp={data.ohm_mdp} />
+          <button
+            onClick={onOpenClarif}
+            disabled={!clarifAvailable}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border border-c-line hover:bg-c-brand-soft text-xs text-c-ink-soft disabled:opacity-40 disabled:cursor-not-allowed"
+            title={clarifAvailable ? 'Voir la fiche de clarification' : 'Aucune fiche de clarification'}
+          >
+            <ScrollText className="w-3.5 h-3.5" />
+            {clarifAvailable ? 'Fiche de clarification' : 'Pas de fiche de clarification'}
+          </button>
+        </>
+      )}
 
       {/* Num BS commun a tous */}
       <Field

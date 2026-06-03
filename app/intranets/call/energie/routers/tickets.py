@@ -93,6 +93,15 @@ def get_fiche_documents(
     return fiche_svc.load_documents(int(id_ticket), client_pro=client_pro)
 
 
+@router.get("/tickets/panier/{id_panier}/clarification")
+def get_clarification(
+    id_panier: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Detecte la fiche de clarification PDF d'une ligne de panier (OEN)."""
+    return fiche_svc.load_clarification(int(id_panier))
+
+
 @router.get("/tickets/en-cours", response_model=TicketsEnCoursResponse)
 def get_tickets_en_cours(user: UserToken = Depends(get_current_user)):
     """Tableau du haut UNIQUEMENT : tickets a traiter + serveur_now + last_modif."""

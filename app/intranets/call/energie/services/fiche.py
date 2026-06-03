@@ -498,6 +498,18 @@ def save_offre(id_panier: int, payload: dict) -> dict:
 
 # --- Documents (CIN, KBIS, Justif) ----------------------------------------
 
+def load_clarification(id_panier: int) -> dict:
+    """Detecte la fiche de clarification PDF pour une ligne de panier.
+
+    URL (cf. code WinDev) : <DOC_BASE_URL>/{IDTK_Call_Panier}_Clarification.pdf
+    Utilise sur la fiche OEN (Ohm Energie).
+    """
+    url, kind = _first_existing(
+        f"{DOC_BASE_URL}/{id_panier}_Clarification.pdf",
+    )
+    return {"url": url, "kind": kind}
+
+
 def load_documents(id_tk_liste: int, client_pro: bool = False) -> dict:
     """Detecte les documents disponibles pour un ticket Energie.
 

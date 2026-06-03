@@ -103,7 +103,12 @@ class DocumentInfo(BaseModel):
 
 
 class FicheDocumentsResponse(BaseModel):
-    """Documents Energie : CIN + KBIS (si Pro) + Justif."""
+    """Documents Energie : CIN + KBIS (si Pro).
+
+    Note : la fiche de clarification (Justif OEN) est detectee separement
+    via /tickets/panier/{id_panier}/clarification car liee a la ligne du
+    panier, pas au ticket.
+    """
     cin: DocumentInfo = DocumentInfo()
     kbis: DocumentInfo = DocumentInfo()
     justif: DocumentInfo = DocumentInfo()
