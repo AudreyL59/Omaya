@@ -305,6 +305,15 @@ export default function TicketsCallPage() {
       <FicheTicketModal
         idTicket={ficheOpenId}
         onClose={() => setFicheOpenId(null)}
+        onAfterAction={async () => {
+          // Apres action panier : refetch les 2 tableaux
+          const p = await fetchEnCours()
+          if (p) {
+            setEnCours(p)
+            lastModifRef.current = p.last_modif
+          }
+          await fetchTraites(jourBasRef.current)
+        }}
       />
     </div>
   )

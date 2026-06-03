@@ -19,14 +19,18 @@ import {
   Loader2,
   ArrowLeft,
   Phone,
+  PhoneOff,
   CreditCard,
   FileText,
   ScrollText,
   Eye,
   EyeOff,
+  Ban,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import DocumentViewerModal from '@/components/DocumentViewerModal'
+import ConfirmDialog from '@/components/ConfirmDialog'
+import AnnulLignePanierPopup from '@/components/AnnulLignePanierPopup'
 
 // --- Types ---------------------------------------------------------------
 
@@ -122,6 +126,15 @@ interface DocRef {
 
 const API_BASE = '/api/call/energie'
 
+interface VerrouPeek {
+  appel_en_cours: boolean
+  ope_appel_id: number
+  ope_appel_nom: string
+  date_h_appel: string
+  duree_minutes: number
+  duree_secondes: number
+}
+
 interface Props {
   idTicket: string | null
   onClose: () => void
@@ -130,7 +143,7 @@ interface Props {
 
 // --- Component principal -------------------------------------------------
 
-export default function FicheTicketModal({ idTicket, onClose }: Props) {
+export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: Props) {
   const [data, setData] = useState<FicheData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -146,6 +159,12 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   const [savingClient, setSavingClient] = useState(false)
   const [savingOffre, setSavingOffre] = useState(false)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
+  // Phase 3 : verrou ope + popups d'action
+  const [verrouLoading, setVerrouLoading] = useState(false)
+  const [verrouConfirm, setVerrouConfirm] = useState<VerrouPeek | null>(null)
+  const [actionDialog, setActionDialog] = useState<null | 'valider' | 'annulVente' | 'renvoi' | 'renvoiClarif'>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [annulLigneOpen, setAnnulLigneOpen] = useState(false)
 
   useEffect(() => {
     if (!idTicket) return
@@ -233,6 +252,158 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
 
   const patchOffre = (id: string, patch: Partial<FicheOffre>) => {
     setEditOffres((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
+
+  // Recharge la fiche apres une action verrou ou panier
+  const reloadFiche = async () => {
+    if (!idTicket) return
+    try {
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/fiche`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) return
+      const d = (await r.json()) as FicheData
+      setData(d)
+      setEditClient({ ...d.client })
+      setEditVente({ ...d.vente })
+      const map: Record<string, FicheOffre> = {}
+      for (const o of d.panier) map[o.id] = { ...o }
+      setEditOffres(map)
+    } catch { /* ignore */ }
+  }
+
+  const handlePrendreAppel = async (force = false) => {
+    if (!idTicket) return
+    setVerrouLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/verrou/prendre`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      const j = await r.json()
+      if (j.needs_confirm) {
+        setVerrouConfirm(j.peek as VerrouPeek)
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Appel démarré (mobiles démasqués)' })
+      setVerrouConfirm(null)
+      await reloadFiche()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setVerrouLoading(false)
+    }
+  }
+
+  const handleLacherAppel = async () => {
+    if (!idTicket) return
+    setVerrouLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/verrou/lacher`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Appel terminé' })
+      await reloadFiche()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setVerrouLoading(false)
+    }
+  }
+
+  const handleAnnulerLigne = async (motifs: string[], precisions: string) => {
+    if (!selectedPanierId) return
+    setActionLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/panier/${selectedPanierId}/annuler-ligne`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motifs, precisions }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Offre annulée' })
+      setAnnulLigneOpen(false)
+      await reloadFiche()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleConfirmAction = async () => {
+    if (!idTicket || !actionDialog) return
+    setActionLoading(true)
+    try {
+      const venteBody = (() => {
+        if (actionDialog === 'renvoi' || actionDialog === 'renvoiClarif') return {}
+        return {
+          client: editClient ? {
+            civilite: editClient.civilite,
+            nom: editClient.nom,
+            nom_marital: editClient.nom_marital,
+            prenom: editClient.prenom,
+            date_naiss: editClient.date_naiss,
+            dep_naiss: editClient.dep_naiss,
+            type_logement: editClient.type_logement,
+            adresse1: editClient.adresse1,
+            adresse2: editClient.adresse2,
+            cp: editClient.cp,
+            ville: editClient.ville,
+            email: editClient.email,
+          } : undefined,
+          vente: editVente ? {
+            ref_appel: editVente.ref_appel,
+            intervention_vendeur: editVente.intervention_vendeur,
+            info_vente: editVente.info_vente,
+          } : undefined,
+        }
+      })()
+      const path =
+        actionDialog === 'valider' ? 'valider-vente'
+        : actionDialog === 'annulVente' ? 'annuler-vente'
+        : actionDialog === 'renvoiClarif' ? 'renvoyer-clarification'
+        : 'renvoyer-complement'
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/${path}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(venteBody),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      const msg =
+        actionDialog === 'valider' ? 'Panier validé'
+        : actionDialog === 'annulVente' ? 'Vente annulée'
+        : actionDialog === 'renvoiClarif' ? 'Panier renvoyé pour clarification'
+        : 'Panier renvoyé pour complément'
+      setToast({ kind: 'ok', msg })
+      setActionDialog(null)
+      onAfterAction?.()
+      onClose()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const handleSaveClient = async () => {
@@ -390,6 +561,9 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 kbisAvailable={!!docKbis.url}
                 onOpenCin={() => setViewerOpen('cin')}
                 onOpenKbis={() => setViewerOpen('kbis')}
+                verrouLoading={verrouLoading}
+                onPrendreAppel={() => handlePrendreAppel(false)}
+                onLacherAppel={handleLacherAppel}
               />
               <ColonneCentre
                 data={data}
@@ -400,6 +574,10 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 onSelect={setSelectedPanierId}
                 onSaveClient={handleSaveClient}
                 savingClient={savingClient}
+                onAnnulLigne={() => setAnnulLigneOpen(true)}
+                onAskValider={() => setActionDialog('valider')}
+                onAskAnnulVente={() => setActionDialog('annulVente')}
+                onAskRenvoi={() => setActionDialog('renvoi')}
               />
               <ColonneDroite
                 data={data}
@@ -417,6 +595,7 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 savingOffre={savingOffre}
                 clarifAvailable={!!docClarif.url}
                 onOpenClarif={() => setViewerOpen('clarif')}
+                onAskRenvoiClarif={() => setActionDialog('renvoiClarif')}
               />
             </div>
           )}
@@ -428,6 +607,66 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
           url={viewerDoc.url}
           kind={viewerDoc.kind}
           onClose={() => setViewerOpen(null)}
+        />
+
+        {/* Confirmation verrou pris par un autre ope */}
+        <ConfirmDialog
+          open={verrouConfirm !== null}
+          title={
+            verrouConfirm?.appel_en_cours
+              ? `${verrouConfirm.ope_appel_nom} est en train de contacter ce client depuis ${verrouConfirm.duree_minutes} min ${verrouConfirm.duree_secondes}s.\nSouhaitez-vous vraiment reprendre l'appel ?`
+              : `${verrouConfirm?.ope_appel_nom} a raccroché avec ce client le ${verrouConfirm?.date_h_appel || ''}.\nSouhaitez-vous vraiment recontacter ce client ?`
+          }
+          confirmLabel="Oui, prendre l'appel"
+          confirmColor="green"
+          loading={verrouLoading}
+          onConfirm={() => handlePrendreAppel(true)}
+          onCancel={() => setVerrouConfirm(null)}
+        />
+
+        {/* Annulation 1 ligne du panier */}
+        <AnnulLignePanierPopup
+          open={annulLigneOpen}
+          loading={actionLoading}
+          onCancel={() => setAnnulLigneOpen(false)}
+          onConfirm={(motifs, prec) => handleAnnulerLigne(motifs, prec)}
+        />
+
+        <ConfirmDialog
+          open={actionDialog === 'valider'}
+          title="Voulez-vous vraiment valider le panier ?"
+          confirmLabel="Valider le panier"
+          confirmColor="green"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
+        />
+        <ConfirmDialog
+          open={actionDialog === 'annulVente'}
+          title="Voulez-vous vraiment annuler le panier ?"
+          confirmLabel="Annuler toute la vente"
+          confirmColor="red"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
+        />
+        <ConfirmDialog
+          open={actionDialog === 'renvoi'}
+          title="Voulez-vous vraiment renvoyer le panier ?"
+          confirmLabel="Renvoyer le panier pour complément"
+          confirmColor="orange"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
+        />
+        <ConfirmDialog
+          open={actionDialog === 'renvoiClarif'}
+          title="Voulez-vous vraiment renvoyer le panier pour la fiche clarification ?"
+          confirmLabel="Renvoyer pour fiche clarification"
+          confirmColor="red"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
         />
 
         {toast && (
@@ -454,6 +693,9 @@ function ColonneGauche({
   kbisAvailable,
   onOpenCin,
   onOpenKbis,
+  verrouLoading,
+  onPrendreAppel,
+  onLacherAppel,
 }: {
   data: FicheData
   client: FicheClient
@@ -462,6 +704,9 @@ function ColonneGauche({
   kbisAvailable: boolean
   onOpenCin: () => void
   onOpenKbis: () => void
+  verrouLoading: boolean
+  onPrendreAppel: () => void
+  onLacherAppel: () => void
 }) {
   const c = client
   const v = data.vendeur
@@ -564,14 +809,27 @@ function ColonneGauche({
             <div className="flex-1">
               <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
             </div>
-            <button
-              disabled
-              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-c-line text-xs text-c-ink-soft cursor-not-allowed"
-              title="À venir (Phase 3)"
-            >
-              <Phone className="w-3.5 h-3.5 text-green-600" />
-              Démarrer l'appel
-            </button>
+            {data.is_my_call ? (
+              <button
+                onClick={onLacherAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-red-600 bg-red-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Raccrocher / libérer le verrou"
+              >
+                {verrouLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneOff className="w-3.5 h-3.5" />}
+                Lâcher l'appel
+              </button>
+            ) : (
+              <button
+                onClick={onPrendreAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-green-600 bg-green-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Démarrer l'appel (pose le verrou, démasque les mobiles, envoie un SMS au vendeur)"
+              >
+                {verrouLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
+                Démarrer l'appel
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -590,6 +848,10 @@ function ColonneCentre({
   onSelect,
   onSaveClient,
   savingClient,
+  onAnnulLigne,
+  onAskValider,
+  onAskAnnulVente,
+  onAskRenvoi,
 }: {
   data: FicheData
   editOffres: Record<string, FicheOffre>
@@ -599,10 +861,22 @@ function ColonneCentre({
   onSelect: (id: string) => void
   onSaveClient: () => void
   savingClient: boolean
+  onAnnulLigne: () => void
+  onAskValider: () => void
+  onAskAnnulVente: () => void
+  onAskRenvoi: () => void
 }) {
   const offresList = data.panier.map((p) => editOffres[p.id] || p)
   const nbValide = offresList.filter((o) => o.statut_prod === 1 || o.statut_prod === 3).length
   const nbAnnule = offresList.filter((o) => o.statut_prod === 2).length
+  const nbTotal = offresList.length
+  // Boutons WinDev :
+  // - Valider : nbValid > 0 ET nbValid+nbAnnul == nbTotal
+  // - Annuler vente : nbAnnul == nbTotal (et > 0)
+  const canValider = nbValide > 0 && nbValide + nbAnnule === nbTotal
+  const canAnnulerVente = nbTotal > 0 && nbAnnule === nbTotal
+  const selectedOffre = selectedId ? offresList.find((o) => o.id === selectedId) : null
+  const canAnnulerLigne = !!selectedOffre && selectedOffre.statut_prod !== 2
 
   return (
     <div className="col-span-4 flex flex-col gap-3">
@@ -695,13 +969,26 @@ function ColonneCentre({
         </button>
       </div>
 
-      {/* Boutons d'action (Phase 3) */}
+      {/* Action sur la ligne selectionnee */}
+      {selectedOffre && (
+        <button
+          onClick={onAnnulLigne}
+          disabled={!canAnnulerLigne}
+          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded border border-red-300 text-red-600 text-xs font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Annuler uniquement la ligne sélectionnée (motifs)"
+        >
+          <Ban className="w-3.5 h-3.5" />
+          {selectedOffre.statut_prod === 2 ? 'Offre déjà annulée' : 'Annuler cette offre'}
+        </button>
+      )}
+
+      {/* Boutons d'action panier */}
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
-          <ActionButton label="Valider le panier" disabled />
-          <ActionButton label="Annuler toute la vente" disabled />
+          <ActionButton label="Valider le panier" disabled={!canValider} onClick={onAskValider} />
+          <ActionButton label="Annuler toute la vente" disabled={!canAnnulerVente} onClick={onAskAnnulVente} />
         </div>
-        <ActionButton label="Renvoyer le panier pour complément" variant="orange" full disabled />
+        <ActionButton label="Renvoyer le panier pour complément" variant="orange" full onClick={onAskRenvoi} />
       </div>
     </div>
   )
@@ -718,6 +1005,7 @@ function ColonneDroite({
   savingOffre,
   clarifAvailable,
   onOpenClarif,
+  onAskRenvoiClarif,
 }: {
   data: FicheData
   offre: FicheOffre | null
@@ -727,6 +1015,7 @@ function ColonneDroite({
   savingOffre: boolean
   clarifAvailable: boolean
   onOpenClarif: () => void
+  onAskRenvoiClarif: () => void
 }) {
   if (!offre) {
     return (
@@ -770,6 +1059,17 @@ function ColonneDroite({
           </select>
         </div>
       </div>
+
+      {/* Bouton "Renvoyer pour fiche clarification" - OEN uniquement */}
+      {offre.partenaire.toUpperCase() === 'OEN' && (
+        <button
+          onClick={onAskRenvoiClarif}
+          className="w-full py-2 px-3 rounded bg-red-600 text-white text-xs font-semibold hover:brightness-110"
+          title="Renvoyer le panier pour la fiche clarification (statut 28 + SMS spécifique)"
+        >
+          Renvoyer le panier pour la fiche clarification
+        </button>
+      )}
     </div>
   )
 }
@@ -1031,21 +1331,22 @@ function ProTab({ active, label }: { active: boolean; label: string }) {
 }
 
 function ActionButton({
-  label, disabled, variant = 'dark', full,
+  label, disabled, variant = 'dark', full, onClick,
 }: {
   label: string
   disabled?: boolean
   variant?: 'dark' | 'orange'
   full?: boolean
+  onClick?: () => void
 }) {
   const cls = variant === 'orange' ? 'bg-orange-500 text-white' : 'bg-gray-900 text-white'
   return (
     <button
+      onClick={onClick}
       disabled={disabled}
       className={`${cls} ${full ? 'w-full' : ''} py-2 px-3 rounded text-xs font-semibold transition-opacity ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110'
       }`}
-      title={disabled ? 'À venir (Phase 3)' : ''}
     >
       {label}
     </button>

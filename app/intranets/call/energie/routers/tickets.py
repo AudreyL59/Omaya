@@ -28,6 +28,12 @@ from app.intranets.call.energie.schemas.fiche import (
     SaveVenteRequest,
     SaveOffreRequest,
     SaveResponse,
+    VerrouPeek,
+    VerrouResponse,
+    PrendreAppelRequest,
+    AnnulLignePanierRequest,
+    ActionVenteRequest,
+    ActionVenteResponse,
 )
 
 router = APIRouter()
@@ -50,6 +56,117 @@ def get_fiche_ticket(
     if "error" in data:
         raise HTTPException(status_code=404, detail=data["error"])
     return data
+
+
+# --- Phase 3 : verrou ope + actions panier --------------------------------
+
+@router.get("/tickets/{id_ticket}/verrou", response_model=VerrouPeek)
+def get_verrou(id_ticket: str, user: UserToken = Depends(get_current_user)):
+    try:
+        data = fiche_svc.peek_verrou(int(id_ticket))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data
+
+
+@router.post("/tickets/{id_ticket}/verrou/prendre", response_model=VerrouResponse)
+def post_verrou_prendre(
+    id_ticket: str,
+    payload: PrendreAppelRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        data = fiche_svc.prendre_appel(int(id_ticket), user.id_salarie or 0, force=payload.force)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data
+
+
+@router.post("/tickets/{id_ticket}/verrou/lacher", response_model=SaveResponse)
+def post_verrou_lacher(id_ticket: str, user: UserToken = Depends(get_current_user)):
+    try:
+        data = fiche_svc.lacher_appel(int(id_ticket))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data
+
+
+@router.post("/tickets/panier/{id_panier}/annuler-ligne", response_model=SaveResponse)
+def post_annuler_ligne(
+    id_panier: str,
+    payload: AnnulLignePanierRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        data = fiche_svc.annuler_ligne_panier(int(id_panier), payload.motifs, payload.precisions)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(status_code=400, detail=data["error"])
+    return data
+
+
+@router.post("/tickets/{id_ticket}/annuler-vente", response_model=ActionVenteResponse)
+def post_annuler_vente(
+    id_ticket: str,
+    payload: ActionVenteRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return fiche_svc.annuler_vente(int(id_ticket), payload.dict(exclude_none=True))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/tickets/{id_ticket}/valider-vente", response_model=ActionVenteResponse)
+def post_valider_vente(
+    id_ticket: str,
+    payload: ActionVenteRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return fiche_svc.valider_vente(int(id_ticket), payload.dict(exclude_none=True))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/tickets/{id_ticket}/renvoyer-complement", response_model=ActionVenteResponse)
+def post_renvoyer_complement(id_ticket: str, user: UserToken = Depends(get_current_user)):
+    try:
+        return fiche_svc.renvoyer_complement(int(id_ticket))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/tickets/{id_ticket}/renvoyer-clarification", response_model=ActionVenteResponse)
+def post_renvoyer_clarification(id_ticket: str, user: UserToken = Depends(get_current_user)):
+    """Bouton specifique : 'Renvoyer pour fiche clarification' (Energie).
+
+    UPDATE InfoVente avec note 'Renvoye pour fiche clarification le {now} par
+    {user}' + statut 28 + SMS specifique.
+    """
+    try:
+        return fiche_svc.renvoyer_clarification(
+            int(id_ticket),
+            user_nom=user.nom or "",
+            user_prenom=user.prenom or "",
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.post("/tickets/{id_ticket}/save-vente", response_model=SaveResponse)

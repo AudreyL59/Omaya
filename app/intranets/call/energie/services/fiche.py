@@ -496,6 +496,343 @@ def save_offre(id_panier: int, payload: dict) -> dict:
     return {"ok": True}
 
 
+# --- Phase 3 : verrou ope + actions panier --------------------------------
+
+def _parse_dt(v: Any):
+    """Wrapper local pour eviter import circulaire avec tickets.py."""
+    from app.intranets.call.energie.services.tickets import _parse_dt as _pdt
+    return _pdt(v)
+
+
+def peek_verrou(id_tk_liste: int) -> dict:
+    """Etat actuel du verrou ope sur un ticket Energie."""
+    db_bo = get_connection("ticket_bo")
+    db_rh = get_connection("rh")
+    rows = db_bo.query(
+        """SELECT IDtk_Call, AppelEnCours, OpéAppel, DateH_Appel
+        FROM TK_Call
+        WHERE IDTK_Liste = ? AND ModifELEM NOT LIKE '%suppr%'""",
+        (id_tk_liste,),
+    )
+    if not rows:
+        return {"error": "Ticket introuvable"}
+    r = rows[0]
+    appel_en_cours = _bool(r.get("AppelEnCours"))
+    ope_appel_id = _to_int(r.get("OpéAppel"))
+    date_h_appel_iso = _iso(r.get("DateH_Appel"))
+    nom_ope = ""
+    if ope_appel_id:
+        rs = db_rh.query(
+            "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?",
+            (ope_appel_id,),
+        )
+        if rs:
+            nom_ope = f"{(rs[0].get('Nom') or '').strip()} {_capitalize((rs[0].get('Prenom') or '').strip())}".strip()
+    minutes = 0
+    seconds = 0
+    dt = _parse_dt(r.get("DateH_Appel"))
+    if dt is not None:
+        delta = datetime.now() - dt
+        total = max(0, int(delta.total_seconds()))
+        minutes = total // 60
+        seconds = total % 60
+    return {
+        "appel_en_cours": appel_en_cours,
+        "ope_appel_id": ope_appel_id,
+        "ope_appel_nom": nom_ope,
+        "date_h_appel": date_h_appel_iso,
+        "duree_minutes": minutes,
+        "duree_secondes": seconds,
+    }
+
+
+def prendre_appel(id_tk_liste: int, user_id: int, force: bool = False) -> dict:
+    """Pose le verrou ope sur un ticket Call Energie.
+
+    Si pris par un autre, renvoie needs_confirm=True avec peek. Si force=True,
+    ecrase. Envoie un SMS au vendeur.
+    """
+    db_bo = get_connection("ticket_bo")
+    db_rh = get_connection("rh")
+    rows = db_bo.query(
+        """SELECT IDtk_Call, IDSalarie, AppelEnCours, OpéAppel, DateH_Appel,
+            DateDeb_PriseEnCharge, NomClient, NomMaritalClient, PrenomClient
+        FROM TK_Call
+        WHERE IDTK_Liste = ? AND ModifELEM NOT LIKE '%suppr%'""",
+        (id_tk_liste,),
+    )
+    if not rows:
+        return {"error": "Ticket introuvable"}
+    r = rows[0]
+    id_call = _to_int(r.get("IDtk_Call"))
+    id_salarie = _to_int(r.get("IDSalarie"))
+
+    if not force:
+        appel_en_cours = _bool(r.get("AppelEnCours"))
+        ope_appel_id = _to_int(r.get("OpéAppel"))
+        date_h_appel = _parse_dt(r.get("DateH_Appel"))
+        if (appel_en_cours and ope_appel_id and ope_appel_id != user_id) or (
+            not appel_en_cours and date_h_appel is not None and ope_appel_id != user_id
+        ):
+            return {"needs_confirm": True, "peek": peek_verrou(id_tk_liste)}
+
+    now_wd = _sql_now()
+    db_bo.query(
+        f"""UPDATE TK_Call SET
+            AppelEnCours = 1,
+            OpéAppel = {_to_int(user_id)},
+            DateH_Appel = '{now_wd}',
+            ModifDate = '{now_wd}'
+        WHERE IDtk_Call = {id_call}"""
+    )
+    if not _parse_dt(r.get("DateDeb_PriseEnCharge")):
+        db_bo.query(
+            f"""UPDATE TK_Call SET
+                DateDeb_PriseEnCharge = '{now_wd}',
+                ModifDate = '{now_wd}'
+            WHERE IDtk_Call = {id_call}"""
+        )
+
+    sms_result = _envoyer_sms_prise_appel(
+        db_rh, id_salarie, user_id,
+        r.get("NomClient"), r.get("NomMaritalClient"), r.get("PrenomClient"),
+    )
+    return {"ok": True, "sms": sms_result}
+
+
+def lacher_appel(id_tk_liste: int) -> dict:
+    """Libere le verrou ope."""
+    db_bo = get_connection("ticket_bo")
+    rows = db_bo.query(
+        "SELECT IDtk_Call, DateFin_PriseEnCharge FROM TK_Call WHERE IDTK_Liste = ?",
+        (id_tk_liste,),
+    )
+    if not rows:
+        return {"error": "Ticket introuvable"}
+    r = rows[0]
+    id_call = _to_int(r.get("IDtk_Call"))
+    now_wd = _sql_now()
+    sets = ["AppelEnCours = 0", f"ModifDate = '{now_wd}'"]
+    if not _parse_dt(r.get("DateFin_PriseEnCharge")):
+        sets.append(f"DateFin_PriseEnCharge = '{now_wd}'")
+    db_bo.query(
+        f"""UPDATE TK_Call SET {', '.join(sets)}
+        WHERE IDtk_Call = {id_call}"""
+    )
+    return {"ok": True}
+
+
+def _format_nom_client_sms(nom: str, nom_marital: str, prenom: str) -> str:
+    parts = [(nom or "").strip()]
+    if (nom_marital or "").strip():
+        parts.append(f"ep {nom_marital.strip()}")
+    parts.append(_capitalize((prenom or "").strip()))
+    return " ".join(p for p in parts if p)
+
+
+def _get_gsm_vendeur(db_rh, id_vendeur: int) -> str:
+    """Recupere le GSM du vendeur depuis Salarie_Coordonnees."""
+    rows = db_rh.query(
+        "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?",
+        (id_vendeur,),
+    )
+    if not rows:
+        return ""
+    gsm = (rows[0].get("TélMob") or "").strip()
+    return "".join(c for c in gsm if c.isdigit() or c == "+")
+
+
+def _envoyer_sms_prise_appel(
+    db_rh, id_vendeur: int, id_ope: int,
+    nom_client: str, nom_marital: str, prenom_client: str,
+) -> str:
+    """SMS 'Attention, vous allez bientot recevoir un appel...'"""
+    from app.shared.notifications.sms import envoi_sms
+    gsm = _get_gsm_vendeur(db_rh, id_vendeur)
+    if not gsm:
+        return "Pas de GSM vendeur"
+    nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
+    texte = f"Attention, vous allez bientot recevoir un appel du CALL pour votre client {nom_clt}."
+    return envoi_sms(texte, gsm, emetteur="Omaya-ENI")
+
+
+def _envoyer_sms_renvoi_complement(
+    db_rh, id_vendeur: int,
+    nom_client: str, nom_marital: str, prenom_client: str,
+) -> str:
+    from app.shared.notifications.sms import envoi_sms
+    gsm = _get_gsm_vendeur(db_rh, id_vendeur)
+    if not gsm:
+        return "Pas de GSM vendeur"
+    nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
+    texte = f"Attention, votre panier pour le client {nom_clt} est renvoye pour complement."
+    return envoi_sms(texte, gsm, emetteur="Omaya-ENI")
+
+
+def _envoyer_sms_renvoi_clarification(
+    db_rh, id_vendeur: int,
+    nom_client: str, nom_marital: str, prenom_client: str,
+) -> str:
+    """SMS specifique : 'panier renvoye car il manque la fiche de clarification'."""
+    from app.shared.notifications.sms import envoi_sms
+    gsm = _get_gsm_vendeur(db_rh, id_vendeur)
+    if not gsm:
+        return "Pas de GSM vendeur"
+    nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
+    texte = f"Attention, votre panier pour le client {nom_clt} est renvoye car il manque la fiche de clarification."
+    return envoi_sms(texte, gsm, emetteur="Omaya-ENI")
+
+
+# --- Actions panier -------------------------------------------------------
+
+def annuler_ligne_panier(id_panier: int, motifs: list[str], precisions: str) -> dict:
+    """UPDATE TK_Call_Panier StatutProd=2 + MotifAnnulation (concat)."""
+    if not motifs:
+        return {"error": "Merci d'ajouter un motif d'annulation"}
+    motif_str = "Motif(s) d'annulation :\n" + "\n".join(f"  - {m}" for m in motifs)
+    if (precisions or "").strip():
+        motif_str += f"\nInformations complementaires:\n{precisions.strip()}"
+    db_bo = get_connection("ticket_bo")
+    now_wd = _sql_now()
+    db_bo.query(
+        f"""UPDATE TK_Call_Panier SET
+            StatutProd = 2,
+            MotifAnnulation = '{_sql_str(motif_str)}',
+            ModifDate = '{now_wd}'
+        WHERE IDTK_Call_Panier = {_to_int(id_panier)}"""
+    )
+    return {"ok": True}
+
+
+def _action_vente_finale(
+    id_tk_liste: int,
+    payload: dict,
+    new_statut: int,
+    sms_kind: str = "",  # "" / "renvoi_complement" / "renvoi_clarification"
+    extra_info_vente: str = "",  # texte a appendre dans InfoVente avant save
+) -> dict:
+    """Logique commune Annul / Valide / Renvoi / Renvoi clarification.
+
+    1. Si extra_info_vente : prepend a payload.vente.info_vente
+    2. Si payload : save_vente_infos (UPDATE TK_Call)
+    3. UPDATE TK_Liste IDTK_Statut = new_statut
+    4. Si verrou actif : libere
+    5. SMS optionnel
+    """
+    db_bo = get_connection("ticket_bo")
+    db_ticket = get_connection("ticket")
+    db_rh = get_connection("rh")
+    now_wd = _sql_now()
+
+    # 0. Si extra_info_vente, on l'ajoute a InfoVente (recup l'ancien, append, save)
+    if extra_info_vente:
+        rows_cur = db_bo.query(
+            "SELECT InfoVente FROM TK_Call WHERE IDTK_Liste = ?",
+            (id_tk_liste,),
+        )
+        prev = (rows_cur[0].get("InfoVente") or "").strip() if rows_cur else ""
+        new_info = (prev + "\n" if prev else "") + extra_info_vente
+        if payload:
+            v = payload.setdefault("vente", {}) or {}
+            v["info_vente"] = new_info
+        else:
+            # Pas de save vente complet -> UPDATE direct InfoVente
+            db_bo.query(
+                f"""UPDATE TK_Call SET
+                    InfoVente = '{_sql_str(new_info)}',
+                    ModifDate = '{now_wd}'
+                WHERE IDTK_Liste = {_to_int(id_tk_liste)}
+                  AND ModifELEM NOT LIKE '%suppr%'"""
+            )
+
+    # 1. Save infos vente si payload fourni
+    if payload and ("client" in payload or "vente" in payload):
+        save_vente_infos(id_tk_liste, payload)
+
+    # 2. Recupere infos pour le SMS
+    rows_call = db_bo.query(
+        """SELECT IDtk_Call, IDSalarie, AppelEnCours,
+            NomClient, NomMaritalClient, PrenomClient
+        FROM TK_Call WHERE IDTK_Liste = ?""",
+        (id_tk_liste,),
+    )
+    if not rows_call:
+        return {"error": "Ticket introuvable"}
+    r_call = rows_call[0]
+    id_call = _to_int(r_call.get("IDtk_Call"))
+    id_salarie = _to_int(r_call.get("IDSalarie"))
+    appel_en_cours = _bool(r_call.get("AppelEnCours"))
+    nom_client = r_call.get("NomClient") or ""
+    nom_marital = r_call.get("NomMaritalClient") or ""
+    prenom_client = r_call.get("PrenomClient") or ""
+
+    # 3. UPDATE TK_Liste IDTK_Statut
+    db_ticket.query(
+        f"""UPDATE TK_Liste SET
+            IDTK_Statut = {new_statut},
+            ModifDate = '{now_wd}'
+        WHERE IDTK_Liste = {_to_int(id_tk_liste)}"""
+    )
+
+    # 4. Libere verrou si actif
+    if appel_en_cours:
+        db_bo.query(
+            f"""UPDATE TK_Call SET
+                AppelEnCours = 0,
+                DateFin_PriseEnCharge = '{now_wd}',
+                ModifDate = '{now_wd}'
+            WHERE IDtk_Call = {id_call}"""
+        )
+
+    # 5. SMS optionnel
+    sms_result = ""
+    if sms_kind == "renvoi_complement":
+        sms_result = _envoyer_sms_renvoi_complement(
+            db_rh, id_salarie, nom_client, nom_marital, prenom_client,
+        )
+    elif sms_kind == "renvoi_clarification":
+        sms_result = _envoyer_sms_renvoi_clarification(
+            db_rh, id_salarie, nom_client, nom_marital, prenom_client,
+        )
+
+    return {"ok": True, "sms": sms_result}
+
+
+def annuler_vente(id_tk_liste: int, payload: dict) -> dict:
+    """POPUP_AnnulVente : TK_Liste statut=14 + save vente + lacher verrou."""
+    return _action_vente_finale(id_tk_liste, payload, new_statut=14)
+
+
+def valider_vente(id_tk_liste: int, payload: dict) -> dict:
+    """POPUP_ValideVente : TK_Liste statut=15 + save vente + lacher verrou."""
+    return _action_vente_finale(id_tk_liste, payload, new_statut=15)
+
+
+def renvoyer_complement(id_tk_liste: int) -> dict:
+    """POPUP_RenvoiPanier : TK_Liste statut=28 + lacher verrou + SMS."""
+    return _action_vente_finale(
+        id_tk_liste, payload={}, new_statut=28, sms_kind="renvoi_complement",
+    )
+
+
+def renvoyer_clarification(id_tk_liste: int, user_nom: str, user_prenom: str) -> dict:
+    """Bouton 'Renvoyer pour fiche clarification' (specifique Energie).
+
+    UPDATE TK_Call.InfoVente : append "Ticket renvoye pour fiche clarification
+    le {now} par {user}". Puis TK_Liste statut=28 + lacher verrou + SMS specifique.
+    """
+    info_to_append = (
+        f"Ticket renvoye pour fiche clarification le "
+        f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} "
+        f"par {user_nom} {_capitalize(user_prenom)}"
+    )
+    return _action_vente_finale(
+        id_tk_liste, payload={}, new_statut=28,
+        sms_kind="renvoi_clarification",
+        extra_info_vente=info_to_append,
+    )
+
+
 # --- Documents (CIN, KBIS, Justif) ----------------------------------------
 
 def load_clarification(id_panier: int) -> dict:

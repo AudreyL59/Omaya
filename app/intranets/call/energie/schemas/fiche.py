@@ -166,3 +166,41 @@ class SaveOffreRequest(BaseModel):
 
 class SaveResponse(BaseModel):
     ok: bool = True
+
+
+# --- Phase 3 ---------------------------------------------------------------
+
+class VerrouPeek(BaseModel):
+    appel_en_cours: bool = False
+    ope_appel_id: int = 0
+    ope_appel_nom: str = ""
+    date_h_appel: str = ""
+    duree_minutes: int = 0
+    duree_secondes: int = 0
+
+
+class VerrouResponse(BaseModel):
+    ok: bool = False
+    needs_confirm: bool = False
+    peek: VerrouPeek | None = None
+    sms: str = ""
+
+
+class PrendreAppelRequest(BaseModel):
+    force: bool = False
+
+
+class AnnulLignePanierRequest(BaseModel):
+    motifs: list[str] = []
+    precisions: str = ""
+
+
+class ActionVenteRequest(BaseModel):
+    """Body annul-vente / valider-vente. Pour Energie : pas de bloc anomalie."""
+    client: SaveClientPayload | None = None
+    vente: SaveVentePayload | None = None
+
+
+class ActionVenteResponse(BaseModel):
+    ok: bool = True
+    sms: str = ""
