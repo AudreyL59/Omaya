@@ -156,6 +156,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     db_ticket = get_connection("ticket")
     db_bo = get_connection("ticket_bo")
     db_rh = get_connection("rh")
+    db_adv = get_connection("adv")
 
     # Vague 1 : TK_Liste + TK_Call en parallele
     sql_liste = """SELECT
@@ -241,12 +242,20 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
 
     # Panier brut (Phase 1 : on l'expose tel quel, pas de catalogue produit
     # joint pour avoir Lib_Offre. A enrichir en Phase 2 selon besoin.)
+    # Charge les partenaires actifs pour mapper le prefix BDD au Lib_Partenaire
+    # (nom complet affiche dans la fiche).
+    from app.intranets.call.energie.services.tickets import _load_partenaires_actifs
+    partenaires_list = _load_partenaires_actifs(db_adv)
+    prefix_to_lib = {p["prefix"]: p["lib"] for p in partenaires_list}
+
     panier = []
     for p in rows_panier:
+        prefix = (p.get("Partenaire") or "").strip()
         panier.append({
             "id": _str_id(p.get("IDTK_Call_Panier")),
             "id_produit": _to_int(p.get("IDproduit")),
-            "partenaire": (p.get("Partenaire") or "").strip(),  # "OEN", "PRO", "ENI", "VAL", "STR", ...
+            "partenaire": prefix,  # prefixe BDD : "OEN", "PRO", "ENI", "VAL", "STR", ...
+            "partenaire_lib": prefix_to_lib.get(prefix, prefix),  # nom complet
             "opt_energie_verte_elec": _bool(p.get("OPT_EnergieVerteElec")),
             "opt_energie_verte_gaz": _bool(p.get("OPT_EnergieVerteGaz")),
             "opt_reforestation": _bool(p.get("OPT_Reforestation")),

@@ -70,6 +70,7 @@ interface FicheOffre {
   id: string
   id_produit: number
   partenaire: string
+  partenaire_lib: string
   // Options
   opt_energie_verte_elec: boolean
   opt_energie_verte_gaz: boolean
@@ -606,9 +607,9 @@ function ColonneCentre({
     <div className="col-span-4 flex flex-col gap-3">
       {/* Tableau panier */}
       <div className="bg-white rounded-lg border border-c-line overflow-hidden flex flex-col" style={{ maxHeight: '40vh' }}>
-        <div className="bg-gray-50 border-b border-c-line text-xs font-semibold text-c-ink-soft grid grid-cols-[70px_1fr]">
-          <div className="px-2 py-2">Type</div>
-          <div className="px-2 py-2">Lib Offre</div>
+        <div className="bg-gray-50 border-b border-c-line text-xs font-semibold text-c-ink-soft grid grid-cols-[150px_1fr]">
+          <div className="px-2 py-2">Partenaire</div>
+          <div className="px-2 py-2">Lib Offre / Num BS</div>
         </div>
         <div className="overflow-y-auto flex-1">
           {offresList.length === 0 ? (
@@ -620,12 +621,13 @@ function ColonneCentre({
                 <div
                   key={o.id}
                   onClick={() => onSelect(o.id)}
-                  className={`grid grid-cols-[70px_1fr] text-xs border-b border-c-line-soft cursor-pointer transition-colors ${
+                  className={`grid grid-cols-[150px_1fr] text-xs border-b border-c-line-soft cursor-pointer transition-colors ${
                     isSel ? 'bg-emerald-50' : 'hover:bg-gray-50'
                   }`}
+                  title={o.partenaire_lib || o.partenaire}
                 >
-                  <div className="px-2 py-2 font-semibold">{o.partenaire || '—'}</div>
-                  <div className="px-2 py-2">{o.num_bs || `Produit #${o.id_produit}`}</div>
+                  <div className="px-2 py-2 font-semibold truncate">{o.partenaire_lib || o.partenaire || '—'}</div>
+                  <div className="px-2 py-2 truncate">{o.num_bs || `Produit #${o.id_produit}`}</div>
                 </div>
               )
             })
@@ -779,16 +781,17 @@ function PartenaireBlock({
   savingOffre: boolean
 }) {
   const p = offre.partenaire.toUpperCase()
+  const partenaireLabel = offre.partenaire_lib || offre.partenaire || 'Partenaire'
 
   return (
     <div className="bg-white rounded-lg border border-c-line p-4 space-y-3 text-xs">
-      {/* Header avec libelle du partenaire */}
+      {/* Header avec libelle complet du partenaire */}
       <div className="flex items-center justify-between border-b border-c-line-soft pb-2 mb-1">
-        <span className="text-sm font-bold text-emerald-700">{p || 'Partenaire'}</span>
+        <span className="text-sm font-bold text-emerald-700">{partenaireLabel}</span>
       </div>
 
-      {/* Champs specifiques selon le partenaire */}
-      {p === 'STR' && <STRCredentials login={data.ohm_login} mdp={data.ohm_mdp} />}
+      {/* Credentials Ohm Energie (OEN uniquement) */}
+      {p === 'OEN' && <OhmCredentials login={data.ohm_login} mdp={data.ohm_mdp} />}
 
       {/* Num BS commun a tous */}
       <Field
@@ -845,7 +848,7 @@ function PartenaireBlock({
   )
 }
 
-function STRCredentials({ login, mdp }: { login: string; mdp: string }) {
+function OhmCredentials({ login, mdp }: { login: string; mdp: string }) {
   const [show, setShow] = useState(false)
   return (
     <div className="space-y-2">

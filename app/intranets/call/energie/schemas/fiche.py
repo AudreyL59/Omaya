@@ -48,7 +48,8 @@ class FicheOffreEnergie(BaseModel):
     """Une ligne du panier Energie."""
     id: str
     id_produit: int
-    partenaire: str                # "OEN", "PRO", "ENI", "VAL", "STR", ...
+    partenaire: str                # PrefixeBDD : "OEN", "PRO", "ENI", "VAL", "STR", ...
+    partenaire_lib: str = ""       # Lib_Partenaire (nom complet)
     # Options ENERGIE generales
     opt_energie_verte_elec: bool
     opt_energie_verte_gaz: bool
