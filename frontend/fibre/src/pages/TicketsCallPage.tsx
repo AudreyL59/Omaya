@@ -28,6 +28,7 @@ import {
   Check,
 } from 'lucide-react'
 import { getToken } from '@/api'
+import FicheTicketModal from '@/components/FicheTicketModal'
 
 interface TicketEnCours {
   id: string
@@ -115,6 +116,11 @@ export default function TicketsCallPage() {
   const [loadingTraites, setLoadingTraites] = useState(true)
   const [clientNow, setClientNow] = useState('')
   const [jourBas, setJourBas] = useState(() => new Date().toISOString().slice(0, 10))
+  // Selection courante pour ouvrir la fiche : on stocke un id par tableau
+  // (haut = en cours, bas = traites) + l'id actuellement ouvert dans la modal.
+  const [selectedHautId, setSelectedHautId] = useState<string>('')
+  const [selectedBasId, setSelectedBasId] = useState<string>('')
+  const [ficheOpenId, setFicheOpenId] = useState<string | null>(null)
   const lastModifRef = useRef('')
   const stoppedRef = useRef(false)
   const jourBasRef = useRef(jourBas)
@@ -233,8 +239,16 @@ export default function TicketsCallPage() {
       />
 
       {/* Tableau du HAUT : tickets à traiter */}
-      <SectionHeader title="Tickets Call à traiter" right={<HautActions />} />
-      <TableEnCours rows={enCours.tickets_en_cours} />
+      <SectionHeader
+        title="Tickets Call à traiter"
+        right={<HautActions disabled={!selectedHautId} onClick={() => selectedHautId && setFicheOpenId(selectedHautId)} />}
+      />
+      <TableEnCours
+        rows={enCours.tickets_en_cours}
+        selectedId={selectedHautId}
+        onSelect={setSelectedHautId}
+        onOpenFiche={(id) => setFicheOpenId(id)}
+      />
 
       {/* Tableau du BAS : tickets traités du jour (placeholder pendant chargement) */}
       <SectionHeader
@@ -246,6 +260,8 @@ export default function TicketsCallPage() {
             onApply={refetchNow}
             rows={traitesRows}
             loading={loadingTraites}
+            ficheDisabled={!selectedBasId}
+            onOpenFiche={() => selectedBasId && setFicheOpenId(selectedBasId)}
           />
         }
       />
@@ -255,8 +271,16 @@ export default function TicketsCallPage() {
           Chargement des tickets traités...
         </div>
       ) : (
-        <TableTraites rows={traitesRows} />
+        <TableTraites
+          rows={traitesRows}
+          selectedId={selectedBasId}
+          onSelect={setSelectedBasId}
+          onOpenFiche={(id) => setFicheOpenId(id)}
+        />
       )}
+
+      {/* Popup fiche ticket */}
+      <FicheTicketModal idTicket={ficheOpenId} onClose={() => setFicheOpenId(null)} />
     </div>
   )
 }
@@ -380,10 +404,15 @@ function SectionHeader({
   )
 }
 
-function HautActions() {
+function HautActions({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
   return (
     <>
-      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-c-brand text-white text-sm font-semibold hover:brightness-110">
+      <button
+        onClick={onClick}
+        disabled={disabled}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+        title={disabled ? 'Sélectionne un ticket dans la table' : 'Ouvrir la fiche'}
+      >
         <Eye className="w-4 h-4" />
         Voir la fiche
       </button>
@@ -397,12 +426,16 @@ function BasActions({
   onApply,
   rows,
   loading,
+  ficheDisabled,
+  onOpenFiche,
 }: {
   date: string
   onChangeDate: (d: string) => void
   onApply: () => void
   rows: TicketTraite[]
   loading: boolean
+  ficheDisabled: boolean
+  onOpenFiche: () => void
 }) {
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
@@ -467,7 +500,12 @@ function BasActions({
         )}
         Export Excel
       </button>
-      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-c-brand text-white text-sm font-semibold hover:brightness-110">
+      <button
+        onClick={onOpenFiche}
+        disabled={ficheDisabled}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-c-brand text-white text-sm font-semibold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+        title={ficheDisabled ? 'Sélectionne un ticket dans la table' : 'Ouvrir la fiche'}
+      >
         <Eye className="w-4 h-4" />
         Voir la fiche
       </button>
@@ -475,7 +513,17 @@ function BasActions({
   )
 }
 
-function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
+function TableEnCours({
+  rows,
+  selectedId,
+  onSelect,
+  onOpenFiche,
+}: {
+  rows: TicketEnCours[]
+  selectedId: string
+  onSelect: (id: string) => void
+  onOpenFiche: (id: string) => void
+}) {
   if (!rows.length) {
     return (
       <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm bg-white">
@@ -505,7 +553,12 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
             //  - Si AppelEnCours : fond ORANGE PASTEL (un opé a pris le ticket)
             //  - Si IDTK_Statut = 34 : texte BLEU RVB(0,102,254)
             //  - Si TicketDiff : texte ROUGE
-            const bg = t.appel_en_cours ? 'bg-orange-100' : 'bg-white'
+            const isSel = t.id === selectedId
+            const bg = isSel
+              ? 'bg-c-brand-soft'
+              : t.appel_en_cours
+                ? 'bg-orange-100'
+                : 'bg-white'
             const textColor =
               t.id_tk_statut === 34
                 ? 'text-blue-600'
@@ -515,6 +568,8 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
             return (
               <tr
                 key={t.id}
+                onClick={() => onSelect(t.id)}
+                onDoubleClick={() => onOpenFiche(t.id)}
                 className={`${bg} ${textColor} border-t border-c-line-soft hover:bg-c-brand-soft/50 cursor-pointer transition-colors`}
               >
                 <Td>{t.ope_appel_nom}</Td>
@@ -544,7 +599,17 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
   )
 }
 
-function TableTraites({ rows }: { rows: TicketTraite[] }) {
+function TableTraites({
+  rows,
+  selectedId,
+  onSelect,
+  onOpenFiche,
+}: {
+  rows: TicketTraite[]
+  selectedId: string
+  onSelect: (id: string) => void
+  onOpenFiche: (id: string) => void
+}) {
   if (!rows.length) {
     return (
       <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm bg-white">
@@ -567,6 +632,7 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
             <Th className="text-center">NB Offres</Th>
             <Th className="text-center">NB Fibre Valide</Th>
             <Th className="text-center">NB Mobile Valide</Th>
+            <Th>Réf Appel</Th>
           </tr>
         </thead>
         <tbody>
@@ -575,16 +641,22 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
             //  - delai NUM >= 1h apres Datecrea : fond ROUGE (priorite max)
             //  - VendeurDistrib : fond GRIS (vendeur du reseau distrib externe)
             //  - 1er contrat du vendeur : fond VERT
-            const bg = t.delai_depasse
-              ? 'bg-red-100'
-              : t.vendeur_distrib
-                ? 'bg-gray-100'
-                : t.premier_contrat
-                  ? 'bg-green-100'
-                  : 'bg-white'
+            //  - ligne selectionnee : override avec un fond bleu doux
+            const isSel = t.id === selectedId
+            const bg = isSel
+              ? 'bg-c-brand-soft'
+              : t.delai_depasse
+                ? 'bg-red-100'
+                : t.vendeur_distrib
+                  ? 'bg-gray-100'
+                  : t.premier_contrat
+                    ? 'bg-green-100'
+                    : 'bg-white'
             return (
               <tr
                 key={t.id}
+                onClick={() => onSelect(t.id)}
+                onDoubleClick={() => onOpenFiche(t.id)}
                 className={`${bg} border-t border-c-line-soft hover:bg-c-brand-soft/50 cursor-pointer transition-colors`}
               >
                 <Td>{shortDateTime(t.date_crea)}</Td>
@@ -597,6 +669,7 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
                 <Td className="text-center"><CountBadge value={t.nb_offres} /></Td>
                 <Td className="text-center"><CountBadge value={t.nb_fibre_valide} variant="brand" /></Td>
                 <Td className="text-center"><CountBadge value={t.nb_mobile_valide} variant="brand" /></Td>
+                <Td className="text-c-ink-soft">{t.ref_appel}</Td>
               </tr>
             )
           })}

@@ -1,0 +1,99 @@
+"""
+Schemas Pydantic pour la fiche d'un ticket Call Fibre (popup).
+
+Transposition de PAGE_TicketFicheFibre. Phase 1 = lecture seule.
+"""
+
+from pydantic import BaseModel
+
+
+class FicheClient(BaseModel):
+    civilite: int                 # 1=M, 2=Mme, 3=Mlle (a confirmer)
+    nom: str
+    nom_marital: str
+    prenom: str
+    nom_format: str               # "M. NOM ép MARITAL Prenom" pre-formate
+    date_naiss: str               # YYYY-MM-DD
+    dep_naiss: int
+    type_logement: int            # 1=Maison, 2=Appartement
+    adresse1: str
+    adresse2: str
+    cp: str
+    ville: str
+    email: str
+    mobile1: str                  # eventuellement masque "0612345xx"
+    mobile2: str
+    opt_rappel: bool              # consentement "rappele immediatement"
+    opt_partenaire: bool          # consentement "transmission aux partenaires"
+    client_pro: bool
+    client_rs: str                # raison sociale (si pro)
+    client_siret: str             # SIRET (si pro)
+
+
+class FicheVendeur(BaseModel):
+    id_salarie: int
+    nom: str
+    prenom: str
+    gsm: str                      # eventuellement masque
+    lib_affectation: str          # "Plateau/Staff => Service IT" (a calculer)
+
+
+class FicheVente(BaseModel):
+    ref_appel: str
+    intervention_vendeur: bool
+    mobile_propose_vendeur: bool
+    info_vente: str
+
+
+class FicheAnomalie(BaseModel):
+    active: bool                  # bloc visible si True
+    id_type: int                  # IDTK_CallSFR_TypeAnomalie
+    info_cplt: str
+
+
+class FicheOffre(BaseModel):
+    """Une ligne du panier de la fiche."""
+    id: str                       # IDTK_CallSFR_Panier
+    id_offre: str                 # IDOffres_SFR (du catalogue)
+    lib_offre: str
+    type: str                     # "FIBRE" / "MOBILE"
+    opt_tv: bool
+    portabilite: bool
+    type_vente: int               # 1=CQ, 2=CQ VLA, autres=Migration
+    statut_prod: int              # 0=ND, 1=Validé, 2=Annulé, 3=Num BS, 4=Validé-Différé
+    motif_annulation: str
+    num_portabilite: str
+    num_rio: str
+    num_prise_optique: str
+    opt_choisies: str
+
+
+class StatutVenteOption(BaseModel):
+    id: int
+    label: str
+
+
+class FicheTicketFibreResponse(BaseModel):
+    """Reponse complete de GET /tickets/{id}/fiche."""
+    id_ticket: str
+    id_call_sfr: str
+    id_tk_statut: int
+    is_cloture: bool
+    is_statut_34: bool            # afficher libelle special
+    is_my_call: bool              # mobile demasque ou pas
+    client: FicheClient
+    vendeur: FicheVendeur
+    vente: FicheVente
+    anomalie: FicheAnomalie
+    panier: list[FicheOffre]
+    nb_prod_total: int
+    nb_prod_valide: int
+    nb_prod_annule: int
+    btn_valider_actif: bool
+    btn_annuler_actif: bool
+    statuts_vente: list[StatutVenteOption]
+
+
+class FicheTestEligibiliteResponse(BaseModel):
+    """Image TestEligibilite (data URL) pour une ligne du panier (FIBRE only)."""
+    test_eligibilite: str         # "data:image/jpeg;base64,..." ou ""

@@ -16,11 +16,16 @@ from fastapi.responses import Response
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.call.fibre.services import tickets as svc
+from app.intranets.call.fibre.services import fiche as fiche_svc
 from app.intranets.call.fibre.schemas.tickets import (
     TicketsPageResponse,
     TicketsLiveResponse,
     TicketsEnCoursResponse,
     TicketsTraitesResponse,
+)
+from app.intranets.call.fibre.schemas.fiche import (
+    FicheTicketFibreResponse,
+    FicheTestEligibiliteResponse,
 )
 
 router = APIRouter()
@@ -79,6 +84,32 @@ def export_tickets_traites(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/tickets/{id_ticket}/fiche", response_model=FicheTicketFibreResponse)
+def get_fiche_ticket(
+    id_ticket: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Charge la fiche complete d'un ticket Call Fibre (popup).
+
+    Phase 1 = lecture seule. Mobile masque si l'ope n'est pas celui qui a
+    pris l'appel (= n'a pas pose le verrou).
+    """
+    return fiche_svc.load_fiche(
+        id_tk_liste=int(id_ticket),
+        current_user_id=user.id_salarie or 0,
+    )
+
+
+@router.get("/tickets/panier/{id_panier}/test-eligibilite", response_model=FicheTestEligibiliteResponse)
+def get_panier_test_eligibilite(
+    id_panier: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Charge l'image TestEligibilite pour une ligne du panier (FIBRE only)."""
+    url = fiche_svc.load_panier_ligne_image(int(id_panier))
+    return {"test_eligibilite": url}
 
 
 @router.get("/tickets/live", response_model=TicketsLiveResponse)

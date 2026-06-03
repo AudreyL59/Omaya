@@ -1,0 +1,282 @@
+"""
+Service Call Fibre - chargement de la fiche d'un ticket (popup).
+
+Transposition du code WinDev `PAGE_TicketFicheFibre` (code init serveur) :
+- TK_CallSFR + TK_Liste (par IDTK_Liste) -> infos client + vente + statut
+- Salarie (par IDSalarie) -> vendeur
+- TK_CallSFR_Panier JOIN SFR_OffresProvad -> panier (toutes les lignes)
+- Pour chaque ligne du panier, HLitRecherche TK_CallSFR_Panier pour les
+  champs detail (NumPortabilite, RIO, NumPrise_Optique, OptChoisies,
+  TestEligibilite-image).
+
+Phase 1 = lecture seule. Save/verrou ope traites separement.
+"""
+
+import base64
+from typing import Any
+
+from app.core.database import get_connection
+from app.intranets.call.fibre.services.tickets import (
+    _capitalize,
+    _format_nom_client,
+    _format_ville,
+    _iso,
+    _str_id,
+    _to_int,
+)
+
+
+def _mask_phone(num: str) -> str:
+    """'0612345678' -> '06123456xx'. Vide si num vide."""
+    s = (num or "").strip()
+    if not s:
+        return ""
+    if len(s) <= 2:
+        return "xx"
+    return s[:-2] + "xx"
+
+
+def _bool(v: Any) -> bool:
+    return bool(v) and v not in (0, "0", "")
+
+
+def _safe_b64_data_url(raw: Any) -> str:
+    """Memo binaire HFSQL -> data URL base64. Renvoie '' si vide ou non-binaire."""
+    if not raw:
+        return ""
+    if isinstance(raw, memoryview):
+        raw = bytes(raw)
+    if isinstance(raw, (bytes, bytearray)):
+        b64 = base64.b64encode(raw).decode("ascii")
+    elif isinstance(raw, str):
+        # Si deja en base64 (le pont peut deja serializer ainsi), on prend tel quel
+        b64 = raw
+    else:
+        return ""
+    return f"data:image/jpeg;base64,{b64}"
+
+
+def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
+    """Charge toutes les donnees necessaires pour afficher la fiche d'un
+    ticket Call Fibre.
+
+    `current_user_id` : id_salarie de l'utilisateur connecte. Sert a savoir
+    s'il a deja pris l'appel (= a poser le verrou) -> si oui, on demasque
+    les mobiles. Sinon les 2 derniers chars sont remplaces par "xx".
+    """
+    db_ticket = get_connection("ticket")
+    db_bo = get_connection("ticket_bo")
+    db_rh = get_connection("rh")
+    db_adv = get_connection("adv")
+
+    # 1. Infos ticket : TK_Liste + TK_CallSFR (2 queries, pas cross-base)
+    rows_liste = db_ticket.query(
+        """SELECT
+            IDTK_Liste AS id_tk_liste,
+            IDTK_Statut AS id_tk_statut,
+            OPCrea AS op_crea,
+            Cloturée AS cloturee,
+            DateCloture AS date_cloture
+        FROM TK_Liste
+        WHERE IDTK_Liste = ?""",
+        (id_tk_liste,),
+    )
+    if not rows_liste:
+        return {"error": "Ticket introuvable"}
+    tk_liste = rows_liste[0]
+
+    rows_call = db_bo.query(
+        """SELECT
+            IDtk_CallSFR, IDTK_Liste, IDSalarie,
+            CivilitéClient, NomClient, NomMaritalClient, PrenomClient,
+            DATENAISS, DEPNAISS, TypeLogement, ADRESSE1, ADRESSE2, CP, VILLE,
+            adrMail, Mobile1, Mobile2,
+            AppelEnCours, DateH_Appel, OpéAppel, RefAppel,
+            MotifAnnulation, DateDeb_PriseEnCharge, DateFin_PriseEnCharge,
+            InterventionVend, MobPropoVend, InfoVente,
+            AnomalieMobile, IDTK_CallSFR_TypeAnomalie, InfoCpltAnomalie,
+            Opt_Rappel, Opt_Partenaire,
+            ClientPro, ClientRS, ClientSiret
+        FROM TK_CallSFR
+        WHERE IDTK_Liste = ?
+          AND ModifELEM NOT LIKE '%suppr%'""",
+        (id_tk_liste,),
+    )
+    if not rows_call:
+        return {"error": "Pas de TK_CallSFR pour ce ticket"}
+    tc = rows_call[0]
+
+    id_call_sfr = _to_int(tc.get("IDtk_CallSFR"))
+    id_salarie = _to_int(tc.get("IDSalarie"))
+    id_tk_statut = _to_int(tk_liste.get("id_tk_statut"))
+    appel_en_cours = _bool(tc.get("AppelEnCours"))
+    ope_appel_id = _to_int(tc.get("OpéAppel"))
+
+    # Verrou opé : est-ce que l'opé connecte a pris l'appel ?
+    # WinDev demasque les mobiles uniquement si EtatAppelClient = AppelEnCours = 1.
+    # Ici on demasque si l'opé connecte est l'opé du ticket actuel (par securite).
+    is_my_call = appel_en_cours and ope_appel_id == current_user_id
+
+    mobile1_raw = (tc.get("Mobile1") or "").strip()
+    mobile2_raw = (tc.get("Mobile2") or "").strip()
+    mobile1 = mobile1_raw if is_my_call else _mask_phone(mobile1_raw)
+    mobile2 = mobile2_raw if is_my_call else _mask_phone(mobile2_raw)
+
+    # 2. Salarie vendeur (Nom + Prenom + TélMob)
+    nom_vend = ""
+    prenom_vend = ""
+    gsm_vend_raw = ""
+    if id_salarie:
+        rows_sal = db_rh.query(
+            "SELECT Nom, Prenom, TélMob FROM Salarie WHERE IDSalarie = ?",
+            (id_salarie,),
+        )
+        if rows_sal:
+            s = rows_sal[0]
+            nom_vend = (s.get("Nom") or "").strip()
+            prenom_vend = _capitalize((s.get("Prenom") or "").strip())
+            gsm_vend_raw = (s.get("TélMob") or "").strip()
+    gsm_vend = gsm_vend_raw if is_my_call else _mask_phone(gsm_vend_raw)
+
+    # 3. Panier : TK_CallSFR_Panier + SFR_OffresProvad (cross-base impossible)
+    rows_panier = db_bo.query(
+        """SELECT
+            IDTK_CallSFR_Panier, IDOffres_SFR, Opt_TV, TYPE, portabilité,
+            TypeVente, MotifAnnulation, StatutProd,
+            NumPortabilité, NumPrise_RIO, NumPrise_Optique, OptChoisies
+        FROM TK_CallSFR_Panier
+        WHERE IDtk_CallSFR = ?
+          AND ModifELEM NOT LIKE '%suppr%'""",
+        (id_call_sfr,),
+    )
+    # Lib_Offre via SFR_OffresProvad (base adv)
+    offre_ids = {_to_int(p.get("IDOffres_SFR")) for p in rows_panier}
+    offre_ids.discard(0)
+    offre_libs: dict[int, str] = {}
+    if offre_ids:
+        oids_sql = ",".join(str(i) for i in offre_ids)
+        rows_off = db_adv.query(
+            f"""SELECT IDOffres_SFR, Lib_Offre FROM SFR_OffresProvad
+            WHERE IDOffres_SFR IN ({oids_sql})"""
+        )
+        for o in rows_off:
+            offre_libs[_to_int(o.get("IDOffres_SFR"))] = (o.get("Lib_Offre") or "").strip()
+
+    panier = []
+    for p in rows_panier:
+        id_off = _to_int(p.get("IDOffres_SFR"))
+        panier.append({
+            "id": _str_id(p.get("IDTK_CallSFR_Panier")),
+            "id_offre": _str_id(p.get("IDOffres_SFR")),
+            "lib_offre": offre_libs.get(id_off, ""),
+            "type": (p.get("TYPE") or "").strip(),  # "FIBRE" / "MOBILE"
+            "opt_tv": _bool(p.get("Opt_TV")),
+            "portabilite": _bool(p.get("portabilité")),
+            "type_vente": _to_int(p.get("TypeVente")),
+            "statut_prod": _to_int(p.get("StatutProd")),
+            "motif_annulation": (p.get("MotifAnnulation") or "").strip(),
+            "num_portabilite": (p.get("NumPortabilité") or "").strip(),
+            "num_rio": (p.get("NumPrise_RIO") or "").strip(),
+            "num_prise_optique": (p.get("NumPrise_Optique") or "").strip(),
+            "opt_choisies": (p.get("OptChoisies") or "").strip(),
+        })
+
+    # 4. Statuts vente disponibles (dynamique selon IDTK_Statut)
+    # WinDev: ListeAjoute Non défini=0, Validé=1, Annulé=2, Num BS ajouté=3,
+    # et si IDTK_Statut=15: Validé - Différé=4
+    statuts_vente = [
+        {"id": 0, "label": "Non défini"},
+        {"id": 1, "label": "Validé"},
+        {"id": 2, "label": "Annulé"},
+        {"id": 3, "label": "Num BS ajouté"},
+    ]
+    if id_tk_statut == 15:
+        statuts_vente.append({"id": 4, "label": "Validé - Différé"})
+
+    # 5. Compteurs panier (pour pre-calculer les etats des boutons)
+    nb_prod_total = len(panier)
+    nb_prod_valide = sum(1 for p in panier if p["statut_prod"] == 1)
+    nb_prod_annule = sum(1 for p in panier if p["statut_prod"] == 2)
+    btn_valider_actif = nb_prod_valide > 0 and (nb_prod_valide + nb_prod_annule) == nb_prod_total
+    btn_annuler_actif = nb_prod_total > 0 and nb_prod_annule == nb_prod_total
+
+    return {
+        "id_ticket": _str_id(id_tk_liste),
+        "id_call_sfr": _str_id(id_call_sfr),
+        "id_tk_statut": id_tk_statut,
+        "is_cloture": _bool(tk_liste.get("cloturee")),
+        "is_statut_34": id_tk_statut == 34,  # Affiche libelle special
+        "is_my_call": is_my_call,  # mobile demasque ou non
+        "client": {
+            "civilite": _to_int(tc.get("CivilitéClient")),
+            "nom": (tc.get("NomClient") or "").strip(),
+            "nom_marital": (tc.get("NomMaritalClient") or "").strip(),
+            "prenom": (tc.get("PrenomClient") or "").strip(),
+            "nom_format": _format_nom_client(
+                _to_int(tc.get("CivilitéClient")),
+                tc.get("NomClient"),
+                tc.get("NomMaritalClient"),
+                tc.get("PrenomClient"),
+            ),
+            "date_naiss": _iso(tc.get("DATENAISS"))[:10],
+            "dep_naiss": _to_int(tc.get("DEPNAISS")),
+            "type_logement": _to_int(tc.get("TypeLogement")),  # 1=Maison, 2=Appart
+            "adresse1": (tc.get("ADRESSE1") or "").strip(),
+            "adresse2": (tc.get("ADRESSE2") or "").strip(),
+            "cp": (tc.get("CP") or "").strip(),
+            "ville": _format_ville(tc.get("VILLE") or ""),
+            "email": (tc.get("adrMail") or "").strip(),
+            "mobile1": mobile1,
+            "mobile2": mobile2,
+            "opt_rappel": _bool(tc.get("Opt_Rappel")),
+            "opt_partenaire": _bool(tc.get("Opt_Partenaire")),
+            "client_pro": _bool(tc.get("ClientPro")),
+            "client_rs": (tc.get("ClientRS") or "").strip(),
+            "client_siret": (tc.get("ClientSiret") or "").strip(),
+        },
+        "vendeur": {
+            "id_salarie": id_salarie,
+            "nom": nom_vend,
+            "prenom": prenom_vend,
+            "gsm": gsm_vend,
+            "lib_affectation": "",  # TODO: affectationTerrainVendeur(IDSalarie)
+        },
+        "vente": {
+            "ref_appel": (tc.get("RefAppel") or "").strip(),
+            "intervention_vendeur": _bool(tc.get("InterventionVend")),
+            "mobile_propose_vendeur": _bool(tc.get("MobPropoVend")),
+            "info_vente": (tc.get("InfoVente") or "").strip(),
+        },
+        "anomalie": {
+            "active": _bool(tc.get("AnomalieMobile")),
+            "id_type": _to_int(tc.get("IDTK_CallSFR_TypeAnomalie")),
+            "info_cplt": (tc.get("InfoCpltAnomalie") or "").strip(),
+        },
+        "panier": panier,
+        "nb_prod_total": nb_prod_total,
+        "nb_prod_valide": nb_prod_valide,
+        "nb_prod_annule": nb_prod_annule,
+        "btn_valider_actif": btn_valider_actif,
+        "btn_annuler_actif": btn_annuler_actif,
+        "statuts_vente": statuts_vente,
+    }
+
+
+def load_panier_ligne_image(id_panier: int) -> str:
+    """Charge l'image TestEligibilite d'une ligne de panier (FIBRE uniquement).
+
+    Renvoie une data URL base64 ou "" si pas d'image / non FIBRE.
+    Appel separe pour eviter de charger toutes les images dans la fiche.
+    """
+    db_bo = get_connection("ticket_bo")
+    rows = db_bo.query(
+        """SELECT TYPE, TestEligibilité FROM TK_CallSFR_Panier
+        WHERE IDTK_CallSFR_Panier = ?""",
+        (id_panier,),
+    )
+    if not rows:
+        return ""
+    r = rows[0]
+    if (r.get("TYPE") or "").strip().upper() != "FIBRE":
+        return ""
+    return _safe_b64_data_url(r.get("TestEligibilité"))
