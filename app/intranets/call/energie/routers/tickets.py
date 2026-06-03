@@ -62,7 +62,11 @@ def get_fiche_documents(
 @router.get("/tickets/en-cours", response_model=TicketsEnCoursResponse)
 def get_tickets_en_cours(user: UserToken = Depends(get_current_user)):
     """Tableau du haut UNIQUEMENT : tickets a traiter + serveur_now + last_modif."""
-    return svc.load_page_en_cours(user_id=user.id_salarie, user_id_poste=0)
+    try:
+        return svc.load_page_en_cours(user_id=user.id_salarie, user_id_poste=0)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.get("/tickets/traites", response_model=TicketsTraitesResponse)
@@ -71,7 +75,11 @@ def get_tickets_traites(
     jour: str | None = Query(None, description="YYYY-MM-DD. Defaut = today."),
 ):
     """Tableau du bas (tickets traites du jour)."""
-    return svc.load_page_traites(jour=jour)
+    try:
+        return svc.load_page_traites(jour=jour)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.get("/tickets", response_model=TicketsPageResponse)
@@ -108,9 +116,12 @@ def get_tickets_live(
     timeout: int = Query(25, ge=1, le=55, description="Long polling timeout (s)."),
 ):
     """Long polling : renvoie les en-cours quand un changement est detecte."""
-    changed, latest = svc.wait_for_change(since, timeout_seconds=timeout)
-    if not changed:
-        return {"changed": False, "page": None, "last_modif": latest}
-
-    page = svc.load_page_en_cours(user_id=user.id_salarie, user_id_poste=0)
-    return {"changed": True, "page": page, "last_modif": page["last_modif"]}
+    try:
+        changed, latest = svc.wait_for_change(since, timeout_seconds=timeout)
+        if not changed:
+            return {"changed": False, "page": None, "last_modif": latest}
+        page = svc.load_page_en_cours(user_id=user.id_salarie, user_id_poste=0)
+        return {"changed": True, "page": page, "last_modif": page["last_modif"]}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
