@@ -22,8 +22,10 @@ import {
   CreditCard,
   CheckCircle2,
   Circle,
+  FileText,
 } from 'lucide-react'
 import { getToken } from '@/api'
+import DocumentViewerModal from '@/components/DocumentViewerModal'
 
 interface FicheClient {
   civilite: number
@@ -90,6 +92,11 @@ interface StatutVenteOption {
   label: string
 }
 
+interface DocRef {
+  url: string
+  kind: 'pdf' | 'image' | ''
+}
+
 interface FicheData {
   id_ticket: string
   id_call_sfr: string
@@ -123,7 +130,11 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   const [error, setError] = useState<string>('')
   const [selectedPanierId, setSelectedPanierId] = useState<string>('')
   const [testEligImg, setTestEligImg] = useState<string>('')
-  const [cinOpen, setCinOpen] = useState(false)
+  // Etat du viewer doc (CIN / KBIS / Lettre resil) + URLs detectees
+  const [docCin, setDocCin] = useState<DocRef>({ url: '', kind: '' })
+  const [docKbis, setDocKbis] = useState<DocRef>({ url: '', kind: '' })
+  const [docLettre, setDocLettre] = useState<DocRef>({ url: '', kind: '' })
+  const [viewerOpen, setViewerOpen] = useState<null | 'cin' | 'kbis' | 'lettre'>(null)
 
   // Fetch fiche
   useEffect(() => {
@@ -133,6 +144,9 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
     setData(null)
     setSelectedPanierId('')
     setTestEligImg('')
+    setDocCin({ url: '', kind: '' })
+    setDocKbis({ url: '', kind: '' })
+    setDocLettre({ url: '', kind: '' })
     ;(async () => {
       try {
         const r = await fetch(`${API_BASE}/tickets/${idTicket}/fiche`, {
@@ -155,6 +169,18 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
         const firstFibre = d.panier.find((p) => p.type === 'FIBRE')
         if (firstFibre) setSelectedPanierId(firstFibre.id)
         else if (d.panier.length > 0) setSelectedPanierId(d.panier[0].id)
+        // Detecte les documents en arriere-plan (CIN + KBIS si Pro)
+        fetch(`${API_BASE}/tickets/${idTicket}/documents?client_pro=${d.client.client_pro ? 1 : 0}`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+          .then((r2) => (r2.ok ? r2.json() : null))
+          .then((docs) => {
+            if (docs?.cin) setDocCin(docs.cin)
+            if (docs?.kbis) setDocKbis(docs.kbis)
+          })
+          .catch(() => {
+            /* silencieux */
+          })
       } catch (e) {
         setError('Erreur réseau')
       } finally {
@@ -171,6 +197,7 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   useEffect(() => {
     if (!selectedOffre || selectedOffre.type !== 'FIBRE') {
       setTestEligImg('')
+      setDocLettre({ url: '', kind: '' })
       return
     }
     let cancelled = false
@@ -186,10 +213,25 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
         /* ignore */
       }
     })()
+    // Lettre de resil : visible uniquement si FIBRE + pas portabilite
+    if (!selectedOffre.portabilite && idTicket) {
+      fetch(`${API_BASE}/tickets/${idTicket}/panier/${selectedOffre.id}/lettre-resil`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!cancelled && d) setDocLettre(d)
+        })
+        .catch(() => {
+          /* silencieux */
+        })
+    } else {
+      setDocLettre({ url: '', kind: '' })
+    }
     return () => {
       cancelled = true
     }
-  }, [selectedOffre])
+  }, [selectedOffre, idTicket])
 
   // Esc ferme la modal
   useEffect(() => {
@@ -201,6 +243,12 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   }, [onClose])
 
   if (!idTicket) return null
+
+  // Document actif dans le viewer
+  const viewerDoc: DocRef =
+    viewerOpen === 'cin' ? docCin : viewerOpen === 'kbis' ? docKbis : viewerOpen === 'lettre' ? docLettre : { url: '', kind: '' }
+  const viewerTitle =
+    viewerOpen === 'cin' ? "Carte d'identité" : viewerOpen === 'kbis' ? 'KBIS' : viewerOpen === 'lettre' ? 'Lettre de résiliation' : ''
 
   return (
     <AnimatePresence>
@@ -270,17 +318,33 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
             </div>
           ) : (
             <div className="flex-1 grid grid-cols-12 gap-4 p-4 overflow-auto bg-gray-50">
-              <ColonneGauche data={data} onOpenCin={() => setCinOpen(true)} />
+              <ColonneGauche
+                data={data}
+                cinAvailable={!!docCin.url}
+                kbisAvailable={!!docKbis.url}
+                onOpenCin={() => setViewerOpen('cin')}
+                onOpenKbis={() => setViewerOpen('kbis')}
+              />
               <ColonneCentre data={data} selectedId={selectedPanierId} onSelect={setSelectedPanierId} />
-              <ColonneDroite data={data} offre={selectedOffre} testEligImg={testEligImg} />
+              <ColonneDroite
+                data={data}
+                offre={selectedOffre}
+                testEligImg={testEligImg}
+                lettreAvailable={!!docLettre.url}
+                onOpenLettre={() => setViewerOpen('lettre')}
+              />
             </div>
           )}
         </motion.div>
 
-        {/* Sous-modal CIN (placeholder Phase 2) */}
-        {cinOpen && (
-          <CinPlaceholderModal onClose={() => setCinOpen(false)} />
-        )}
+        {/* Viewer documents (CIN / KBIS / Lettre resil) */}
+        <DocumentViewerModal
+          open={viewerOpen !== null}
+          title={viewerTitle}
+          url={viewerDoc.url}
+          kind={viewerDoc.kind}
+          onClose={() => setViewerOpen(null)}
+        />
       </motion.div>
     </AnimatePresence>
   )
@@ -288,7 +352,19 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
 
 // --- Colonne gauche : Client + Vendeur -----------------------------------
 
-function ColonneGauche({ data, onOpenCin }: { data: FicheData; onOpenCin: () => void }) {
+function ColonneGauche({
+  data,
+  cinAvailable,
+  kbisAvailable,
+  onOpenCin,
+  onOpenKbis,
+}: {
+  data: FicheData
+  cinAvailable: boolean
+  kbisAvailable: boolean
+  onOpenCin: () => void
+  onOpenKbis: () => void
+}) {
   const c = data.client
   const v = data.vendeur
   return (
@@ -315,16 +391,21 @@ function ColonneGauche({ data, onOpenCin }: { data: FicheData; onOpenCin: () => 
             </div>
             <button
               onClick={onOpenCin}
-              className="shrink-0 w-12 h-9 rounded border border-c-line hover:bg-c-brand-soft flex items-center justify-center"
-              title="Voir la CIN"
+              disabled={!cinAvailable}
+              className="shrink-0 w-12 h-9 rounded border border-c-line hover:bg-c-brand-soft flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+              title={cinAvailable ? 'Voir la CIN' : 'Aucune CIN disponible'}
             >
               <CreditCard className="w-5 h-5 text-c-ink-soft" />
             </button>
           </div>
           <div className="text-[10px] text-c-ink-faint text-right -mt-1.5">
-            <button onClick={onOpenCin} className="hover:underline">
-              Voir la CIN SOS
-            </button>
+            {cinAvailable ? (
+              <button onClick={onOpenCin} className="hover:underline">
+                Voir la CIN SOS
+              </button>
+            ) : (
+              <span className="italic">Pas de CIN trouvée</span>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Né(e) le" value={c.date_naiss} />
@@ -370,11 +451,24 @@ function ColonneGauche({ data, onOpenCin }: { data: FicheData; onOpenCin: () => 
             <ProTab active={c.client_pro} label="Client Pro" />
           </div>
 
-          {/* Si client Pro : Raison Sociale + SIRET */}
+          {/* Si client Pro : Raison Sociale + SIRET + bouton KBIS */}
           {c.client_pro && (
             <div className="pt-2 space-y-2.5">
               <Field label="Raison Sociale" value={c.client_rs} />
-              <Field label="n° SIRET" value={c.client_siret} />
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <Field label="n° SIRET" value={c.client_siret} />
+                </div>
+                <button
+                  onClick={onOpenKbis}
+                  disabled={!kbisAvailable}
+                  className="shrink-0 flex items-center gap-1.5 px-3 h-9 rounded border border-c-line hover:bg-c-brand-soft text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={kbisAvailable ? 'Voir le KBIS' : 'Aucun KBIS disponible'}
+                >
+                  <FileText className="w-3.5 h-3.5 text-c-ink-soft" />
+                  KBIS
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -508,10 +602,14 @@ function ColonneDroite({
   data,
   offre,
   testEligImg,
+  lettreAvailable,
+  onOpenLettre,
 }: {
   data: FicheData
   offre: FicheOffre | null
   testEligImg: string
+  lettreAvailable: boolean
+  onOpenLettre: () => void
 }) {
   return (
     <div className="col-span-4 flex flex-col gap-4">
@@ -526,9 +624,10 @@ function ColonneDroite({
               </div>
               {offre.type === 'FIBRE' && !offre.portabilite && (
                 <button
-                  disabled
-                  className="px-3 py-1.5 rounded bg-orange-500 text-white text-xs font-semibold opacity-60 cursor-not-allowed"
-                  title="À venir (phase 2/3)"
+                  onClick={onOpenLettre}
+                  disabled={!lettreAvailable}
+                  className="px-3 py-1.5 rounded bg-orange-500 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={lettreAvailable ? 'Ouvrir la Lettre de résiliation' : 'Aucune Lettre de résiliation trouvée'}
                 >
                   Lettre de résil
                 </button>
@@ -651,38 +750,6 @@ function ColonneDroite({
         </div>
       )}
     </div>
-  )
-}
-
-// --- Sous-modal CIN placeholder (Phase 2) --------------------------------
-
-function CinPlaceholderModal({ onClose }: { onClose: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onClick={onClose}
-      className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
-    >
-      <motion.div
-        initial={{ scale: 0.95 }}
-        animate={{ scale: 1 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-xl p-6 max-w-md text-center space-y-3"
-      >
-        <h3 className="text-base font-bold text-c-ink">Carte d'identité</h3>
-        <p className="text-sm text-c-ink-soft">
-          Le viewer CIN (image + PDF + KBIS) sera ajouté en Phase 2.
-        </p>
-        <button
-          onClick={onClose}
-          className="px-4 py-2 rounded bg-c-brand text-white text-sm font-semibold hover:brightness-110"
-        >
-          Fermer
-        </button>
-      </motion.div>
-    </motion.div>
   )
 }
 

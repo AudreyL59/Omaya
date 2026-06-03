@@ -28,6 +28,8 @@ from app.intranets.call.fibre.schemas.tickets import (
 from app.intranets.call.fibre.schemas.fiche import (
     FicheTicketFibreResponse,
     FicheTestEligibiliteResponse,
+    FicheDocumentsResponse,
+    LettreResilResponse,
 )
 
 router = APIRouter()
@@ -119,6 +121,30 @@ def get_panier_test_eligibilite(
     """Charge l'image TestEligibilite pour une ligne du panier (FIBRE only)."""
     url = fiche_svc.load_panier_ligne_image(int(id_panier))
     return {"test_eligibilite": url}
+
+
+@router.get("/tickets/{id_ticket}/documents", response_model=FicheDocumentsResponse)
+def get_fiche_documents(
+    id_ticket: str,
+    client_pro: bool = Query(False),
+    user: UserToken = Depends(get_current_user),
+):
+    """Detecte les documents disponibles pour ce ticket (CIN, KBIS si Pro).
+
+    Fait des HEAD HTTP vers rest.omaya.fr -> renvoie pour chaque doc l'URL
+    et le type (pdf / image) si trouve, sinon vide.
+    """
+    return fiche_svc.load_documents(int(id_ticket), client_pro=client_pro)
+
+
+@router.get("/tickets/{id_ticket}/panier/{id_panier}/lettre-resil", response_model=LettreResilResponse)
+def get_lettre_resil(
+    id_ticket: str,
+    id_panier: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Detecte la Lettre de resiliation pour une ligne de panier (FIBRE only)."""
+    return fiche_svc.load_lettre_resil(int(id_ticket), int(id_panier))
 
 
 @router.get("/tickets/live", response_model=TicketsLiveResponse)

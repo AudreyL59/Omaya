@@ -3,16 +3,18 @@ Service Call Fibre - chargement de la fiche d'un ticket (popup).
 
 Transposition du code WinDev `PAGE_TicketFicheFibre` (code init serveur) :
 - TK_CallSFR + TK_Liste (par IDTK_Liste) -> infos client + vente + statut
-- Salarie (par IDSalarie) -> vendeur
+- Salarie + Salarie_Coordonnees (par IDSalarie) -> vendeur
 - TK_CallSFR_Panier JOIN SFR_OffresProvad -> panier (toutes les lignes)
 - Pour chaque ligne du panier, HLitRecherche TK_CallSFR_Panier pour les
   champs detail (NumPortabilite, RIO, NumPrise_Optique, OptChoisies,
   TestEligibilite-image).
 
 Phase 1 = lecture seule. Save/verrou ope traites separement.
+Phase 2 = viewer documents (CIN/KBIS/Lettre resil) via rest.omaya.fr.
 """
 
 import base64
+import urllib.request
 from typing import Any
 
 from app.core.database import get_connection
@@ -24,6 +26,34 @@ from app.intranets.call.fibre.services.tickets import (
     _str_id,
     _to_int,
 )
+
+
+DOC_BASE_URL = "https://rest.omaya.fr/DocOmaya"
+
+
+def _url_exists(url: str, timeout: float = 3.0) -> bool:
+    """HEAD HTTP : True si le fichier existe (HTTP 200/2xx)."""
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return 200 <= resp.status < 300
+    except Exception:
+        return False
+
+
+def _first_existing(*urls: str) -> tuple[str, str]:
+    """Retourne (url, kind) du premier fichier existant.
+
+    kind = 'pdf' si l'URL finit par .pdf, sinon 'image'.
+    Si aucun n'existe -> ("", "").
+    """
+    for url in urls:
+        if not url:
+            continue
+        if _url_exists(url):
+            kind = "pdf" if url.lower().endswith(".pdf") else "image"
+            return url, kind
+    return "", ""
 
 
 def _mask_phone(num: str) -> str:
@@ -267,6 +297,60 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         "btn_annuler_actif": btn_annuler_actif,
         "statuts_vente": statuts_vente,
     }
+
+
+def load_documents(id_tk_liste: int, client_pro: bool = False) -> dict:
+    """Detecte les documents disponibles pour un ticket (CIN + KBIS).
+
+    Conventions de nommage (cf. code WinDev) :
+    - CIN  : <idCallSFR>_PieceIdentite.{pdf|png|jpg}  (fallback _CIN.jpg)
+    - KBIS : <IDTicket>_KBIS.{pdf|png}                (uniquement si Pro)
+
+    Retourne {cin: {url, kind}, kbis: {url, kind}}. Kind = 'pdf' ou 'image'.
+    url et kind vides si rien trouve.
+    """
+    # On a besoin du IDtk_CallSFR pour la CIN (pas l'IDTK_Liste).
+    db_bo = get_connection("ticket_bo")
+    rows = db_bo.query(
+        "SELECT IDtk_CallSFR FROM TK_CallSFR WHERE IDTK_Liste = ? AND ModifELEM NOT LIKE '%suppr%'",
+        (id_tk_liste,),
+    )
+    id_call_sfr = _to_int(rows[0].get("IDtk_CallSFR")) if rows else 0
+
+    # CIN : 3 candidats par ordre de priorite (PDF > PNG > JPG fallback _CIN.jpg)
+    cin_url, cin_kind = "", ""
+    if id_call_sfr:
+        cin_url, cin_kind = _first_existing(
+            f"{DOC_BASE_URL}/{id_call_sfr}_PieceIdentite.pdf",
+            f"{DOC_BASE_URL}/{id_call_sfr}_PieceIdentite.png",
+            f"{DOC_BASE_URL}/{id_call_sfr}_PieceIdentite.jpg",
+            f"{DOC_BASE_URL}/{id_call_sfr}_CIN.jpg",
+        )
+
+    # KBIS : 2 candidats (PDF > PNG)
+    kbis_url, kbis_kind = "", ""
+    if client_pro:
+        kbis_url, kbis_kind = _first_existing(
+            f"{DOC_BASE_URL}/{id_tk_liste}_KBIS.pdf",
+            f"{DOC_BASE_URL}/{id_tk_liste}_KBIS.png",
+        )
+
+    return {
+        "cin": {"url": cin_url, "kind": cin_kind},
+        "kbis": {"url": kbis_url, "kind": kbis_kind},
+    }
+
+
+def load_lettre_resil(id_tk_liste: int, id_panier: int) -> dict:
+    """Detecte la Lettre de resiliation pour une ligne de panier donnee.
+
+    Convention : <IDTicket>_<IDPanier>_LettreResil.{pdf|png}
+    """
+    url, kind = _first_existing(
+        f"{DOC_BASE_URL}/{id_tk_liste}_{id_panier}_LettreResil.pdf",
+        f"{DOC_BASE_URL}/{id_tk_liste}_{id_panier}_LettreResil.png",
+    )
+    return {"url": url, "kind": kind}
 
 
 def load_panier_ligne_image(id_panier: int) -> str:

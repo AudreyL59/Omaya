@@ -97,3 +97,21 @@ class FicheTicketFibreResponse(BaseModel):
 class FicheTestEligibiliteResponse(BaseModel):
     """Image TestEligibilite (data URL) pour une ligne du panier (FIBRE only)."""
     test_eligibilite: str         # "data:image/jpeg;base64,..." ou ""
+
+
+class DocumentInfo(BaseModel):
+    """Reference vers un document hebergé sur rest.omaya.fr/DocOmaya/."""
+    url: str = ""                 # URL absolue, vide si pas trouve
+    kind: str = ""                # "pdf" / "image" / ""
+
+
+class FicheDocumentsResponse(BaseModel):
+    """Documents disponibles pour un ticket (CIN + KBIS)."""
+    cin: DocumentInfo = DocumentInfo()
+    kbis: DocumentInfo = DocumentInfo()
+
+
+class LettreResilResponse(BaseModel):
+    """Lettre de resiliation pour une ligne de panier (FIBRE + pas portabilite)."""
+    url: str = ""
+    kind: str = ""
