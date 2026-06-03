@@ -482,14 +482,9 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
             "ticket_diff": ticket_diff,
         })
 
-    # 4. Resolve noms vendeur + affectations en PARALLELE (2 queries
-    # independantes, sur la meme base rh mais subprocess distincts).
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f_sal = pool.submit(_load_salaries, db_rh, salaries_to_load)
-        f_aff = pool.submit(_load_affectations, db_rh, salaries_to_load)
-        salaries = f_sal.result()
-        affectations = f_aff.result()
+    # 4. Resolve noms vendeur + ope appel + affectations
+    salaries = _load_salaries(db_rh, salaries_to_load)
+    affectations = _load_affectations(db_rh, salaries_to_load)
     _enrich_vendeur_distrib(salaries, affectations, db_rh)
     # Batch des premiers contrats SFR (1 query au lieu de N)
     sal_non_distrib_ids = {
@@ -622,26 +617,18 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
             "ref_appel": (r.get("RefAppel") or "").strip(),
         }
 
-    # Panier + Salaries + Affectations en PARALLELE (3 queries independantes
-    # une fois qu'on a id_calls + salaries_to_load).
-    from concurrent.futures import ThreadPoolExecutor
+    # Panier (offres ENI). Pas de catalogue produit a joindre pour le MVP -
+    # les colonnes TYPE/TypeVente n'existent pas dans TK_Call_Panier.
     paniers: dict[int, list[dict]] = {}
-    rows_p: list[dict] = []
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        f_panier = pool.submit(
-            db_bo.query,
+    if id_calls:
+        ids_call_sql = ",".join(str(i) for i in id_calls)
+        rows_p = db_bo.query(
             f"""SELECT IDtk_Call, IDproduit, NumBS, Num_DateSaisie, StatutProd,
                 Partenaire
             FROM TK_Call_Panier
-            WHERE IDtk_Call IN ({",".join(str(i) for i in id_calls)})
-              AND ModifElem NOT LIKE '%suppr%'""",
-        ) if id_calls else None
-        f_sal = pool.submit(_load_salaries, db_rh, salaries_to_load)
-        f_aff = pool.submit(_load_affectations, db_rh, salaries_to_load)
-        rows_p = f_panier.result() if f_panier else []
-        salaries = f_sal.result()
-        affectations = f_aff.result()
-    if id_calls:
+            WHERE IDtk_Call IN ({ids_call_sql})
+              AND ModifElem NOT LIKE '%suppr%'"""
+        )
         for p in rows_p:
             id_call = _to_int(p.get("IDtk_Call"))
             paniers.setdefault(id_call, []).append({
@@ -655,7 +642,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
                 "partenaire": (p.get("Partenaire") or "").strip(),
             })
 
-    # salaries + affectations deja charges en parallele plus haut
+    salaries = _load_salaries(db_rh, salaries_to_load)
+    affectations = _load_affectations(db_rh, salaries_to_load)
     _enrich_vendeur_distrib(salaries, affectations, db_rh)
 
     # Construction finale

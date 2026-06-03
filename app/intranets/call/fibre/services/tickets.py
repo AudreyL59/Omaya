@@ -502,14 +502,9 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
             "ticket_diff": ticket_diff,
         })
 
-    # 4. Resolve noms vendeur + affectations en PARALLELE (2 queries
-    # independantes sur la meme base rh, subprocess distincts).
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f_sal = pool.submit(_load_salaries, db_rh, salaries_to_load)
-        f_aff = pool.submit(_load_affectations, db_rh, salaries_to_load)
-        salaries = f_sal.result()
-        affectations = f_aff.result()
+    # 4. Resolve noms vendeur + ope appel + affectations
+    salaries = _load_salaries(db_rh, salaries_to_load)
+    affectations = _load_affectations(db_rh, salaries_to_load)
     _enrich_vendeur_distrib(salaries, affectations, db_rh)
     # Batch des premiers contrats SFR (1 query au lieu de N)
     sal_non_distrib_ids = {
@@ -642,27 +637,20 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
             "ref_appel": (r.get("RefAppel") or "").strip(),
         }
 
-    # Panier + Salaries + Affectations en PARALLELE (3 queries
-    # independantes une fois qu'on a id_calls + salaries_to_load).
-    from concurrent.futures import ThreadPoolExecutor
+    # Panier (offres)
     paniers: dict[int, list[dict]] = {}
-    rows_p: list[dict] = []
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        f_panier = pool.submit(
-            db_bo.query,
+    if id_calls:
+        # TK_CallSFR_Panier (base ticket_bo) JOIN SFR_OffresProvad (adv).
+        # Cross-base impossible -> 2 queries puis join Python.
+        ids_call_sql = ",".join(str(i) for i in id_calls)
+        rows_p = db_bo.query(
             f"""SELECT IDtk_CallSFR, IDOffres_SFR, TYPE, TypeVente, NUM,
                 Num_DateSaisie, StatutProd
             FROM TK_CallSFR_Panier
-            WHERE IDtk_CallSFR IN ({",".join(str(i) for i in id_calls)})
-              AND ModifELEM NOT LIKE '%suppr%'""",
-        ) if id_calls else None
-        f_sal = pool.submit(_load_salaries, db_rh, salaries_to_load)
-        f_aff = pool.submit(_load_affectations, db_rh, salaries_to_load)
-        rows_p = f_panier.result() if f_panier else []
-        salaries = f_sal.result()
-        affectations = f_aff.result()
-    if id_calls and rows_p:
-        # Lib_Offre via SFR_OffresProvad (cross-base avec ticket_bo donc 2 queries)
+            WHERE IDtk_CallSFR IN ({ids_call_sql})
+              AND ModifELEM NOT LIKE '%suppr%'"""
+        )
+        # Lib_Offre via SFR_OffresProvad
         offre_ids = {_to_int(p.get("IDOffres_SFR")) for p in rows_p}
         offre_ids.discard(0)
         offre_libs: dict[int, str] = {}
@@ -681,11 +669,14 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
                 "type_vente": _to_int(p.get("TypeVente")),
                 "num": (p.get("NUM") or "").strip(),
                 "num_date_saisie": _iso(p.get("Num_DateSaisie")),
+                # Brut pour le calcul de delai (evite la perte d'info via _iso)
                 "_num_date_saisie_raw": p.get("Num_DateSaisie"),
                 "statut_prod": _to_int(p.get("StatutProd")),
                 "lib_offre": offre_libs.get(_to_int(p.get("IDOffres_SFR")), ""),
             })
 
+    salaries = _load_salaries(db_rh, salaries_to_load)
+    affectations = _load_affectations(db_rh, salaries_to_load)
     _enrich_vendeur_distrib(salaries, affectations, db_rh)
     # Batch premiers contrats (1 query au lieu de N)
     sal_non_distrib_ids = {
