@@ -280,7 +280,21 @@ export default function TicketsCallPage() {
       )}
 
       {/* Popup fiche ticket */}
-      <FicheTicketModal idTicket={ficheOpenId} onClose={() => setFicheOpenId(null)} />
+      <FicheTicketModal
+        idTicket={ficheOpenId}
+        onClose={() => setFicheOpenId(null)}
+        onAfterAction={async () => {
+          // Apres une action panier (valider/annuler/renvoyer) : refetch les
+          // 2 tableaux pour que le ticket disparaisse du haut et apparaisse
+          // dans le bas (ou inversement).
+          const p = await fetchEnCours()
+          if (p) {
+            setEnCours(p)
+            lastModifRef.current = p.last_modif
+          }
+          await fetchTraites(jourBasRef.current)
+        }}
+      />
     </div>
   )
 }

@@ -443,6 +443,364 @@ def _dates_to_compact(s: str | None) -> str:
     return ""
 
 
+# --- Phase 3 : verrou ope + actions panier --------------------------------
+
+def peek_verrou(id_tk_liste: int) -> dict:
+    """Renvoie l'etat actuel du verrou ope sur un ticket :
+    {appel_en_cours, ope_appel_id, ope_appel_nom, date_h_appel,
+     duree_minutes_si_en_cours}.
+
+    Permet au frontend d'afficher la bonne confirmation avant prise d'appel.
+    """
+    from datetime import datetime as _dt
+    db_bo = get_connection("ticket_bo")
+    db_rh = get_connection("rh")
+    rows = db_bo.query(
+        """SELECT IDtk_CallSFR, AppelEnCours, OpéAppel, DateH_Appel
+        FROM TK_CallSFR
+        WHERE IDTK_Liste = ? AND ModifELEM NOT LIKE '%suppr%'""",
+        (id_tk_liste,),
+    )
+    if not rows:
+        return {"error": "Ticket introuvable"}
+    r = rows[0]
+    appel_en_cours = _bool(r.get("AppelEnCours"))
+    ope_appel_id = _to_int(r.get("OpéAppel"))
+    date_h_appel_iso = _iso(r.get("DateH_Appel"))
+    nom_ope = ""
+    if ope_appel_id:
+        rs = db_rh.query(
+            "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?",
+            (ope_appel_id,),
+        )
+        if rs:
+            nom_ope = f"{(rs[0].get('Nom') or '').strip()} {_capitalize((rs[0].get('Prenom') or '').strip())}".strip()
+    # Duree depuis prise d'appel (en minutes/secondes)
+    minutes = 0
+    seconds = 0
+    dt = _parse_dt(r.get("DateH_Appel"))
+    if dt is not None:
+        delta = _dt.now() - dt
+        total = max(0, int(delta.total_seconds()))
+        minutes = total // 60
+        seconds = total % 60
+    return {
+        "appel_en_cours": appel_en_cours,
+        "ope_appel_id": ope_appel_id,
+        "ope_appel_nom": nom_ope,
+        "date_h_appel": date_h_appel_iso,
+        "duree_minutes": minutes,
+        "duree_secondes": seconds,
+    }
+
+
+def _parse_dt(v: Any):
+    """Wrapper local pour eviter une import circulaire avec tickets.py."""
+    from app.intranets.call.fibre.services.tickets import _parse_dt as _pdt
+    return _pdt(v)
+
+
+def prendre_appel(id_tk_liste: int, user_id: int, force: bool = False) -> dict:
+    """Pose le verrou ope sur un ticket.
+
+    Si `force=False` et un autre ope a deja le verrou (ou a raccroche
+    recemment), renvoie {needs_confirm: True, peek: {...}} pour que le
+    frontend affiche la confirmation. Si force=True, ecrase.
+
+    Logique WinDev :
+    - UPDATE TK_CallSFR : AppelEnCours=1, OpéAppel=user, DateH_Appel=now
+    - UPDATE TK_CallSFR : DateDeb_PriseEnCharge=now si vide
+    - Envoi SMS au vendeur "Attention, vous allez bientot recevoir un appel..."
+    """
+    from datetime import datetime as _dt
+    db_bo = get_connection("ticket_bo")
+    db_rh = get_connection("rh")
+
+    rows = db_bo.query(
+        """SELECT IDtk_CallSFR, IDSalarie, AppelEnCours, OpéAppel, DateH_Appel,
+            DateDeb_PriseEnCharge, NomClient, NomMaritalClient, PrenomClient
+        FROM TK_CallSFR
+        WHERE IDTK_Liste = ? AND ModifELEM NOT LIKE '%suppr%'""",
+        (id_tk_liste,),
+    )
+    if not rows:
+        return {"error": "Ticket introuvable"}
+    r = rows[0]
+    id_call_sfr = _to_int(r.get("IDtk_CallSFR"))
+    id_salarie = _to_int(r.get("IDSalarie"))
+
+    # Si pas force et un autre ope a le verrou : demande confirmation
+    if not force:
+        appel_en_cours = _bool(r.get("AppelEnCours"))
+        ope_appel_id = _to_int(r.get("OpéAppel"))
+        date_h_appel = _parse_dt(r.get("DateH_Appel"))
+        # Confirmation obligatoire si verrou actif par un autre, ou si trace
+        # de prise d'appel par un autre (meme s'il a raccroche).
+        if (appel_en_cours and ope_appel_id and ope_appel_id != user_id) or (
+            not appel_en_cours and date_h_appel is not None and ope_appel_id != user_id
+        ):
+            peek = peek_verrou(id_tk_liste)
+            return {"needs_confirm": True, "peek": peek}
+
+    # UPDATE TK_CallSFR : pose le verrou
+    now_wd = _sql_now()
+    db_bo.query(
+        f"""UPDATE TK_CallSFR SET
+            AppelEnCours = 1,
+            OpéAppel = {_to_int(user_id)},
+            DateH_Appel = '{now_wd}',
+            ModifDate = '{now_wd}'
+        WHERE IDtk_CallSFR = {id_call_sfr}"""
+    )
+    # DateDeb_PriseEnCharge si vide
+    if not _parse_dt(r.get("DateDeb_PriseEnCharge")):
+        db_bo.query(
+            f"""UPDATE TK_CallSFR SET
+                DateDeb_PriseEnCharge = '{now_wd}',
+                ModifDate = '{now_wd}'
+            WHERE IDtk_CallSFR = {id_call_sfr}"""
+        )
+
+    # Envoi SMS au vendeur "Attention, vous allez bientot recevoir un appel..."
+    sms_result = _envoyer_sms_vendeur_prise_appel(
+        db_rh, id_salarie, user_id,
+        r.get("NomClient"), r.get("NomMaritalClient"), r.get("PrenomClient"),
+    )
+    return {"ok": True, "sms": sms_result}
+
+
+def lacher_appel(id_tk_liste: int) -> dict:
+    """Libere le verrou ope. UPDATE AppelEnCours=0, DateFin_PriseEnCharge=now si vide."""
+    db_bo = get_connection("ticket_bo")
+    rows = db_bo.query(
+        "SELECT IDtk_CallSFR, DateFin_PriseEnCharge FROM TK_CallSFR WHERE IDTK_Liste = ?",
+        (id_tk_liste,),
+    )
+    if not rows:
+        return {"error": "Ticket introuvable"}
+    r = rows[0]
+    id_call_sfr = _to_int(r.get("IDtk_CallSFR"))
+    now_wd = _sql_now()
+    sets = ["AppelEnCours = 0", f"ModifDate = '{now_wd}'"]
+    if not _parse_dt(r.get("DateFin_PriseEnCharge")):
+        sets.append(f"DateFin_PriseEnCharge = '{now_wd}'")
+    db_bo.query(
+        f"""UPDATE TK_CallSFR SET {', '.join(sets)}
+        WHERE IDtk_CallSFR = {id_call_sfr}"""
+    )
+    return {"ok": True}
+
+
+def _envoyer_sms_vendeur_prise_appel(
+    db_rh, id_vendeur: int, id_ope: int,
+    nom_client: str, nom_marital: str, prenom_client: str,
+) -> str:
+    """Envoie le SMS "Attention, vous allez bientot recevoir un appel...".
+
+    Cherche le GSM du vendeur via Salarie_Coordonnees, puis appelle envoi_sms().
+    """
+    from app.shared.notifications.sms import envoi_sms
+    # GSM vendeur
+    rows_v = db_rh.query(
+        "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?",
+        (id_vendeur,),
+    )
+    gsm = ""
+    if rows_v:
+        gsm = (rows_v[0].get("TélMob") or "").strip()
+    gsm = "".join(c for c in gsm if c.isdigit() or c == "+")
+    if not gsm:
+        return "Pas de GSM vendeur (SMS non envoye)"
+    # Nom de l'ope (signataire du SMS)
+    rows_op = db_rh.query(
+        "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?",
+        (id_ope,),
+    )
+    nom_ope = ""
+    if rows_op:
+        nom_ope = f"{(rows_op[0].get('Nom') or '').strip()} {_capitalize((rows_op[0].get('Prenom') or '').strip())}".strip()
+    nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
+    texte = f"Attention, vous allez bientot recevoir un appel du CALL pour votre client {nom_clt}."
+    return envoi_sms(texte, gsm, emetteur="Omaya-Fibre")
+
+
+def _envoyer_sms_vendeur_renvoi_complement(
+    db_rh, id_vendeur: int,
+    nom_client: str, nom_marital: str, prenom_client: str,
+) -> str:
+    from app.shared.notifications.sms import envoi_sms
+    rows_v = db_rh.query(
+        "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?",
+        (id_vendeur,),
+    )
+    gsm = "".join(c for c in (rows_v[0].get("TélMob") or "") if c.isdigit() or c == "+") if rows_v else ""
+    if not gsm:
+        return "Pas de GSM vendeur"
+    nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
+    texte = f"Attention, votre panier pour le client {nom_clt} est renvoye pour complement."
+    return envoi_sms(texte, gsm, emetteur="Omaya-Fibre")
+
+
+def _envoyer_sms_vendeur_validation_degroupage(
+    db_rh, id_vendeur: int,
+    nom_client: str, nom_marital: str, prenom_client: str,
+) -> str:
+    from app.shared.notifications.sms import envoi_sms
+    rows_v = db_rh.query(
+        "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?",
+        (id_vendeur,),
+    )
+    gsm = "".join(c for c in (rows_v[0].get("TélMob") or "") if c.isdigit() or c == "+") if rows_v else ""
+    if not gsm:
+        return "Pas de GSM vendeur"
+    nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
+    texte = f"Le CALL vient d'envoyer le panier degroupe SFR pour votre client {nom_clt}."
+    return envoi_sms(texte, gsm, emetteur="Omaya-Fibre")
+
+
+def _format_nom_client_sms(nom: str, nom_marital: str, prenom: str) -> str:
+    """'NOM ep MARITAL Prenom' (sans accent, pour SMS)."""
+    parts = [(nom or "").strip()]
+    if (nom_marital or "").strip():
+        parts.append(f"ep {nom_marital.strip()}")
+    parts.append(_capitalize((prenom or "").strip()))
+    return " ".join(p for p in parts if p)
+
+
+# --- Actions panier -------------------------------------------------------
+
+def annuler_ligne_panier(id_panier: int, motifs: list[str], precisions: str) -> dict:
+    """UPDATE TK_CallSFR_Panier : StatutProd=2 + MotifAnnulation (concat).
+
+    Transposition Popup1. Au moins 1 motif requis (sinon renvoie 400).
+    """
+    if not motifs:
+        return {"error": "Merci d'ajouter un motif d'annulation"}
+    motif_str = "Motif(s) d'annulation :\n" + "\n".join(f"  - {m}" for m in motifs)
+    if (precisions or "").strip():
+        motif_str += f"\nInformations complementaires:\n{precisions.strip()}"
+    db_bo = get_connection("ticket_bo")
+    now_wd = _sql_now()
+    db_bo.query(
+        f"""UPDATE TK_CallSFR_Panier SET
+            StatutProd = 2,
+            MotifAnnulation = '{_sql_str(motif_str)}',
+            ModifDate = '{now_wd}'
+        WHERE IDTK_CallSFR_Panier = {_to_int(id_panier)}"""
+    )
+    return {"ok": True}
+
+
+def _action_vente_finale(
+    id_tk_liste: int,
+    payload: dict,
+    new_statut: int,
+    send_sms_renvoi: bool = False,
+    send_sms_si_degroupage: bool = False,
+) -> dict:
+    """Logique commune AnnulVente / ValideVente / RenvoiPanier.
+
+    1. save_vente_infos (UPDATE TK_CallSFR) si payload fourni
+    2. UPDATE TK_Liste IDTK_Statut = new_statut
+    3. Si verrou actif : libere (AppelEnCours=0, DateFin_PriseEnCharge=now)
+    4. SMS si demande (renvoi: toujours ; validation: uniquement si idStatutSFR
+       avant = 34 = panier degroupe)
+    """
+    db_bo = get_connection("ticket_bo")
+    db_ticket = get_connection("ticket")
+    db_rh = get_connection("rh")
+    now_wd = _sql_now()
+
+    # 1. Save infos vente (si payload fourni — RenvoiPanier ne save pas)
+    if payload:
+        save_vente_infos(id_tk_liste, payload)
+
+    # Recupere infos pour le SMS et le statut anterieur
+    rows_call = db_bo.query(
+        """SELECT IDtk_CallSFR, IDSalarie, AppelEnCours,
+            NomClient, NomMaritalClient, PrenomClient
+        FROM TK_CallSFR WHERE IDTK_Liste = ?""",
+        (id_tk_liste,),
+    )
+    if not rows_call:
+        return {"error": "Ticket introuvable"}
+    r_call = rows_call[0]
+    id_call_sfr = _to_int(r_call.get("IDtk_CallSFR"))
+    id_salarie = _to_int(r_call.get("IDSalarie"))
+    appel_en_cours = _bool(r_call.get("AppelEnCours"))
+    nom_client = r_call.get("NomClient") or ""
+    nom_marital = r_call.get("NomMaritalClient") or ""
+    prenom_client = r_call.get("PrenomClient") or ""
+
+    # Recupere statut TK_Liste avant pour SMS degroupage
+    rows_liste = db_ticket.query(
+        "SELECT IDTK_Statut FROM TK_Liste WHERE IDTK_Liste = ?",
+        (id_tk_liste,),
+    )
+    statut_avant = _to_int(rows_liste[0].get("IDTK_Statut")) if rows_liste else 0
+
+    # 2. UPDATE TK_Liste IDTK_Statut
+    db_ticket.query(
+        f"""UPDATE TK_Liste SET
+            IDTK_Statut = {new_statut},
+            ModifDate = '{now_wd}'
+        WHERE IDTK_Liste = {_to_int(id_tk_liste)}"""
+    )
+
+    # 3. Libere le verrou si actif
+    if appel_en_cours:
+        db_bo.query(
+            f"""UPDATE TK_CallSFR SET
+                AppelEnCours = 0,
+                DateFin_PriseEnCharge = '{now_wd}',
+                ModifDate = '{now_wd}'
+            WHERE IDtk_CallSFR = {id_call_sfr}"""
+        )
+
+    # 4. SMS optionnel
+    sms_result = ""
+    if send_sms_renvoi:
+        sms_result = _envoyer_sms_vendeur_renvoi_complement(
+            db_rh, id_salarie, nom_client, nom_marital, prenom_client,
+        )
+    elif send_sms_si_degroupage and statut_avant == 34:
+        sms_result = _envoyer_sms_vendeur_validation_degroupage(
+            db_rh, id_salarie, nom_client, nom_marital, prenom_client,
+        )
+
+    return {"ok": True, "sms": sms_result}
+
+
+def annuler_vente(id_tk_liste: int, payload: dict) -> dict:
+    """Confirme l'annulation de toute la vente (POPUP_AnnulVente WinDev).
+
+    -> TK_Liste IDTK_Statut = 14 + save vente + lacher verrou. Pas de SMS.
+    """
+    return _action_vente_finale(id_tk_liste, payload, new_statut=14)
+
+
+def valider_vente(id_tk_liste: int, payload: dict) -> dict:
+    """Confirme la validation du panier (POPUP_ValideVente WinDev).
+
+    -> TK_Liste IDTK_Statut = 15 + save vente + lacher verrou + SMS si
+    le statut anterieur etait 34 (panier degroupe).
+    """
+    return _action_vente_finale(
+        id_tk_liste, payload, new_statut=15, send_sms_si_degroupage=True,
+    )
+
+
+def renvoyer_complement(id_tk_liste: int) -> dict:
+    """Renvoie le panier pour complement (POPUP_RenvoiPanier WinDev).
+
+    -> TK_Liste IDTK_Statut = 28 + lacher verrou + SMS vendeur (toujours).
+    Pas de save vente (le code WinDev ne save rien d'autre que le statut).
+    """
+    return _action_vente_finale(
+        id_tk_liste, payload={}, new_statut=28, send_sms_renvoi=True,
+    )
+
+
 def load_panier_ligne_image(id_panier: int) -> str:
     """Charge l'image TestEligibilite d'une ligne de panier (FIBRE uniquement).
 

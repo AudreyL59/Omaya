@@ -18,14 +18,18 @@ import {
   Loader2,
   ArrowLeft,
   Phone,
+  PhoneOff,
   ExternalLink,
   CreditCard,
   CheckCircle2,
   Circle,
   FileText,
+  Ban,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import DocumentViewerModal from '@/components/DocumentViewerModal'
+import ConfirmDialog from '@/components/ConfirmDialog'
+import AnnulLignePanierPopup from '@/components/AnnulLignePanierPopup'
 
 interface FicheClient {
   civilite: number
@@ -119,12 +123,22 @@ interface FicheData {
 
 const API_BASE = '/api/call/fibre'
 
+interface VerrouPeek {
+  appel_en_cours: boolean
+  ope_appel_id: number
+  ope_appel_nom: string
+  date_h_appel: string
+  duree_minutes: number
+  duree_secondes: number
+}
+
 interface Props {
   idTicket: string | null
   onClose: () => void
+  onAfterAction?: () => void   // callback pour refresh la liste apres action panier
 }
 
-export default function FicheTicketModal({ idTicket, onClose }: Props) {
+export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: Props) {
   const [data, setData] = useState<FicheData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
@@ -143,6 +157,12 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   const [savingVente, setSavingVente] = useState(false)
   const [savingOffre, setSavingOffre] = useState(false)
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
+  // Phase 3 : verrou ope + sous-popups d'action
+  const [verrouLoading, setVerrouLoading] = useState(false)
+  const [verrouConfirm, setVerrouConfirm] = useState<VerrouPeek | null>(null)
+  const [actionDialog, setActionDialog] = useState<null | 'valider' | 'annulVente' | 'renvoi'>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [annulLigneOpen, setAnnulLigneOpen] = useState(false)
 
   // Fetch fiche
   useEffect(() => {
@@ -362,6 +382,189 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
     setEditOffres((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
   }
 
+  // Recharge la fiche apres une action verrou ou panier
+  const reloadFiche = async () => {
+    if (!idTicket) return
+    try {
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/fiche`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) return
+      const d = (await r.json()) as FicheData
+      setData(d)
+      setEditClient({ ...d.client })
+      setEditVente({ ...d.vente })
+      setEditAnomalie({ ...d.anomalie })
+      const offresMap: Record<string, FicheOffre> = {}
+      for (const o of d.panier) offresMap[o.id] = { ...o }
+      setEditOffres(offresMap)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Bouton "Démarrer l'appel" : pose le verrou ope
+  const handlePrendreAppel = async (force: boolean = false) => {
+    if (!idTicket) return
+    setVerrouLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/verrou/prendre`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ force }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      const j = await r.json()
+      if (j.needs_confirm) {
+        setVerrouConfirm(j.peek as VerrouPeek)
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Appel démarré (mobiles démasqués)' })
+      setVerrouConfirm(null)
+      await reloadFiche()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setVerrouLoading(false)
+    }
+  }
+
+  // Bouton "Lâcher l'appel" : libère le verrou
+  const handleLacherAppel = async () => {
+    if (!idTicket) return
+    setVerrouLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/verrou/lacher`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Appel terminé' })
+      await reloadFiche()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setVerrouLoading(false)
+    }
+  }
+
+  // Annulation 1 ligne du panier (Popup1)
+  const handleAnnulerLigne = async (motifs: string[], precisions: string) => {
+    if (!selectedPanierId) return
+    setActionLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/tickets/panier/${selectedPanierId}/annuler-ligne`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ motifs, precisions }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Offre annulée' })
+      setAnnulLigneOpen(false)
+      await reloadFiche()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  // Confirmation des 3 actions panier (Valider / Annul vente / Renvoi)
+  const handleConfirmAction = async () => {
+    if (!idTicket || !actionDialog) return
+    setActionLoading(true)
+    try {
+      // Pour valider/annuler : on envoie aussi les champs vente courants
+      const body =
+        actionDialog === 'renvoi'
+          ? {}
+          : {
+              client: editClient
+                ? {
+                    civilite: editClient.civilite,
+                    nom: editClient.nom,
+                    nom_marital: editClient.nom_marital,
+                    prenom: editClient.prenom,
+                    date_naiss: editClient.date_naiss,
+                    dep_naiss: editClient.dep_naiss,
+                    type_logement: editClient.type_logement,
+                    adresse1: editClient.adresse1,
+                    adresse2: editClient.adresse2,
+                    cp: editClient.cp,
+                    ville: editClient.ville,
+                    email: editClient.email,
+                  }
+                : undefined,
+              vente: editVente
+                ? {
+                    ref_appel: editVente.ref_appel,
+                    intervention_vendeur: editVente.intervention_vendeur,
+                    mobile_propose_vendeur: editVente.mobile_propose_vendeur,
+                    info_vente: editVente.info_vente,
+                  }
+                : undefined,
+              anomalie: editAnomalie
+                ? {
+                    active: editAnomalie.active,
+                    id_type: editAnomalie.id_type,
+                    info_cplt: editAnomalie.info_cplt,
+                  }
+                : undefined,
+            }
+      const path =
+        actionDialog === 'valider'
+          ? 'valider-vente'
+          : actionDialog === 'annulVente'
+            ? 'annuler-vente'
+            : 'renvoyer-complement'
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      const msg =
+        actionDialog === 'valider'
+          ? 'Panier validé'
+          : actionDialog === 'annulVente'
+            ? 'Vente annulée'
+            : 'Panier renvoyé pour complément'
+      setToast({ kind: 'ok', msg })
+      setActionDialog(null)
+      onAfterAction?.()
+      onClose()
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   if (!idTicket) return null
 
   // Document actif dans le viewer
@@ -446,6 +649,9 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 kbisAvailable={!!docKbis.url}
                 onOpenCin={() => setViewerOpen('cin')}
                 onOpenKbis={() => setViewerOpen('kbis')}
+                verrouLoading={verrouLoading}
+                onPrendreAppel={() => handlePrendreAppel(false)}
+                onLacherAppel={handleLacherAppel}
               />
               <ColonneCentre
                 data={data}
@@ -454,6 +660,10 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 onVenteChange={(patch) => setEditVente((v) => (v ? { ...v, ...patch } : v))}
                 selectedId={selectedPanierId}
                 onSelect={setSelectedPanierId}
+                onAnnulLigne={() => setAnnulLigneOpen(true)}
+                onAskValider={() => setActionDialog('valider')}
+                onAskAnnulVente={() => setActionDialog('annulVente')}
+                onAskRenvoi={() => setActionDialog('renvoi')}
               />
               <ColonneDroite
                 data={data}
@@ -488,6 +698,62 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
           onClose={() => setViewerOpen(null)}
         />
 
+        {/* Confirmation : un autre ope a deja le verrou (ou trace recente) */}
+        <ConfirmDialog
+          open={verrouConfirm !== null}
+          title={
+            verrouConfirm?.appel_en_cours
+              ? `${verrouConfirm.ope_appel_nom} est en train de contacter ce client depuis ${verrouConfirm.duree_minutes} min ${verrouConfirm.duree_secondes}s.\nSouhaitez-vous vraiment reprendre l'appel ?`
+              : `${verrouConfirm?.ope_appel_nom} a raccroché avec ce client le ${verrouConfirm?.date_h_appel || ''}.\nSouhaitez-vous vraiment recontacter ce client ?`
+          }
+          confirmLabel="Oui, prendre l'appel"
+          confirmColor="green"
+          loading={verrouLoading}
+          onConfirm={() => handlePrendreAppel(true)}
+          onCancel={() => setVerrouConfirm(null)}
+        />
+
+        {/* Popup annulation 1 ligne du panier (motifs) */}
+        <AnnulLignePanierPopup
+          open={annulLigneOpen}
+          loading={actionLoading}
+          onCancel={() => setAnnulLigneOpen(false)}
+          onConfirm={(motifs, prec) => handleAnnulerLigne(motifs, prec)}
+        />
+
+        {/* Confirmation : Valider le panier */}
+        <ConfirmDialog
+          open={actionDialog === 'valider'}
+          title="Voulez-vous vraiment valider le panier ?"
+          confirmLabel="Valider le panier"
+          confirmColor="green"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
+        />
+
+        {/* Confirmation : Annuler toute la vente */}
+        <ConfirmDialog
+          open={actionDialog === 'annulVente'}
+          title="Voulez-vous vraiment annuler le panier ?"
+          confirmLabel="Annuler toute la vente"
+          confirmColor="red"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
+        />
+
+        {/* Confirmation : Renvoyer pour complement */}
+        <ConfirmDialog
+          open={actionDialog === 'renvoi'}
+          title="Voulez-vous vraiment renvoyer le panier ?"
+          confirmLabel="Renvoyer le panier pour complément"
+          confirmColor="orange"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
+        />
+
         {/* Toast feedback save */}
         {toast && (
           <div
@@ -513,6 +779,9 @@ function ColonneGauche({
   kbisAvailable,
   onOpenCin,
   onOpenKbis,
+  verrouLoading,
+  onPrendreAppel,
+  onLacherAppel,
 }: {
   data: FicheData
   client: FicheClient
@@ -521,6 +790,9 @@ function ColonneGauche({
   kbisAvailable: boolean
   onOpenCin: () => void
   onOpenKbis: () => void
+  verrouLoading: boolean
+  onPrendreAppel: () => void
+  onLacherAppel: () => void
 }) {
   const c = client
   const v = data.vendeur
@@ -653,14 +925,35 @@ function ColonneGauche({
             <div className="flex-1">
               <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
             </div>
-            <button
-              disabled
-              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-c-line text-xs text-c-ink-soft cursor-not-allowed"
-              title="À venir (phase 3)"
-            >
-              <Phone className="w-3.5 h-3.5 text-green-600" />
-              Démarrer l'appel
-            </button>
+            {data.is_my_call ? (
+              <button
+                onClick={onLacherAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-red-600 bg-red-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Raccrocher / libérer le verrou"
+              >
+                {verrouLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <PhoneOff className="w-3.5 h-3.5" />
+                )}
+                Lâcher l'appel
+              </button>
+            ) : (
+              <button
+                onClick={onPrendreAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-green-600 bg-green-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Démarrer l'appel (pose le verrou, démasque les mobiles, envoie un SMS au vendeur)"
+              >
+                {verrouLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Phone className="w-3.5 h-3.5" />
+                )}
+                Démarrer l'appel
+              </button>
+            )}
           </div>
           {v.lib_affectation && (
             <div className="text-[10px] text-c-ink-faint mt-1">{v.lib_affectation}</div>
@@ -680,6 +973,10 @@ function ColonneCentre({
   onVenteChange,
   selectedId,
   onSelect,
+  onAnnulLigne,
+  onAskValider,
+  onAskAnnulVente,
+  onAskRenvoi,
 }: {
   data: FicheData
   editOffres: Record<string, FicheOffre>
@@ -687,11 +984,23 @@ function ColonneCentre({
   onVenteChange: (patch: Partial<FicheVente>) => void
   selectedId: string
   onSelect: (id: string) => void
+  onAnnulLigne: () => void
+  onAskValider: () => void
+  onAskAnnulVente: () => void
+  onAskRenvoi: () => void
 }) {
   // Compteurs recalcules en live depuis editOffres (les statuts ont pu changer)
   const offresList = data.panier.map((p) => editOffres[p.id] || p)
   const nbValide = offresList.filter((o) => o.statut_prod === 1).length
   const nbAnnule = offresList.filter((o) => o.statut_prod === 2).length
+  const nbTotal = offresList.length
+  // Boutons WinDev :
+  // - Valider : actif si nbValide > 0 ET nbValide+nbAnnule == nbTotal
+  // - Annuler vente : actif si nbAnnule == nbTotal (et > 0)
+  const canValider = nbValide > 0 && nbValide + nbAnnule === nbTotal
+  const canAnnulerVente = nbTotal > 0 && nbAnnule === nbTotal
+  const selectedOffre = selectedId ? offresList.find((o) => o.id === selectedId) : null
+  const canAnnulerLigne = !!selectedOffre && selectedOffre.statut_prod !== 2
   return (
     <div className="col-span-4 flex flex-col gap-3">
       <div className="bg-white rounded-lg border border-c-line overflow-hidden flex-1 flex flex-col">
@@ -755,21 +1064,43 @@ function ColonneCentre({
         </div>
       </div>
 
-      {/* Boutons d'action (grisés en phase 1) */}
+      {/* Action sur la ligne selectionnee : "Annuler cette offre" */}
+      {selectedOffre && (
+        <button
+          onClick={onAnnulLigne}
+          disabled={!canAnnulerLigne}
+          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded border border-red-300 text-red-600 text-xs font-medium hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Annuler uniquement la ligne sélectionnée (motifs)"
+        >
+          <Ban className="w-3.5 h-3.5" />
+          {selectedOffre.statut_prod === 2
+            ? 'Offre déjà annulée'
+            : 'Annuler cette offre'}
+        </button>
+      )}
+
+      {/* Boutons d'action panier */}
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <ActionButton
             label="Valider le panier"
-            disabled={!data.btn_valider_actif}
+            disabled={!canValider}
             variant="dark"
+            onClick={onAskValider}
           />
           <ActionButton
             label="Annuler toute la vente"
-            disabled={!data.btn_annuler_actif}
+            disabled={!canAnnulerVente}
             variant="dark"
+            onClick={onAskAnnulVente}
           />
         </div>
-        <ActionButton label="Renvoyer le panier pour complément" disabled variant="orange" full />
+        <ActionButton
+          label="Renvoyer le panier pour complément"
+          variant="orange"
+          full
+          onClick={onAskRenvoi}
+        />
       </div>
     </div>
   )
@@ -1147,11 +1478,13 @@ function ActionButton({
   disabled,
   variant,
   full,
+  onClick,
 }: {
   label: string
   disabled?: boolean
   variant: 'dark' | 'orange'
   full?: boolean
+  onClick?: () => void
 }) {
   const cls =
     variant === 'orange'
@@ -1159,11 +1492,11 @@ function ActionButton({
       : 'bg-gray-900 text-white'
   return (
     <button
+      onClick={onClick}
       disabled={disabled}
       className={`${cls} ${full ? 'w-full' : ''} py-2 px-3 rounded text-xs font-semibold transition-opacity ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110'
       }`}
-      title={disabled ? 'Indisponible en lecture seule (phase 1)' : ''}
     >
       {label}
     </button>

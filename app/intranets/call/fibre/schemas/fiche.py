@@ -168,3 +168,53 @@ class SaveOffreRequest(BaseModel):
 
 class SaveResponse(BaseModel):
     ok: bool = True
+
+
+# --- Phase 3 ---------------------------------------------------------------
+
+class VerrouPeek(BaseModel):
+    appel_en_cours: bool = False
+    ope_appel_id: int = 0
+    ope_appel_nom: str = ""
+    date_h_appel: str = ""
+    duree_minutes: int = 0
+    duree_secondes: int = 0
+
+
+class VerrouResponse(BaseModel):
+    """Reponse a POST /tickets/{id}/verrou/prendre.
+
+    - ok=True : verrou pose (eventuellement avec SMS resultat)
+    - needs_confirm=True : un autre ope a le verrou -> frontend doit confirmer
+      avant de renvoyer la requete avec force=True
+    """
+    ok: bool = False
+    needs_confirm: bool = False
+    peek: VerrouPeek | None = None
+    sms: str = ""
+
+
+class PrendreAppelRequest(BaseModel):
+    force: bool = False
+
+
+class AnnulLignePanierRequest(BaseModel):
+    motifs: list[str] = []
+    precisions: str = ""
+
+
+class ActionVenteRequest(BaseModel):
+    """Body pour annuler-vente / valider-vente.
+
+    Reprend les memes champs que SaveVenteRequest (le code WinDev save les
+    infos vente dans le meme call). Pour renvoyer-complement, le body
+    peut etre vide (pas de save).
+    """
+    client: SaveClientPayload | None = None
+    vente: SaveVentePayload | None = None
+    anomalie: SaveAnomaliePayload | None = None
+
+
+class ActionVenteResponse(BaseModel):
+    ok: bool = True
+    sms: str = ""
