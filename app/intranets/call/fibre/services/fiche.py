@@ -15,6 +15,7 @@ Phase 2 = viewer documents (CIN/KBIS/Lettre resil) via rest.omaya.fr.
 
 import base64
 import urllib.request
+from datetime import datetime
 from typing import Any
 
 from app.core.database import get_connection
