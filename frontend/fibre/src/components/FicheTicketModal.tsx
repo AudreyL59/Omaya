@@ -139,7 +139,14 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
           headers: { Authorization: `Bearer ${getToken()}` },
         })
         if (!r.ok) {
-          setError(`Chargement échoué (${r.status})`)
+          let detail = ''
+          try {
+            const j = await r.json()
+            detail = j?.detail ? `: ${j.detail}` : ''
+          } catch {
+            /* ignore */
+          }
+          setError(`Chargement échoué (${r.status})${detail}`)
           return
         }
         const d = (await r.json()) as FicheData

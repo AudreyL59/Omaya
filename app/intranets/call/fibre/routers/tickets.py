@@ -9,8 +9,10 @@ Stratégie de chargement de la page principale (transposition WinDev) :
 """
 
 from datetime import date as _date
+import sys
+import traceback
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
@@ -96,10 +98,17 @@ def get_fiche_ticket(
     Phase 1 = lecture seule. Mobile masque si l'ope n'est pas celui qui a
     pris l'appel (= n'a pas pose le verrou).
     """
-    return fiche_svc.load_fiche(
-        id_tk_liste=int(id_ticket),
-        current_user_id=user.id_salarie or 0,
-    )
+    try:
+        data = fiche_svc.load_fiche(
+            id_tk_liste=int(id_ticket),
+            current_user_id=user.id_salarie or 0,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data
 
 
 @router.get("/tickets/panier/{id_panier}/test-eligibilite", response_model=FicheTestEligibiliteResponse)
