@@ -122,20 +122,27 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     mobile1 = mobile1_raw if is_my_call else _mask_phone(mobile1_raw)
     mobile2 = mobile2_raw if is_my_call else _mask_phone(mobile2_raw)
 
-    # 2. Salarie vendeur (Nom + Prenom + TélMob)
+    # 2. Salarie vendeur :
+    #    - Nom + Prenom : table Salarie
+    #    - TélMob : table Salarie_Coordonnees (jointure sur IDSalarie)
     nom_vend = ""
     prenom_vend = ""
     gsm_vend_raw = ""
     if id_salarie:
         rows_sal = db_rh.query(
-            "SELECT Nom, Prenom, TélMob FROM Salarie WHERE IDSalarie = ?",
+            "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?",
             (id_salarie,),
         )
         if rows_sal:
             s = rows_sal[0]
             nom_vend = (s.get("Nom") or "").strip()
             prenom_vend = _capitalize((s.get("Prenom") or "").strip())
-            gsm_vend_raw = (s.get("TélMob") or "").strip()
+        rows_coord = db_rh.query(
+            "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?",
+            (id_salarie,),
+        )
+        if rows_coord:
+            gsm_vend_raw = (rows_coord[0].get("TélMob") or "").strip()
     gsm_vend = gsm_vend_raw if is_my_call else _mask_phone(gsm_vend_raw)
 
     # 3. Panier : TK_CallSFR_Panier + SFR_OffresProvad (cross-base impossible)
