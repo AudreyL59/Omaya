@@ -331,12 +331,15 @@ function DashboardEnergie({
               Détail panier : Offres validées par Opérateur
             </div>
 
-            {/* Carrousel de partenaires (logo + 2 cercles) */}
+            {/* Carrousel de partenaires (logo + 2 cercles). On masque les
+                partenaires sans aucune offre ni client pour le jour selectionne. */}
             {stats ? (
               <div className="flex items-center gap-7 overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
-                {stats.partenaires.map((p) => (
-                  <PartenaireBlock key={p.id} partenaire={p} />
-                ))}
+                {stats.partenaires
+                  .filter((p) => p.nb_offres > 0 || p.nb_clients > 0)
+                  .map((p) => (
+                    <PartenaireBlock key={p.id} partenaire={p} />
+                  ))}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-c-ink-faint text-xs">

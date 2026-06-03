@@ -323,7 +323,7 @@ function DashboardCard({
           </button>
           <div
             ref={scrollRef}
-            className="flex items-center gap-10 overflow-x-auto flex-1 px-3 py-1 scroll-smooth"
+            className="flex items-center gap-16 overflow-x-auto flex-1 px-4 py-1 scroll-smooth"
             style={{ scrollbarWidth: 'thin' }}
           >
             {stats.agences_internes.map((a) => (
