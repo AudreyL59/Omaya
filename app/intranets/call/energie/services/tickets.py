@@ -1092,7 +1092,7 @@ def get_last_modif_call_energie() -> str:
     return f"{max_modif}#{suivi_hash}"
 
 
-def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 1.0) -> tuple[bool, str]:
+def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 0.75) -> tuple[bool, str]:
     """Long polling : attend qu'un changement survienne sur Call Energie.
 
     Renvoie (changed, latest_token).
