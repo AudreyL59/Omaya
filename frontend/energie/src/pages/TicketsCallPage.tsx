@@ -52,9 +52,24 @@ interface TicketTraite {
   nb_offres: number
   nb_offres_valides: number
   nb_num_bs: number
+  nb_brut_par_partenaire: Record<string, number>
   vendeur_distrib: boolean
   premier_contrat: boolean
   delai_depasse: boolean
+}
+
+interface StatPartenaire {
+  id: string
+  prefix: string
+  lib: string
+  logo_url: string
+  nb_offres: number
+  nb_clients: number
+}
+
+interface StatsEnergie {
+  tickets_valides: number
+  partenaires: StatPartenaire[]
 }
 
 interface EnCoursPayload {
@@ -65,6 +80,7 @@ interface EnCoursPayload {
 
 interface TraitesPayload {
   tickets_traites: TicketTraite[]
+  stats: StatsEnergie
 }
 
 const API_BASE = '/api/call/energie'
@@ -192,23 +208,19 @@ export default function TicketsCallPage() {
   }
 
   const traitesRows = traites?.tickets_traites || []
+  const stats = traites?.stats
+  // Liste ordonnee des prefixes Partenaires pour les colonnes dynamiques
+  // du tableau du bas ("NB Offres OEN (brut)", "NB Offres ENI (brut)", ...).
+  const partenairePrefixes = stats?.partenaires.map((p) => p.prefix) || []
 
   return (
     <div className="p-6 space-y-4">
-      {/* Header simple : logo + titre + timestamps (le dashboard ENI sera defini plus tard) */}
-      <div className="bg-white rounded-xl shadow-sm border border-c-line p-5">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center shadow">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-c-ink leading-tight">Call ENI</h1>
-            <p className="text-[11px] text-c-ink-faint">
-              Dernière vérif {clientNow || '—'} · serveur {enCours.serveur_now || '—'}
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* DASHBOARD : Tickets validés + cercles par Partenaire (Offres + Clients) */}
+      <DashboardEnergie
+        clientNow={clientNow}
+        serveurNow={enCours.serveur_now}
+        stats={stats}
+      />
 
       {/* Tableau du HAUT : tickets à traiter */}
       <SectionHeader title="Tickets Call à traiter" right={<HautActions />} />
@@ -223,6 +235,7 @@ export default function TicketsCallPage() {
             onChangeDate={setJourBas}
             onApply={refetchNow}
             rows={traitesRows}
+            loading={loadingTraites}
           />
         }
       />
@@ -232,8 +245,106 @@ export default function TicketsCallPage() {
           Chargement des tickets traités...
         </div>
       ) : (
-        <TableTraites rows={traitesRows} />
+        <TableTraites rows={traitesRows} partenairePrefixes={partenairePrefixes} />
       )}
+    </div>
+  )
+}
+
+// --- Dashboard Energie (haut de page) -------------------------------------
+
+function DashboardEnergie({
+  clientNow,
+  serveurNow,
+  stats,
+}: {
+  clientNow: string
+  serveurNow: string
+  stats: StatsEnergie | undefined
+}) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-c-line p-5">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center shadow">
+            <Zap className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-c-ink leading-tight">Call ENI</h1>
+            <p className="text-[11px] text-c-ink-faint">
+              Dernière vérif {clientNow || '—'} · serveur {serveurNow || '—'}
+            </p>
+          </div>
+        </div>
+
+        {/* Tickets validés - gros cercle vert à gauche du bloc partenaires */}
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col items-center min-w-[90px]">
+            <div className="w-16 h-16 rounded-full border border-emerald-600 flex items-center justify-center text-xl font-bold text-emerald-700 bg-white">
+              {stats?.tickets_valides ?? 0}
+            </div>
+            <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
+              Tickets validés
+            </div>
+          </div>
+
+          {/* Séparateur vertical + libellé "Détail Panier" */}
+          <div className="hidden md:block self-stretch border-l border-c-line-soft" />
+          <div className="hidden lg:block text-[11px] text-c-ink-soft uppercase tracking-wide font-medium max-w-[120px] leading-snug">
+            Détail panier : Offres validées par Opérateur
+          </div>
+
+          {/* Carrousel de partenaires */}
+          {stats ? (
+            <div className="flex items-center gap-5 overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
+              {stats.partenaires.map((p) => (
+                <PartenaireBlock key={p.id} partenaire={p} />
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-c-ink-faint text-xs">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Stats...
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PartenaireBlock({ partenaire }: { partenaire: StatPartenaire }) {
+  return (
+    <div className="flex items-center gap-3 shrink-0">
+      {/* Logo partenaire (data URL base64) ou fallback prefix */}
+      <div className="w-14 h-14 rounded-full bg-white overflow-hidden flex items-center justify-center shrink-0 border border-c-line">
+        {partenaire.logo_url ? (
+          <img
+            src={partenaire.logo_url}
+            alt={partenaire.lib || partenaire.prefix}
+            className="w-full h-full object-contain"
+            title={partenaire.lib || partenaire.prefix}
+          />
+        ) : (
+          <span className="text-xs font-bold text-c-ink-soft">{partenaire.prefix}</span>
+        )}
+      </div>
+      {/* 2 cercles : Offres et Clients */}
+      <StatCircle value={partenaire.nb_offres} label="Offres" />
+      <StatCircle value={partenaire.nb_clients} label="Clients" />
+    </div>
+  )
+}
+
+function StatCircle({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="flex flex-col items-center min-w-[60px]">
+      <div className="w-12 h-12 rounded-full border border-c-ink flex items-center justify-center text-base font-bold text-c-ink bg-white">
+        {value}
+      </div>
+      <div className="text-[10px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
+        {label}
+      </div>
     </div>
   )
 }
@@ -273,11 +384,13 @@ function BasActions({
   onChangeDate,
   onApply,
   rows,
+  loading,
 }: {
   date: string
   onChangeDate: (d: string) => void
   onApply: () => void
   rows: TicketTraite[]
+  loading: boolean
 }) {
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
@@ -320,10 +433,15 @@ function BasActions({
       />
       <button
         onClick={onApply}
-        className="flex items-center gap-2 px-2 py-1 rounded-md border border-c-line-strong text-xs hover:bg-c-brand-soft"
+        disabled={loading}
+        className="flex items-center gap-2 px-2 py-1 rounded-md border border-c-line-strong text-xs hover:bg-c-brand-soft disabled:opacity-60"
         title="Appliquer la date"
       >
-        <Search className="w-3.5 h-3.5" />
+        {loading ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Search className="w-3.5 h-3.5" />
+        )}
       </button>
       <button
         onClick={handleExport}
@@ -414,7 +532,7 @@ function TableEnCours({ rows }: { rows: TicketEnCours[] }) {
   )
 }
 
-function TableTraites({ rows }: { rows: TicketTraite[] }) {
+function TableTraites({ rows, partenairePrefixes }: { rows: TicketTraite[]; partenairePrefixes: string[] }) {
   if (!rows.length) {
     return (
       <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm bg-white">
@@ -434,9 +552,11 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
             <Th>Commercial</Th>
             <Th>Agence</Th>
             <Th>État</Th>
-            <Th className="text-center">NB Offres</Th>
-            <Th className="text-center">NB Valides</Th>
-            <Th className="text-center">NB Num BS</Th>
+            <Th className="text-center">NB Offres (brut)</Th>
+            {partenairePrefixes.map((prefix) => (
+              <Th key={prefix} className="text-center">NB Offres {prefix} (Brut)</Th>
+            ))}
+            <Th>Réf Appel</Th>
           </tr>
         </thead>
         <tbody>
@@ -465,8 +585,12 @@ function TableTraites({ rows }: { rows: TicketTraite[] }) {
                 <Td className="text-c-ink-soft">{t.agence}</Td>
                 <Td>{t.lib_statut}</Td>
                 <Td className="text-center"><CountBadge value={t.nb_offres} /></Td>
-                <Td className="text-center"><CountBadge value={t.nb_offres_valides} variant="brand" /></Td>
-                <Td className="text-center"><CountBadge value={t.nb_num_bs} variant="brand" /></Td>
+                {partenairePrefixes.map((prefix) => (
+                  <Td key={prefix} className="text-center">
+                    <CountBadge value={t.nb_brut_par_partenaire?.[prefix] || 0} variant="brand" />
+                  </Td>
+                ))}
+                <Td className="text-c-ink-soft">{t.ref_appel}</Td>
               </tr>
             )
           })}

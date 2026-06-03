@@ -625,7 +625,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
     if id_calls:
         ids_call_sql = ",".join(str(i) for i in id_calls)
         rows_p = db_bo.query(
-            f"""SELECT IDtk_Call, IDproduit, NumBS, Num_DateSaisie, StatutProd
+            f"""SELECT IDtk_Call, IDproduit, NumBS, Num_DateSaisie, StatutProd,
+                Partenaire
             FROM TK_Call_Panier
             WHERE IDtk_Call IN ({ids_call_sql})
               AND ModifElem NOT LIKE '%suppr%'"""
@@ -639,6 +640,8 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
                 # Brut pour le calcul de delai (evite la perte d'info via _iso)
                 "_num_date_saisie_raw": p.get("Num_DateSaisie"),
                 "statut_prod": _to_int(p.get("StatutProd")),
+                # Code du Partenaire : matche Partenaire.PréfixeBDD ("OEN", "PRO", "ENI", ...)
+                "partenaire": (p.get("Partenaire") or "").strip(),
             })
 
     salaries = _load_salaries(db_rh, salaries_to_load)
@@ -657,10 +660,16 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
 
         nb_offres_valides = 0
         nb_num_bs = 0
+        nb_brut_par_partenaire: dict[str, int] = {}
         lib_statut_force = tk["lib_statut"]
         delai_depasse = False
 
         for off in panier:
+            # Compteurs brut par Partenaire (toutes statut_prod confondus,
+            # cf. colonnes "NB Offres XX (Brut)" du tableau du bas)
+            prefix = (off.get("partenaire") or "").strip()
+            if prefix:
+                nb_brut_par_partenaire[prefix] = nb_brut_par_partenaire.get(prefix, 0) + 1
             if off["statut_prod"] in (1, 3):
                 nb_offres_valides += 1
                 if off["num_bs"]:
@@ -693,6 +702,7 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
             "nb_offres": len(panier),
             "nb_offres_valides": nb_offres_valides,
             "nb_num_bs": nb_num_bs,
+            "nb_brut_par_partenaire": nb_brut_par_partenaire,
             "vendeur_distrib": sal["vendeur_distrib"],
             "premier_contrat": premier_contrat,
             "delai_depasse": delai_depasse,
@@ -725,6 +735,117 @@ _TK_STATUT_CACHE_TTL = 600.0  # 10 minutes
 _AGENCES_META_CACHE: dict[int, dict] | None = None
 _AGENCES_META_AT: float = 0.0
 _AGENCES_META_TTL = 600.0  # 10 minutes
+
+# Cache module : Partenaires actifs (TkCall=True) + logo base64. 10 minutes.
+_PARTENAIRES_CACHE: list[dict] | None = None
+_PARTENAIRES_AT: float = 0.0
+_PARTENAIRES_TTL = 600.0
+
+
+def _load_partenaires_actifs(db_adv) -> list[dict]:
+    """Charge la liste des Partenaires actifs pour Call ENI.
+
+    Filtre : IsActif=True ET TkCall=True (seuls les partenaires utilises pour
+    les Call Energie). Le logo (memo binaire) est encode en base64 -> data URL.
+
+    Match avec TK_Call_Panier.Partenaire via PréfixeBDD (champ texte court,
+    type "OEN", "PRO", "ENI"). Le code WinDev pose la valeur du PréfixeBDD
+    dans le champ Partenaire du panier au moment de la saisie.
+
+    Cache 10min.
+    """
+    global _PARTENAIRES_CACHE, _PARTENAIRES_AT
+    now = time.monotonic()
+    if _PARTENAIRES_CACHE is not None and now - _PARTENAIRES_AT < _PARTENAIRES_TTL:
+        return _PARTENAIRES_CACHE
+
+    rows = db_adv.query(
+        """SELECT IDPartenaire, Lib_Partenaire, PréfixeBDD, LOGO
+        FROM Partenaire
+        WHERE IsActif = 1 AND TkCall = 1
+        ORDER BY Lib_Partenaire ASC"""
+    )
+    out: list[dict] = []
+    for r in rows:
+        prefix = (r.get("PréfixeBDD") or "").strip()
+        if not prefix:
+            continue
+        # Logo : memo binaire -> base64 data URL
+        logo_raw = r.get("LOGO")
+        logo_url = ""
+        if logo_raw:
+            if isinstance(logo_raw, memoryview):
+                logo_raw = bytes(logo_raw)
+            if isinstance(logo_raw, (bytes, bytearray)):
+                b64 = base64.b64encode(logo_raw).decode("ascii")
+            else:
+                b64 = str(logo_raw)
+            # Le navigateur fait le content sniffing (PNG/JPG/BMP)
+            logo_url = f"data:image/png;base64,{b64}"
+        out.append({
+            "id": str(_to_int(r.get("IDPartenaire"))),
+            "prefix": prefix,
+            "lib": (r.get("Lib_Partenaire") or "").strip(),
+            "logo_url": logo_url,
+        })
+
+    _PARTENAIRES_CACHE = out
+    _PARTENAIRES_AT = now
+    return out
+
+
+def compute_stats_energie(tickets_traites: list[dict], db_adv=None) -> dict:
+    """Compteurs globaux Call Energie : tickets valides + Offres/Clients par Partenaire.
+
+    Definition (validee user) :
+    - tickets_valides : nb tickets traites du jour qui ont au moins 1 offre
+      panier avec statut_prod in (1, 3).
+    - par Partenaire :
+      - nb_offres : nb de lignes panier (statut_prod in (1, 3)) ou
+        TK_Call_Panier.Partenaire = PréfixeBDD du partenaire.
+      - nb_clients : nb de tickets DISTINCTS qui ont au moins 1 offre validee
+        de ce partenaire.
+    """
+    if db_adv is None:
+        db_adv = get_connection("adv")
+    partenaires = _load_partenaires_actifs(db_adv)
+
+    tickets_valides = 0
+    stats_by_prefix: dict[str, dict] = {
+        p["prefix"]: {"nb_offres": 0, "tickets_set": set()}
+        for p in partenaires
+    }
+
+    for t in tickets_traites:
+        has_valid = False
+        seen_prefix_in_ticket: set[str] = set()
+        for off in t.get("_panier", []):
+            if off.get("statut_prod") not in (1, 3):
+                continue
+            has_valid = True
+            prefix = (off.get("partenaire") or "").strip()
+            if prefix in stats_by_prefix:
+                stats_by_prefix[prefix]["nb_offres"] += 1
+                seen_prefix_in_ticket.add(prefix)
+        if has_valid:
+            tickets_valides += 1
+        for prefix in seen_prefix_in_ticket:
+            stats_by_prefix[prefix]["tickets_set"].add(t["id"])
+
+    return {
+        "tickets_valides": tickets_valides,
+        "partenaires": [
+            {
+                "id": p["id"],
+                "prefix": p["prefix"],
+                "lib": p["lib"],
+                "logo_url": p["logo_url"],
+                "nb_offres": stats_by_prefix[p["prefix"]]["nb_offres"],
+                "nb_clients": len(stats_by_prefix[p["prefix"]]["tickets_set"]),
+            }
+            for p in partenaires
+        ],
+    }
 
 
 def _load_agences_meta(db_rh) -> dict[int, dict]:
@@ -1030,14 +1151,13 @@ def export_traites_xlsx(jour: str | None = None, traites: list[dict] | None = No
 
 
 def load_page_traites(jour: str | None = None) -> dict:
-    """Charge le tableau du bas (tickets traites du jour).
-
-    Pas de stats globales pour Energie en l'etat (dashboard a definir).
-    """
+    """Charge le tableau du bas + stats par Partenaire (dashboard du haut)."""
     traites = list_tickets_traites(jour)
+    stats = compute_stats_energie(traites)
     traites_clean = [{k: v for k, v in t.items() if not k.startswith("_")} for t in traites]
     return {
         "tickets_traites": traites_clean,
+        "stats": stats,
     }
 
 

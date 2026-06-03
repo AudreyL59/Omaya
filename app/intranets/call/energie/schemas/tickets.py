@@ -52,12 +52,30 @@ class TicketTraite(BaseModel):
     agence: str
     lib_statut: str
     ref_appel: str
-    nb_offres: int                # nb d'offres ENI dans le panier
+    nb_offres: int                # nb d'offres BRUT (toutes statuts confondus)
     nb_offres_valides: int        # offres avec statut_prod in (1, 3)
     nb_num_bs: int                # nb d'offres avec NumBS renseigne
+    # Ventilation BRUT par PrefixeBDD du Partenaire ("OEN" -> 2, "PRO" -> 1, ...)
+    nb_brut_par_partenaire: dict[str, int] = {}
     vendeur_distrib: bool
     premier_contrat: bool
     delai_depasse: bool
+
+
+class StatPartenaire(BaseModel):
+    """Un partenaire dans le dashboard du haut (cercle Offres + cercle Clients)."""
+    id: str
+    prefix: str           # PréfixeBDD ("OEN", "PRO", "ENI", ...)
+    lib: str              # Lib_Partenaire (nom complet, fallback si pas de logo)
+    logo_url: str = ""    # data:image/...;base64,... (memo LOGO de Partenaire)
+    nb_offres: int        # offres validees (statut_prod in 1, 3)
+    nb_clients: int       # nb tickets distincts ayant au moins 1 offre validee
+
+
+class StatsEnergie(BaseModel):
+    """Stats globales du dashboard Call Energie."""
+    tickets_valides: int          # nb tickets avec au moins 1 offre validee
+    partenaires: list[StatPartenaire] = []
 
 
 class TicketsEnCoursResponse(BaseModel):
@@ -68,11 +86,13 @@ class TicketsEnCoursResponse(BaseModel):
 
 class TicketsTraitesResponse(BaseModel):
     tickets_traites: list[TicketTraite]
+    stats: StatsEnergie
 
 
 class TicketsPageResponse(BaseModel):
     tickets_en_cours: list[TicketEnCours]
     tickets_traites: list[TicketTraite]
+    stats: StatsEnergie
     serveur_now: str
     last_modif: str = ""
 

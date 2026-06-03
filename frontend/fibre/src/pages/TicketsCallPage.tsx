@@ -245,6 +245,7 @@ export default function TicketsCallPage() {
             onChangeDate={setJourBas}
             onApply={refetchNow}
             rows={traitesRows}
+            loading={loadingTraites}
           />
         }
       />
@@ -294,7 +295,7 @@ function DashboardCard({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-10">
           <StatCircle label="Paniers validés" value={stats?.paniers_valides ?? 0} />
           <StatCircle label="Offres Fibre THD" value={stats?.offres_fibre_thd ?? 0} />
           <StatCircle label="CQ Fibre Validés" value={stats?.cq_fibre_valides ?? 0} />
@@ -307,8 +308,8 @@ function DashboardCard({
 
       {/* Bloc agences : 3 totaux à gauche + carrousel à droite */}
       {stats ? (
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col gap-1.5 shrink-0 pr-4 border-r border-c-line-soft">
+        <div className="flex items-center gap-8">
+          <div className="flex flex-col gap-2.5 shrink-0 pr-6 border-r border-c-line-soft">
             <TotalRow label="Tot Interne" fibre={totInterneFibre} mobile={totInterneMobile} />
             <TotalRow label="Tot Power" fibre={stats.nb_fibre_power} mobile={stats.nb_mobile_power} />
             <TotalRow label="Tot Fox" fibre={stats.nb_fibre_fox} mobile={stats.nb_mobile_fox} />
@@ -322,7 +323,7 @@ function DashboardCard({
           </button>
           <div
             ref={scrollRef}
-            className="flex items-center gap-6 overflow-x-auto flex-1 px-2 scroll-smooth"
+            className="flex items-center gap-10 overflow-x-auto flex-1 px-3 py-1 scroll-smooth"
             style={{ scrollbarWidth: 'thin' }}
           >
             {stats.agences_internes.map((a) => (
@@ -352,7 +353,7 @@ function DashboardCard({
 function StatCircle({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex flex-col items-center min-w-[80px]">
-      <div className="w-16 h-16 rounded-full border-[3px] border-c-ink flex items-center justify-center text-xl font-bold text-c-ink bg-white">
+      <div className="w-16 h-16 rounded-full border border-c-ink flex items-center justify-center text-xl font-bold text-c-ink bg-white">
         {value}
       </div>
       <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
@@ -395,11 +396,13 @@ function BasActions({
   onChangeDate,
   onApply,
   rows,
+  loading,
 }: {
   date: string
   onChangeDate: (d: string) => void
   onApply: () => void
   rows: TicketTraite[]
+  loading: boolean
 }) {
   const [exporting, setExporting] = useState(false)
   const handleExport = async () => {
@@ -442,10 +445,15 @@ function BasActions({
       />
       <button
         onClick={onApply}
-        className="flex items-center gap-2 px-2 py-1 rounded-md border border-c-line-strong text-xs hover:bg-c-brand-soft"
+        disabled={loading}
+        className="flex items-center gap-2 px-2 py-1 rounded-md border border-c-line-strong text-xs hover:bg-c-brand-soft disabled:opacity-60"
         title="Appliquer la date"
       >
-        <Search className="w-3.5 h-3.5" />
+        {loading ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <Search className="w-3.5 h-3.5" />
+        )}
       </button>
       <button
         onClick={handleExport}
@@ -615,12 +623,12 @@ function CountBadge({ value, variant = 'neutral' }: { value: number; variant?: '
 
 function TotalRow({ label, fibre, mobile }: { label: string; fibre: number; mobile: number }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex items-center gap-3 text-xs">
       <span className="font-semibold text-c-ink w-20 text-right">{label}</span>
       <Globe className="w-4 h-4 text-c-ink-soft" />
-      <span className="font-bold text-c-ink min-w-[18px] text-center">{fibre}</span>
+      <span className="font-bold text-c-ink min-w-[20px] text-center">{fibre}</span>
       <Smartphone className="w-4 h-4 text-c-ink-soft" />
-      <span className="font-bold text-c-ink min-w-[18px] text-center">{mobile}</span>
+      <span className="font-bold text-c-ink min-w-[20px] text-center">{mobile}</span>
     </div>
   )
 }
@@ -628,7 +636,7 @@ function TotalRow({ label, fibre, mobile }: { label: string; fibre: number; mobi
 function AgenceCard({ agence }: { agence: StatAgence }) {
   return (
     <div className="flex flex-col items-center shrink-0">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {/* Logo agence (gimmick) ou fallback User icon */}
         <div className="w-14 h-14 rounded-full border border-c-line bg-white overflow-hidden flex items-center justify-center shrink-0">
           {agence.gimmick_url ? (
@@ -642,18 +650,18 @@ function AgenceCard({ agence }: { agence: StatAgence }) {
           )}
         </div>
         {/* Compteurs Fibre / Mobile en colonne verticale */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-1.5">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
             <Globe className="w-3.5 h-3.5 text-c-ink-soft" />
             <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_fibre}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <Smartphone className="w-3.5 h-3.5 text-c-ink-soft" />
             <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_mobile}</span>
           </div>
         </div>
       </div>
-      <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium whitespace-nowrap">
+      <div className="text-[11px] text-c-ink-soft mt-2 text-center font-medium whitespace-nowrap">
         {agence.lib_orga}
       </div>
     </div>
