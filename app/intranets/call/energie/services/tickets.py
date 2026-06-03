@@ -33,15 +33,11 @@ STATUTS_TRAITES = (14, 15, 16, 17, 19)  # 18 et 28 exclus
 # Inclu dans le tableau du haut via OR explicite.
 IDTK_STATUT_BLEU_EN_COURS = 34
 
-# Agences "internes" (codees en dur cote WinDev).
+# Agences "internes" Energie (specifiques a Call ENI, distinctes de Fibre).
 # Tuple (id_orga_racine, libelle_affichage).
 AGENCES_INTERNES: list[tuple[int, str]] = [
-    (64, "Agence CD"),
-    (20260402170805658, "Agence Duval Caen"),
-    (20191203164626234, "Agence JR"),
-    (20210906121249525, "Agence Le Mans"),
-    (20260402142812484, "Agence Brosset Tours"),
-    (20260402165637765, "Agence Poitiers"),
+    (20260219111520715, "Agence Calais"),
+    (20260601102030477, "Agence Rennes"),
 ]
 
 # Agences externes (reseau distrib).
