@@ -28,7 +28,66 @@ from app.intranets.call.fibre.services.tickets import (
 )
 
 
+def _iso_date(v: Any) -> str:
+    """HFSQL Date (compact 8 chars) ou DateTime (>= 14 chars) -> 'YYYY-MM-DD'.
+
+    Le champ DATENAISS de TK_CallSFR est de type 'Date' (pas DateTime), donc
+    stocke sous 8 chars compact "19910405". La fonction _iso() de tickets.py
+    ne gere que les formats >= 14 chars -> renvoyait "19910405" tel quel et
+    le frontend (input type="date") refusait la valeur.
+    """
+    if not v:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d")
+    s = str(v).strip()
+    if not s or s.startswith("0000"):
+        return ""
+    # Compact 8 chars OU plus (Date / DateTime HFSQL)
+    if len(s) >= 8 and s[:8].isdigit():
+        return f"{s[0:4]}-{s[4:6]}-{s[6:8]}"
+    # ISO "1991-04-05..."
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:10]
+    return ""
+
+
 DOC_BASE_URL = "https://rest.omaya.fr/DocOmaya"
+
+
+# Cache module : referentiel TK_CallSFR_TypeAnomalie (motifs Vente differee).
+_TYPE_ANOMALIE_CACHE: list[dict] | None = None
+_TYPE_ANOMALIE_AT: float = 0.0
+_TYPE_ANOMALIE_TTL = 600.0  # 10 minutes
+
+
+def _load_motifs_anomalie() -> list[dict]:
+    """Charge le referentiel TK_CallSFR_TypeAnomalie (base ticket_bo).
+
+    Cache 10min. Retourne une liste [{id, label}, ...] triee par IDTK_CallSFR_TypeAnomalie.
+    """
+    import time as _time
+    global _TYPE_ANOMALIE_CACHE, _TYPE_ANOMALIE_AT
+    now = _time.monotonic()
+    if _TYPE_ANOMALIE_CACHE is not None and now - _TYPE_ANOMALIE_AT < _TYPE_ANOMALIE_TTL:
+        return _TYPE_ANOMALIE_CACHE
+    db_bo = get_connection("ticket_bo")
+    rows = db_bo.query(
+        """SELECT IDTK_CallSFR_TypeAnomalie, LibTypeAnomalie
+        FROM TK_CallSFR_TypeAnomalie
+        WHERE ModifELEM NOT LIKE '%suppr%'
+        ORDER BY IDTK_CallSFR_TypeAnomalie ASC"""
+    )
+    out = [
+        {
+            "id": _to_int(r.get("IDTK_CallSFR_TypeAnomalie")),
+            "label": (r.get("LibTypeAnomalie") or "").strip(),
+        }
+        for r in rows
+    ]
+    _TYPE_ANOMALIE_CACHE = out
+    _TYPE_ANOMALIE_AT = now
+    return out
 
 
 def _url_exists(url: str, timeout: float = 3.0) -> bool:
@@ -258,7 +317,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
                 tc.get("NomMaritalClient"),
                 tc.get("PrenomClient"),
             ),
-            "date_naiss": _iso(tc.get("DATENAISS"))[:10],
+            "date_naiss": _iso_date(tc.get("DATENAISS")),
             "dep_naiss": _to_int(tc.get("DEPNAISS")),
             "type_logement": _to_int(tc.get("TypeLogement")),  # 1=Maison, 2=Appart
             "adresse1": (tc.get("ADRESSE1") or "").strip(),
@@ -299,6 +358,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         "btn_valider_actif": btn_valider_actif,
         "btn_annuler_actif": btn_annuler_actif,
         "statuts_vente": statuts_vente,
+        "motifs_anomalie": _load_motifs_anomalie(),
     }
 
 

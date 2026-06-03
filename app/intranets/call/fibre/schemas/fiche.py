@@ -73,6 +73,11 @@ class StatutVenteOption(BaseModel):
     label: str
 
 
+class MotifAnomalieOption(BaseModel):
+    id: int
+    label: str
+
+
 class FicheTicketFibreResponse(BaseModel):
     """Reponse complete de GET /tickets/{id}/fiche."""
     id_ticket: str
@@ -92,6 +97,7 @@ class FicheTicketFibreResponse(BaseModel):
     btn_valider_actif: bool
     btn_annuler_actif: bool
     statuts_vente: list[StatutVenteOption]
+    motifs_anomalie: list[MotifAnomalieOption] = []
 
 
 class FicheTestEligibiliteResponse(BaseModel):

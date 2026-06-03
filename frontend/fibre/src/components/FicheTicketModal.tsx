@@ -96,6 +96,11 @@ interface StatutVenteOption {
   label: string
 }
 
+interface MotifAnomalieOption {
+  id: number
+  label: string
+}
+
 interface DocRef {
   url: string
   kind: 'pdf' | 'image' | ''
@@ -119,6 +124,7 @@ interface FicheData {
   btn_valider_actif: boolean
   btn_annuler_actif: boolean
   statuts_vente: StatutVenteOption[]
+  motifs_anomalie: MotifAnomalieOption[]
 }
 
 const API_BASE = '/api/call/fibre'
@@ -1185,10 +1191,14 @@ function ColonneDroite({
         <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
           <h3 className="text-sm font-bold text-blue-700 mb-2">Vente mobile en différé</h3>
           <div className="space-y-2 text-xs">
-            <Field
+            <SelectField
               label="Motif"
-              value={String(editAnomalie.id_type || '')}
-              onChange={(v) => onAnomalieChange({ id_type: parseInt(v || '0', 10) || 0 })}
+              value={editAnomalie.id_type}
+              options={[
+                { v: 0, l: '— Choisir un motif —' },
+                ...data.motifs_anomalie.map((m) => ({ v: m.id, l: m.label })),
+              ]}
+              onChange={(v) => onAnomalieChange({ id_type: v })}
             />
             <Field
               label="Si Autre, Précisions"
