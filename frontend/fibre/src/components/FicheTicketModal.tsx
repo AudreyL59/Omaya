@@ -135,6 +135,14 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   const [docKbis, setDocKbis] = useState<DocRef>({ url: '', kind: '' })
   const [docLettre, setDocLettre] = useState<DocRef>({ url: '', kind: '' })
   const [viewerOpen, setViewerOpen] = useState<null | 'cin' | 'kbis' | 'lettre'>(null)
+  // States d'edition (initialises a partir des donnees du backend)
+  const [editClient, setEditClient] = useState<FicheClient | null>(null)
+  const [editVente, setEditVente] = useState<FicheVente | null>(null)
+  const [editAnomalie, setEditAnomalie] = useState<FicheAnomalie | null>(null)
+  const [editOffres, setEditOffres] = useState<Record<string, FicheOffre>>({})
+  const [savingVente, setSavingVente] = useState(false)
+  const [savingOffre, setSavingOffre] = useState(false)
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
 
   // Fetch fiche
   useEffect(() => {
@@ -165,6 +173,13 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
         }
         const d = (await r.json()) as FicheData
         setData(d)
+        // Init des states d'edition (copies)
+        setEditClient({ ...d.client })
+        setEditVente({ ...d.vente })
+        setEditAnomalie({ ...d.anomalie })
+        const offresMap: Record<string, FicheOffre> = {}
+        for (const o of d.panier) offresMap[o.id] = { ...o }
+        setEditOffres(offresMap)
         // Pré-sélection : 1re ligne FIBRE si présente, sinon 1re ligne
         const firstFibre = d.panier.find((p) => p.type === 'FIBRE')
         if (firstFibre) setSelectedPanierId(firstFibre.id)
@@ -190,12 +205,17 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   }, [idTicket])
 
   // Lazy load TestEligibilite quand on sélectionne une ligne FIBRE
+  // (On lit depuis editOffres pour avoir les modifs en cours)
   const selectedOffre = useMemo(
-    () => data?.panier.find((p) => p.id === selectedPanierId) || null,
-    [data, selectedPanierId],
+    () => (selectedPanierId ? editOffres[selectedPanierId] || null : null),
+    [editOffres, selectedPanierId],
   )
+  // Recharge image test-elig + lettre-resil uniquement quand on CHANGE de
+  // ligne ou que le flag FIBRE/portabilite change (pas a chaque keystroke).
+  const isFibre = selectedOffre?.type === 'FIBRE'
+  const isPortabilite = !!selectedOffre?.portabilite
   useEffect(() => {
-    if (!selectedOffre || selectedOffre.type !== 'FIBRE') {
+    if (!selectedPanierId || !isFibre) {
       setTestEligImg('')
       setDocLettre({ url: '', kind: '' })
       return
@@ -203,7 +223,7 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
     let cancelled = false
     ;(async () => {
       try {
-        const r = await fetch(`${API_BASE}/tickets/panier/${selectedOffre.id}/test-eligibilite`, {
+        const r = await fetch(`${API_BASE}/tickets/panier/${selectedPanierId}/test-eligibilite`, {
           headers: { Authorization: `Bearer ${getToken()}` },
         })
         if (!r.ok) return
@@ -213,9 +233,8 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
         /* ignore */
       }
     })()
-    // Lettre de resil : visible uniquement si FIBRE + pas portabilite
-    if (!selectedOffre.portabilite && idTicket) {
-      fetch(`${API_BASE}/tickets/${idTicket}/panier/${selectedOffre.id}/lettre-resil`, {
+    if (!isPortabilite && idTicket) {
+      fetch(`${API_BASE}/tickets/${idTicket}/panier/${selectedPanierId}/lettre-resil`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -231,7 +250,7 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
     return () => {
       cancelled = true
     }
-  }, [selectedOffre, idTicket])
+  }, [selectedPanierId, isFibre, isPortabilite, idTicket])
 
   // Esc ferme la modal
   useEffect(() => {
@@ -241,6 +260,107 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  // Auto-dismiss du toast apres 3s
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(null), 3000)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  // Save infos client + vente + anomalie
+  const handleSaveVente = async () => {
+    if (!idTicket || !editClient || !editVente || !editAnomalie) return
+    setSavingVente(true)
+    try {
+      const body = {
+        client: {
+          civilite: editClient.civilite,
+          nom: editClient.nom,
+          nom_marital: editClient.nom_marital,
+          prenom: editClient.prenom,
+          date_naiss: editClient.date_naiss,
+          dep_naiss: editClient.dep_naiss,
+          type_logement: editClient.type_logement,
+          adresse1: editClient.adresse1,
+          adresse2: editClient.adresse2,
+          cp: editClient.cp,
+          ville: editClient.ville,
+          email: editClient.email,
+        },
+        vente: {
+          ref_appel: editVente.ref_appel,
+          intervention_vendeur: editVente.intervention_vendeur,
+          mobile_propose_vendeur: editVente.mobile_propose_vendeur,
+          info_vente: editVente.info_vente,
+        },
+        anomalie: {
+          active: editAnomalie.active,
+          id_type: editAnomalie.id_type,
+          info_cplt: editAnomalie.info_cplt,
+        },
+      }
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/save-vente`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Informations client et vente enregistrées' })
+    } catch (e) {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setSavingVente(false)
+    }
+  }
+
+  // Save offre selectionnee
+  const handleSaveOffre = async () => {
+    const offre = selectedPanierId ? editOffres[selectedPanierId] : null
+    if (!offre) return
+    setSavingOffre(true)
+    try {
+      const body = {
+        portabilite: offre.portabilite,
+        num_portabilite: offre.num_portabilite,
+        num_rio: offre.num_rio,
+        num_prise_optique: offre.num_prise_optique,
+        opt_choisies: offre.opt_choisies,
+        type_vente: offre.type_vente,
+        statut_prod: offre.statut_prod,
+      }
+      const r = await fetch(`${API_BASE}/tickets/panier/${offre.id}/save-offre`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: "Modifications de l'offre enregistrées" })
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setSavingOffre(false)
+    }
+  }
+
+  // Helper : update partiel d'une offre dans editOffres
+  const patchOffre = (id: string, patch: Partial<FicheOffre>) => {
+    setEditOffres((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
 
   if (!idTicket) return null
 
@@ -320,18 +440,40 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
             <div className="flex-1 grid grid-cols-12 gap-4 p-4 overflow-auto bg-gray-50">
               <ColonneGauche
                 data={data}
+                client={editClient!}
+                onClientChange={(patch) => setEditClient((c) => (c ? { ...c, ...patch } : c))}
                 cinAvailable={!!docCin.url}
                 kbisAvailable={!!docKbis.url}
                 onOpenCin={() => setViewerOpen('cin')}
                 onOpenKbis={() => setViewerOpen('kbis')}
               />
-              <ColonneCentre data={data} selectedId={selectedPanierId} onSelect={setSelectedPanierId} />
+              <ColonneCentre
+                data={data}
+                editOffres={editOffres}
+                editVente={editVente!}
+                onVenteChange={(patch) => setEditVente((v) => (v ? { ...v, ...patch } : v))}
+                selectedId={selectedPanierId}
+                onSelect={setSelectedPanierId}
+              />
               <ColonneDroite
                 data={data}
                 offre={selectedOffre}
+                onOffreChange={(patch) =>
+                  selectedPanierId && patchOffre(selectedPanierId, patch)
+                }
+                editVente={editVente!}
+                onVenteChange={(patch) => setEditVente((v) => (v ? { ...v, ...patch } : v))}
+                editAnomalie={editAnomalie!}
+                onAnomalieChange={(patch) =>
+                  setEditAnomalie((a) => (a ? { ...a, ...patch } : a))
+                }
                 testEligImg={testEligImg}
                 lettreAvailable={!!docLettre.url}
                 onOpenLettre={() => setViewerOpen('lettre')}
+                onSaveVente={handleSaveVente}
+                onSaveOffre={handleSaveOffre}
+                savingVente={savingVente}
+                savingOffre={savingOffre}
               />
             </div>
           )}
@@ -345,6 +487,17 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
           kind={viewerDoc.kind}
           onClose={() => setViewerOpen(null)}
         />
+
+        {/* Toast feedback save */}
+        {toast && (
+          <div
+            className={`fixed bottom-4 right-4 z-[70] px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+              toast.kind === 'ok' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            }`}
+          >
+            {toast.msg}
+          </div>
+        )}
       </motion.div>
     </AnimatePresence>
   )
@@ -354,18 +507,22 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
 
 function ColonneGauche({
   data,
+  client,
+  onClientChange,
   cinAvailable,
   kbisAvailable,
   onOpenCin,
   onOpenKbis,
 }: {
   data: FicheData
+  client: FicheClient
+  onClientChange: (patch: Partial<FicheClient>) => void
   cinAvailable: boolean
   kbisAvailable: boolean
   onOpenCin: () => void
   onOpenKbis: () => void
 }) {
-  const c = data.client
+  const c = client
   const v = data.vendeur
   return (
     <div className="col-span-4 flex flex-col gap-4">
@@ -382,12 +539,13 @@ function ColonneGauche({
               { v: 2, l: 'Mme' },
               { v: 3, l: 'Mlle' },
             ]}
+            onChange={(v) => onClientChange({ civilite: v })}
           />
-          <Field label="Nom" value={c.nom} />
-          <Field label="Nom Marital" value={c.nom_marital} />
+          <Field label="Nom" value={c.nom} onChange={(v) => onClientChange({ nom: v })} />
+          <Field label="Nom Marital" value={c.nom_marital} onChange={(v) => onClientChange({ nom_marital: v })} />
           <div className="flex items-end gap-3">
             <div className="flex-1">
-              <Field label="Prénom" value={c.prenom} />
+              <Field label="Prénom" value={c.prenom} onChange={(v) => onClientChange({ prenom: v })} />
             </div>
             <button
               onClick={onOpenCin}
@@ -408,8 +566,17 @@ function ColonneGauche({
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Né(e) le" value={c.date_naiss} />
-            <Field label="Dép" value={c.dep_naiss ? String(c.dep_naiss).padStart(2, '0') : ''} />
+            <Field
+              label="Né(e) le"
+              type="date"
+              value={c.date_naiss}
+              onChange={(v) => onClientChange({ date_naiss: v })}
+            />
+            <Field
+              label="Dép"
+              value={c.dep_naiss ? String(c.dep_naiss).padStart(2, '0') : ''}
+              onChange={(v) => onClientChange({ dep_naiss: parseInt(v || '0', 10) || 0 })}
+            />
           </div>
           <Radios
             label="Logement"
@@ -418,17 +585,19 @@ function ColonneGauche({
               { v: 1, l: 'Maison' },
               { v: 2, l: 'Appartement' },
             ]}
+            onChange={(v) => onClientChange({ type_logement: v })}
           />
-          <Field label="Adresse" value={c.adresse1} />
-          <Field label="Cplt" value={c.adresse2} />
+          <Field label="Adresse" value={c.adresse1} onChange={(v) => onClientChange({ adresse1: v })} />
+          <Field label="Cplt" value={c.adresse2} onChange={(v) => onClientChange({ adresse2: v })} />
           <div className="grid grid-cols-3 gap-3">
-            <Field label="CP" value={c.cp} />
+            <Field label="CP" value={c.cp} onChange={(v) => onClientChange({ cp: v })} />
             <div className="col-span-2">
-              <Field label="Ville" value={c.ville} />
+              <Field label="Ville" value={c.ville} onChange={(v) => onClientChange({ ville: v })} />
             </div>
           </div>
-          <Field label="Email" value={c.email} />
+          <Field label="Email" type="email" value={c.email} onChange={(v) => onClientChange({ email: v })} />
           <div className="grid grid-cols-2 gap-3">
+            {/* Mobile 1/2 : readonly (saves seulement via verrou ope - Phase 3) */}
             <Field label="Mobile 1" value={c.mobile1} muted={!data.is_my_call} />
             <Field label="Mobile 2 / Fixe" value={c.mobile2} muted={!data.is_my_call} />
           </div>
@@ -506,13 +675,23 @@ function ColonneGauche({
 
 function ColonneCentre({
   data,
+  editOffres,
+  editVente,
+  onVenteChange,
   selectedId,
   onSelect,
 }: {
   data: FicheData
+  editOffres: Record<string, FicheOffre>
+  editVente: FicheVente
+  onVenteChange: (patch: Partial<FicheVente>) => void
   selectedId: string
   onSelect: (id: string) => void
 }) {
+  // Compteurs recalcules en live depuis editOffres (les statuts ont pu changer)
+  const offresList = data.panier.map((p) => editOffres[p.id] || p)
+  const nbValide = offresList.filter((o) => o.statut_prod === 1).length
+  const nbAnnule = offresList.filter((o) => o.statut_prod === 2).length
   return (
     <div className="col-span-4 flex flex-col gap-3">
       <div className="bg-white rounded-lg border border-c-line overflow-hidden flex-1 flex flex-col">
@@ -523,12 +702,12 @@ function ColonneCentre({
           <div className="px-2 py-2 text-center">Portabilité</div>
         </div>
         <div className="overflow-y-auto flex-1">
-          {data.panier.length === 0 ? (
+          {offresList.length === 0 ? (
             <div className="p-4 text-center text-c-ink-faint italic text-xs">
               Aucune offre au panier
             </div>
           ) : (
-            data.panier.map((p) => {
+            offresList.map((p) => {
               const isSel = p.id === selectedId
               return (
                 <div
@@ -558,20 +737,20 @@ function ColonneCentre({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <span className="text-c-ink-soft">nb Prod validé(s) : </span>
-            <span className="font-bold text-c-ink">{data.nb_prod_valide}</span>
+            <span className="font-bold text-c-ink">{nbValide}</span>
           </div>
           <div>
             <span className="text-c-ink-soft">nb Prod annulé(s) : </span>
-            <span className="font-bold text-c-ink">{data.nb_prod_annule}</span>
+            <span className="font-bold text-c-ink">{nbAnnule}</span>
           </div>
         </div>
         <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
           <label className="text-c-ink-soft">Réf Appel :</label>
           <input
             type="text"
-            value={data.vente.ref_appel}
-            readOnly
-            className="px-2 py-1 border border-c-line rounded text-xs bg-gray-50"
+            value={editVente.ref_appel}
+            onChange={(e) => onVenteChange({ ref_appel: e.target.value })}
+            className="px-2 py-1 border border-c-line rounded text-xs bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none"
           />
         </div>
       </div>
@@ -601,15 +780,33 @@ function ColonneCentre({
 function ColonneDroite({
   data,
   offre,
+  onOffreChange,
+  editVente,
+  onVenteChange,
+  editAnomalie,
+  onAnomalieChange,
   testEligImg,
   lettreAvailable,
   onOpenLettre,
+  onSaveVente,
+  onSaveOffre,
+  savingVente,
+  savingOffre,
 }: {
   data: FicheData
   offre: FicheOffre | null
+  onOffreChange: (patch: Partial<FicheOffre>) => void
+  editVente: FicheVente
+  onVenteChange: (patch: Partial<FicheVente>) => void
+  editAnomalie: FicheAnomalie
+  onAnomalieChange: (patch: Partial<FicheAnomalie>) => void
   testEligImg: string
   lettreAvailable: boolean
   onOpenLettre: () => void
+  onSaveVente: () => void
+  onSaveOffre: () => void
+  savingVente: boolean
+  savingOffre: boolean
 }) {
   return (
     <div className="col-span-4 flex flex-col gap-4">
@@ -618,10 +815,15 @@ function ColonneDroite({
         {offre ? (
           <>
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <input type="radio" checked={offre.portabilite} readOnly className="accent-c-brand" />
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={offre.portabilite}
+                  onChange={(e) => onOffreChange({ portabilite: e.target.checked })}
+                  className="accent-c-brand"
+                />
                 <span className="text-sm font-semibold text-c-ink">Portabilité</span>
-              </div>
+              </label>
               {offre.type === 'FIBRE' && !offre.portabilite && (
                 <button
                   onClick={onOpenLettre}
@@ -636,17 +838,30 @@ function ColonneDroite({
 
             <div className="space-y-2.5 text-xs">
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Num à conserver" value={offre.num_portabilite} />
-                <Field label="Code RIO" value={offre.num_rio} />
+                <Field
+                  label="Num à conserver"
+                  value={offre.num_portabilite}
+                  onChange={(v) => onOffreChange({ num_portabilite: v })}
+                />
+                <Field
+                  label="Code RIO"
+                  value={offre.num_rio}
+                  onChange={(v) => onOffreChange({ num_rio: v })}
+                />
               </div>
               {offre.type === 'FIBRE' && (
-                <Field label="Prise Optique" value={offre.num_prise_optique} />
+                <Field
+                  label="Prise Optique"
+                  value={offre.num_prise_optique}
+                  onChange={(v) => onOffreChange({ num_prise_optique: v })}
+                />
               )}
               <div className="grid grid-cols-2 gap-3">
                 <SelectField
                   label="Statut Vente"
                   value={offre.statut_prod}
                   options={data.statuts_vente.map((s) => ({ v: s.id, l: s.label }))}
+                  onChange={(v) => onOffreChange({ statut_prod: v })}
                 />
                 <SelectField
                   label="Type Vente"
@@ -656,9 +871,15 @@ function ColonneDroite({
                     { v: 1, l: 'Conquête' },
                     { v: 2, l: 'Mig Mobile / Mig ADSL' },
                   ]}
+                  onChange={(v) => onOffreChange({ type_vente: v })}
                 />
               </div>
-              <Field label="Options Choisies" value={offre.opt_choisies} multi />
+              <Field
+                label="Options Choisies"
+                value={offre.opt_choisies}
+                multi
+                onChange={(v) => onOffreChange({ opt_choisies: v })}
+              />
             </div>
 
             {/* Test d'éligibilité (FIBRE only) */}
@@ -686,10 +907,11 @@ function ColonneDroite({
             )}
 
             <button
-              disabled
-              className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold opacity-60 cursor-not-allowed"
-              title="À venir (phase 2)"
+              onClick={onSaveOffre}
+              disabled={savingOffre}
+              className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
+              {savingOffre && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Enregistrer les modifs Offre
             </button>
           </>
@@ -706,15 +928,31 @@ function ColonneDroite({
           <div>
             <div className="font-semibold text-c-ink mb-1">Intervention du vendeur :</div>
             <div className="flex gap-3">
-              <Radio active={data.vente.intervention_vendeur} label="Oui" />
-              <Radio active={!data.vente.intervention_vendeur} label="Non" />
+              <Radio
+                active={editVente.intervention_vendeur}
+                label="Oui"
+                onClick={() => onVenteChange({ intervention_vendeur: true })}
+              />
+              <Radio
+                active={!editVente.intervention_vendeur}
+                label="Non"
+                onClick={() => onVenteChange({ intervention_vendeur: false })}
+              />
             </div>
           </div>
           <div>
             <div className="font-semibold text-c-ink mb-1">Le vendeur a proposé un mobile :</div>
             <div className="flex gap-3">
-              <Radio active={data.vente.mobile_propose_vendeur} label="Oui" />
-              <Radio active={!data.vente.mobile_propose_vendeur} label="Non" />
+              <Radio
+                active={editVente.mobile_propose_vendeur}
+                label="Oui"
+                onClick={() => onVenteChange({ mobile_propose_vendeur: true })}
+              />
+              <Radio
+                active={!editVente.mobile_propose_vendeur}
+                label="Non"
+                onClick={() => onVenteChange({ mobile_propose_vendeur: false })}
+              />
             </div>
           </div>
         </div>
@@ -722,29 +960,39 @@ function ColonneDroite({
         <div className="space-y-1 text-xs">
           <label className="font-semibold text-c-ink">Info Vente</label>
           <textarea
-            value={data.vente.info_vente}
-            readOnly
+            value={editVente.info_vente}
+            onChange={(e) => onVenteChange({ info_vente: e.target.value })}
             rows={3}
-            className="w-full px-2 py-1.5 border border-c-line rounded text-xs bg-gray-50 resize-none"
+            className="w-full px-2 py-1.5 border border-c-line rounded text-xs bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none resize-none"
           />
         </div>
 
         <button
-          disabled
-          className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold opacity-60 cursor-not-allowed"
-          title="À venir (phase 2)"
+          onClick={onSaveVente}
+          disabled={savingVente}
+          className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
+          {savingVente && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
           Enregistrer les infos client et vente
         </button>
       </div>
 
-      {/* Bloc anomalie mobile (si AnomalieMobile=1) */}
-      {data.anomalie.active && (
+      {/* Bloc anomalie mobile (visible uniquement si AnomalieMobile=1) */}
+      {editAnomalie.active && (
         <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
           <h3 className="text-sm font-bold text-blue-700 mb-2">Vente mobile en différé</h3>
           <div className="space-y-2 text-xs">
-            <Field label="Motif" value={String(data.anomalie.id_type || '')} />
-            <Field label="Si Autre, Précisions" value={data.anomalie.info_cplt} multi />
+            <Field
+              label="Motif"
+              value={String(editAnomalie.id_type || '')}
+              onChange={(v) => onAnomalieChange({ id_type: parseInt(v || '0', 10) || 0 })}
+            />
+            <Field
+              label="Si Autre, Précisions"
+              value={editAnomalie.info_cplt}
+              multi
+              onChange={(v) => onAnomalieChange({ info_cplt: v })}
+            />
             <div className="font-semibold text-blue-700 mt-2">Demande de dégroupage Panier</div>
           </div>
         </div>
@@ -760,28 +1008,36 @@ function Field({
   value,
   multi,
   muted,
+  onChange,
+  type = 'text',
 }: {
   label: string
   value: string | number
   multi?: boolean
   muted?: boolean
+  onChange?: (v: string) => void
+  type?: 'text' | 'date' | 'email'
 }) {
+  const readOnly = !onChange
+  const baseCls = `w-full px-2 py-1 border border-c-line rounded text-xs ${readOnly ? 'bg-gray-50' : 'bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none'} ${muted ? 'text-c-ink-faint italic' : ''}`
   return (
     <div className="space-y-0.5">
       <label className="block text-c-ink-soft">{label}</label>
       {multi ? (
         <textarea
-          value={String(value || '')}
-          readOnly
+          value={String(value ?? '')}
+          readOnly={readOnly}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           rows={2}
-          className={`w-full px-2 py-1 border border-c-line rounded text-xs bg-gray-50 resize-none ${muted ? 'text-c-ink-faint italic' : ''}`}
+          className={`${baseCls} resize-none`}
         />
       ) : (
         <input
-          type="text"
-          value={String(value || '')}
-          readOnly
-          className={`w-full px-2 py-1 border border-c-line rounded text-xs bg-gray-50 ${muted ? 'text-c-ink-faint italic' : ''}`}
+          type={type}
+          value={String(value ?? '')}
+          readOnly={readOnly}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          className={baseCls}
         />
       )}
     </div>
@@ -792,20 +1048,23 @@ function Radios({
   label,
   value,
   options,
+  onChange,
 }: {
   label: string
   value: number
   options: { v: number; l: string }[]
+  onChange?: (v: number) => void
 }) {
   return (
     <div className="flex items-center gap-4">
       <span className="text-c-ink-soft w-20">{label} :</span>
       {options.map((opt) => (
-        <label key={opt.v} className="flex items-center gap-1 cursor-default">
+        <label key={opt.v} className={`flex items-center gap-1 ${onChange ? 'cursor-pointer' : 'cursor-default'}`}>
           <input
             type="radio"
             checked={value === opt.v}
-            readOnly
+            readOnly={!onChange}
+            onChange={onChange ? () => onChange(opt.v) : undefined}
             className="accent-c-brand"
           />
           <span className="text-c-ink">{opt.l}</span>
@@ -815,9 +1074,20 @@ function Radios({
   )
 }
 
-function Toggle({ label, value }: { label: string; value: boolean }) {
+function Toggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: boolean
+  onChange?: (v: boolean) => void
+}) {
   return (
-    <div className="flex items-center gap-2 text-c-ink">
+    <div
+      className={`flex items-center gap-2 text-c-ink ${onChange ? 'cursor-pointer select-none' : ''}`}
+      onClick={onChange ? () => onChange(!value) : undefined}
+    >
       <div
         className={`w-10 h-5 rounded-full p-0.5 flex items-center transition-colors ${
           value ? 'bg-green-500 justify-end' : 'bg-gray-300 justify-start'
@@ -846,18 +1116,21 @@ function SelectField({
   label,
   value,
   options,
+  onChange,
 }: {
   label: string
   value: number
   options: { v: number; l: string }[]
+  onChange?: (v: number) => void
 }) {
   return (
     <div className="space-y-0.5">
       <label className="block text-c-ink-soft">{label}</label>
       <select
         value={value}
-        disabled
-        className="w-full px-2 py-1 border border-c-line rounded text-xs bg-gray-50 cursor-not-allowed"
+        disabled={!onChange}
+        onChange={onChange ? (e) => onChange(Number(e.target.value)) : undefined}
+        className={`w-full px-2 py-1 border border-c-line rounded text-xs ${onChange ? 'bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none' : 'bg-gray-50 cursor-not-allowed'}`}
       >
         {options.map((opt) => (
           <option key={opt.v} value={opt.v}>
@@ -897,10 +1170,24 @@ function ActionButton({
   )
 }
 
-function Radio({ active, label }: { active: boolean; label: string }) {
+function Radio({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  onClick?: () => void
+}) {
   return (
-    <label className="flex items-center gap-1 cursor-default">
-      <input type="radio" checked={active} readOnly className="accent-c-brand" />
+    <label className={`flex items-center gap-1 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}>
+      <input
+        type="radio"
+        checked={active}
+        readOnly={!onClick}
+        onChange={onClick ? () => onClick() : undefined}
+        className="accent-c-brand"
+      />
       <span>{label}</span>
     </label>
   )

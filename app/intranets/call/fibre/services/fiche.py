@@ -353,6 +353,96 @@ def load_lettre_resil(id_tk_liste: int, id_panier: int) -> dict:
     return {"url": url, "kind": kind}
 
 
+def _sql_str(s: Any) -> str:
+    """Escape un texte pour interpolation SQL HFSQL : double les simple quotes."""
+    if s is None:
+        return ""
+    return str(s).replace("'", "''")
+
+
+def _sql_now() -> str:
+    """Date+Heure HFSQL compact pour ModifDate ('YYYYMMDDHHMMSS')."""
+    from datetime import datetime as _dt
+    return _dt.now().strftime("%Y%m%d%H%M%S")
+
+
+def _sql_bool(b: Any) -> int:
+    return 1 if _bool(b) else 0
+
+
+def save_vente_infos(id_tk_liste: int, payload: dict) -> dict:
+    """UPDATE TK_CallSFR avec les infos client + vente + anomalie modifiees.
+
+    Transposition du bouton "Enregistrer les infos client et vente" WinDev.
+    Match avec TK_CallSFR via IDTK_Liste.
+    """
+    db_bo = get_connection("ticket_bo")
+    c = payload.get("client", {}) or {}
+    v = payload.get("vente", {}) or {}
+    a = payload.get("anomalie", {}) or {}
+    now_wd = _sql_now()
+
+    sql = f"""UPDATE TK_CallSFR SET
+        CivilitéClient = {_to_int(c.get('civilite'))},
+        NomClient = '{_sql_str(c.get('nom'))}',
+        NomMaritalClient = '{_sql_str(c.get('nom_marital'))}',
+        PrenomClient = '{_sql_str(c.get('prenom'))}',
+        DATENAISS = '{_sql_str(_dates_to_compact(c.get('date_naiss')))}',
+        DEPNAISS = {_to_int(c.get('dep_naiss'))},
+        TypeLogement = {_to_int(c.get('type_logement'))},
+        ADRESSE1 = '{_sql_str(c.get('adresse1'))}',
+        ADRESSE2 = '{_sql_str(c.get('adresse2'))}',
+        CP = '{_sql_str(c.get('cp'))}',
+        VILLE = '{_sql_str(c.get('ville'))}',
+        adrMail = '{_sql_str(c.get('email'))}',
+        InfoVente = '{_sql_str(v.get('info_vente'))}',
+        RefAppel = '{_sql_str(v.get('ref_appel'))}',
+        InterventionVend = {1 if _bool(v.get('intervention_vendeur')) else 2},
+        MobPropoVend = {1 if _bool(v.get('mobile_propose_vendeur')) else 2},
+        AnomalieMobile = {_sql_bool(a.get('active'))},
+        IDTK_CallSFR_TypeAnomalie = {_to_int(a.get('id_type'))},
+        InfoCpltAnomalie = '{_sql_str(a.get('info_cplt'))}',
+        ModifDate = '{now_wd}'
+    WHERE IDTK_Liste = {_to_int(id_tk_liste)}
+      AND ModifELEM NOT LIKE '%suppr%'"""
+    db_bo.query(sql)
+    return {"ok": True}
+
+
+def save_offre(id_panier: int, payload: dict) -> dict:
+    """UPDATE TK_CallSFR_Panier avec les modifs de la ligne d'offre.
+
+    Transposition du bouton "Enregistrer les modifs Offre" WinDev.
+    """
+    db_bo = get_connection("ticket_bo")
+    now_wd = _sql_now()
+
+    sql = f"""UPDATE TK_CallSFR_Panier SET
+        portabilité = {_sql_bool(payload.get('portabilite'))},
+        NumPortabilité = '{_sql_str(payload.get('num_portabilite'))}',
+        NumPrise_RIO = '{_sql_str(payload.get('num_rio'))}',
+        TypeVente = {_to_int(payload.get('type_vente'))},
+        StatutProd = {_to_int(payload.get('statut_prod'))},
+        NumPrise_Optique = '{_sql_str(payload.get('num_prise_optique'))}',
+        OptChoisies = '{_sql_str(payload.get('opt_choisies'))}',
+        ModifDate = '{now_wd}'
+    WHERE IDTK_CallSFR_Panier = {_to_int(id_panier)}"""
+    db_bo.query(sql)
+    return {"ok": True}
+
+
+def _dates_to_compact(s: str | None) -> str:
+    """ISO 'YYYY-MM-DD' -> compact 'YYYYMMDD'. Vide si non parsable."""
+    if not s:
+        return ""
+    s = str(s).strip()
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:4] + s[5:7] + s[8:10]
+    if len(s) == 8 and s.isdigit():
+        return s
+    return ""
+
+
 def load_panier_ligne_image(id_panier: int) -> str:
     """Charge l'image TestEligibilite d'une ligne de panier (FIBRE uniquement).
 

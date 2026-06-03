@@ -115,3 +115,56 @@ class LettreResilResponse(BaseModel):
     """Lettre de resiliation pour une ligne de panier (FIBRE + pas portabilite)."""
     url: str = ""
     kind: str = ""
+
+
+class SaveClientPayload(BaseModel):
+    """Champs client editables (cf. ColonneGauche de la fiche)."""
+    civilite: int = 0
+    nom: str = ""
+    nom_marital: str = ""
+    prenom: str = ""
+    date_naiss: str = ""           # ISO YYYY-MM-DD ou vide
+    dep_naiss: int = 0
+    type_logement: int = 0         # 1=Maison, 2=Appart
+    adresse1: str = ""
+    adresse2: str = ""
+    cp: str = ""
+    ville: str = ""
+    email: str = ""
+
+
+class SaveVentePayload(BaseModel):
+    """Champs vente (cf. ColonneDroite + Ref Appel)."""
+    ref_appel: str = ""
+    intervention_vendeur: bool = False
+    mobile_propose_vendeur: bool = False
+    info_vente: str = ""
+
+
+class SaveAnomaliePayload(BaseModel):
+    """Champs anomalie mobile (bloc conditionnel)."""
+    active: bool = False
+    id_type: int = 0
+    info_cplt: str = ""
+
+
+class SaveVenteRequest(BaseModel):
+    """Body de POST /tickets/{id}/save-vente."""
+    client: SaveClientPayload
+    vente: SaveVentePayload
+    anomalie: SaveAnomaliePayload
+
+
+class SaveOffreRequest(BaseModel):
+    """Body de POST /tickets/panier/{id_panier}/save-offre."""
+    portabilite: bool = False
+    num_portabilite: str = ""
+    num_rio: str = ""
+    num_prise_optique: str = ""
+    opt_choisies: str = ""
+    type_vente: int = 0
+    statut_prod: int = 0
+
+
+class SaveResponse(BaseModel):
+    ok: bool = True

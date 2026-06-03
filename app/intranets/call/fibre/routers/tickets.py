@@ -30,6 +30,9 @@ from app.intranets.call.fibre.schemas.fiche import (
     FicheTestEligibiliteResponse,
     FicheDocumentsResponse,
     LettreResilResponse,
+    SaveVenteRequest,
+    SaveOffreRequest,
+    SaveResponse,
 )
 
 router = APIRouter()
@@ -135,6 +138,40 @@ def get_fiche_documents(
     et le type (pdf / image) si trouve, sinon vide.
     """
     return fiche_svc.load_documents(int(id_ticket), client_pro=client_pro)
+
+
+@router.post("/tickets/{id_ticket}/save-vente", response_model=SaveResponse)
+def post_save_vente(
+    id_ticket: str,
+    payload: SaveVenteRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    """Save infos client + vente + anomalie (UPDATE TK_CallSFR).
+
+    Transposition du bouton "Enregistrer les infos client et vente" WinDev.
+    """
+    try:
+        return fiche_svc.save_vente_infos(int(id_ticket), payload.dict())
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/tickets/panier/{id_panier}/save-offre", response_model=SaveResponse)
+def post_save_offre(
+    id_panier: str,
+    payload: SaveOffreRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    """Save les modifs d'une ligne d'offre (UPDATE TK_CallSFR_Panier).
+
+    Transposition du bouton "Enregistrer les modifs Offre" WinDev.
+    """
+    try:
+        return fiche_svc.save_offre(int(id_panier), payload.dict())
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.get("/tickets/{id_ticket}/panier/{id_panier}/lettre-resil", response_model=LettreResilResponse)
