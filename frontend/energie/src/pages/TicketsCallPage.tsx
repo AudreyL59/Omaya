@@ -18,9 +18,12 @@ import {
   Eye,
   Search,
   Zap,
-  Users,
+  Package,
+  User,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Check,
 } from 'lucide-react'
 import { getToken } from '@/api'
@@ -70,22 +73,20 @@ interface StatPartenaire {
   nb_clients: number
 }
 
-interface StatPartenaireAgence {
-  prefix: string
-  lib: string
+interface StatAgenceEnergie {
+  id_orga: string
+  lib_orga: string
   nb_offres: number
   nb_clients: number
-}
-
-interface StatAgenceEnergie {
-  lib_agence: string
-  par_partenaire: StatPartenaireAgence[]
+  gimmick_url: string
 }
 
 interface StatsEnergie {
   tickets_valides: number
   partenaires: StatPartenaire[]
-  agences: StatAgenceEnergie[]
+  agences_internes: StatAgenceEnergie[]
+  nb_offres_multicom: number
+  nb_clients_multicom: number
 }
 
 interface EnCoursPayload {
@@ -279,80 +280,158 @@ function DashboardEnergie({
   stats: StatsEnergie | undefined
 }) {
   const [expanded, setExpanded] = useState(false)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const scrollBy = (dir: 1 | -1) => {
+    if (!scrollRef.current) return
+    scrollRef.current.scrollBy({ left: dir * 240, behavior: 'smooth' })
+  }
+  const totInterneOffres = stats?.agences_internes.reduce((s, a) => s + a.nb_offres, 0) ?? 0
+  const totInterneClients = stats?.agences_internes.reduce((s, a) => s + a.nb_clients, 0) ?? 0
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-c-line p-5 space-y-4">
+    <div className="bg-white rounded-xl shadow-sm border border-c-line overflow-hidden">
       {/* Ligne 1 : titre + tickets validés + carrousel partenaires */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center shadow">
-            <Zap className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-c-ink leading-tight">Call ENI</h1>
-            <p className="text-[11px] text-c-ink-faint">
-              Dernière vérif {clientNow || '—'} · serveur {serveurNow || '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-8">
-          {/* Tickets validés - gros cercle vert */}
-          <div className="flex flex-col items-center min-w-[90px]">
-            <div className="w-16 h-16 rounded-full border border-emerald-600 flex items-center justify-center text-xl font-bold text-emerald-700 bg-white">
-              {stats?.tickets_valides ?? 0}
+      <div className="p-5">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center shadow">
+              <Zap className="w-6 h-6 text-white" />
             </div>
-            <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
-              Tickets validés
+            <div>
+              <h1 className="text-2xl font-bold text-c-ink leading-tight">Call ENI</h1>
+              <p className="text-[11px] text-c-ink-faint">
+                Dernière vérif {clientNow || '—'} · serveur {serveurNow || '—'}
+              </p>
             </div>
           </div>
 
-          {/* Séparateur vertical + libellé "Détail Panier" */}
-          <div className="hidden md:block self-stretch border-l border-c-line-soft" />
-          <div className="hidden lg:block text-[11px] text-c-ink-soft uppercase tracking-wide font-medium max-w-[120px] leading-snug">
-            Détail panier : Offres validées par Opérateur
+          <div className="flex items-center gap-8">
+            {/* Tickets validés - gros cercle vert */}
+            <div className="flex flex-col items-center min-w-[90px]">
+              <div className="w-16 h-16 rounded-full border border-emerald-600 flex items-center justify-center text-xl font-bold text-emerald-700 bg-white">
+                {stats?.tickets_valides ?? 0}
+              </div>
+              <div className="text-[11px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
+                Tickets validés
+              </div>
+            </div>
+
+            {/* Séparateur vertical + libellé "Détail Panier" */}
+            <div className="hidden md:block self-stretch border-l border-c-line-soft" />
+            <div className="hidden lg:block text-[11px] text-c-ink-soft uppercase tracking-wide font-medium max-w-[120px] leading-snug">
+              Détail panier : Offres validées par Opérateur
+            </div>
+
+            {/* Carrousel de partenaires (logo + 2 cercles) */}
+            {stats ? (
+              <div className="flex items-center gap-7 overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
+                {stats.partenaires.map((p) => (
+                  <PartenaireBlock key={p.id} partenaire={p} />
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-c-ink-faint text-xs">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Stats...
+              </div>
+            )}
           </div>
-
-          {/* Carrousel de partenaires (logo + 2 cercles) */}
-          {stats ? (
-            <div className="flex items-center gap-7 overflow-x-auto" style={{ scrollbarWidth: 'thin' }}>
-              {stats.partenaires.map((p) => (
-                <PartenaireBlock key={p.id} partenaire={p} />
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-c-ink-faint text-xs">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Stats...
-            </div>
-          )}
-
-          {/* Bouton déplier le détail par agence */}
-          {stats && stats.agences.length > 0 && (
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              className="shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-md border border-c-line-strong text-xs font-medium text-c-ink hover:bg-c-brand-soft"
-              title={expanded ? 'Masquer le détail par agence' : 'Afficher le détail par agence'}
-            >
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              {expanded ? 'Masquer le détail' : 'Détail par agence'}
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Section dépliable : detail par agence */}
+      {/* Section dépliable : detail par agence (style Fibre : Tot + carrousel) */}
       {expanded && stats && (
-        <div className="border-t border-c-line-soft pt-4 space-y-2">
-          <div className="text-[11px] text-c-ink-soft uppercase tracking-wide font-medium">
-            Détail par agence ({stats.agences.length})
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {stats.agences.map((a) => (
-              <AgenceEnergieCard key={a.lib_agence} agence={a} partenaires={stats.partenaires} />
-            ))}
+        <div className="border-t border-c-line-soft p-5">
+          <div className="flex items-center gap-8">
+            <div className="flex flex-col gap-2.5 shrink-0 pr-6 border-r border-c-line-soft">
+              <TotalRow label="Tot Interne" offres={totInterneOffres} clients={totInterneClients} />
+              <TotalRow label="Tot Multicom" offres={stats.nb_offres_multicom} clients={stats.nb_clients_multicom} />
+            </div>
+            <button
+              onClick={() => scrollBy(-1)}
+              className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+              aria-label="Défiler à gauche"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <div
+              ref={scrollRef}
+              className="flex items-center gap-10 overflow-x-auto flex-1 px-3 py-1 scroll-smooth"
+              style={{ scrollbarWidth: 'thin' }}
+            >
+              {stats.agences_internes.map((a) => (
+                <AgenceEnergieCard key={a.id_orga} agence={a} />
+              ))}
+            </div>
+            <button
+              onClick={() => scrollBy(1)}
+              className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+              aria-label="Défiler à droite"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
           </div>
         </div>
       )}
+
+      {/* Bouton flèche full-width en bas, juste la flèche */}
+      {stats && stats.agences_internes.length > 0 && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full border-t border-c-line-soft flex items-center justify-center py-2 text-c-ink-soft hover:bg-c-brand-soft/30 transition-colors"
+          title={expanded ? 'Masquer le détail par agence' : 'Afficher le détail par agence'}
+          aria-label={expanded ? 'Masquer le détail' : 'Afficher le détail'}
+        >
+          {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function TotalRow({ label, offres, clients }: { label: string; offres: number; clients: number }) {
+  return (
+    <div className="flex items-center gap-3 text-xs">
+      <span className="font-semibold text-c-ink w-24 text-right">{label}</span>
+      <Package className="w-4 h-4 text-c-ink-soft" aria-label="Offres" />
+      <span className="font-bold text-c-ink min-w-[20px] text-center" title="Offres">{offres}</span>
+      <User className="w-4 h-4 text-c-ink-soft" aria-label="Clients" />
+      <span className="font-bold text-c-ink min-w-[20px] text-center" title="Clients">{clients}</span>
+    </div>
+  )
+}
+
+function AgenceEnergieCard({ agence }: { agence: StatAgenceEnergie }) {
+  return (
+    <div className="flex flex-col items-center shrink-0">
+      <div className="flex items-center gap-3">
+        {/* Logo agence (gimmick) ou fallback User icon */}
+        <div className="w-14 h-14 rounded-full border border-c-line bg-white overflow-hidden flex items-center justify-center shrink-0">
+          {agence.gimmick_url ? (
+            <img
+              src={agence.gimmick_url}
+              alt={agence.lib_orga}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <User className="w-6 h-6 text-c-ink-soft" />
+          )}
+        </div>
+        {/* Compteurs Offres / Clients en colonne verticale */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2" title="Offres">
+            <Package className="w-3.5 h-3.5 text-c-ink-soft" />
+            <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_offres}</span>
+          </div>
+          <div className="flex items-center gap-2" title="Clients">
+            <User className="w-3.5 h-3.5 text-c-ink-soft" />
+            <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_clients}</span>
+          </div>
+        </div>
+      </div>
+      <div className="text-[11px] text-c-ink-soft mt-2 text-center font-medium whitespace-nowrap">
+        {agence.lib_orga}
+      </div>
     </div>
   )
 }
@@ -388,52 +467,6 @@ function StatCircle({ value, label }: { value: number; label: string }) {
       </div>
       <div className="text-[10px] text-c-ink-soft mt-1 text-center font-medium uppercase tracking-wide">
         {label}
-      </div>
-    </div>
-  )
-}
-
-function AgenceEnergieCard({
-  agence,
-  partenaires,
-}: {
-  agence: StatAgenceEnergie
-  partenaires: StatPartenaire[]
-}) {
-  // Map prefix -> logo_url pour afficher le mini-logo du partenaire
-  const prefixToLogo: Record<string, string> = {}
-  for (const p of partenaires) prefixToLogo[p.prefix] = p.logo_url
-  const totalOffres = agence.par_partenaire.reduce((s, x) => s + x.nb_offres, 0)
-  const totalClients = agence.par_partenaire.reduce((s, x) => s + x.nb_clients, 0)
-  return (
-    <div className="border border-c-line rounded-lg p-3 bg-white">
-      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-c-line-soft">
-        <Users className="w-4 h-4 text-c-ink-soft shrink-0" />
-        <div className="text-xs font-semibold text-c-ink truncate" title={agence.lib_agence}>
-          {agence.lib_agence}
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        {agence.par_partenaire.map((pp) => (
-          <div key={pp.prefix} className="flex items-center gap-2 text-xs">
-            {prefixToLogo[pp.prefix] ? (
-              <img src={prefixToLogo[pp.prefix]} alt={pp.lib} className="w-5 h-5 object-contain shrink-0" title={pp.lib} />
-            ) : (
-              <span className="w-5 text-[9px] font-bold text-c-ink-soft text-center shrink-0">{pp.prefix}</span>
-            )}
-            <span className="flex-1 text-c-ink-soft truncate" title={pp.lib}>{pp.lib}</span>
-            <span className="font-bold text-c-ink min-w-[24px] text-right" title="Offres">{pp.nb_offres}</span>
-            <span className="text-c-ink-faint">/</span>
-            <span className="font-bold text-c-ink min-w-[24px] text-right" title="Clients">{pp.nb_clients}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-2 text-xs pt-1.5 mt-1.5 border-t border-c-line-soft">
-          <span className="w-5 text-center text-c-ink-soft font-bold">Σ</span>
-          <span className="flex-1 font-semibold text-c-ink-soft">Total</span>
-          <span className="font-bold text-c-ink min-w-[24px] text-right" title="Total Offres">{totalOffres}</span>
-          <span className="text-c-ink-faint">/</span>
-          <span className="font-bold text-c-ink min-w-[24px] text-right" title="Total Clients">{totalClients}</span>
-        </div>
       </div>
     </div>
   )

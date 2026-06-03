@@ -72,25 +72,25 @@ class StatPartenaire(BaseModel):
     nb_clients: int       # nb tickets distincts ayant au moins 1 offre validee
 
 
-class StatPartenaireAgence(BaseModel):
-    """Compteur Offres/Clients par Partenaire au sein d'une agence."""
-    prefix: str
-    lib: str
+class StatAgenceEnergie(BaseModel):
+    """Une carte agence interne dans le detail depliable (meme structure
+    que Call Fibre : logo gimmick + Offres + Clients)."""
+    id_orga: str
+    lib_orga: str
     nb_offres: int
     nb_clients: int
-
-
-class StatAgenceEnergie(BaseModel):
-    """Une agence dans le detail depliable (compteurs par Partenaire)."""
-    lib_agence: str
-    par_partenaire: list[StatPartenaireAgence] = []
+    gimmick_url: str = ""
 
 
 class StatsEnergie(BaseModel):
     """Stats globales du dashboard Call Energie."""
     tickets_valides: int          # nb tickets avec au moins 1 offre validee
     partenaires: list[StatPartenaire] = []
-    agences: list[StatAgenceEnergie] = []
+    # Detail par agence (depliable). Reprend les 6 agences internes Fibre
+    # + Multicom (tout le reseau distrib externe Energie cumule).
+    agences_internes: list[StatAgenceEnergie] = []
+    nb_offres_multicom: int = 0
+    nb_clients_multicom: int = 0
 
 
 class TicketsEnCoursResponse(BaseModel):
