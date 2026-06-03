@@ -301,7 +301,7 @@ function DashboardEnergie({
     <div className="bg-white rounded-xl shadow-sm border border-c-line overflow-hidden">
       {/* Ligne 1 : titre + tickets validés + carrousel partenaires */}
       <div className="p-5">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center flex-wrap gap-8">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center shadow">
               <Zap className="w-6 h-6 text-white" />

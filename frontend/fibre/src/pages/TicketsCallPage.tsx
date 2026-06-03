@@ -283,7 +283,7 @@ function DashboardCard({
   return (
     <div className="bg-white rounded-xl shadow-sm border border-c-line p-5 space-y-5">
       {/* Header : Logo + titre + 4 cercles de stats */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center flex-wrap gap-8">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center shadow">
             <Phone className="w-6 h-6 text-white" />
