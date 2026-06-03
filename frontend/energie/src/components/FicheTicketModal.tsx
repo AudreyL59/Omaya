@@ -1,17 +1,18 @@
 /**
- * Popup fiche d'un ticket Call Energie (transposition PAGE_TicketFicheEnergie).
+ * Popup fiche d'un ticket Call Energie - Phase 2.
  *
- * Phase 1 : colonne gauche uniquement (infos client + vendeur). Les 2
- * autres colonnes (panier + detail offre/vente) sont des placeholders
- * en attendant Phase 2.
+ * 3 colonnes :
+ * - Gauche : infos client + vendeur (editables, save via "Enregistrer les
+ *   infos Client")
+ * - Centre : tableau panier selectionnable + Statut Vente + Ref Appel +
+ *   Intervention vendeur + Info Vente + 3 boutons d'action (grises en P2)
+ * - Droite : header partenaire selectionne + champs SPECIFIQUES selon le
+ *   partenaire (OEN/PRO/ENI/VAL/STR) + Num BS + Enregistrer
  *
- * Differences vs Fibre :
- * - Pas de Mobile 2 / Fixe
- * - Pas de MobPropoVend ni bloc anomalie
- * - Documents : CIN + KBIS (si Pro) + Justif (specifique Energie)
+ * Le bloc "Vente mobile en differe" n'existe pas pour Energie.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -21,9 +22,13 @@ import {
   CreditCard,
   FileText,
   ScrollText,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import DocumentViewerModal from '@/components/DocumentViewerModal'
+
+// --- Types ---------------------------------------------------------------
 
 interface FicheClient {
   civilite: number
@@ -65,12 +70,19 @@ interface FicheOffre {
   id: string
   id_produit: number
   partenaire: string
+  // Options
   opt_energie_verte_elec: boolean
   opt_energie_verte_gaz: boolean
   opt_reforestation: boolean
   opt_mail: boolean
   opt_mandat: boolean
   format_numerique: boolean
+  opt_accept_com_parte: boolean
+  opt_consent_consult_distri: boolean
+  opt_e_communication: boolean
+  opt_e_facture: boolean
+  opt_optin_commercial: boolean
+  // Etat
   statut_prod: number
   motif_annulation: string
   num_bs: string
@@ -98,6 +110,8 @@ interface FicheData {
   btn_valider_actif: boolean
   btn_annuler_actif: boolean
   statuts_vente: StatutVenteOption[]
+  ohm_login: string
+  ohm_mdp: string
 }
 
 interface DocRef {
@@ -113,14 +127,24 @@ interface Props {
   onAfterAction?: () => void
 }
 
+// --- Component principal -------------------------------------------------
+
 export default function FicheTicketModal({ idTicket, onClose }: Props) {
   const [data, setData] = useState<FicheData | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string>('')
+  const [error, setError] = useState('')
+  const [selectedPanierId, setSelectedPanierId] = useState('')
   const [docCin, setDocCin] = useState<DocRef>({ url: '', kind: '' })
   const [docKbis, setDocKbis] = useState<DocRef>({ url: '', kind: '' })
   const [docJustif, setDocJustif] = useState<DocRef>({ url: '', kind: '' })
   const [viewerOpen, setViewerOpen] = useState<null | 'cin' | 'kbis' | 'justif'>(null)
+  // States editables
+  const [editClient, setEditClient] = useState<FicheClient | null>(null)
+  const [editVente, setEditVente] = useState<FicheVente | null>(null)
+  const [editOffres, setEditOffres] = useState<Record<string, FicheOffre>>({})
+  const [savingClient, setSavingClient] = useState(false)
+  const [savingOffre, setSavingOffre] = useState(false)
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
 
   useEffect(() => {
     if (!idTicket) return
@@ -146,11 +170,16 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
         }
         const d = (await r.json()) as FicheData
         setData(d)
+        setEditClient({ ...d.client })
+        setEditVente({ ...d.vente })
+        const map: Record<string, FicheOffre> = {}
+        for (const o of d.panier) map[o.id] = { ...o }
+        setEditOffres(map)
+        if (d.panier.length > 0) setSelectedPanierId(d.panier[0].id)
         // Documents en background
-        fetch(
-          `${API_BASE}/tickets/${idTicket}/documents?client_pro=${d.client.client_pro ? 1 : 0}`,
-          { headers: { Authorization: `Bearer ${getToken()}` } },
-        )
+        fetch(`${API_BASE}/tickets/${idTicket}/documents?client_pro=${d.client.client_pro ? 1 : 0}`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
           .then((r2) => (r2.ok ? r2.json() : null))
           .then((docs) => {
             if (docs?.cin) setDocCin(docs.cin)
@@ -167,12 +196,111 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
   }, [idTicket])
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(null), 3000)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  const selectedOffre = useMemo(
+    () => (selectedPanierId ? editOffres[selectedPanierId] || null : null),
+    [editOffres, selectedPanierId],
+  )
+
+  const patchOffre = (id: string, patch: Partial<FicheOffre>) => {
+    setEditOffres((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
+
+  const handleSaveClient = async () => {
+    if (!idTicket || !editClient || !editVente) return
+    setSavingClient(true)
+    try {
+      const body = {
+        client: {
+          civilite: editClient.civilite,
+          nom: editClient.nom,
+          nom_marital: editClient.nom_marital,
+          prenom: editClient.prenom,
+          date_naiss: editClient.date_naiss,
+          dep_naiss: editClient.dep_naiss,
+          type_logement: editClient.type_logement,
+          adresse1: editClient.adresse1,
+          adresse2: editClient.adresse2,
+          cp: editClient.cp,
+          ville: editClient.ville,
+          email: editClient.email,
+        },
+        vente: {
+          ref_appel: editVente.ref_appel,
+          intervention_vendeur: editVente.intervention_vendeur,
+          info_vente: editVente.info_vente,
+        },
+      }
+      const r = await fetch(`${API_BASE}/tickets/${idTicket}/save-vente`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Infos client enregistrées' })
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setSavingClient(false)
+    }
+  }
+
+  const handleSaveOffre = async (offre: FicheOffre, silent = false) => {
+    setSavingOffre(true)
+    try {
+      // On envoie tous les champs (le backend update seulement ceux fournis)
+      const body = {
+        statut_prod: offre.statut_prod,
+        num_bs: offre.num_bs,
+        opt_mandat: offre.opt_mandat,
+        format_numerique: offre.format_numerique,
+        opt_accept_com_parte: offre.opt_accept_com_parte,
+        opt_consent_consult_distri: offre.opt_consent_consult_distri,
+        opt_e_communication: offre.opt_e_communication,
+        opt_e_facture: offre.opt_e_facture,
+        opt_optin_commercial: offre.opt_optin_commercial,
+        opt_energie_verte_elec: offre.opt_energie_verte_elec,
+        opt_energie_verte_gaz: offre.opt_energie_verte_gaz,
+        opt_reforestation: offre.opt_reforestation,
+        opt_mail: offre.opt_mail,
+      }
+      const r = await fetch(`${API_BASE}/tickets/panier/${offre.id}/save-offre`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      if (!silent) setToast({ kind: 'ok', msg: 'Offre enregistrée' })
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    } finally {
+      setSavingOffre(false)
+    }
+  }
 
   if (!idTicket) return null
 
@@ -201,12 +329,11 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
           exit={{ opacity: 0, scale: 0.97 }}
           className="bg-white rounded-xl shadow-2xl w-full max-w-[1500px] h-[95vh] flex flex-col overflow-hidden"
         >
-          {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-c-line">
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="p-1.5 rounded text-c-ink-soft hover:bg-c-brand-soft hover:text-c-ink transition-colors"
+                className="p-1.5 rounded text-c-ink-soft hover:bg-c-brand-soft hover:text-c-ink"
                 title="Retour"
               >
                 <ArrowLeft className="w-5 h-5" />
@@ -218,22 +345,19 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded text-c-ink-soft hover:bg-c-brand-soft hover:text-c-ink transition-colors"
+              className="p-1.5 rounded text-c-ink-soft hover:bg-c-brand-soft hover:text-c-ink"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Corps */}
           {loading ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
             </div>
           ) : error ? (
-            <div className="flex-1 flex items-center justify-center text-red-600 text-sm">
-              {error}
-            </div>
-          ) : !data ? (
+            <div className="flex-1 flex items-center justify-center text-red-600 text-sm">{error}</div>
+          ) : !data || !editClient || !editVente ? (
             <div className="flex-1 flex items-center justify-center text-c-ink-faint text-sm italic">
               Aucune donnée
             </div>
@@ -241,6 +365,8 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
             <div className="flex-1 grid grid-cols-12 gap-4 p-4 overflow-auto bg-gray-50">
               <ColonneGauche
                 data={data}
+                client={editClient}
+                onClientChange={(patch) => setEditClient((c) => (c ? { ...c, ...patch } : c))}
                 cinAvailable={!!docCin.url}
                 kbisAvailable={!!docKbis.url}
                 justifAvailable={!!docJustif.url}
@@ -248,20 +374,31 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
                 onOpenKbis={() => setViewerOpen('kbis')}
                 onOpenJustif={() => setViewerOpen('justif')}
               />
-
-              {/* Colonne centre : placeholder Phase 2 */}
-              <div className="col-span-4 flex flex-col gap-3">
-                <div className="bg-white rounded-lg border border-c-line p-6 text-center text-sm text-c-ink-faint italic flex-1 flex items-center justify-center">
-                  Panier (Phase 2)
-                </div>
-              </div>
-
-              {/* Colonne droite : placeholder Phase 2 */}
-              <div className="col-span-4 flex flex-col gap-3">
-                <div className="bg-white rounded-lg border border-c-line p-6 text-center text-sm text-c-ink-faint italic flex-1 flex items-center justify-center">
-                  Détail offre + Vente (Phase 2)
-                </div>
-              </div>
+              <ColonneCentre
+                data={data}
+                editOffres={editOffres}
+                editVente={editVente}
+                onVenteChange={(patch) => setEditVente((v) => (v ? { ...v, ...patch } : v))}
+                selectedId={selectedPanierId}
+                onSelect={setSelectedPanierId}
+                onSaveClient={handleSaveClient}
+                savingClient={savingClient}
+              />
+              <ColonneDroite
+                data={data}
+                offre={selectedOffre}
+                onOffreChange={(patch) =>
+                  selectedPanierId && patchOffre(selectedPanierId, patch)
+                }
+                onSaveStatutAuto={(newStatut) => {
+                  if (selectedOffre) {
+                    const next = { ...selectedOffre, statut_prod: newStatut }
+                    handleSaveOffre(next, false)
+                  }
+                }}
+                onSaveOffre={() => selectedOffre && handleSaveOffre(selectedOffre)}
+                savingOffre={savingOffre}
+              />
             </div>
           )}
         </motion.div>
@@ -273,15 +410,27 @@ export default function FicheTicketModal({ idTicket, onClose }: Props) {
           kind={viewerDoc.kind}
           onClose={() => setViewerOpen(null)}
         />
+
+        {toast && (
+          <div
+            className={`fixed bottom-4 right-4 z-[70] px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+              toast.kind === 'ok' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            }`}
+          >
+            {toast.msg}
+          </div>
+        )}
       </motion.div>
     </AnimatePresence>
   )
 }
 
-// --- Colonne gauche : Client + Vendeur (identique structure Fibre) -------
+// --- Colonne gauche : Client + Vendeur ----------------------------------
 
 function ColonneGauche({
   data,
+  client,
+  onClientChange,
   cinAvailable,
   kbisAvailable,
   justifAvailable,
@@ -290,6 +439,8 @@ function ColonneGauche({
   onOpenJustif,
 }: {
   data: FicheData
+  client: FicheClient
+  onClientChange: (patch: Partial<FicheClient>) => void
   cinAvailable: boolean
   kbisAvailable: boolean
   justifAvailable: boolean
@@ -297,29 +448,24 @@ function ColonneGauche({
   onOpenKbis: () => void
   onOpenJustif: () => void
 }) {
-  const c = data.client
+  const c = client
   const v = data.vendeur
   return (
     <div className="col-span-4 flex flex-col gap-4">
-      {/* Bloc client */}
       <div className="bg-white rounded-lg border border-c-line p-4">
         <h3 className="text-sm font-bold text-c-ink mb-3">Information contrat et client</h3>
-
         <div className="space-y-2.5 text-xs">
           <Radios
             label="Civilité"
             value={c.civilite}
-            options={[
-              { v: 1, l: 'M.' },
-              { v: 2, l: 'Mme' },
-              { v: 3, l: 'Mlle' },
-            ]}
+            options={[{ v: 1, l: 'M.' }, { v: 2, l: 'Mme' }, { v: 3, l: 'Mlle' }]}
+            onChange={(v) => onClientChange({ civilite: v })}
           />
-          <Field label="Nom" value={c.nom} />
-          <Field label="Nom Marital" value={c.nom_marital} />
+          <Field label="Nom" value={c.nom} onChange={(v) => onClientChange({ nom: v })} />
+          <Field label="Nom Marital" value={c.nom_marital} onChange={(v) => onClientChange({ nom_marital: v })} />
           <div className="flex items-end gap-3">
             <div className="flex-1">
-              <Field label="Prénom" value={c.prenom} />
+              <Field label="Prénom" value={c.prenom} onChange={(v) => onClientChange({ prenom: v })} />
             </div>
             <button
               onClick={onOpenCin}
@@ -332,39 +478,37 @@ function ColonneGauche({
           </div>
           <div className="text-[10px] text-c-ink-faint text-right -mt-1.5">
             {cinAvailable ? (
-              <button onClick={onOpenCin} className="hover:underline">
-                Voir la CIN
-              </button>
+              <button onClick={onOpenCin} className="hover:underline">Voir la CIN</button>
             ) : (
               <span className="italic">Pas de CIN trouvée</span>
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Né(e) le" type="date" value={c.date_naiss} />
-            <Field label="Dép" value={c.dep_naiss ? String(c.dep_naiss).padStart(2, '0') : ''} />
+            <Field label="Né(e) le" type="date" value={c.date_naiss} onChange={(v) => onClientChange({ date_naiss: v })} />
+            <Field
+              label="Dép"
+              value={c.dep_naiss ? String(c.dep_naiss).padStart(2, '0') : ''}
+              onChange={(v) => onClientChange({ dep_naiss: parseInt(v || '0', 10) || 0 })}
+            />
           </div>
           <Radios
             label="Logement"
             value={c.type_logement}
-            options={[
-              { v: 1, l: 'Maison' },
-              { v: 2, l: 'Appartement' },
-            ]}
+            options={[{ v: 1, l: 'Maison' }, { v: 2, l: 'Appartement' }]}
+            onChange={(v) => onClientChange({ type_logement: v })}
           />
-          <Field label="Adresse" value={c.adresse1} />
-          <Field label="Cplt" value={c.adresse2} />
+          <Field label="Adresse" value={c.adresse1} onChange={(v) => onClientChange({ adresse1: v })} />
+          <Field label="Cplt" value={c.adresse2} onChange={(v) => onClientChange({ adresse2: v })} />
           <div className="grid grid-cols-3 gap-3">
-            <Field label="CP" value={c.cp} />
+            <Field label="CP" value={c.cp} onChange={(v) => onClientChange({ cp: v })} />
             <div className="col-span-2">
-              <Field label="Ville" value={c.ville} />
+              <Field label="Ville" value={c.ville} onChange={(v) => onClientChange({ ville: v })} />
             </div>
           </div>
-          <Field label="Email" type="email" value={c.email} />
+          <Field label="Email" type="email" value={c.email} onChange={(v) => onClientChange({ email: v })} />
           <div className="grid grid-cols-2 gap-3">
-            {/* Energie n'a qu'un seul Mobile */}
             <Field label="Mobile 1" value={c.mobile1} muted={!data.is_my_call} />
             <div className="flex items-end">
-              {/* Bouton Justificatif (specifique Energie) */}
               <button
                 onClick={onOpenJustif}
                 disabled={!justifAvailable}
@@ -377,25 +521,16 @@ function ColonneGauche({
             </div>
           </div>
 
-          {/* Consentements (lecture seule en Phase 1) */}
           <div className="pt-2 space-y-2">
-            <Toggle
-              label="Le client est d'accord pour être rappelé immédiatement par le Call"
-              value={c.opt_rappel}
-            />
-            <Toggle
-              label="Le client accepte que ses coordonnées soient transmises aux partenaires"
-              value={c.opt_partenaire}
-            />
+            <Toggle label="Le client est d'accord pour être rappelé immédiatement par le Call" value={c.opt_rappel} />
+            <Toggle label="Le client accepte que ses coordonnées soient transmises aux partenaires" value={c.opt_partenaire} />
           </div>
 
-          {/* Switch Part / Pro */}
           <div className="pt-2 flex bg-gray-900 text-white rounded-md p-0.5">
             <ProTab active={!c.client_pro} label="Client Part" />
             <ProTab active={c.client_pro} label="Client Pro" />
           </div>
 
-          {/* Si client Pro : Raison Sociale + SIRET + KBIS */}
           {c.client_pro && (
             <div className="pt-2 space-y-2.5">
               <Field label="Raison Sociale" value={c.client_rs} />
@@ -418,7 +553,6 @@ function ColonneGauche({
         </div>
       </div>
 
-      {/* Bloc vendeur */}
       <div className="bg-white rounded-lg border border-c-line p-4">
         <h3 className="text-sm font-bold text-c-ink mb-3">Information Vendeur</h3>
         <div className="space-y-2.5 text-xs">
@@ -437,72 +571,412 @@ function ColonneGauche({
               Démarrer l'appel
             </button>
           </div>
-          {v.lib_affectation && (
-            <div className="text-[10px] text-c-ink-faint mt-1">{v.lib_affectation}</div>
-          )}
         </div>
       </div>
     </div>
   )
 }
 
-// --- Helpers UI ----------------------------------------------------------
+// --- Colonne centre : Panier + Vente -----------------------------------
+
+function ColonneCentre({
+  data,
+  editOffres,
+  editVente,
+  onVenteChange,
+  selectedId,
+  onSelect,
+  onSaveClient,
+  savingClient,
+}: {
+  data: FicheData
+  editOffres: Record<string, FicheOffre>
+  editVente: FicheVente
+  onVenteChange: (patch: Partial<FicheVente>) => void
+  selectedId: string
+  onSelect: (id: string) => void
+  onSaveClient: () => void
+  savingClient: boolean
+}) {
+  const offresList = data.panier.map((p) => editOffres[p.id] || p)
+  const nbValide = offresList.filter((o) => o.statut_prod === 1 || o.statut_prod === 3).length
+  const nbAnnule = offresList.filter((o) => o.statut_prod === 2).length
+
+  return (
+    <div className="col-span-4 flex flex-col gap-3">
+      {/* Tableau panier */}
+      <div className="bg-white rounded-lg border border-c-line overflow-hidden flex flex-col" style={{ maxHeight: '40vh' }}>
+        <div className="bg-gray-50 border-b border-c-line text-xs font-semibold text-c-ink-soft grid grid-cols-[70px_1fr]">
+          <div className="px-2 py-2">Type</div>
+          <div className="px-2 py-2">Lib Offre</div>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {offresList.length === 0 ? (
+            <div className="p-4 text-center text-c-ink-faint italic text-xs">Aucune offre</div>
+          ) : (
+            offresList.map((o) => {
+              const isSel = o.id === selectedId
+              return (
+                <div
+                  key={o.id}
+                  onClick={() => onSelect(o.id)}
+                  className={`grid grid-cols-[70px_1fr] text-xs border-b border-c-line-soft cursor-pointer transition-colors ${
+                    isSel ? 'bg-emerald-50' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="px-2 py-2 font-semibold">{o.partenaire || '—'}</div>
+                  <div className="px-2 py-2">{o.num_bs || `Produit #${o.id_produit}`}</div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Compteurs */}
+      <div className="bg-white rounded-lg border border-c-line p-3 text-xs space-y-2">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <span className="text-c-ink-soft">nb Prod validé(s) : </span>
+            <span className="font-bold text-c-ink">{nbValide}</span>
+          </div>
+          <div>
+            <span className="text-c-ink-soft">nb Prod annulé(s) : </span>
+            <span className="font-bold text-c-ink">{nbAnnule}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Intervention vendeur + Info Vente + Ref Appel + Enregistrer client */}
+      <div className="bg-white rounded-lg border border-c-line p-4 space-y-3 text-xs">
+        <div>
+          <div className="font-semibold text-c-ink mb-1">Intervention du vendeur :</div>
+          <div className="flex gap-3">
+            <Radio
+              active={editVente.intervention_vendeur}
+              label="Oui"
+              onClick={() => onVenteChange({ intervention_vendeur: true })}
+            />
+            <Radio
+              active={!editVente.intervention_vendeur}
+              label="Non"
+              onClick={() => onVenteChange({ intervention_vendeur: false })}
+            />
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="font-semibold text-c-ink">Info Vente</label>
+          <textarea
+            value={editVente.info_vente}
+            onChange={(e) => onVenteChange({ info_vente: e.target.value })}
+            rows={3}
+            className="w-full px-2 py-1.5 border border-c-line rounded text-xs bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none resize-none"
+          />
+        </div>
+        <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+          <label className="text-c-ink-soft">Réf Appel :</label>
+          <input
+            type="text"
+            value={editVente.ref_appel}
+            onChange={(e) => onVenteChange({ ref_appel: e.target.value })}
+            className="px-2 py-1 border border-c-line rounded text-xs bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
+          />
+        </div>
+        <button
+          onClick={onSaveClient}
+          disabled={savingClient}
+          className="w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {savingClient && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          Enregistrer les infos Client
+        </button>
+      </div>
+
+      {/* Boutons d'action (Phase 3) */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <ActionButton label="Valider le panier" disabled />
+          <ActionButton label="Annuler toute la vente" disabled />
+        </div>
+        <ActionButton label="Renvoyer le panier pour complément" variant="orange" full disabled />
+      </div>
+    </div>
+  )
+}
+
+// --- Colonne droite : Statut + bloc spécifique par Partenaire ----------
+
+function ColonneDroite({
+  data,
+  offre,
+  onOffreChange,
+  onSaveStatutAuto,
+  onSaveOffre,
+  savingOffre,
+}: {
+  data: FicheData
+  offre: FicheOffre | null
+  onOffreChange: (patch: Partial<FicheOffre>) => void
+  onSaveStatutAuto: (newStatut: number) => void
+  onSaveOffre: () => void
+  savingOffre: boolean
+}) {
+  if (!offre) {
+    return (
+      <div className="col-span-4 flex flex-col gap-3">
+        <div className="bg-white rounded-lg border border-c-line p-6 text-center text-sm text-c-ink-faint italic flex items-center justify-center" style={{ minHeight: 200 }}>
+          Sélectionne une ligne du panier
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="col-span-4 flex flex-col gap-3">
+      {/* Bloc partenaire-specifique en haut */}
+      <PartenaireBlock
+        data={data}
+        offre={offre}
+        onOffreChange={onOffreChange}
+        onSaveOffre={onSaveOffre}
+        savingOffre={savingOffre}
+      />
+
+      {/* Statut Vente (auto-save) - commun a tous les partenaires */}
+      <div className="bg-white rounded-lg border border-c-line p-4 space-y-3 text-xs">
+        <div className="space-y-0.5">
+          <label className="text-c-ink-soft">Statut Vente</label>
+          <select
+            value={offre.statut_prod}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10)
+              onOffreChange({ statut_prod: v })
+              onSaveStatutAuto(v)
+            }}
+            className="w-full px-2 py-1 border border-c-line rounded text-xs bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
+          >
+            {data.statuts_vente.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PartenaireBlock({
+  data,
+  offre,
+  onOffreChange,
+  onSaveOffre,
+  savingOffre,
+}: {
+  data: FicheData
+  offre: FicheOffre
+  onOffreChange: (patch: Partial<FicheOffre>) => void
+  onSaveOffre: () => void
+  savingOffre: boolean
+}) {
+  const p = offre.partenaire.toUpperCase()
+
+  return (
+    <div className="bg-white rounded-lg border border-c-line p-4 space-y-3 text-xs">
+      {/* Header avec libelle du partenaire */}
+      <div className="flex items-center justify-between border-b border-c-line-soft pb-2 mb-1">
+        <span className="text-sm font-bold text-emerald-700">{p || 'Partenaire'}</span>
+      </div>
+
+      {/* Champs specifiques selon le partenaire */}
+      {p === 'STR' && <STRCredentials login={data.ohm_login} mdp={data.ohm_mdp} />}
+
+      {/* Num BS commun a tous */}
+      <Field
+        label="Num BS"
+        value={offre.num_bs}
+        onChange={(v) => onOffreChange({ num_bs: v })}
+      />
+
+      {/* Options specifiques */}
+      {p === 'PRO' && (
+        <CheckboxField
+          label="Format numérique"
+          checked={offre.format_numerique}
+          onChange={(v) => onOffreChange({ format_numerique: v })}
+        />
+      )}
+      {p === 'ENI' && (
+        <CheckboxField
+          label="Mandat"
+          checked={offre.opt_mandat}
+          onChange={(v) => onOffreChange({ opt_mandat: v })}
+        />
+      )}
+      {p === 'VAL' && (
+        <div className="space-y-2">
+          <CheckboxField
+            label="PLENICOACH DEPANNAGE PREMIUM"
+            checked={offre.opt_optin_commercial}
+            onChange={(v) => onOffreChange({ opt_optin_commercial: v })}
+          />
+          <CheckboxField
+            label="Acceptation Commerciales Partenaires"
+            checked={offre.opt_accept_com_parte}
+            onChange={(v) => onOffreChange({ opt_accept_com_parte: v })}
+          />
+          <CheckboxField
+            label="Consentement consultation distributeurs"
+            checked={offre.opt_consent_consult_distri}
+            onChange={(v) => onOffreChange({ opt_consent_consult_distri: v })}
+          />
+        </div>
+      )}
+
+      {/* Bouton Enregistrer */}
+      <button
+        onClick={onSaveOffre}
+        disabled={savingOffre}
+        className="w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        {savingOffre && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+        Enregistrer
+      </button>
+    </div>
+  )
+}
+
+function STRCredentials({ login, mdp }: { login: string; mdp: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-[60px_1fr] gap-2 items-center">
+        <label className="text-c-ink-soft">Login :</label>
+        <input
+          type="text"
+          value={login}
+          readOnly
+          className="px-2 py-1 border border-c-line rounded text-xs bg-gray-50 font-mono"
+        />
+      </div>
+      <div className="grid grid-cols-[60px_1fr_30px] gap-2 items-center">
+        <label className="text-c-ink-soft">MPD :</label>
+        <input
+          type={show ? 'text' : 'password'}
+          value={mdp}
+          readOnly
+          className="px-2 py-1 border border-c-line rounded text-xs bg-gray-50 font-mono"
+        />
+        <button
+          onClick={() => setShow((s) => !s)}
+          className="p-1 text-c-ink-soft hover:text-c-ink"
+          title={show ? 'Masquer' : 'Afficher'}
+        >
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// --- Helpers UI ---------------------------------------------------------
 
 function Field({
-  label,
-  value,
-  multi,
-  muted,
-  type = 'text',
+  label, value, multi, muted, onChange, type = 'text',
 }: {
   label: string
   value: string | number
   multi?: boolean
   muted?: boolean
+  onChange?: (v: string) => void
   type?: 'text' | 'date' | 'email'
 }) {
-  const baseCls = `w-full px-2 py-1 border border-c-line rounded text-xs bg-gray-50 ${muted ? 'text-c-ink-faint italic' : ''}`
+  const readOnly = !onChange
+  const cls = `w-full px-2 py-1 border border-c-line rounded text-xs ${
+    readOnly ? 'bg-gray-50' : 'bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none'
+  } ${muted ? 'text-c-ink-faint italic' : ''}`
   return (
     <div className="space-y-0.5">
       <label className="block text-c-ink-soft">{label}</label>
       {multi ? (
         <textarea
           value={String(value ?? '')}
-          readOnly
+          readOnly={readOnly}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
           rows={2}
-          className={`${baseCls} resize-none`}
+          className={`${cls} resize-none`}
         />
       ) : (
         <input
           type={type}
           value={String(value ?? '')}
-          readOnly
-          className={baseCls}
+          readOnly={readOnly}
+          onChange={onChange ? (e) => onChange(e.target.value) : undefined}
+          className={cls}
         />
       )}
     </div>
   )
 }
 
+function CheckboxField({
+  label, checked, onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-emerald-600"
+      />
+      <span className="text-c-ink">{label}</span>
+    </label>
+  )
+}
+
 function Radios({
-  label,
-  value,
-  options,
+  label, value, options, onChange,
 }: {
   label: string
   value: number
   options: { v: number; l: string }[]
+  onChange?: (v: number) => void
 }) {
   return (
     <div className="flex items-center gap-4">
       <span className="text-c-ink-soft w-20">{label} :</span>
       {options.map((opt) => (
-        <label key={opt.v} className="flex items-center gap-1 cursor-default">
-          <input type="radio" checked={value === opt.v} readOnly className="accent-emerald-600" />
+        <label key={opt.v} className={`flex items-center gap-1 ${onChange ? 'cursor-pointer' : 'cursor-default'}`}>
+          <input
+            type="radio"
+            checked={value === opt.v}
+            readOnly={!onChange}
+            onChange={onChange ? () => onChange(opt.v) : undefined}
+            className="accent-emerald-600"
+          />
           <span className="text-c-ink">{opt.l}</span>
         </label>
       ))}
     </div>
+  )
+}
+
+function Radio({ active, label, onClick }: { active: boolean; label: string; onClick?: () => void }) {
+  return (
+    <label className={`flex items-center gap-1 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}>
+      <input
+        type="radio"
+        checked={active}
+        readOnly={!onClick}
+        onChange={onClick ? () => onClick() : undefined}
+        className="accent-emerald-600"
+      />
+      <span>{label}</span>
+    </label>
   )
 }
 
@@ -523,12 +997,30 @@ function Toggle({ label, value }: { label: string; value: boolean }) {
 
 function ProTab({ active, label }: { active: boolean; label: string }) {
   return (
-    <div
-      className={`flex-1 text-center text-xs font-semibold py-1.5 rounded ${
-        active ? 'bg-white text-gray-900' : 'text-gray-300'
-      }`}
-    >
+    <div className={`flex-1 text-center text-xs font-semibold py-1.5 rounded ${active ? 'bg-white text-gray-900' : 'text-gray-300'}`}>
       {label}
     </div>
+  )
+}
+
+function ActionButton({
+  label, disabled, variant = 'dark', full,
+}: {
+  label: string
+  disabled?: boolean
+  variant?: 'dark' | 'orange'
+  full?: boolean
+}) {
+  const cls = variant === 'orange' ? 'bg-orange-500 text-white' : 'bg-gray-900 text-white'
+  return (
+    <button
+      disabled={disabled}
+      className={`${cls} ${full ? 'w-full' : ''} py-2 px-3 rounded text-xs font-semibold transition-opacity ${
+        disabled ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110'
+      }`}
+      title={disabled ? 'À venir (Phase 3)' : ''}
+    >
+      {label}
+    </button>
   )
 }

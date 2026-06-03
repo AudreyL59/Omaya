@@ -111,6 +111,40 @@ def _first_existing(*urls: str) -> tuple[str, str]:
     return "", ""
 
 
+# Cache des descendants de chaque racine d'organigramme (5min).
+_ORGA_DESCENDANTS_CACHE: dict[int, tuple[set[int], float]] = {}
+_ORGA_DESCENDANTS_TTL = 300.0
+
+
+def _orga_descendants_set(db_rh, id_racine: int) -> set[int]:
+    """Retourne tous les descendants d'une racine d'organigramme (BFS).
+
+    Inclut la racine elle-meme. Cache 5min.
+    """
+    cached = _ORGA_DESCENDANTS_CACHE.get(id_racine)
+    now = _time_mod.monotonic()
+    if cached and now - cached[1] < _ORGA_DESCENDANTS_TTL:
+        return cached[0]
+    # On charge l'organigramme entier (parent -> enfants) et on fait un BFS.
+    rows = db_rh.query("SELECT IDOrganigramme, IdPARENT FROM Organigramme")
+    children: dict[int, list[int]] = {}
+    for r in rows:
+        pid = _to_int(r.get("IdPARENT"))
+        cid = _to_int(r.get("IDOrganigramme"))
+        if pid and cid:
+            children.setdefault(pid, []).append(cid)
+    visited: set[int] = {id_racine}
+    queue: list[int] = [id_racine]
+    while queue:
+        node = queue.pop(0)
+        for c in children.get(node, []):
+            if c not in visited:
+                visited.add(c)
+                queue.append(c)
+    _ORGA_DESCENDANTS_CACHE[id_racine] = (visited, now)
+    return visited
+
+
 # --- Chargement de la fiche -----------------------------------------------
 
 def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
@@ -186,6 +220,8 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
                 IDTK_Call_Panier, IDproduit, Partenaire,
                 OPT_EnergieVerteElec, OPT_Reforestation, OPT_EnergieVerteGaz,
                 OPT_Mail, Opt_Mandat, FormatNumérique,
+                OPT_AcceptComParte, OPT_ConsentConsultDistri,
+                OPT_eCommunication, OPT_eFacture, OPT_optinCommercial,
                 MotifAnnulation, StatutProd, NumBS, Num_DateSaisie
             FROM TK_Call_Panier
             WHERE IDtk_Call = ?
@@ -217,11 +253,44 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
             "opt_mail": _bool(p.get("OPT_Mail")),
             "opt_mandat": _bool(p.get("Opt_Mandat")),
             "format_numerique": _bool(p.get("FormatNumérique")),
+            # Options VAL (Valoris)
+            "opt_accept_com_parte": _bool(p.get("OPT_AcceptComParte")),
+            "opt_consent_consult_distri": _bool(p.get("OPT_ConsentConsultDistri")),
+            # Autres options
+            "opt_e_communication": _bool(p.get("OPT_eCommunication")),
+            "opt_e_facture": _bool(p.get("OPT_eFacture")),
+            "opt_optin_commercial": _bool(p.get("OPT_optinCommercial")),
             "statut_prod": _to_int(p.get("StatutProd")),
             "motif_annulation": (p.get("MotifAnnulation") or "").strip(),
             "num_bs": (p.get("NumBS") or "").strip(),
             "num_date_saisie": _iso(p.get("Num_DateSaisie")),
         })
+
+    # Credentials portail Ohm Energie (cf. code WinDev) : si le vendeur est
+    # descendant de l'agence Power Ohm (ID racine ID_ORGA_POWER_OHM) -> admin,
+    # sinon credentials standard.
+    ohm_login = "Power_distribExo_Sup"
+    ohm_mdp = "U8uDym72"
+    if id_salarie:
+        # Recupere l'orga d'affectation du vendeur
+        try:
+            row_aff = db_rh.query(
+                """SELECT TOP 1 IDOrganigramme FROM Salarie_Organigramme
+                WHERE IDSalarie = ?
+                  AND ModifELEM NOT LIKE '%suppr%'
+                  AND (DateFin = '' OR DateFin >= ?)
+                ORDER BY DateDébut DESC""",
+                (id_salarie, datetime.now().strftime("%Y%m%d")),
+            )
+            id_orga_vendeur = _to_int(row_aff[0].get("IDOrganigramme")) if row_aff else 0
+            # Si dans l'arborescence Power Ohm
+            if id_orga_vendeur:
+                power_ohm_set = _orga_descendants_set(db_rh, ID_ORGA_POWER_OHM)
+                if id_orga_vendeur in power_ohm_set:
+                    ohm_login = "Power_distrib_admin"
+                    ohm_mdp = "Jbrk5Q78"
+        except Exception:
+            pass  # garde les defaults
 
     # Statuts vente (transposition WinDev : 0=Non defini, 1=Validé, 2=Annulé,
     # 3=Num BS ajouté, 4=Validé Différé si statut TK_Liste=15)
@@ -292,7 +361,130 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         "btn_valider_actif": btn_valider_actif,
         "btn_annuler_actif": btn_annuler_actif,
         "statuts_vente": statuts_vente,
+        # Credentials Ohm Energie (utilises uniquement pour la colonne droite
+        # quand le partenaire est STR / dans un futur fournisseur dependant).
+        "ohm_login": ohm_login,
+        "ohm_mdp": ohm_mdp,
     }
+
+
+# --- Save (UPDATE TK_Call + TK_Call_Panier) -------------------------------
+
+def _sql_str(s: Any) -> str:
+    """Escape SQL HFSQL : double les simple quotes."""
+    if s is None:
+        return ""
+    return str(s).replace("'", "''")
+
+
+def _sql_now() -> str:
+    """DateTime HFSQL compact pour ModifDate."""
+    return datetime.now().strftime("%Y%m%d%H%M%S")
+
+
+def _sql_bool(b: Any) -> int:
+    return 1 if _bool(b) else 0
+
+
+def _date_to_compact(s: str | None) -> str:
+    """ISO 'YYYY-MM-DD' -> compact 'YYYYMMDD'. Vide si non parsable."""
+    if not s:
+        return ""
+    s = str(s).strip()
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:4] + s[5:7] + s[8:10]
+    if len(s) == 8 and s.isdigit():
+        return s
+    return ""
+
+
+def save_vente_infos(id_tk_liste: int, payload: dict) -> dict:
+    """UPDATE TK_Call avec les infos client + vente modifiees.
+
+    Transposition du bouton "Enregistrer les infos Client" WinDev.
+    """
+    db_bo = get_connection("ticket_bo")
+    c = payload.get("client", {}) or {}
+    v = payload.get("vente", {}) or {}
+    now_wd = _sql_now()
+    sql = f"""UPDATE TK_Call SET
+        CivilitéClient = {_to_int(c.get('civilite'))},
+        NomClient = '{_sql_str(c.get('nom'))}',
+        NomMaritalClient = '{_sql_str(c.get('nom_marital'))}',
+        PrenomClient = '{_sql_str(c.get('prenom'))}',
+        DATENAISS = '{_sql_str(_date_to_compact(c.get('date_naiss')))}',
+        DEPNAISS = {_to_int(c.get('dep_naiss'))},
+        TypeLogement = {_to_int(c.get('type_logement'))},
+        ADRESSE1 = '{_sql_str(c.get('adresse1'))}',
+        ADRESSE2 = '{_sql_str(c.get('adresse2'))}',
+        CP = '{_sql_str(c.get('cp'))}',
+        VILLE = '{_sql_str(c.get('ville'))}',
+        adrMail = '{_sql_str(c.get('email'))}',
+        InfoVente = '{_sql_str(v.get('info_vente'))}',
+        RefAppel = '{_sql_str(v.get('ref_appel'))}',
+        InterventionVend = {1 if _bool(v.get('intervention_vendeur')) else 2},
+        ModifDate = '{now_wd}'
+    WHERE IDTK_Liste = {_to_int(id_tk_liste)}
+      AND ModifELEM NOT LIKE '%suppr%'"""
+    db_bo.query(sql)
+    return {"ok": True}
+
+
+def save_offre(id_panier: int, payload: dict) -> dict:
+    """UPDATE TK_Call_Panier avec les modifs d'une ligne d'offre.
+
+    Met a jour les champs communs (StatutProd, NumBS) + les options
+    speciﬁques (Opt_Mandat, FormatNumérique, OPT_AcceptComParte,
+    OPT_ConsentConsultDistri, OPT_eCommunication, OPT_eFacture,
+    OPT_optinCommercial, OPT_EnergieVerteElec, OPT_EnergieVerteGaz,
+    OPT_Reforestation, OPT_Mail).
+    Les champs absents du payload restent inchanges (via COALESCE pattern :
+    on n'update que ce qui est passe).
+
+    Pour STR : pas de champs supplementaires dans TK_Call_Panier (les
+    credentials Login/MDP sont calcules cote backend selon le vendeur,
+    Date Activ + Ref Client + Code Vendeur seraient dans une autre table -
+    a confirmer avec le user en Phase 3 si besoin de save).
+    """
+    db_bo = get_connection("ticket_bo")
+    now_wd = _sql_now()
+
+    # On construit SET dynamique pour ne toucher que les champs fournis.
+    sets = [f"ModifDate = '{now_wd}'"]
+    if "statut_prod" in payload:
+        sets.append(f"StatutProd = {_to_int(payload.get('statut_prod'))}")
+    if "num_bs" in payload:
+        sets.append(f"NumBS = '{_sql_str(payload.get('num_bs'))}'")
+        # Si on saisit le NumBS pour la 1ere fois -> note Num_DateSaisie
+        if payload.get("num_bs"):
+            sets.append(f"Num_DateSaisie = '{now_wd}'")
+    if "opt_mandat" in payload:
+        sets.append(f"Opt_Mandat = {_sql_bool(payload.get('opt_mandat'))}")
+    if "format_numerique" in payload:
+        sets.append(f"FormatNumérique = {_sql_bool(payload.get('format_numerique'))}")
+    if "opt_accept_com_parte" in payload:
+        sets.append(f"OPT_AcceptComParte = {_sql_bool(payload.get('opt_accept_com_parte'))}")
+    if "opt_consent_consult_distri" in payload:
+        sets.append(f"OPT_ConsentConsultDistri = {_sql_bool(payload.get('opt_consent_consult_distri'))}")
+    if "opt_e_communication" in payload:
+        sets.append(f"OPT_eCommunication = {_sql_bool(payload.get('opt_e_communication'))}")
+    if "opt_e_facture" in payload:
+        sets.append(f"OPT_eFacture = {_sql_bool(payload.get('opt_e_facture'))}")
+    if "opt_optin_commercial" in payload:
+        sets.append(f"OPT_optinCommercial = {_sql_bool(payload.get('opt_optin_commercial'))}")
+    if "opt_energie_verte_elec" in payload:
+        sets.append(f"OPT_EnergieVerteElec = {_sql_bool(payload.get('opt_energie_verte_elec'))}")
+    if "opt_energie_verte_gaz" in payload:
+        sets.append(f"OPT_EnergieVerteGaz = {_sql_bool(payload.get('opt_energie_verte_gaz'))}")
+    if "opt_reforestation" in payload:
+        sets.append(f"OPT_Reforestation = {_sql_bool(payload.get('opt_reforestation'))}")
+    if "opt_mail" in payload:
+        sets.append(f"OPT_Mail = {_sql_bool(payload.get('opt_mail'))}")
+
+    sql = f"""UPDATE TK_Call_Panier SET {', '.join(sets)}
+    WHERE IDTK_Call_Panier = {_to_int(id_panier)}"""
+    db_bo.query(sql)
+    return {"ok": True}
 
 
 # --- Documents (CIN, KBIS, Justif) ----------------------------------------

@@ -49,12 +49,21 @@ class FicheOffreEnergie(BaseModel):
     id: str
     id_produit: int
     partenaire: str                # "OEN", "PRO", "ENI", "VAL", "STR", ...
+    # Options ENERGIE generales
     opt_energie_verte_elec: bool
     opt_energie_verte_gaz: bool
     opt_reforestation: bool
     opt_mail: bool
-    opt_mandat: bool
-    format_numerique: bool
+    opt_mandat: bool               # ENI : checkbox "Mandat"
+    format_numerique: bool         # PRO : checkbox "Format numérique"
+    # Options VAL (Valoris)
+    opt_accept_com_parte: bool
+    opt_consent_consult_distri: bool
+    # Autres options
+    opt_e_communication: bool
+    opt_e_facture: bool
+    opt_optin_commercial: bool
+    # Etat commercial
     statut_prod: int
     motif_annulation: str
     num_bs: str
@@ -82,6 +91,9 @@ class FicheTicketEnergieResponse(BaseModel):
     btn_valider_actif: bool
     btn_annuler_actif: bool
     statuts_vente: list[StatutVenteOption]
+    # Credentials portail Ohm Energie (calcules selon le vendeur)
+    ohm_login: str = ""
+    ohm_mdp: str = ""
 
 
 class DocumentInfo(BaseModel):
@@ -94,3 +106,57 @@ class FicheDocumentsResponse(BaseModel):
     cin: DocumentInfo = DocumentInfo()
     kbis: DocumentInfo = DocumentInfo()
     justif: DocumentInfo = DocumentInfo()
+
+
+# --- Save (Phase 2) -------------------------------------------------------
+
+class SaveClientPayload(BaseModel):
+    civilite: int = 0
+    nom: str = ""
+    nom_marital: str = ""
+    prenom: str = ""
+    date_naiss: str = ""
+    dep_naiss: int = 0
+    type_logement: int = 0
+    adresse1: str = ""
+    adresse2: str = ""
+    cp: str = ""
+    ville: str = ""
+    email: str = ""
+
+
+class SaveVentePayload(BaseModel):
+    ref_appel: str = ""
+    intervention_vendeur: bool = False
+    info_vente: str = ""
+
+
+class SaveVenteRequest(BaseModel):
+    """Body POST /tickets/{id}/save-vente : infos client + vente."""
+    client: SaveClientPayload
+    vente: SaveVentePayload
+
+
+class SaveOffreRequest(BaseModel):
+    """Body POST /tickets/panier/{id_panier}/save-offre.
+
+    Tous les champs sont optionnels (Optional via valeurs par defaut). On
+    n'update que ceux qui sont fournis dans le payload.
+    """
+    statut_prod: int | None = None
+    num_bs: str | None = None
+    opt_mandat: bool | None = None
+    format_numerique: bool | None = None
+    opt_accept_com_parte: bool | None = None
+    opt_consent_consult_distri: bool | None = None
+    opt_e_communication: bool | None = None
+    opt_e_facture: bool | None = None
+    opt_optin_commercial: bool | None = None
+    opt_energie_verte_elec: bool | None = None
+    opt_energie_verte_gaz: bool | None = None
+    opt_reforestation: bool | None = None
+    opt_mail: bool | None = None
+
+
+class SaveResponse(BaseModel):
+    ok: bool = True

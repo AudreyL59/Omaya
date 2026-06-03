@@ -25,6 +25,9 @@ from app.intranets.call.energie.schemas.tickets import (
 from app.intranets.call.energie.schemas.fiche import (
     FicheTicketEnergieResponse,
     FicheDocumentsResponse,
+    SaveVenteRequest,
+    SaveOffreRequest,
+    SaveResponse,
 )
 
 router = APIRouter()
@@ -47,6 +50,37 @@ def get_fiche_ticket(
     if "error" in data:
         raise HTTPException(status_code=404, detail=data["error"])
     return data
+
+
+@router.post("/tickets/{id_ticket}/save-vente", response_model=SaveResponse)
+def post_save_vente(
+    id_ticket: str,
+    payload: SaveVenteRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    """Save infos client + vente (UPDATE TK_Call)."""
+    try:
+        return fiche_svc.save_vente_infos(int(id_ticket), payload.dict())
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/tickets/panier/{id_panier}/save-offre", response_model=SaveResponse)
+def post_save_offre(
+    id_panier: str,
+    payload: SaveOffreRequest,
+    user: UserToken = Depends(get_current_user),
+):
+    """Save les modifs d'une ligne d'offre (UPDATE TK_Call_Panier).
+
+    Champs optionnels : on n'update que ceux fournis dans le payload.
+    """
+    try:
+        return fiche_svc.save_offre(int(id_panier), payload.dict(exclude_none=True))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
 @router.get("/tickets/{id_ticket}/documents", response_model=FicheDocumentsResponse)
