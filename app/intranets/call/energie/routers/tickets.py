@@ -5,22 +5,58 @@ Structure miroir de Call Fibre, mais sans la response stats globales
 (dashboard du haut a definir separement).
 """
 
+import sys
+import traceback
 from datetime import date as _date
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.call.energie.services import tickets as svc
+from app.intranets.call.energie.services import fiche as fiche_svc
 from app.intranets.call.energie.schemas.tickets import (
     TicketsPageResponse,
     TicketsLiveResponse,
     TicketsEnCoursResponse,
     TicketsTraitesResponse,
 )
+from app.intranets.call.energie.schemas.fiche import (
+    FicheTicketEnergieResponse,
+    FicheDocumentsResponse,
+)
 
 router = APIRouter()
+
+
+@router.get("/tickets/{id_ticket}/fiche", response_model=FicheTicketEnergieResponse)
+def get_fiche_ticket(
+    id_ticket: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Charge la fiche complete d'un ticket Call Energie (popup, Phase 1)."""
+    try:
+        data = fiche_svc.load_fiche(
+            id_tk_liste=int(id_ticket),
+            current_user_id=user.id_salarie or 0,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(status_code=404, detail=data["error"])
+    return data
+
+
+@router.get("/tickets/{id_ticket}/documents", response_model=FicheDocumentsResponse)
+def get_fiche_documents(
+    id_ticket: str,
+    client_pro: bool = Query(False),
+    user: UserToken = Depends(get_current_user),
+):
+    """Detecte les documents : CIN + KBIS (si Pro) + Justif (specifique Energie)."""
+    return fiche_svc.load_documents(int(id_ticket), client_pro=client_pro)
 
 
 @router.get("/tickets/en-cours", response_model=TicketsEnCoursResponse)
