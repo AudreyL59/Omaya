@@ -674,7 +674,7 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
                 nb_offres_valides += 1
                 if off["num_bs"]:
                     nb_num_bs += 1
-                    lib_statut_force = "Tk Call - Num BS ENI renseigné"
+                    lib_statut_force = "Tk Call - Num BS renseigné"
             # Delai prise num : si Num_DateSaisie >= date_crea + 1h
             dt_saisie = _parse_dt(off.get("_num_date_saisie_raw"))
             if dt_saisie is not None:
@@ -795,7 +795,8 @@ def _load_partenaires_actifs(db_adv) -> list[dict]:
 
 
 def compute_stats_energie(tickets_traites: list[dict], db_adv=None) -> dict:
-    """Compteurs globaux Call Energie : tickets valides + Offres/Clients par Partenaire.
+    """Compteurs globaux Call Energie : tickets valides + Offres/Clients par
+    Partenaire (au global) ET par (agence, Partenaire).
 
     Definition (validee user) :
     - tickets_valides : nb tickets traites du jour qui ont au moins 1 offre
@@ -805,18 +806,30 @@ def compute_stats_energie(tickets_traites: list[dict], db_adv=None) -> dict:
         TK_Call_Panier.Partenaire = PréfixeBDD du partenaire.
       - nb_clients : nb de tickets DISTINCTS qui ont au moins 1 offre validee
         de ce partenaire.
+    - par agence (lib_orga du vendeur affecte) : meme decoupage par Partenaire.
     """
     if db_adv is None:
         db_adv = get_connection("adv")
     partenaires = _load_partenaires_actifs(db_adv)
+    prefix_to_lib = {p["prefix"]: p["lib"] for p in partenaires}
 
     tickets_valides = 0
     stats_by_prefix: dict[str, dict] = {
         p["prefix"]: {"nb_offres": 0, "tickets_set": set()}
         for p in partenaires
     }
+    # Detail par agence (sous-niveau d'orga du vendeur). On garde aussi un
+    # set de tickets pour comptage "clients distincts" par (agence, prefix).
+    stats_by_agence: dict[str, dict] = {}
 
     for t in tickets_traites:
+        lib_agence = (t.get("_lib_orga") or "").strip() or "(sans agence)"
+        if lib_agence not in stats_by_agence:
+            stats_by_agence[lib_agence] = {
+                p["prefix"]: {"nb_offres": 0, "tickets_set": set()}
+                for p in partenaires
+            }
+
         has_valid = False
         seen_prefix_in_ticket: set[str] = set()
         for off in t.get("_panier", []):
@@ -826,11 +839,13 @@ def compute_stats_energie(tickets_traites: list[dict], db_adv=None) -> dict:
             prefix = (off.get("partenaire") or "").strip()
             if prefix in stats_by_prefix:
                 stats_by_prefix[prefix]["nb_offres"] += 1
+                stats_by_agence[lib_agence][prefix]["nb_offres"] += 1
                 seen_prefix_in_ticket.add(prefix)
         if has_valid:
             tickets_valides += 1
         for prefix in seen_prefix_in_ticket:
             stats_by_prefix[prefix]["tickets_set"].add(t["id"])
+            stats_by_agence[lib_agence][prefix]["tickets_set"].add(t["id"])
 
     return {
         "tickets_valides": tickets_valides,
@@ -844,6 +859,22 @@ def compute_stats_energie(tickets_traites: list[dict], db_adv=None) -> dict:
                 "nb_clients": len(stats_by_prefix[p["prefix"]]["tickets_set"]),
             }
             for p in partenaires
+        ],
+        # Tri alphabetique des agences pour stabilite UI
+        "agences": [
+            {
+                "lib_agence": lib_agence,
+                "par_partenaire": [
+                    {
+                        "prefix": prefix,
+                        "lib": prefix_to_lib.get(prefix, prefix),
+                        "nb_offres": data["nb_offres"],
+                        "nb_clients": len(data["tickets_set"]),
+                    }
+                    for prefix, data in stats_by_agence[lib_agence].items()
+                ],
+            }
+            for lib_agence in sorted(stats_by_agence.keys())
         ],
     }
 

@@ -72,10 +72,25 @@ class StatPartenaire(BaseModel):
     nb_clients: int       # nb tickets distincts ayant au moins 1 offre validee
 
 
+class StatPartenaireAgence(BaseModel):
+    """Compteur Offres/Clients par Partenaire au sein d'une agence."""
+    prefix: str
+    lib: str
+    nb_offres: int
+    nb_clients: int
+
+
+class StatAgenceEnergie(BaseModel):
+    """Une agence dans le detail depliable (compteurs par Partenaire)."""
+    lib_agence: str
+    par_partenaire: list[StatPartenaireAgence] = []
+
+
 class StatsEnergie(BaseModel):
     """Stats globales du dashboard Call Energie."""
     tickets_valides: int          # nb tickets avec au moins 1 offre validee
     partenaires: list[StatPartenaire] = []
+    agences: list[StatAgenceEnergie] = []
 
 
 class TicketsEnCoursResponse(BaseModel):
