@@ -1180,6 +1180,27 @@ function ColonneDroite({
 }) {
   return (
     <div className="col-span-4 flex flex-col gap-4">
+      {/* Bloc anomalie mobile en HAUT (visible uniquement si AnomalieMobile=1) */}
+      {editAnomalie.active && (
+        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
+          <h3 className="text-sm font-bold text-blue-700 mb-2">Vente mobile en différé</h3>
+          <div className="space-y-2 text-xs">
+            <Field
+              label="Motif"
+              value={String(editAnomalie.id_type || '')}
+              onChange={(v) => onAnomalieChange({ id_type: parseInt(v || '0', 10) || 0 })}
+            />
+            <Field
+              label="Si Autre, Précisions"
+              value={editAnomalie.info_cplt}
+              multi
+              onChange={(v) => onAnomalieChange({ info_cplt: v })}
+            />
+            <div className="font-semibold text-blue-700 mt-2">Demande de dégroupage Panier</div>
+          </div>
+        </div>
+      )}
+
       {/* Détail offre sélectionnée */}
       <div className="bg-white rounded-lg border border-c-line p-4">
         {offre ? (
@@ -1349,27 +1370,6 @@ function ColonneDroite({
           Enregistrer les infos client et vente
         </button>
       </div>
-
-      {/* Bloc anomalie mobile (visible uniquement si AnomalieMobile=1) */}
-      {editAnomalie.active && (
-        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
-          <h3 className="text-sm font-bold text-blue-700 mb-2">Vente mobile en différé</h3>
-          <div className="space-y-2 text-xs">
-            <Field
-              label="Motif"
-              value={String(editAnomalie.id_type || '')}
-              onChange={(v) => onAnomalieChange({ id_type: parseInt(v || '0', 10) || 0 })}
-            />
-            <Field
-              label="Si Autre, Précisions"
-              value={editAnomalie.info_cplt}
-              multi
-              onChange={(v) => onAnomalieChange({ info_cplt: v })}
-            />
-            <div className="font-semibold text-blue-700 mt-2">Demande de dégroupage Panier</div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
