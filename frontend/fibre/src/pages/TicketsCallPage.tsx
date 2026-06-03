@@ -22,7 +22,7 @@ import {
   Phone,
   User,
   Smartphone,
-  Globe,
+  Router,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -625,7 +625,7 @@ function TotalRow({ label, fibre, mobile }: { label: string; fibre: number; mobi
   return (
     <div className="flex items-center gap-3 text-xs">
       <span className="font-semibold text-c-ink w-20 text-right">{label}</span>
-      <Globe className="w-4 h-4 text-c-ink-soft" />
+      <Router className="w-4 h-4 text-c-ink-soft" />
       <span className="font-bold text-c-ink min-w-[20px] text-center">{fibre}</span>
       <Smartphone className="w-4 h-4 text-c-ink-soft" />
       <span className="font-bold text-c-ink min-w-[20px] text-center">{mobile}</span>
@@ -652,7 +652,7 @@ function AgenceCard({ agence }: { agence: StatAgence }) {
         {/* Compteurs Fibre / Mobile en colonne verticale */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
-            <Globe className="w-3.5 h-3.5 text-c-ink-soft" />
+            <Router className="w-3.5 h-3.5 text-c-ink-soft" />
             <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_fibre}</span>
           </div>
           <div className="flex items-center gap-2">
