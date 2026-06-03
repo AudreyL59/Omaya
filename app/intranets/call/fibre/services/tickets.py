@@ -379,21 +379,39 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
     # obsolete (l'exe externe tourne periodiquement, un ticket peut avoir change
     # de statut entre 2 runs).
     # Filtre Datecrea > today_00 (transposition WinDev TK_Liste.Datecrea > {ParamdateCrea}).
+    # SI user != formation (id 6) : borne sup aussi -> seulement aujourd'hui.
     today_00 = _date.today().strftime("%Y%m%d000000000")
+    today_compact = _date.today().strftime("%Y%m%d")
     ids_sql = ",".join(str(i) for i in ids)
-    rows_liste_raw = db_ticket.query(
-        f"""SELECT
-            IDTK_Liste     AS id_tk_liste,
-            Datecrea       AS date_crea,
-            OPCrea         AS op_crea,
-            IDTK_Statut    AS id_tk_statut,
-            Cloturée       AS cloturee,
-            ModifELEM      AS modif_elem
-        FROM TK_Liste
-        WHERE IDTK_Liste IN ({ids_sql})
-          AND Datecrea > ?""",
-        (today_00,),
-    )
+    if user_id == ID_OPE_FORMATION:
+        rows_liste_raw = db_ticket.query(
+            f"""SELECT
+                IDTK_Liste     AS id_tk_liste,
+                Datecrea       AS date_crea,
+                OPCrea         AS op_crea,
+                IDTK_Statut    AS id_tk_statut,
+                Cloturée       AS cloturee,
+                ModifELEM      AS modif_elem
+            FROM TK_Liste
+            WHERE IDTK_Liste IN ({ids_sql})
+              AND Datecrea > ?""",
+            (today_00,),
+        )
+    else:
+        # User normal : strict aujourd'hui (LEFT(Datecrea, 8) = today_compact).
+        rows_liste_raw = db_ticket.query(
+            f"""SELECT
+                IDTK_Liste     AS id_tk_liste,
+                Datecrea       AS date_crea,
+                OPCrea         AS op_crea,
+                IDTK_Statut    AS id_tk_statut,
+                Cloturée       AS cloturee,
+                ModifELEM      AS modif_elem
+            FROM TK_Liste
+            WHERE IDTK_Liste IN ({ids_sql})
+              AND LEFT(Datecrea, 8) = ?""",
+            (today_compact,),
+        )
     # Filtres business (transposition exacte WinDev) :
     rows_liste = [
         r for r in rows_liste_raw
