@@ -423,10 +423,13 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
 
     # 2. TK_Call pour ces IDs
     ids_sql = ",".join(str(i) for i in by_id.keys())
+    # TK_Call (Energie) n'a PAS le champ TicketDiff (SFR-only). On laisse
+    # ticket_diff = False partout (la coloration rouge "ticket diff" du
+    # frontend ne sera jamais declenchee pour Energie).
     rows_call = db_bo.query(
         f"""SELECT
             IDTK_Liste, IDSalarie, CivilitéClient, NomClient, NomMaritalClient,
-            PrenomClient, CP, VILLE, AppelEnCours, OpéAppel, TicketDiff
+            PrenomClient, CP, VILLE, AppelEnCours, OpéAppel
         FROM TK_Call
         WHERE IDTK_Liste IN ({ids_sql})
           AND ModifELEM NOT LIKE '%suppr%'"""
@@ -457,10 +460,8 @@ def list_tickets_en_cours(user_id: int, user_id_poste: int) -> list[dict]:
                     continue
             except ValueError:
                 pass
-        # Filtre TicketDiff masque pour idPoste = 20
-        ticket_diff = bool(r.get("TicketDiff"))
-        if ticket_diff and user_id_poste == ID_POSTE_MASQUE_DIFF:
-            continue
+        # Pas de TicketDiff pour Energie -> on hardcode False
+        ticket_diff = False
 
         id_salarie = _to_int(r.get("IDSalarie"))
         salaries_to_load.add(id_salarie)
