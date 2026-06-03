@@ -382,6 +382,38 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
     setEditOffres((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
   }
 
+  // Save auto silencieux d'une offre (toast court). Utilise pour les
+  // champs qui declenchent un save direct (Statut Vente).
+  const saveOffreAuto = async (offre: FicheOffre) => {
+    try {
+      const body = {
+        portabilite: offre.portabilite,
+        num_portabilite: offre.num_portabilite,
+        num_rio: offre.num_rio,
+        num_prise_optique: offre.num_prise_optique,
+        opt_choisies: offre.opt_choisies,
+        type_vente: offre.type_vente,
+        statut_prod: offre.statut_prod,
+      }
+      const r = await fetch(`${API_BASE}/tickets/panier/${offre.id}/save-offre`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Échec : ${j?.detail || r.status}` })
+        return
+      }
+      setToast({ kind: 'ok', msg: 'Statut enregistré' })
+    } catch {
+      setToast({ kind: 'err', msg: 'Erreur réseau' })
+    }
+  }
+
   // Recharge la fiche apres une action verrou ou panier
   const reloadFiche = async () => {
     if (!idTicket) return
@@ -671,6 +703,11 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 onOffreChange={(patch) =>
                   selectedPanierId && patchOffre(selectedPanierId, patch)
                 }
+                onSaveStatutAuto={(newStatut) => {
+                  if (selectedOffre) {
+                    saveOffreAuto({ ...selectedOffre, statut_prod: newStatut })
+                  }
+                }}
                 editVente={editVente!}
                 onVenteChange={(patch) => setEditVente((v) => (v ? { ...v, ...patch } : v))}
                 editAnomalie={editAnomalie!}
@@ -1112,6 +1149,7 @@ function ColonneDroite({
   data,
   offre,
   onOffreChange,
+  onSaveStatutAuto,
   editVente,
   onVenteChange,
   editAnomalie,
@@ -1127,6 +1165,7 @@ function ColonneDroite({
   data: FicheData
   offre: FicheOffre | null
   onOffreChange: (patch: Partial<FicheOffre>) => void
+  onSaveStatutAuto: (newStatut: number) => void
   editVente: FicheVente
   onVenteChange: (patch: Partial<FicheVente>) => void
   editAnomalie: FicheAnomalie
@@ -1192,7 +1231,10 @@ function ColonneDroite({
                   label="Statut Vente"
                   value={offre.statut_prod}
                   options={data.statuts_vente.map((s) => ({ v: s.id, l: s.label }))}
-                  onChange={(v) => onOffreChange({ statut_prod: v })}
+                  onChange={(v) => {
+                    onOffreChange({ statut_prod: v })
+                    onSaveStatutAuto(v)
+                  }}
                 />
                 <SelectField
                   label="Type Vente"
