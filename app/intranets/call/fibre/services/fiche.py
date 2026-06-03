@@ -93,30 +93,28 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     `current_user_id` : id_salarie de l'utilisateur connecte. Sert a savoir
     s'il a deja pris l'appel (= a poser le verrou) -> si oui, on demasque
     les mobiles. Sinon les 2 derniers chars sont remplaces par "xx".
+
+    Perf : on parallelise les queries independantes (chaque query HFSQL
+    spawn un subprocess Dll_ODBC.exe + bloque le thread Python ~150ms).
+    En sequentiel : ~5 queries x 150ms = 750ms. Avec 2 vagues paralleles :
+    ~300ms.
     """
+    from concurrent.futures import ThreadPoolExecutor
     db_ticket = get_connection("ticket")
     db_bo = get_connection("ticket_bo")
     db_rh = get_connection("rh")
     db_adv = get_connection("adv")
 
-    # 1. Infos ticket : TK_Liste + TK_CallSFR (2 queries, pas cross-base)
-    rows_liste = db_ticket.query(
-        """SELECT
+    # Vague 1 : TK_Liste + TK_CallSFR en parallele (2 queries, bases differentes)
+    sql_liste = """SELECT
             IDTK_Liste AS id_tk_liste,
             IDTK_Statut AS id_tk_statut,
             OPCrea AS op_crea,
             Cloturée AS cloturee,
             DateCloture AS date_cloture
         FROM TK_Liste
-        WHERE IDTK_Liste = ?""",
-        (id_tk_liste,),
-    )
-    if not rows_liste:
-        return {"error": "Ticket introuvable"}
-    tk_liste = rows_liste[0]
-
-    rows_call = db_bo.query(
-        """SELECT
+        WHERE IDTK_Liste = ?"""
+    sql_call = """SELECT
             IDtk_CallSFR, IDTK_Liste, IDSalarie,
             CivilitéClient, NomClient, NomMaritalClient, PrenomClient,
             DATENAISS, DEPNAISS, TypeLogement, ADRESSE1, ADRESSE2, CP, VILLE,
@@ -129,9 +127,15 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
             ClientPro, ClientRS, ClientSiret
         FROM TK_CallSFR
         WHERE IDTK_Liste = ?
-          AND ModifELEM NOT LIKE '%suppr%'""",
-        (id_tk_liste,),
-    )
+          AND ModifELEM NOT LIKE '%suppr%'"""
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_liste = pool.submit(db_ticket.query, sql_liste, (id_tk_liste,))
+        f_call = pool.submit(db_bo.query, sql_call, (id_tk_liste,))
+        rows_liste = f_liste.result()
+        rows_call = f_call.result()
+    if not rows_liste:
+        return {"error": "Ticket introuvable"}
+    tk_liste = rows_liste[0]
     if not rows_call:
         return {"error": "Pas de TK_CallSFR pour ce ticket"}
     tc = rows_call[0]
@@ -152,40 +156,39 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     mobile1 = mobile1_raw if is_my_call else _mask_phone(mobile1_raw)
     mobile2 = mobile2_raw if is_my_call else _mask_phone(mobile2_raw)
 
-    # 2. Salarie vendeur :
-    #    - Nom + Prenom : table Salarie
-    #    - TélMob : table Salarie_Coordonnees (jointure sur IDSalarie)
+    # Vague 2 : Salarie + Salarie_Coordonnees + Panier en parallele (3 queries,
+    # 2 bases differentes). Toutes independantes -> ThreadPoolExecutor max 3.
     nom_vend = ""
     prenom_vend = ""
     gsm_vend_raw = ""
-    if id_salarie:
-        rows_sal = db_rh.query(
-            "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?",
-            (id_salarie,),
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_sal = pool.submit(
+            db_rh.query, "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?", (id_salarie,)
+        ) if id_salarie else None
+        f_coord = pool.submit(
+            db_rh.query, "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?", (id_salarie,)
+        ) if id_salarie else None
+        f_panier = pool.submit(
+            db_bo.query,
+            """SELECT
+                IDTK_CallSFR_Panier, IDOffres_SFR, Opt_TV, TYPE, portabilité,
+                TypeVente, MotifAnnulation, StatutProd,
+                NumPortabilité, NumPrise_RIO, NumPrise_Optique, OptChoisies
+            FROM TK_CallSFR_Panier
+            WHERE IDtk_CallSFR = ?
+              AND ModifELEM NOT LIKE '%suppr%'""",
+            (id_call_sfr,),
         )
-        if rows_sal:
-            s = rows_sal[0]
-            nom_vend = (s.get("Nom") or "").strip()
-            prenom_vend = _capitalize((s.get("Prenom") or "").strip())
-        rows_coord = db_rh.query(
-            "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?",
-            (id_salarie,),
-        )
-        if rows_coord:
-            gsm_vend_raw = (rows_coord[0].get("TélMob") or "").strip()
+        rows_sal = f_sal.result() if f_sal else []
+        rows_coord = f_coord.result() if f_coord else []
+        rows_panier = f_panier.result()
+    if rows_sal:
+        s = rows_sal[0]
+        nom_vend = (s.get("Nom") or "").strip()
+        prenom_vend = _capitalize((s.get("Prenom") or "").strip())
+    if rows_coord:
+        gsm_vend_raw = (rows_coord[0].get("TélMob") or "").strip()
     gsm_vend = gsm_vend_raw if is_my_call else _mask_phone(gsm_vend_raw)
-
-    # 3. Panier : TK_CallSFR_Panier + SFR_OffresProvad (cross-base impossible)
-    rows_panier = db_bo.query(
-        """SELECT
-            IDTK_CallSFR_Panier, IDOffres_SFR, Opt_TV, TYPE, portabilité,
-            TypeVente, MotifAnnulation, StatutProd,
-            NumPortabilité, NumPrise_RIO, NumPrise_Optique, OptChoisies
-        FROM TK_CallSFR_Panier
-        WHERE IDtk_CallSFR = ?
-          AND ModifELEM NOT LIKE '%suppr%'""",
-        (id_call_sfr,),
-    )
     # Lib_Offre via SFR_OffresProvad (base adv)
     offre_ids = {_to_int(p.get("IDOffres_SFR")) for p in rows_panier}
     offre_ids.discard(0)
