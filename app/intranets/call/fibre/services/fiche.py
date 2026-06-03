@@ -91,26 +91,50 @@ def _load_motifs_anomalie() -> list[dict]:
     return out
 
 
-def _url_exists(url: str, timeout: float = 3.0) -> bool:
-    """HEAD HTTP : True si le fichier existe (HTTP 200/2xx)."""
+# Cache des HEAD HTTP pour les URLs DocOmaya. TTL 60s : evite de refaire
+# 4 HEAD sequentiels a chaque ouverture de fiche pour un meme ticket.
+import time as _time_mod
+_URL_HEAD_CACHE: dict[str, tuple[bool, float]] = {}
+_URL_HEAD_TTL = 60.0
+
+
+def _url_exists(url: str, timeout: float = 1.5) -> bool:
+    """HEAD HTTP : True si le fichier existe (HTTP 200/2xx).
+
+    Cache 60s pour eviter les HEAD repetes. Timeout court (1.5s) car les
+    docs sont sur le meme serveur OVH -> si > 1.5s c'est qu'ils n'existent
+    pas (ou que le serveur lag, on prefere echouer vite).
+    """
+    now = _time_mod.monotonic()
+    cached = _URL_HEAD_CACHE.get(url)
+    if cached is not None and now - cached[1] < _URL_HEAD_TTL:
+        return cached[0]
     try:
         req = urllib.request.Request(url, method="HEAD")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return 200 <= resp.status < 300
+            exists = 200 <= resp.status < 300
     except Exception:
-        return False
+        exists = False
+    _URL_HEAD_CACHE[url] = (exists, now)
+    return exists
 
 
 def _first_existing(*urls: str) -> tuple[str, str]:
     """Retourne (url, kind) du premier fichier existant.
 
-    kind = 'pdf' si l'URL finit par .pdf, sinon 'image'.
+    Les HEAD sont faits en PARALLELE pour ne pas additionner les timeouts.
+    On respecte l'ordre de priorite : on retourne le premier URL existant
+    selon l'ordre des args (PDF avant PNG avant JPG).
     Si aucun n'existe -> ("", "").
     """
-    for url in urls:
-        if not url:
-            continue
-        if _url_exists(url):
+    from concurrent.futures import ThreadPoolExecutor
+    valid_urls = [u for u in urls if u]
+    if not valid_urls:
+        return "", ""
+    with ThreadPoolExecutor(max_workers=min(len(valid_urls), 4)) as pool:
+        results = list(pool.map(_url_exists, valid_urls))
+    for url, exists in zip(valid_urls, results):
+        if exists:
             kind = "pdf" if url.lower().endswith(".pdf") else "image"
             return url, kind
     return "", ""
@@ -188,11 +212,16 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         FROM TK_CallSFR
         WHERE IDTK_Liste = ?
           AND ModifELEM NOT LIKE '%suppr%'"""
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    # Vague 1 : TK_Liste + TK_CallSFR + motifs_anomalie (referentiel) en parallele.
+    # Le referentiel est mis en cache (10min) donc le 1er appel paie ~150ms,
+    # les suivants sont instantanes.
+    with ThreadPoolExecutor(max_workers=3) as pool:
         f_liste = pool.submit(db_ticket.query, sql_liste, (id_tk_liste,))
         f_call = pool.submit(db_bo.query, sql_call, (id_tk_liste,))
+        f_motifs = pool.submit(_load_motifs_anomalie)
         rows_liste = f_liste.result()
         rows_call = f_call.result()
+        motifs_anomalie = f_motifs.result()
     if not rows_liste:
         return {"error": "Ticket introuvable"}
     tk_liste = rows_liste[0]
@@ -359,7 +388,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         "btn_valider_actif": btn_valider_actif,
         "btn_annuler_actif": btn_annuler_actif,
         "statuts_vente": statuts_vente,
-        "motifs_anomalie": _load_motifs_anomalie(),
+        "motifs_anomalie": motifs_anomalie,
     }
 
 
