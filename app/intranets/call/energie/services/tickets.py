@@ -794,14 +794,14 @@ def _load_partenaires_actifs(db_adv) -> list[dict]:
 
 def compute_stats_energie(tickets_traites: list[dict], db_adv=None, db_rh=None) -> dict:
     """Compteurs Call Energie :
-    - tickets_valides : nb tickets traites du jour avec au moins 1 offre validee
-    - par Partenaire (global) : nb_offres + nb_clients
-    - par agence interne (les 6 AGENCES_INTERNES de Fibre) + Multicom :
-      nb_offres + nb_clients (cumules tous partenaires).
-
-    Regroupement vendeur -> agence : on prend l'orga d'affectation du vendeur
-    et on regarde s'il est descendant d'une des 6 agences internes. Sinon il
-    est compte dans "Multicom" (= reseau distrib externe pour Energie).
+    - tickets_valides : nb tickets traites du jour avec au moins 1 offre validee.
+    - partenaires (global / dashboard du haut) : Offres + Clients par Partenaire.
+    - Detail depliable, decoupage en 3 zones :
+        - agences_internes (les 2 racines listees dans AGENCES_INTERNES)
+        - multicom (descendants de ID_ORGA_MULTICOM)
+        - power (descendants de ID_ORGA_POWER)
+      Chaque zone expose en plus le decoupage `par_partenaire` (1 mini-bloc
+      par partenaire avec son logo + Offres + Clients).
     """
     if db_adv is None:
         db_adv = get_connection("adv")
@@ -809,71 +809,80 @@ def compute_stats_energie(tickets_traites: list[dict], db_adv=None, db_rh=None) 
         db_rh = get_connection("rh")
     partenaires = _load_partenaires_actifs(db_adv)
 
-    # Descendants de chaque agence interne (cache module 5min)
+    # Descendants de chaque racine
     agence_to_descendants: dict[int, set[int]] = {}
     for id_orga, _ in AGENCES_INTERNES:
         agence_to_descendants[id_orga] = _orga_descendants(db_rh, id_orga)
-    # Multicom : si on a une racine, on l'utilise. Sinon heuristique = "tout
-    # vendeur qui n'est dans AUCUNE des 6 agences internes".
-    multicom_set: set[int] = set()
-    if ID_ORGA_MULTICOM:
-        multicom_set = _orga_descendants(db_rh, ID_ORGA_MULTICOM)
+    multicom_set = _orga_descendants(db_rh, ID_ORGA_MULTICOM) if ID_ORGA_MULTICOM else set()
+    power_set = _orga_descendants(db_rh, ID_ORGA_POWER) if ID_ORGA_POWER else set()
 
-    # Resolver vendeur -> id_orga (depuis les tickets, qui ont deja _id_salarie)
+    # Resolver vendeur -> id_orga
     id_salaries = {t["_id_salarie"] for t in tickets_traites if t.get("_id_salarie")}
     aff = _load_affectations(db_rh, id_salaries)
 
-    # Init compteurs
+    # Init compteurs (zone -> prefix -> {nb_offres, tickets_set})
+    def _empty_par_partenaire() -> dict[str, dict]:
+        return {p["prefix"]: {"nb_offres": 0, "tickets_set": set()} for p in partenaires}
+
     tickets_valides = 0
-    stats_by_prefix: dict[str, dict] = {
-        p["prefix"]: {"nb_offres": 0, "tickets_set": set()}
-        for p in partenaires
+    stats_by_prefix: dict[str, dict] = _empty_par_partenaire()
+    stats_internes: dict[int, dict[str, dict]] = {
+        id_orga: _empty_par_partenaire() for id_orga, _ in AGENCES_INTERNES
     }
-    # Par agence interne (id_orga -> compteurs)
-    stats_internes: dict[int, dict] = {
-        id_orga: {"nb_offres": 0, "tickets_set": set()}
-        for id_orga, _ in AGENCES_INTERNES
-    }
-    # Multicom (reseau distrib externe)
-    stats_multicom: dict = {"nb_offres": 0, "tickets_set": set()}
+    stats_multicom: dict[str, dict] = _empty_par_partenaire()
+    stats_power: dict[str, dict] = _empty_par_partenaire()
 
     for t in tickets_traites:
         id_orga_vendeur = aff.get(t.get("_id_salarie", 0), {}).get("id_orga", 0)
-        # Match vers une agence interne ?
-        agence_match = None
+        # Determine la zone du vendeur (interne X, multicom, power, ou aucune).
+        # zone_target = dict {prefix -> {nb_offres, tickets_set}} ou None.
+        zone_target: dict[str, dict] | None = None
         for id_agence in stats_internes:
             if id_orga_vendeur in agence_to_descendants[id_agence]:
-                agence_match = id_agence
+                zone_target = stats_internes[id_agence]
                 break
+        if zone_target is None and id_orga_vendeur in multicom_set:
+            zone_target = stats_multicom
+        if zone_target is None and id_orga_vendeur in power_set:
+            zone_target = stats_power
 
         has_valid = False
         seen_prefix_in_ticket: set[str] = set()
-        nb_offres_valides_ticket = 0
         for off in t.get("_panier", []):
             if off.get("statut_prod") not in (1, 3):
                 continue
             has_valid = True
-            nb_offres_valides_ticket += 1
             prefix = (off.get("partenaire") or "").strip()
             if prefix in stats_by_prefix:
                 stats_by_prefix[prefix]["nb_offres"] += 1
                 seen_prefix_in_ticket.add(prefix)
+                if zone_target is not None:
+                    zone_target[prefix]["nb_offres"] += 1
         if has_valid:
             tickets_valides += 1
-            # Attribue les offres + le client a l'agence (interne ou Multicom)
-            if agence_match is not None:
-                stats_internes[agence_match]["nb_offres"] += nb_offres_valides_ticket
-                stats_internes[agence_match]["tickets_set"].add(t["id"])
-            elif not ID_ORGA_MULTICOM or id_orga_vendeur in multicom_set:
-                # Heuristique : pas interne -> Multicom (sauf si on a une racine
-                # explicite et que le vendeur n'y est pas).
-                stats_multicom["nb_offres"] += nb_offres_valides_ticket
-                stats_multicom["tickets_set"].add(t["id"])
         for prefix in seen_prefix_in_ticket:
             stats_by_prefix[prefix]["tickets_set"].add(t["id"])
+            if zone_target is not None:
+                zone_target[prefix]["tickets_set"].add(t["id"])
 
-    # Enrichit avec lib_orga reel + gimmick_url (Societe.GUIMMICK)
+    # Enrichit avec lib_orga + gimmick_url
     agences_meta = _load_agences_meta(db_rh)
+
+    def _serialize_par_partenaire(zone_stats: dict[str, dict]) -> list[dict]:
+        """Liste filtree : on garde uniquement les partenaires avec >= 1 offre."""
+        out: list[dict] = []
+        for p in partenaires:
+            data = zone_stats[p["prefix"]]
+            if data["nb_offres"] == 0 and not data["tickets_set"]:
+                continue
+            out.append({
+                "prefix": p["prefix"],
+                "lib": p["lib"],
+                "logo_url": p["logo_url"],
+                "nb_offres": data["nb_offres"],
+                "nb_clients": len(data["tickets_set"]),
+            })
+        return out
 
     return {
         "tickets_valides": tickets_valides,
@@ -892,14 +901,13 @@ def compute_stats_energie(tickets_traites: list[dict], db_adv=None, db_rh=None) 
             {
                 "id_orga": str(id_orga),
                 "lib_orga": agences_meta.get(id_orga, {}).get("lib_orga") or lib_default,
-                "nb_offres": stats_internes[id_orga]["nb_offres"],
-                "nb_clients": len(stats_internes[id_orga]["tickets_set"]),
                 "gimmick_url": agences_meta.get(id_orga, {}).get("gimmick_url", ""),
+                "par_partenaire": _serialize_par_partenaire(stats_internes[id_orga]),
             }
             for (id_orga, lib_default) in AGENCES_INTERNES
         ],
-        "nb_offres_multicom": stats_multicom["nb_offres"],
-        "nb_clients_multicom": len(stats_multicom["tickets_set"]),
+        "multicom": {"par_partenaire": _serialize_par_partenaire(stats_multicom)},
+        "power": {"par_partenaire": _serialize_par_partenaire(stats_power)},
     }
 
 

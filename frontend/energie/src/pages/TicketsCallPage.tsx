@@ -73,20 +73,31 @@ interface StatPartenaire {
   nb_clients: number
 }
 
+interface StatPartenaireZone {
+  prefix: string
+  lib: string
+  logo_url: string
+  nb_offres: number
+  nb_clients: number
+}
+
 interface StatAgenceEnergie {
   id_orga: string
   lib_orga: string
-  nb_offres: number
-  nb_clients: number
   gimmick_url: string
+  par_partenaire: StatPartenaireZone[]
+}
+
+interface StatZoneDistrib {
+  par_partenaire: StatPartenaireZone[]
 }
 
 interface StatsEnergie {
   tickets_valides: number
   partenaires: StatPartenaire[]
   agences_internes: StatAgenceEnergie[]
-  nb_offres_multicom: number
-  nb_clients_multicom: number
+  multicom: StatZoneDistrib
+  power: StatZoneDistrib
 }
 
 interface EnCoursPayload {
@@ -285,8 +296,6 @@ function DashboardEnergie({
     if (!scrollRef.current) return
     scrollRef.current.scrollBy({ left: dir * 240, behavior: 'smooth' })
   }
-  const totInterneOffres = stats?.agences_internes.reduce((s, a) => s + a.nb_offres, 0) ?? 0
-  const totInterneClients = stats?.agences_internes.reduce((s, a) => s + a.nb_clients, 0) ?? 0
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-c-line overflow-hidden">
@@ -339,24 +348,25 @@ function DashboardEnergie({
         </div>
       </div>
 
-      {/* Section dépliable : detail par agence (style Fibre : Tot + carrousel) */}
+      {/* Section dépliable : Totaux a gauche + Carrousel agences a droite. */}
       {expanded && stats && (
         <div className="border-t border-c-line-soft p-5">
-          <div className="flex items-center gap-8">
-            <div className="flex flex-col gap-2.5 shrink-0 pr-6 border-r border-c-line-soft">
-              <TotalRow label="Tot Interne" offres={totInterneOffres} clients={totInterneClients} />
-              <TotalRow label="Tot Multicom" offres={stats.nb_offres_multicom} clients={stats.nb_clients_multicom} />
+          <div className="flex items-start gap-8">
+            <div className="flex flex-col gap-4 shrink-0 pr-6 border-r border-c-line-soft">
+              <TotalRow label="Tot Interne" par_partenaire={mergeInternes(stats.agences_internes)} />
+              <TotalRow label="Tot Multicom" par_partenaire={stats.multicom.par_partenaire} />
+              <TotalRow label="Tot Power" par_partenaire={stats.power.par_partenaire} />
             </div>
             <button
               onClick={() => scrollBy(-1)}
-              className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+              className="shrink-0 text-c-ink-soft hover:text-c-ink p-1 mt-6"
               aria-label="Défiler à gauche"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div
               ref={scrollRef}
-              className="flex items-center gap-10 overflow-x-auto flex-1 px-3 py-1 scroll-smooth"
+              className="flex items-start gap-10 overflow-x-auto flex-1 px-3 py-1 scroll-smooth"
               style={{ scrollbarWidth: 'thin' }}
             >
               {stats.agences_internes.map((a) => (
@@ -365,7 +375,7 @@ function DashboardEnergie({
             </div>
             <button
               onClick={() => scrollBy(1)}
-              className="shrink-0 text-c-ink-soft hover:text-c-ink p-1"
+              className="shrink-0 text-c-ink-soft hover:text-c-ink p-1 mt-6"
               aria-label="Défiler à droite"
             >
               <ChevronRight className="w-5 h-5" />
@@ -389,14 +399,37 @@ function DashboardEnergie({
   )
 }
 
-function TotalRow({ label, offres, clients }: { label: string; offres: number; clients: number }) {
+/** Aggrege les par_partenaire de toutes les agences internes en une liste
+ *  unique (somme Offres + Clients par partenaire) pour la ligne "Tot Interne". */
+function mergeInternes(agences: StatAgenceEnergie[]): StatPartenaireZone[] {
+  const acc: Record<string, StatPartenaireZone> = {}
+  for (const a of agences) {
+    for (const pp of a.par_partenaire) {
+      const cur = acc[pp.prefix]
+      if (cur) {
+        cur.nb_offres += pp.nb_offres
+        cur.nb_clients += pp.nb_clients
+      } else {
+        acc[pp.prefix] = { ...pp }
+      }
+    }
+  }
+  return Object.values(acc)
+}
+
+function TotalRow({ label, par_partenaire }: { label: string; par_partenaire: StatPartenaireZone[] }) {
   return (
     <div className="flex items-center gap-3 text-xs">
-      <span className="font-semibold text-c-ink w-24 text-right">{label}</span>
-      <Package className="w-4 h-4 text-c-ink-soft" aria-label="Offres" />
-      <span className="font-bold text-c-ink min-w-[20px] text-center" title="Offres">{offres}</span>
-      <User className="w-4 h-4 text-c-ink-soft" aria-label="Clients" />
-      <span className="font-bold text-c-ink min-w-[20px] text-center" title="Clients">{clients}</span>
+      <span className="font-semibold text-c-ink w-24 text-right shrink-0">{label}</span>
+      {par_partenaire.length === 0 ? (
+        <span className="text-c-ink-faint italic">—</span>
+      ) : (
+        <div className="flex items-end gap-4">
+          {par_partenaire.map((pp) => (
+            <PartenaireMiniBlock key={pp.prefix} pp={pp} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -404,7 +437,7 @@ function TotalRow({ label, offres, clients }: { label: string; offres: number; c
 function AgenceEnergieCard({ agence }: { agence: StatAgenceEnergie }) {
   return (
     <div className="flex flex-col items-center shrink-0">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         {/* Logo agence (gimmick) ou fallback User icon */}
         <div className="w-14 h-14 rounded-full border border-c-line bg-white overflow-hidden flex items-center justify-center shrink-0">
           {agence.gimmick_url ? (
@@ -417,20 +450,46 @@ function AgenceEnergieCard({ agence }: { agence: StatAgenceEnergie }) {
             <User className="w-6 h-6 text-c-ink-soft" />
           )}
         </div>
-        {/* Compteurs Offres / Clients en colonne verticale */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2" title="Offres">
-            <Package className="w-3.5 h-3.5 text-c-ink-soft" />
-            <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_offres}</span>
+        {/* Mini-blocs par partenaire (logo + Offres + Clients) */}
+        {agence.par_partenaire.length === 0 ? (
+          <span className="text-xs text-c-ink-faint italic">aucune offre</span>
+        ) : (
+          <div className="flex items-end gap-4">
+            {agence.par_partenaire.map((pp) => (
+              <PartenaireMiniBlock key={pp.prefix} pp={pp} />
+            ))}
           </div>
-          <div className="flex items-center gap-2" title="Clients">
-            <User className="w-3.5 h-3.5 text-c-ink-soft" />
-            <span className="text-xs font-bold text-c-ink min-w-[16px]">{agence.nb_clients}</span>
-          </div>
-        </div>
+        )}
       </div>
       <div className="text-[11px] text-c-ink-soft mt-2 text-center font-medium whitespace-nowrap">
         {agence.lib_orga}
+      </div>
+    </div>
+  )
+}
+
+function PartenaireMiniBlock({ pp }: { pp: StatPartenaireZone }) {
+  const label = pp.lib || pp.prefix
+  return (
+    <div className="flex flex-col items-center gap-1 shrink-0" title={label}>
+      {/* Logo partenaire en haut (petit) */}
+      <div className="w-8 h-6 flex items-center justify-center">
+        {pp.logo_url ? (
+          <img src={pp.logo_url} alt={label} className="max-w-full max-h-full object-contain" />
+        ) : (
+          <span className="text-[9px] font-bold text-c-ink-soft">{pp.prefix}</span>
+        )}
+      </div>
+      {/* Compteurs Offres + Clients */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1.5" title="Offres">
+          <Package className="w-3.5 h-3.5 text-c-ink-soft" />
+          <span className="text-xs font-bold text-c-ink min-w-[14px]">{pp.nb_offres}</span>
+        </div>
+        <div className="flex items-center gap-1.5" title="Clients">
+          <User className="w-3.5 h-3.5 text-c-ink-soft" />
+          <span className="text-xs font-bold text-c-ink min-w-[14px]">{pp.nb_clients}</span>
+        </div>
       </div>
     </div>
   )

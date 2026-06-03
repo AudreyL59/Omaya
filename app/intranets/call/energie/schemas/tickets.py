@@ -72,25 +72,38 @@ class StatPartenaire(BaseModel):
     nb_clients: int       # nb tickets distincts ayant au moins 1 offre validee
 
 
-class StatAgenceEnergie(BaseModel):
-    """Une carte agence interne dans le detail depliable (meme structure
-    que Call Fibre : logo gimmick + Offres + Clients)."""
-    id_orga: str
-    lib_orga: str
+class StatPartenaireZone(BaseModel):
+    """Mini-bloc Partenaire dans une zone (Tot Interne / Tot Multicom / Tot
+    Power / Agence X) : logo + Offres + Clients."""
+    prefix: str
+    lib: str
+    logo_url: str = ""
     nb_offres: int
     nb_clients: int
+
+
+class StatAgenceEnergie(BaseModel):
+    """Une carte agence dans le detail depliable : logo gimmick + decoupage
+    par Partenaire (1 mini-bloc par partenaire ayant >= 1 offre)."""
+    id_orga: str
+    lib_orga: str
     gimmick_url: str = ""
+    par_partenaire: list[StatPartenaireZone] = []
+
+
+class StatZoneDistrib(BaseModel):
+    """Zone distrib (Multicom ou Power) : decoupage par Partenaire uniquement."""
+    par_partenaire: list[StatPartenaireZone] = []
 
 
 class StatsEnergie(BaseModel):
     """Stats globales du dashboard Call Energie."""
     tickets_valides: int          # nb tickets avec au moins 1 offre validee
     partenaires: list[StatPartenaire] = []
-    # Detail par agence (depliable). Reprend les 6 agences internes Fibre
-    # + Multicom (tout le reseau distrib externe Energie cumule).
+    # Detail depliable : 3 zones (interne par agence + Multicom + Power)
     agences_internes: list[StatAgenceEnergie] = []
-    nb_offres_multicom: int = 0
-    nb_clients_multicom: int = 0
+    multicom: StatZoneDistrib = StatZoneDistrib()
+    power: StatZoneDistrib = StatZoneDistrib()
 
 
 class TicketsEnCoursResponse(BaseModel):
