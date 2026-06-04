@@ -16,10 +16,21 @@ Logique :
 import base64
 import struct
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from app.core.database.pg import get_pg_connection
+
+
+def _iso(v) -> str:
+    """PG renvoie des date/datetime natifs ; on serialise en ISO."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(v, date):
+        return v.strftime("%Y-%m-%d")
+    return str(v)
 
 
 def _to_int(v) -> int:
@@ -278,8 +289,8 @@ def calculer_stats_entree_sortie(
             sid = _to_int(r.get("id_salarie"))
             if sid and sid not in sortie_by_sal:
                 sortie_by_sal[sid] = {
-                    "date_sortie": r.get("date_sortie_reelle") or "",
-                    "fin_demandee": r.get("date_sortie_demandee") or "",
+                    "date_sortie": _iso(r.get("date_sortie_reelle")),
+                    "fin_demandee": _iso(r.get("date_sortie_demandee")),
                 }
 
     # --- Lookup societe : IdSte → RS_Interne ------------------------------
@@ -331,7 +342,7 @@ def calculer_stats_entree_sortie(
             "adresse": r.get("adresse1") or "",
             "cp": r.get("cp") or "",
             "ville": r.get("ville") or "",
-            "date_entree": r.get("date_debut") or "",
+            "date_entree": _iso(r.get("date_debut")),
             "en_activite": bool(r.get("en_activite")),
             "date_sortie": sortie.get("date_sortie", ""),
             "fin_demandee": sortie.get("fin_demandee", ""),
@@ -360,9 +371,9 @@ def calculer_stats_entree_sortie(
             "adresse": r.get("adresse1") or "",
             "cp": r.get("cp") or "",
             "ville": r.get("ville") or "",
-            "date_entree": r.get("date_debut") or "",
-            "date_sortie_reelle": r.get("date_sortie_reelle") or "",
-            "fin_demandee": r.get("date_sortie_demandee") or "",
+            "date_entree": _iso(r.get("date_debut")),
+            "date_sortie_reelle": _iso(r.get("date_sortie_reelle")),
+            "fin_demandee": _iso(r.get("date_sortie_demandee")),
             "id_type_sortie": id_type,
             "type_sortie_lib": type_sortie_map.get(id_type, ""),
             "id_orga": str(id_orga_sal),

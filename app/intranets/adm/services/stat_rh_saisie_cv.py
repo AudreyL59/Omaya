@@ -15,6 +15,7 @@ Tables :
 import base64
 import struct
 from collections import defaultdict
+from datetime import date, datetime
 from typing import Optional
 
 from app.core.database.pg import get_pg_connection
@@ -48,17 +49,33 @@ def _capitalize(s: str) -> str:
     return s[0].upper() + s[1:].lower()
 
 
-def _to_ymd(raw: str) -> str:
-    """Normalise une date en YYYYMMDD (accepte ISO '2026-04-20...' ou WinDev '20260420...')."""
+def _to_ymd(raw) -> str:
+    """Normalise une date en YYYYMMDD.
+    Accepte : datetime/date natif PG, ISO '2026-04-20...', WinDev '20260420...'."""
     if not raw:
         return ""
+    # PG renvoie souvent des objets datetime/date natifs
+    if isinstance(raw, (datetime, date)):
+        return raw.strftime("%Y%m%d")
+    s = str(raw)
     # Format ISO avec tirets : 2026-04-20[T...]
-    if len(raw) >= 10 and raw[4:5] == "-" and raw[7:8] == "-":
-        return raw[0:4] + raw[5:7] + raw[8:10]
+    if len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-":
+        return s[0:4] + s[5:7] + s[8:10]
     # Format WinDev YYYYMMDD(HHMMSS)
-    if len(raw) >= 8 and raw[:8].isdigit():
-        return raw[:8]
+    if len(s) >= 8 and s[:8].isdigit():
+        return s[:8]
     return ""
+
+
+def _iso(v) -> str:
+    """PG renvoie des date/datetime natifs ; on serialise en ISO 'YYYY-MM-DD HH:MM:SS'."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(v, date):
+        return v.strftime("%Y-%m-%d")
+    return str(v)
 
 
 def calculer_stats_saisie_cv(
@@ -283,7 +300,7 @@ def calculer_stats_saisie_cv(
             "id_cvtheque": str(cid),
             "ope_id": str(ope_id),
             "ope_nom": salarie_name_map.get(ope_id, ""),
-            "date_traitement": date_traitement,
+            "date_traitement": _iso(date_traitement),
             "est_reactivation": est_reac,
             "nom_prenom": f"{(r.get('nom') or '').strip()} {_capitalize(r.get('prenom') or '')}".strip(),
             "commune": commune_map.get(_to_int(r.get("id_communes_france")), ""),
@@ -312,13 +329,13 @@ def calculer_stats_saisie_cv(
             "id_cvtheque": str(cid),
             "ope_id": str(ope_id),
             "ope_nom": salarie_name_map.get(ope_id, ""),
-            "date_traitement": r.get("datecrea") or "",
+            "date_traitement": _iso(r.get("datecrea")),
             "nom_prenom": f"{(r.get('nom') or '').strip()} {_capitalize(r.get('prenom') or '')}".strip(),
             "commune": commune_map.get(_to_int(r.get("id_communes_france")), ""),
             "tel": r.get("gsm") or "",
             "statut_actuel": r.get("lib_statut") or statut_actuel_map.get(cid, ""),
             "id_cv_statut": _to_int(r.get("id_cv_statut")),
-            "date_saisie": r.get("date_saisie") or "",
+            "date_saisie": _iso(r.get("date_saisie")),
             "id_source": id_source,
             "lib_source": r.get("lib_source") or "",
             "annonceur_coopteur": annonceur,

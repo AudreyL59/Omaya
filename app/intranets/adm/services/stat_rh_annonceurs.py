@@ -20,6 +20,7 @@ Regles KPI (identiques a WinDev) :
 import base64
 import struct
 from collections import defaultdict
+from datetime import date, datetime
 from typing import Optional
 
 from app.core.database.pg import get_pg_connection
@@ -53,15 +54,30 @@ def _capitalize(s: str) -> str:
     return s[0].upper() + s[1:].lower()
 
 
-def _to_ymd(raw: str) -> str:
-    """Normalise une date en YYYYMMDD (ISO avec tirets ou WinDev)."""
+def _to_ymd(raw) -> str:
+    """Normalise une date en YYYYMMDD.
+    Accepte : datetime/date natif PG, ISO avec tirets, WinDev compact."""
     if not raw:
         return ""
-    if len(raw) >= 10 and raw[4:5] == "-" and raw[7:8] == "-":
-        return raw[0:4] + raw[5:7] + raw[8:10]
-    if len(raw) >= 8 and raw[:8].isdigit():
-        return raw[:8]
+    if isinstance(raw, (datetime, date)):
+        return raw.strftime("%Y%m%d")
+    s = str(raw)
+    if len(s) >= 10 and s[4:5] == "-" and s[7:8] == "-":
+        return s[0:4] + s[5:7] + s[8:10]
+    if len(s) >= 8 and s[:8].isdigit():
+        return s[:8]
     return ""
+
+
+def _iso(v) -> str:
+    """PG renvoie des date/datetime natifs ; on serialise en ISO."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(v, date):
+        return v.strftime("%Y-%m-%d")
+    return str(v)
 
 
 def calculer_stats_annonceurs(
@@ -308,7 +324,7 @@ def calculer_stats_annonceurs(
             "lib_annonceur": annonceur_lib_map.get(id_ann, ""),
             "ope_id": str(ope_id),
             "ope_nom": salarie_name_map.get(ope_id, ""),
-            "date_traitement": date_traitement,
+            "date_traitement": _iso(date_traitement),
             "est_reactivation": est_reac,
             "nom_prenom": f"{(r.get('nom') or '').strip()} {_capitalize(r.get('prenom') or '')}".strip(),
             "commune": commune_map.get(_to_int(r.get("id_communes_france")), ""),

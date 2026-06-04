@@ -13,8 +13,20 @@ Logique metier :
 import base64
 import struct
 from collections import defaultdict
+from datetime import date, datetime
 
 from app.core.database.pg import get_pg_connection
+
+
+def _iso(v) -> str:
+    """PG renvoie des date/datetime natifs ; on serialise en ISO 'YYYY-MM-DD HH:MM:SS'."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(v, date):
+        return v.strftime("%Y-%m-%d")
+    return str(v)
 
 
 def _to_int(v) -> int:
@@ -226,8 +238,8 @@ def calculer_stats_rdv(
             "nom": (r.get("nom") or "").strip(),
             "prenom": _capitalize(r.get("prenom") or ""),
             "gsm": r.get("gsm") or "",
-            "date_crea": r.get("datecrea") or "",
-            "date_debut": r.get("date_debut") or "",
+            "date_crea": _iso(r.get("datecrea")),
+            "date_debut": _iso(r.get("date_debut")),
             "lib_categorie": r.get("lib_categorie") or "",
             "statut_lib": r.get("lib_categorie") or "",
             "recruteur_id": str(rec_id),
