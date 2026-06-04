@@ -41,3 +41,27 @@ def charger_droits(
 
     rows = db.query(sql, (id_salarie,))
     return [row["code_interne"] for row in rows]
+
+
+def charger_droits_hfsql(db, id_salarie: int, intranet: str = "vendeur") -> list[str]:
+    """Variante HFSQL de charger_droits (intranets servis en HFSQL, ex.
+    intracall Fibre/Energie). Tables : salarie_droitAccès + TypeDroitAccès
+    (Bdd_Omaya_RH). Mêmes règles de filtre que la version PG.
+    """
+    base_sql = """
+        SELECT TypeDroitAccès.CodeInterne
+        FROM TypeDroitAccès
+        INNER JOIN salarie_droitAccès
+            ON TypeDroitAccès.IDTypeDroitAccès = salarie_droitAccès.IDTypeDroitAccès
+        WHERE salarie_droitAccès.DroitActif = 1
+            AND salarie_droitAccès.ModifELEM NOT LIKE '%suppr%'
+            AND salarie_droitAccès.IDSalarie = ?
+    """
+
+    if intranet == "adm":
+        sql = base_sql
+    else:
+        sql = base_sql + " AND TypeDroitAccès.FDV = 1"
+
+    rows = db.query(sql, (id_salarie,))
+    return [row["CodeInterne"] for row in rows]

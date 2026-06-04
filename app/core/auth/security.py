@@ -25,12 +25,19 @@ def verify_password(encrypted_password, plain_password: str) -> bool:
     Vérifie un mot de passe en déchiffrant le mdp_crypte stocké en base (AES-128).
     Compatible avec CrypteStandard/DécrypteStandard de WinDev.
 
-    `encrypted_password` arrive de PG comme `bytes` ou `memoryview` (colonne bytea).
+    Gère les deux sources :
+    - PG    : colonne `bytea` -> `bytes` / `memoryview` (octets bruts).
+    - HFSQL : champ binaire renvoyé par le bridge en `str` base64.
     """
     if not encrypted_password:
         return False
     try:
-        encrypted_bytes = bytes(encrypted_password)
+        if isinstance(encrypted_password, (bytes, bytearray, memoryview)):
+            encrypted_bytes = bytes(encrypted_password)
+        else:
+            # Bridge HFSQL : binaire serialise en base64 (str)
+            import base64
+            encrypted_bytes = base64.b64decode(encrypted_password)
 
         # WinDev CrypteStandard AES128 : IV = premiers 16 octets, reste = ciphertext
         iv = encrypted_bytes[:16]
