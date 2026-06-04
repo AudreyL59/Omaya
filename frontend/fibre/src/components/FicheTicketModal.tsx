@@ -181,7 +181,6 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
   const [selectedPanierId, setSelectedPanierId] = useState<string>('')
-  const [testEligImg, setTestEligImg] = useState<string>('')
   // Etat du viewer doc (CIN / KBIS / Lettre resil) + URLs detectees
   const [docCin, setDocCin] = useState<DocRef>({ url: '', kind: '' })
   const [docKbis, setDocKbis] = useState<DocRef>({ url: '', kind: '' })
@@ -211,7 +210,6 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
     setError('')
     setData(null)
     setSelectedPanierId('')
-    setTestEligImg('')
     setDocCin({ url: '', kind: '' })
     setDocKbis({ url: '', kind: '' })
     setDocLettre({ url: '', kind: '' })
@@ -272,29 +270,16 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
     () => (selectedPanierId ? editOffres[selectedPanierId] || null : null),
     [editOffres, selectedPanierId],
   )
-  // Recharge image test-elig + lettre-resil uniquement quand on CHANGE de
-  // ligne ou que le flag FIBRE/portabilite change (pas a chaque keystroke).
+  // Recharge la lettre-resil uniquement quand on CHANGE de ligne ou que le
+  // flag FIBRE/portabilite change (pas a chaque keystroke).
   const isFibre = selectedOffre?.type === 'FIBRE'
   const isPortabilite = !!selectedOffre?.portabilite
   useEffect(() => {
     if (!selectedPanierId || !isFibre) {
-      setTestEligImg('')
       setDocLettre({ url: '', kind: '' })
       return
     }
     let cancelled = false
-    ;(async () => {
-      try {
-        const r = await fetch(`${API_BASE}/tickets/panier/${selectedPanierId}/test-eligibilite`, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        })
-        if (!r.ok) return
-        const d = await r.json()
-        if (!cancelled) setTestEligImg(d.test_eligibilite || '')
-      } catch {
-        /* ignore */
-      }
-    })()
     if (!isPortabilite && idTicket) {
       fetch(`${API_BASE}/tickets/${idTicket}/panier/${selectedPanierId}/lettre-resil`, {
         headers: { Authorization: `Bearer ${getToken()}` },
@@ -763,7 +748,6 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 onAnomalieChange={(patch) =>
                   setEditAnomalie((a) => (a ? { ...a, ...patch } : a))
                 }
-                testEligImg={testEligImg}
                 lettreAvailable={!!docLettre.url}
                 onOpenLettre={() => setViewerOpen('lettre')}
                 onSaveVente={handleSaveVente}
@@ -1213,7 +1197,6 @@ function ColonneDroite({
   onVenteChange,
   editAnomalie,
   onAnomalieChange,
-  testEligImg,
   lettreAvailable,
   onOpenLettre,
   onSaveVente,
@@ -1230,7 +1213,6 @@ function ColonneDroite({
   onVenteChange: (patch: Partial<FicheVente>) => void
   editAnomalie: FicheAnomalie
   onAnomalieChange: (patch: Partial<FicheAnomalie>) => void
-  testEligImg: string
   lettreAvailable: boolean
   onOpenLettre: () => void
   onSaveVente: () => void
@@ -1345,33 +1327,10 @@ function ColonneDroite({
                 label="Options Choisies"
                 value={offre.opt_choisies}
                 multi
+                rows={12}
                 onChange={(v) => onOffreChange({ opt_choisies: v })}
               />
             </div>
-
-            {/* Test d'éligibilité (FIBRE only) */}
-            {offre.type === 'FIBRE' && (
-              <div className="mt-3 pt-3 border-t border-c-line-soft">
-                <div className="text-[11px] font-semibold text-c-ink-soft">
-                  Test d'éligibilité réalisé par le vendeur
-                </div>
-                <div className="text-[10px] text-c-ink-faint italic mb-2">
-                  Cliquez sur l'image pour agrandir
-                </div>
-                {testEligImg ? (
-                  <img
-                    src={testEligImg}
-                    alt="Test d'éligibilité"
-                    className="w-full max-h-[180px] object-contain rounded border border-c-line bg-gray-50 cursor-zoom-in"
-                    title="Cliquer pour agrandir (à venir)"
-                  />
-                ) : (
-                  <div className="w-full h-24 bg-gray-100 rounded border border-c-line flex items-center justify-center text-[10px] text-c-ink-faint italic">
-                    Aucune image d'éligibilité
-                  </div>
-                )}
-              </div>
-            )}
 
             <button
               onClick={onSaveOffre}
@@ -1453,6 +1412,7 @@ function Field({
   label,
   value,
   multi,
+  rows = 2,
   muted,
   onChange,
   type = 'text',
@@ -1460,6 +1420,7 @@ function Field({
   label: string
   value: string | number
   multi?: boolean
+  rows?: number
   muted?: boolean
   onChange?: (v: string) => void
   type?: 'text' | 'date' | 'email'
@@ -1474,7 +1435,7 @@ function Field({
           value={String(value ?? '')}
           readOnly={readOnly}
           onChange={onChange ? (e) => onChange(e.target.value) : undefined}
-          rows={2}
+          rows={rows}
           className={`${baseCls} resize-none`}
         />
       ) : (
