@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, AlertCircle, ExternalLink, FileText } from 'lucide-react'
+import { Loader2, AlertCircle, ExternalLink, FileText, FileSpreadsheet } from 'lucide-react'
 import { getToken } from '@/api'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
 
@@ -89,6 +89,7 @@ export default function RegistreRHPage() {
   const [selectedId, setSelectedId] = useState<string>('')
   const [loadingSte, setLoadingSte] = useState(false)
   const [loadingList, setLoadingList] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string>('')
   const [ficheOpen, setFicheOpen] = useState(false)
 
@@ -151,6 +152,39 @@ export default function RegistreRHPage() {
     [salaries, selectedId],
   )
 
+  // Export Excel : telecharge le .xlsx genere par le backend
+  const handleExport = async () => {
+    if (!selectedSte) return
+    setExporting(true)
+    try {
+      const r = await fetch(
+        `/api/adm/registre-rh/export.xlsx?id_ste=${encodeURIComponent(selectedSte)}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        alert(`Export Excel : echec (${j?.detail || r.status})`)
+        return
+      }
+      // Recupere le filename depuis Content-Disposition si dispo, sinon fallback
+      const cd = r.headers.get('Content-Disposition') || ''
+      const m = cd.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/)
+      const filename = m ? decodeURIComponent(m[1]) : `Registre_RH_${selectedSte}.xlsx`
+
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Header */}
@@ -180,6 +214,21 @@ export default function RegistreRHPage() {
             )}
           </select>
         </div>
+
+        {/* Bouton "Exporter Excel" */}
+        <button
+          onClick={handleExport}
+          disabled={!selectedSte || exporting || salaries.length === 0}
+          className="flex items-center gap-2 px-3 py-1.5 border border-emerald-700 text-emerald-700 rounded text-sm hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Telecharger le registre au format Excel (.xlsx)"
+        >
+          {exporting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="w-4 h-4" />
+          )}
+          Exporter Excel
+        </button>
 
         {/* Bouton "Voir Fiche Salarie" */}
         <button

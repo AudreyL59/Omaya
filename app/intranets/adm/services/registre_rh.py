@@ -8,6 +8,7 @@ jointure (salarie + coordonnees + embauche + sortie + type_poste) filtre
 par IdSte. Tri par DateDebut DESC.
 """
 
+import io
 from datetime import date, datetime
 from typing import Any
 
@@ -193,3 +194,136 @@ def list_salaries(id_ste: int) -> list[dict]:
         }
         for r in rows
     ]
+
+
+# --- Export Excel --------------------------------------------------------
+
+CIVILITE_LIBS = {1: "M.", 2: "Mme", 3: "Mlle"}
+
+
+def _date_fr(iso: str) -> str:
+    """ISO 'YYYY-MM-DD' -> 'DD/MM/YYYY' (vide si vide)."""
+    if not iso or len(iso) < 10:
+        return ""
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}"
+
+
+def export_xlsx(id_ste: int) -> tuple[bytes, str]:
+    """Genere un .xlsx du Registre RH pour une societe.
+
+    Retourne (bytes du fichier, nom de fichier suggere).
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    db = get_pg_connection("rh")
+
+    # Nom de la societe (pour le titre + nom de fichier)
+    soc_row = db.query_one(
+        "SELECT rs_interne, raison_sociale FROM rh.pgt_societe WHERE id_ste = ?",
+        (id_ste,),
+    )
+    nom_soc = ""
+    if soc_row:
+        nom_soc = (soc_row.get("rs_interne") or soc_row.get("raison_sociale") or "").strip()
+
+    # Refs pour traduire les ids
+    refs = list_refs()
+    ctt_by_id = {r["id"]: r["label"] for r in refs["type_ctt"]}
+    horaire_by_id = {r["id"]: r["label"] for r in refs["type_horaire"]}
+    sortie_by_id = {r["id"]: r["label"] for r in refs["type_sortie"]}
+
+    rows = list_salaries(id_ste)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Registre RH"
+
+    # En-tete : titre + societe + date
+    titre_font = Font(bold=True, size=14, color="FFFFFF")
+    titre_fill = PatternFill("solid", fgColor="17494E")
+    ws.cell(row=1, column=1, value=f"Registre RH — {nom_soc}").font = titre_font
+    ws.cell(row=1, column=1).fill = titre_fill
+    ws.merge_cells(start_row=1, end_row=1, start_column=1, end_column=24)
+    ws.cell(row=1, column=1).alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 24
+
+    ws.cell(row=2, column=1, value=f"Export du {datetime.now().strftime('%d/%m/%Y a %H:%M')}").font = Font(italic=True, size=9, color="666666")
+    ws.merge_cells(start_row=2, end_row=2, start_column=1, end_column=24)
+
+    # En-tetes colonnes (ligne 4)
+    headers = [
+        "Civilité", "Nom", "Prénom", "Nationalité", "Sexe",
+        "N° Sécu Soc", "Date Naiss", "Lieu Naiss", "Dép Naiss",
+        "Adresse 1", "Adresse 2", "CP", "Ville",
+        "N° CIN", "DPAE n°",
+        "En activité", "Date début", "Type contrat", "Poste",
+        "Date sortie demandée", "Date sortie réelle", "Type sortie",
+        "Type horaire", "RQTH",
+    ]
+    header_font = Font(bold=True, color="FFFFFF", size=10)
+    header_fill = PatternFill("solid", fgColor="4E1D17")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for col_idx, h in enumerate(headers, start=1):
+        c = ws.cell(row=4, column=col_idx, value=h)
+        c.font = header_font
+        c.fill = header_fill
+        c.alignment = header_align
+    ws.row_dimensions[4].height = 30
+    ws.freeze_panes = "A5"  # fige le header
+
+    # Lignes
+    for i, r in enumerate(rows, start=5):
+        ws.cell(row=i, column=1, value=CIVILITE_LIBS.get(r["civilite"], ""))
+        ws.cell(row=i, column=2, value=r["nom"])
+        ws.cell(row=i, column=3, value=r["prenom"])
+        ws.cell(row=i, column=4, value=r["nationalite"])
+        ws.cell(row=i, column=5, value=r["sexe"])
+        ws.cell(row=i, column=6, value=r["num_ss"])
+        ws.cell(row=i, column=7, value=_date_fr(r["date_naiss"]))
+        ws.cell(row=i, column=8, value=r["lieu_naiss"])
+        ws.cell(row=i, column=9, value=r["dep_naiss"] or "")
+        ws.cell(row=i, column=10, value=r["adresse1"])
+        ws.cell(row=i, column=11, value=r["adresse2"])
+        ws.cell(row=i, column=12, value=r["cp"])
+        ws.cell(row=i, column=13, value=r["ville"])
+        ws.cell(row=i, column=14, value=r["num_cin"])
+        ws.cell(row=i, column=15, value=r["dpae_num"])
+        ws.cell(row=i, column=16, value="Oui" if r["en_activite"] else "Non")
+        ws.cell(row=i, column=17, value=_date_fr(r["date_debut"]))
+        ws.cell(row=i, column=18, value=ctt_by_id.get(r["id_type_ctt"], ""))
+        ws.cell(row=i, column=19, value=r["lib_poste"])
+        ws.cell(row=i, column=20, value=_date_fr(r["date_sortie_demandee"]))
+        ws.cell(row=i, column=21, value=_date_fr(r["date_sortie_reelle"]))
+        ws.cell(row=i, column=22, value=sortie_by_id.get(r["id_type_sortie"], ""))
+        ws.cell(row=i, column=23, value=horaire_by_id.get(r["id_type_horaire"], ""))
+        ws.cell(row=i, column=24, value="Oui" if r["travailleur_handi"] else "")
+
+    # Largeurs auto-ish : on calcule la longueur max par colonne
+    for col_idx, h in enumerate(headers, start=1):
+        max_len = len(h)
+        for row in ws.iter_rows(min_row=5, max_row=ws.max_row,
+                                min_col=col_idx, max_col=col_idx):
+            for cell in row:
+                if cell.value is not None:
+                    max_len = max(max_len, len(str(cell.value)))
+        # Borne raisonnable : entre 8 et 35
+        ws.column_dimensions[get_column_letter(col_idx)].width = min(max(max_len + 2, 8), 35)
+
+    # Footer
+    footer_row = ws.max_row + 2
+    nb_total = len(rows)
+    nb_actifs = sum(1 for r in rows if r["en_activite"])
+    ws.cell(row=footer_row, column=1, value=f"{nb_total} salarié(s) dont {nb_actifs} en activité").font = Font(italic=True, size=9, color="666666")
+    ws.merge_cells(start_row=footer_row, end_row=footer_row, start_column=1, end_column=24)
+
+    # Serialise en bytes
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    # Nom de fichier (avec sanitization basique)
+    safe_soc = "".join(c if c.isalnum() or c in " -_" else "_" for c in nom_soc).strip() or f"ste_{id_ste}"
+    filename = f"Registre_RH_{safe_soc}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return buf.getvalue(), filename
