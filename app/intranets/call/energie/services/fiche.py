@@ -17,12 +17,16 @@ Phases ulterieures : panier + colonne droite variable selon partenaire,
 save, verrou ope, actions.
 """
 
+import shutil
+import sys
+import traceback
 import urllib.request
 import time as _time_mod
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
+from app.core.config import DOCS_BASE_PATH
 from app.core.database import get_connection
 from app.intranets.call.fibre.services.tickets import (
     _capitalize,
@@ -37,6 +41,7 @@ from app.intranets.call.fibre.services.tickets import (
 # --- Constantes -----------------------------------------------------------
 
 DOC_BASE_URL = "https://rest.omaya.fr/DocOmaya"
+REP_OHM = DOCS_BASE_PATH / "Call_OhmEnergie"
 
 # Agence Power Ohm : si le vendeur est descendant de cette racine, on
 # utilise des credentials portail Ohm Energie differents (admin vs std).
@@ -506,7 +511,87 @@ def save_offre(id_panier: int, payload: dict) -> dict:
     sql = f"""UPDATE TK_Call_Panier SET {', '.join(sets)}
     WHERE IDTK_Call_Panier = {_to_int(id_panier)}"""
     db_bo.query(sql)
+
+    # Cas WinDev OEN : si nouveau statut = 1 ou 3, partenaire OEN et fichier
+    # de clarification existe, copier le PDF dans Call_OhmEnergie avec un nom
+    # base sur la Ref Client (Observations) + DUAL/MONO selon le produit.
+    if "statut_prod" in payload:
+        try:
+            _copy_clarif_to_ohm_if_oen(id_panier, _to_int(payload.get("statut_prod")))
+        except Exception:
+            # Effet de bord : un echec de copie ne doit pas faire echouer le save.
+            traceback.print_exc(file=sys.stderr)
+
     return {"ok": True}
+
+
+_INVALID_FILENAME_CHARS = '<>:"/\\|?*'
+
+def _sanitize_filename(name: str) -> str:
+    """Remplace les caracteres interdits dans un nom de fichier Windows."""
+    cleaned = "".join("_" if c in _INVALID_FILENAME_CHARS else c for c in name)
+    # Strip + max 200 chars pour eviter le path limit Windows
+    return cleaned.strip()[:200] or "sans_nom"
+
+
+def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
+    """Copie le PDF de clarification vers Call_OhmEnergie/<RefClient> (DUAL|MONO).pdf.
+
+    Conditions (transposition WinDev) :
+    - Nouveau statut = 1 (Validee) ou 3 (Validee bureau)
+    - Partenaire de la ligne = "OEN"
+    - Fichier <id_panier>_Clarification.pdf existe dans DOCS_BASE_PATH
+
+    Nom cible : RefClientOen (= TK_Call_Panier.Observations)
+              + " (DUAL)" si Lib_produit contient DUAL
+              + " (MONO <SousFAM>)" sinon
+    Source : OEN_produit (base adv) joint sur IDproduit.
+    """
+    if statut_prod not in (1, 3):
+        return
+
+    src = DOCS_BASE_PATH / f"{id_panier}_Clarification.pdf"
+    if not src.exists():
+        return
+
+    db_bo = get_connection("ticket_bo")
+    rows = db_bo.query(
+        "SELECT Partenaire, IDproduit, Observations FROM TK_Call_Panier "
+        "WHERE IDTK_Call_Panier = ?",
+        (id_panier,),
+    )
+    if not rows:
+        return
+    r = rows[0]
+    if (r.get("Partenaire") or "").upper() != "OEN":
+        return
+
+    ref_client = (r.get("Observations") or "").strip()
+    if not ref_client:
+        return  # Pas de ref client -> pas de nom de fichier coherent
+    id_produit = _to_int(r.get("IDproduit"))
+
+    # Lib_produit + SousFAM via OEN_produit (base adv)
+    lib_produit = ""
+    sous_fam = ""
+    if id_produit:
+        db_adv = get_connection("adv")
+        prod_rows = db_adv.query(
+            "SELECT Lib_produit, SousFAM FROM OEN_produit WHERE IDproduit = ?",
+            (id_produit,),
+        )
+        if prod_rows:
+            lib_produit = (prod_rows[0].get("Lib_produit") or "").strip()
+            sous_fam = (prod_rows[0].get("SousFAM") or "").strip()
+
+    if "DUAL" in lib_produit.upper():
+        new_nom = f"{ref_client} (DUAL)"
+    else:
+        new_nom = f"{ref_client} (MONO {sous_fam})"
+
+    REP_OHM.mkdir(parents=True, exist_ok=True)
+    dst = REP_OHM / f"{_sanitize_filename(new_nom)}.pdf"
+    shutil.copy2(src, dst)
 
 
 # --- Phase 3 : verrou ope + actions panier --------------------------------
