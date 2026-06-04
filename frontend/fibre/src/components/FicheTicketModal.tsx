@@ -714,6 +714,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                     saveOffreAuto({ ...selectedOffre, statut_prod: newStatut })
                   }
                 }}
+                onAskAnnulLigne={() => setAnnulLigneOpen(true)}
                 editVente={editVente!}
                 onVenteChange={(patch) => setEditVente((v) => (v ? { ...v, ...patch } : v))}
                 editAnomalie={editAnomalie!}
@@ -1156,6 +1157,7 @@ function ColonneDroite({
   offre,
   onOffreChange,
   onSaveStatutAuto,
+  onAskAnnulLigne,
   editVente,
   onVenteChange,
   editAnomalie,
@@ -1172,6 +1174,7 @@ function ColonneDroite({
   offre: FicheOffre | null
   onOffreChange: (patch: Partial<FicheOffre>) => void
   onSaveStatutAuto: (newStatut: number) => void
+  onAskAnnulLigne: () => void
   editVente: FicheVente
   onVenteChange: (patch: Partial<FicheVente>) => void
   editAnomalie: FicheAnomalie
@@ -1263,6 +1266,15 @@ function ColonneDroite({
                   value={offre.statut_prod}
                   options={data.statuts_vente.map((s) => ({ v: s.id, l: s.label }))}
                   onChange={(v) => {
+                    // Cas WinDev : statut = 2 (Annulee) -> ouvre la popup motif
+                    // d'annulation au lieu de sauver directement. Le statut sera
+                    // bascule par l'action "Annul ligne panier" complete (motifs +
+                    // precisions). Le SelectField revient visuellement a l'ancienne
+                    // valeur car on ne modifie pas offre.statut_prod.
+                    if (v === 2) {
+                      onAskAnnulLigne()
+                      return
+                    }
                     onOffreChange({ statut_prod: v })
                     onSaveStatutAuto(v)
                   }}
