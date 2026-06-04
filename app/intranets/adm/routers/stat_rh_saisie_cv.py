@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+import sys
+import traceback
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -36,9 +39,13 @@ def get_stats_saisie_cv(
         else:
             op_filter = user.id_salarie
 
-    return calculer_stats_saisie_cv(
-        date_debut=date_du,
-        date_fin=date_au,
-        type_recherche=type_recherche,
-        id_ope_filter=op_filter,
-    )
+    try:
+        return calculer_stats_saisie_cv(
+            date_debut=date_du,
+            date_fin=date_au,
+            type_recherche=type_recherche,
+            id_ope_filter=op_filter,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

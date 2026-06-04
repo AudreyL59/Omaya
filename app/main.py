@@ -1,6 +1,12 @@
+import sys
+import traceback
+
 import anyio
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import APP_NAME, APP_VERSION, CORS_ORIGINS
 from app.core.auth.router import router as auth_router
@@ -35,6 +41,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(_: Request, exc: Exception):
+    """Capture toutes les exceptions non-traitees pour exposer un detail JSON
+    cote client (au lieu d'un 500 vide). HTTPException reste gere par FastAPI."""
+    # Si c'est deja une HTTPException, la laisser passer au handler natif
+    if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
+        raise exc
+    traceback.print_exc(file=sys.stderr)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
 
 app.include_router(auth_router)
 app.include_router(vendeur_router)
