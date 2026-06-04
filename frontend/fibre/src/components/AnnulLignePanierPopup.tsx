@@ -2,7 +2,7 @@
  * Popup d'annulation d'une ligne du panier (transposition Popup1 WinDev).
  *
  * 5 motifs hardcodes cochables + zone texte libre.
- * Au moins 1 motif requis (alert sinon).
+ * Au moins 1 motif coche OU des informations complementaires requis.
  */
 
 import { useEffect, useState } from 'react'
@@ -40,8 +40,9 @@ export default function AnnulLignePanierPopup({ open, loading, onCancel, onConfi
 
   const handleConfirm = () => {
     const motifs = MOTIFS.filter((_, i) => checked[i])
-    if (motifs.length === 0) {
-      setErrorMsg("Merci d'ajouter au moins un motif d'annulation")
+    // Un motif coché OU des informations complémentaires suffisent.
+    if (motifs.length === 0 && !precisions.trim()) {
+      setErrorMsg("Merci de cocher un motif ou de remplir les informations complémentaires")
       return
     }
     onConfirm(motifs, precisions)
@@ -86,7 +87,10 @@ export default function AnnulLignePanierPopup({ open, loading, onCancel, onConfi
               <label className="text-sm font-medium text-c-ink">Informations complémentaires :</label>
               <textarea
                 value={precisions}
-                onChange={(e) => setPrecisions(e.target.value)}
+                onChange={(e) => {
+                  setPrecisions(e.target.value)
+                  if (e.target.value.trim()) setErrorMsg('')
+                }}
                 rows={3}
                 className="w-full px-2 py-1.5 border border-c-line rounded text-sm bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none resize-none"
               />

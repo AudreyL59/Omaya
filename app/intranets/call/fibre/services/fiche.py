@@ -761,13 +761,18 @@ def _format_nom_client_sms(nom: str, nom_marital: str, prenom: str) -> str:
 def annuler_ligne_panier(id_panier: int, motifs: list[str], precisions: str) -> dict:
     """UPDATE TK_CallSFR_Panier : StatutProd=2 + MotifAnnulation (concat).
 
-    Transposition Popup1. Au moins 1 motif requis (sinon renvoie 400).
+    Transposition Popup1. Au moins 1 motif coche OU des informations
+    complementaires requis (sinon renvoie 400).
     """
-    if not motifs:
-        return {"error": "Merci d'ajouter un motif d'annulation"}
-    motif_str = "Motif(s) d'annulation :\n" + "\n".join(f"  - {m}" for m in motifs)
-    if (precisions or "").strip():
-        motif_str += f"\nInformations complementaires:\n{precisions.strip()}"
+    has_precisions = bool((precisions or "").strip())
+    if not motifs and not has_precisions:
+        return {"error": "Merci d'ajouter un motif ou des informations complementaires"}
+    parts = []
+    if motifs:
+        parts.append("Motif(s) d'annulation :\n" + "\n".join(f"  - {m}" for m in motifs))
+    if has_precisions:
+        parts.append(f"Informations complementaires:\n{precisions.strip()}")
+    motif_str = "\n".join(parts)
     db_bo = get_connection("ticket_bo")
     now_wd = _sql_now()
     db_bo.query(
