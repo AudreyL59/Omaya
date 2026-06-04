@@ -144,6 +144,38 @@ interface Props {
   onAfterAction?: () => void   // callback pour refresh la liste apres action panier
 }
 
+// --- Historique de saisie "Réf Appel" (local au poste, localStorage) -----
+// Mémorise les valeurs déjà saisies/rencontrées sur ce navigateur pour les
+// proposer en autocomplétion (datalist). Non partagé entre postes.
+const REF_APPEL_HISTORY_KEY = 'cf_ref_appel_history'
+const REF_APPEL_HISTORY_MAX = 50
+
+function loadRefAppelHistory(): string[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(REF_APPEL_HISTORY_KEY) || '[]')
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function pushRefAppelHistory(value: string): string[] {
+  const v = (value || '').trim()
+  const cur = loadRefAppelHistory()
+  if (!v) return cur
+  // Dédoublonnage insensible à la casse, plus récent en tête, plafonné.
+  const next = [v, ...cur.filter((x) => x.toLowerCase() !== v.toLowerCase())].slice(
+    0,
+    REF_APPEL_HISTORY_MAX,
+  )
+  try {
+    localStorage.setItem(REF_APPEL_HISTORY_KEY, JSON.stringify(next))
+  } catch {
+    /* quota/private mode : on ignore */
+  }
+  return next
+}
+
 export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: Props) {
   const [data, setData] = useState<FicheData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -169,6 +201,8 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
   const [actionDialog, setActionDialog] = useState<null | 'valider' | 'annulVente' | 'renvoi'>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [annulLigneOpen, setAnnulLigneOpen] = useState(false)
+  // Historique de saisie Réf Appel (local au poste)
+  const [refAppelHistory, setRefAppelHistory] = useState<string[]>(() => loadRefAppelHistory())
 
   // Fetch fiche
   useEffect(() => {
@@ -203,6 +237,8 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
         setEditClient({ ...d.client })
         setEditVente({ ...d.vente })
         setEditAnomalie({ ...d.anomalie })
+        // Mémorise la Réf Appel rencontrée pour l'autocomplétion future
+        if (d.vente?.ref_appel) setRefAppelHistory(pushRefAppelHistory(d.vente.ref_appel))
         const offresMap: Record<string, FicheOffre> = {}
         for (const o of d.panier) offresMap[o.id] = { ...o }
         setEditOffres(offresMap)
@@ -340,6 +376,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
         return
       }
       setToast({ kind: 'ok', msg: 'Informations client et vente enregistrées' })
+      setRefAppelHistory(pushRefAppelHistory(editVente.ref_appel))
     } catch (e) {
       setToast({ kind: 'err', msg: 'Erreur réseau' })
     } finally {
@@ -593,6 +630,10 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
             ? 'Vente annulée'
             : 'Panier renvoyé pour complément'
       setToast({ kind: 'ok', msg })
+      // valider/annuler envoient la Réf Appel -> on la mémorise
+      if (actionDialog !== 'renvoi' && editVente?.ref_appel) {
+        pushRefAppelHistory(editVente.ref_appel)
+      }
       setActionDialog(null)
       onAfterAction?.()
       onClose()
@@ -702,6 +743,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 verrouLoading={verrouLoading}
                 onPrendreAppel={() => handlePrendreAppel(false)}
                 onLacherAppel={handleLacherAppel}
+                refAppelHistory={refAppelHistory}
               />
               <ColonneDroite
                 data={data}
@@ -971,6 +1013,7 @@ function ColonneCentre({
   verrouLoading,
   onPrendreAppel,
   onLacherAppel,
+  refAppelHistory,
 }: {
   data: FicheData
   editOffres: Record<string, FicheOffre>
@@ -985,6 +1028,7 @@ function ColonneCentre({
   verrouLoading: boolean
   onPrendreAppel: () => void
   onLacherAppel: () => void
+  refAppelHistory: string[]
 }) {
   const v = data.vendeur
   // Compteurs recalcules en live depuis editOffres (les statuts ont pu changer)
@@ -1103,8 +1147,15 @@ function ColonneCentre({
             type="text"
             value={editVente.ref_appel}
             onChange={(e) => onVenteChange({ ref_appel: e.target.value })}
+            list="cf-ref-appel-history"
+            autoComplete="off"
             className="px-2 py-1 border border-c-line rounded text-xs bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none"
           />
+          <datalist id="cf-ref-appel-history">
+            {refAppelHistory.map((ref) => (
+              <option key={ref} value={ref} />
+            ))}
+          </datalist>
         </div>
       </div>
 
