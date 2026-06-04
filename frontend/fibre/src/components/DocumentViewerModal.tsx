@@ -26,12 +26,14 @@ export default function DocumentViewerModal({ open, title, url, kind, onClose }:
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          onClick={onClose}
           className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
+            onClick={(e) => e.stopPropagation()}
             className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden"
           >
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-c-line">

@@ -687,9 +687,6 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 kbisAvailable={!!docKbis.url}
                 onOpenCin={() => setViewerOpen('cin')}
                 onOpenKbis={() => setViewerOpen('kbis')}
-                verrouLoading={verrouLoading}
-                onPrendreAppel={() => handlePrendreAppel(false)}
-                onLacherAppel={handleLacherAppel}
               />
               <ColonneCentre
                 data={data}
@@ -702,6 +699,9 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 onAskValider={() => setActionDialog('valider')}
                 onAskAnnulVente={() => setActionDialog('annulVente')}
                 onAskRenvoi={() => setActionDialog('renvoi')}
+                verrouLoading={verrouLoading}
+                onPrendreAppel={() => handlePrendreAppel(false)}
+                onLacherAppel={handleLacherAppel}
               />
               <ColonneDroite
                 data={data}
@@ -813,7 +813,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
   )
 }
 
-// --- Colonne gauche : Client + Vendeur -----------------------------------
+// --- Colonne gauche : Client --------------------------------------------
 
 function ColonneGauche({
   data,
@@ -823,9 +823,6 @@ function ColonneGauche({
   kbisAvailable,
   onOpenCin,
   onOpenKbis,
-  verrouLoading,
-  onPrendreAppel,
-  onLacherAppel,
 }: {
   data: FicheData
   client: FicheClient
@@ -834,12 +831,8 @@ function ColonneGauche({
   kbisAvailable: boolean
   onOpenCin: () => void
   onOpenKbis: () => void
-  verrouLoading: boolean
-  onPrendreAppel: () => void
-  onLacherAppel: () => void
 }) {
   const c = client
-  const v = data.vendeur
   return (
     <div className="col-span-4 flex flex-col gap-4">
       {/* Bloc client */}
@@ -958,52 +951,6 @@ function ColonneGauche({
           )}
         </div>
       </div>
-
-      {/* Bloc vendeur */}
-      <div className="bg-white rounded-lg border border-c-line p-4">
-        <h3 className="text-sm font-bold text-c-ink mb-3">Information Vendeur</h3>
-        <div className="space-y-2.5 text-xs">
-          <Field label="Nom" value={v.nom} />
-          <Field label="Prénom" value={v.prenom} />
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
-            </div>
-            {data.is_my_call ? (
-              <button
-                onClick={onLacherAppel}
-                disabled={verrouLoading}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-red-600 bg-red-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
-                title="Raccrocher / libérer le verrou"
-              >
-                {verrouLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <PhoneOff className="w-3.5 h-3.5" />
-                )}
-                Lâcher l'appel
-              </button>
-            ) : (
-              <button
-                onClick={onPrendreAppel}
-                disabled={verrouLoading}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-green-600 bg-green-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
-                title="Démarrer l'appel (pose le verrou, démasque les mobiles, envoie un SMS au vendeur)"
-              >
-                {verrouLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Phone className="w-3.5 h-3.5" />
-                )}
-                Démarrer l'appel
-              </button>
-            )}
-          </div>
-          {v.lib_affectation && (
-            <div className="text-[10px] text-c-ink-faint mt-1">{v.lib_affectation}</div>
-          )}
-        </div>
-      </div>
     </div>
   )
 }
@@ -1021,6 +968,9 @@ function ColonneCentre({
   onAskValider,
   onAskAnnulVente,
   onAskRenvoi,
+  verrouLoading,
+  onPrendreAppel,
+  onLacherAppel,
 }: {
   data: FicheData
   editOffres: Record<string, FicheOffre>
@@ -1032,7 +982,11 @@ function ColonneCentre({
   onAskValider: () => void
   onAskAnnulVente: () => void
   onAskRenvoi: () => void
+  verrouLoading: boolean
+  onPrendreAppel: () => void
+  onLacherAppel: () => void
 }) {
+  const v = data.vendeur
   // Compteurs recalcules en live depuis editOffres (les statuts ont pu changer)
   const offresList = data.panier.map((p) => editOffres[p.id] || p)
   const nbValide = offresList.filter((o) => o.statut_prod === 1).length
@@ -1081,6 +1035,52 @@ function ColonneCentre({
                 </div>
               )
             })
+          )}
+        </div>
+      </div>
+
+      {/* Bloc vendeur (sous le panier) */}
+      <div className="bg-white rounded-lg border border-c-line p-4">
+        <h3 className="text-sm font-bold text-c-ink mb-3">Information Vendeur</h3>
+        <div className="space-y-2.5 text-xs">
+          <Field label="Nom" value={v.nom} />
+          <Field label="Prénom" value={v.prenom} />
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
+            </div>
+            {data.is_my_call ? (
+              <button
+                onClick={onLacherAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-red-600 bg-red-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Raccrocher / libérer le verrou"
+              >
+                {verrouLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <PhoneOff className="w-3.5 h-3.5" />
+                )}
+                Lâcher l'appel
+              </button>
+            ) : (
+              <button
+                onClick={onPrendreAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-green-600 bg-green-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Démarrer l'appel (pose le verrou, démasque les mobiles, envoie un SMS au vendeur)"
+              >
+                {verrouLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Phone className="w-3.5 h-3.5" />
+                )}
+                Démarrer l'appel
+              </button>
+            )}
+          </div>
+          {v.lib_affectation && (
+            <div className="text-[10px] text-c-ink-faint mt-1">{v.lib_affectation}</div>
           )}
         </div>
       </div>
