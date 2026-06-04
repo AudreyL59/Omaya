@@ -93,6 +93,9 @@ interface FicheOffre {
   motif_annulation: string
   num_bs: string
   num_date_saisie: string
+  // OEN
+  date_activ: string
+  ref_client_oen: string
 }
 
 interface StatutVenteOption {
@@ -472,6 +475,8 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
         opt_energie_verte_gaz: offre.opt_energie_verte_gaz,
         opt_reforestation: offre.opt_reforestation,
         opt_mail: offre.opt_mail,
+        date_activ: offre.date_activ,
+        ref_client_oen: offre.ref_client_oen,
       }
       const r = await fetch(`${API_BASE}/tickets/panier/${offre.id}/save-offre`, {
         method: 'POST',
@@ -1116,6 +1121,20 @@ function PartenaireBlock({
             <ScrollText className="w-3.5 h-3.5" />
             {clarifAvailable ? 'Fiche de clarification' : 'Pas de fiche de clarification'}
           </button>
+          {/* Date Activ + Ref Client OEN */}
+          <div className="grid grid-cols-2 gap-2">
+            <Field
+              label="Date Activ"
+              type="date"
+              value={offre.date_activ}
+              onChange={(v) => onOffreChange({ date_activ: v })}
+            />
+            <Field
+              label="Ref Client"
+              value={offre.ref_client_oen}
+              onChange={(v) => onOffreChange({ ref_client_oen: v })}
+            />
+          </div>
         </>
       )}
 

@@ -70,6 +70,9 @@ class FicheOffreEnergie(BaseModel):
     motif_annulation: str
     num_bs: str
     num_date_saisie: str
+    # OEN : Date Activ + Ref Client (stockes dans DateEntrée + Observations)
+    date_activ: str = ""
+    ref_client_oen: str = ""
 
 
 class StatutVenteOption(BaseModel):
@@ -164,6 +167,9 @@ class SaveOffreRequest(BaseModel):
     opt_energie_verte_gaz: bool | None = None
     opt_reforestation: bool | None = None
     opt_mail: bool | None = None
+    # OEN
+    date_activ: str | None = None
+    ref_client_oen: str | None = None
 
 
 class SaveResponse(BaseModel):

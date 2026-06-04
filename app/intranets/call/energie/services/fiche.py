@@ -223,6 +223,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
                 OPT_Mail, Opt_Mandat, FormatNumérique,
                 OPT_AcceptComParte, OPT_ConsentConsultDistri, Opt_Maintenance,
                 OPT_eCommunication, OPT_eFacture, OPT_optinCommercial,
+                DateEntrée, Observations,
                 MotifAnnulation, StatutProd, NumBS, Num_DateSaisie
             FROM TK_Call_Panier
             WHERE IDtk_Call = ?
@@ -274,6 +275,9 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
             "motif_annulation": (p.get("MotifAnnulation") or "").strip(),
             "num_bs": (p.get("NumBS") or "").strip(),
             "num_date_saisie": _iso(p.get("Num_DateSaisie")),
+            # OEN : "Date Activ" = DateEntrée (Date), "Ref Client" = Observations (memo texte)
+            "date_activ": _iso_date(p.get("DateEntrée")),
+            "ref_client_oen": (p.get("Observations") or "").strip(),
         })
 
     # Credentials portail Ohm Energie (cf. code WinDev) : si le vendeur est
@@ -492,6 +496,12 @@ def save_offre(id_panier: int, payload: dict) -> dict:
         sets.append(f"OPT_Reforestation = {_sql_bool(payload.get('opt_reforestation'))}")
     if "opt_mail" in payload:
         sets.append(f"OPT_Mail = {_sql_bool(payload.get('opt_mail'))}")
+    if "date_activ" in payload:
+        # DateEntrée (champ Date) -> compact YYYYMMDD
+        d = _date_to_compact(payload.get('date_activ'))
+        sets.append(f"DateEntrée = '{d}'")
+    if "ref_client_oen" in payload:
+        sets.append(f"Observations = '{_sql_str(payload.get('ref_client_oen'))}'")
 
     sql = f"""UPDATE TK_Call_Panier SET {', '.join(sets)}
     WHERE IDTK_Call_Panier = {_to_int(id_panier)}"""
