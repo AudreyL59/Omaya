@@ -1,0 +1,88 @@
+"""Endpoints REST de la Fiche Salarie ADM."""
+
+import sys
+import traceback
+
+from fastapi import APIRouter, Depends, HTTPException, Path
+
+from app.core.auth.dependencies import get_current_user
+from app.core.auth.schemas import UserToken
+from app.intranets.adm.schemas.fiche_salarie import (
+    FicheHeader,
+    FicheIdentite,
+    SaveIdentitePayload,
+    SaveResponse,
+    ToggleStatusPayload,
+)
+from app.intranets.adm.services import fiche_salarie as svc
+
+router = APIRouter(prefix="/fiche-salarie", tags=["adm-fiche-salarie"])
+
+
+@router.get("/{id_salarie}/header", response_model=FicheHeader)
+def get_header(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
+    try:
+        data = svc.load_header(id_salarie)
+        if not data:
+            raise HTTPException(status_code=404, detail="Salarie introuvable")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/identite", response_model=FicheIdentite)
+def get_identite(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
+    try:
+        data = svc.load_identite(id_salarie)
+        if not data:
+            raise HTTPException(status_code=404, detail="Salarie introuvable")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/identite", response_model=SaveResponse)
+def save_identite(
+    payload: SaveIdentitePayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        # On filtre les champs non fournis pour ne PAS ecraser avec None
+        body = payload.model_dump(exclude_unset=True)
+        return svc.save_identite(id_salarie, body)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/actif", response_model=SaveResponse)
+def toggle_actif(
+    payload: ToggleStatusPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return svc.set_en_activite(id_salarie, payload.value)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/en-pause", response_model=SaveResponse)
+def toggle_en_pause(
+    payload: ToggleStatusPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return svc.set_en_pause(id_salarie, payload.value)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

@@ -10,6 +10,7 @@ import StatRHAnnonceursPage from '@/pages/StatRHAnnonceursPage'
 import AgendaRecrutementPage from '@/pages/AgendaRecrutementPage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
 import RegistreRHPage from '@/pages/RegistreRHPage'
+import FicheSalariePage from '@/pages/FicheSalariePage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import TicketsPage from '@shared/tickets/TicketsPage'
@@ -49,6 +50,7 @@ function App() {
           <Route path="stat-adv" element={<PlaceholderPage />} />
           <Route path="organigramme" element={<OrganigrammePage />} />
           <Route path="salaries/registre" element={<RegistreRHPage />} />
+          <Route path="salaries/fiche/:idSalarie" element={<FicheSalariePage />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<TicketsPage apiBase={ADM_API} getToken={getToken} />} />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Loader2, AlertCircle, ExternalLink, FileText, FileSpreadsheet } from 'lucide-react'
 import { getToken } from '@/api'
-import FicheSalarieModal from '@/components/FicheSalarieModal'
 
 // --- Types ---------------------------------------------------------------
 
@@ -82,6 +82,7 @@ function refLabel(refs: RefOption[], id: number): string {
 // --- Page ----------------------------------------------------------------
 
 export default function RegistreRHPage() {
+  const navigate = useNavigate()
   const [societes, setSocietes] = useState<SocieteOption[]>([])
   const [refs, setRefs] = useState<RegistreRefs | null>(null)
   const [selectedSte, setSelectedSte] = useState<string>('')
@@ -91,7 +92,6 @@ export default function RegistreRHPage() {
   const [loadingList, setLoadingList] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string>('')
-  const [ficheOpen, setFicheOpen] = useState(false)
 
   // Charge societes + refs en parallele au mount
   useEffect(() => {
@@ -151,6 +151,8 @@ export default function RegistreRHPage() {
     () => salaries.find((s) => s.id_salarie === selectedId) || null,
     [salaries, selectedId],
   )
+
+  const openFiche = (id: string) => navigate(`/salaries/fiche/${id}`)
 
   // Export Excel : telecharge le .xlsx genere par le backend
   const handleExport = async () => {
@@ -230,9 +232,9 @@ export default function RegistreRHPage() {
           Exporter Excel
         </button>
 
-        {/* Bouton "Voir Fiche Salarie" */}
+        {/* Bouton "Voir Fiche Salarie" - navigue vers la page complete */}
         <button
-          onClick={() => selectedId && setFicheOpen(true)}
+          onClick={() => selectedSalarie && openFiche(selectedSalarie.id_salarie)}
           disabled={!selectedSalarie}
           className="flex items-center gap-2 px-3 py-1.5 border border-c-brand text-c-brand rounded text-sm hover:bg-c-brand-soft disabled:opacity-40 disabled:cursor-not-allowed"
         >
@@ -297,10 +299,7 @@ export default function RegistreRHPage() {
                   <tr
                     key={s.id_salarie}
                     onClick={() => setSelectedId(s.id_salarie)}
-                    onDoubleClick={() => {
-                      setSelectedId(s.id_salarie)
-                      setFicheOpen(true)
-                    }}
+                    onDoubleClick={() => openFiche(s.id_salarie)}
                     className={`border-b border-c-line-soft cursor-pointer transition ${
                       isSelected ? 'bg-c-brand-soft' : 'hover:bg-c-bg-soft'
                     }`}
@@ -351,15 +350,6 @@ export default function RegistreRHPage() {
         </div>
       )}
 
-      {/* Modale Fiche Salarie */}
-      {ficheOpen && selectedSalarie && (
-        <FicheSalarieModal
-          idSalarie={selectedSalarie.id_salarie}
-          nom={selectedSalarie.nom}
-          prenom={selectedSalarie.prenom}
-          onClose={() => setFicheOpen(false)}
-        />
-      )}
     </div>
   )
 }
