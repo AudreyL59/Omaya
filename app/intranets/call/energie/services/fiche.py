@@ -221,7 +221,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
                 IDTK_Call_Panier, IDproduit, Partenaire,
                 OPT_EnergieVerteElec, OPT_Reforestation, OPT_EnergieVerteGaz,
                 OPT_Mail, Opt_Mandat, FormatNumérique,
-                OPT_AcceptComParte, OPT_ConsentConsultDistri,
+                OPT_AcceptComParte, OPT_ConsentConsultDistri, Opt_Maintenance,
                 OPT_eCommunication, OPT_eFacture, OPT_optinCommercial,
                 MotifAnnulation, StatutProd, NumBS, Num_DateSaisie
             FROM TK_Call_Panier
@@ -262,7 +262,8 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
             "opt_mail": _bool(p.get("OPT_Mail")),
             "opt_mandat": _bool(p.get("Opt_Mandat")),
             "format_numerique": _bool(p.get("FormatNumérique")),
-            # Options VAL (Valoris)
+            # Options ENI (Engie) : PLENICOACH DEPANNAGE PREMIUM + AcceptComParte + ConsentConsultDistri
+            "opt_maintenance": _bool(p.get("Opt_Maintenance")),
             "opt_accept_com_parte": _bool(p.get("OPT_AcceptComParte")),
             "opt_consent_consult_distri": _bool(p.get("OPT_ConsentConsultDistri")),
             # Autres options
@@ -469,6 +470,8 @@ def save_offre(id_panier: int, payload: dict) -> dict:
             sets.append(f"Num_DateSaisie = '{now_wd}'")
     if "opt_mandat" in payload:
         sets.append(f"Opt_Mandat = {_sql_bool(payload.get('opt_mandat'))}")
+    if "opt_maintenance" in payload:
+        sets.append(f"Opt_Maintenance = {_sql_bool(payload.get('opt_maintenance'))}")
     if "format_numerique" in payload:
         sets.append(f"FormatNumérique = {_sql_bool(payload.get('format_numerique'))}")
     if "opt_accept_com_parte" in payload:

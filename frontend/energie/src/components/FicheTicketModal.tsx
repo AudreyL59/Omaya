@@ -82,6 +82,7 @@ interface FicheOffre {
   opt_mail: boolean
   opt_mandat: boolean
   format_numerique: boolean
+  opt_maintenance: boolean
   opt_accept_com_parte: boolean
   opt_consent_consult_distri: boolean
   opt_e_communication: boolean
@@ -461,6 +462,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
         num_bs: offre.num_bs,
         opt_mandat: offre.opt_mandat,
         format_numerique: offre.format_numerique,
+        opt_maintenance: offre.opt_maintenance,
         opt_accept_com_parte: offre.opt_accept_com_parte,
         opt_consent_consult_distri: offre.opt_consent_consult_distri,
         opt_e_communication: offre.opt_e_communication,
@@ -1133,18 +1135,16 @@ function PartenaireBlock({
         />
       )}
       {p === 'ENI' && (
-        <CheckboxField
-          label="Mandat"
-          checked={offre.opt_mandat}
-          onChange={(v) => onOffreChange({ opt_mandat: v })}
-        />
-      )}
-      {p === 'VAL' && (
         <div className="space-y-2">
           <CheckboxField
+            label="Mandat"
+            checked={offre.opt_mandat}
+            onChange={(v) => onOffreChange({ opt_mandat: v })}
+          />
+          <CheckboxField
             label="PLENICOACH DEPANNAGE PREMIUM"
-            checked={offre.opt_optin_commercial}
-            onChange={(v) => onOffreChange({ opt_optin_commercial: v })}
+            checked={offre.opt_maintenance}
+            onChange={(v) => onOffreChange({ opt_maintenance: v })}
           />
           <CheckboxField
             label="Acceptation Commerciales Partenaires"

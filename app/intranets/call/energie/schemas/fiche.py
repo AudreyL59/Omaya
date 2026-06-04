@@ -57,9 +57,10 @@ class FicheOffreEnergie(BaseModel):
     opt_mail: bool
     opt_mandat: bool               # ENI : checkbox "Mandat"
     format_numerique: bool         # PRO : checkbox "Format numérique"
-    # Options VAL (Valoris)
-    opt_accept_com_parte: bool
-    opt_consent_consult_distri: bool
+    # Options ENI (Engie) :
+    opt_maintenance: bool          # PLENICOACH DEPANNAGE PREMIUM
+    opt_accept_com_parte: bool     # Acceptation Commerciales Partenaires
+    opt_consent_consult_distri: bool  # Consentement consultation distributeurs
     # Autres options
     opt_e_communication: bool
     opt_e_facture: bool
@@ -153,6 +154,7 @@ class SaveOffreRequest(BaseModel):
     num_bs: str | None = None
     opt_mandat: bool | None = None
     format_numerique: bool | None = None
+    opt_maintenance: bool | None = None
     opt_accept_com_parte: bool | None = None
     opt_consent_consult_distri: bool | None = None
     opt_e_communication: bool | None = None
