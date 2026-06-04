@@ -161,7 +161,7 @@ def get_menu(user: UserToken = Depends(get_current_user)):
             "label": "Salariés",
             "section_droit": "Menu_Salariés",
             "items": [
-                {"key": "registre_rh",       "label": "Registre RH",              "route": "/salaries/registre",       "icon":"book",           "droit": "RegistreRH"},
+                {"key": "registre_rh",       "label": "Registre RH",              "route": "/salaries/registre",       "icon":"book",           "droit": None},
                 {"key": "dpae",              "label": "Nouvelle DPAE",            "route": "/salaries/dpae",           "icon":"user-plus",      "droit": "NewDPAE"},
                 {"key": "ctt_travail",       "label": "Liste des contrats de travail","route":"/salaries/contrats",   "icon":"file-signature", "droit": "CttW"},
                 {"key": "formations_iag",    "label": "Suivi des formations IAG", "route": "/salaries/formations-iag", "icon":"graduation-cap", "droit": "impFormIAG"},
