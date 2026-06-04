@@ -119,7 +119,6 @@ fin
 // Récupérer les rubriques : noms simples + détail pour les types
 sListeRubSimple est une chaîne = HListeRubrique(MaRequête, hLstTout)
 sListeRubDetail est une chaîne = HListeRubrique(MaRequête, hLstDétail + hLstTout)
-fSauveTexte("D:\debug_rub.txt", "SIMPLE:" + RC + sListeRubSimple + RC + RC + "DETAIL:" + RC + sListeRubDetail)
 
 // Construire un tableau associatif nom -> type
 tabTypes est un tableau associatif de chaînes

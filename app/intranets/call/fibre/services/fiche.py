@@ -24,6 +24,7 @@ from app.intranets.call.fibre.services.tickets import (
     _format_nom_client,
     _format_ville,
     _iso,
+    _load_offres_ref,
     _str_id,
     _to_int,
 )
@@ -180,14 +181,16 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
 
     Perf : on parallelise les queries independantes (chaque query HFSQL
     spawn un subprocess Dll_ODBC.exe + bloque le thread Python ~150ms).
-    En sequentiel : ~5 queries x 150ms = 750ms. Avec 2 vagues paralleles :
-    ~300ms.
+    On tient en 2 vagues paralleles (~2 x 150ms ~= 300ms) :
+    - Vague 1 : TK_Liste + TK_CallSFR + referentiels caches (motifs, offres)
+    - Vague 2 : Panier + Salarie + Salarie_Coordonnees (3 queries paralleles)
+    Le referentiel SFR_OffresProvad est mis en cache -> plus de 3e vague
+    (avant : l'offre lib_offre etait une requete sequentielle apres la vague 2).
     """
     from concurrent.futures import ThreadPoolExecutor
     db_ticket = get_connection("ticket")
     db_bo = get_connection("ticket_bo")
     db_rh = get_connection("rh")
-    db_adv = get_connection("adv")
 
     # Vague 1 : TK_Liste + TK_CallSFR en parallele (2 queries, bases differentes)
     sql_liste = """SELECT
@@ -212,16 +215,18 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         FROM TK_CallSFR
         WHERE IDTK_Liste = ?
           AND ModifELEM NOT LIKE '%suppr%'"""
-    # Vague 1 : TK_Liste + TK_CallSFR + motifs_anomalie (referentiel) en parallele.
-    # Le referentiel est mis en cache (10min) donc le 1er appel paie ~150ms,
-    # les suivants sont instantanes.
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    # Vague 1 : TK_Liste + TK_CallSFR + referentiels (motifs, offres) en parallele.
+    # Les referentiels sont mis en cache (10min) donc le 1er appel paie ~150ms,
+    # les suivants sont instantanes (pas de subprocess).
+    with ThreadPoolExecutor(max_workers=4) as pool:
         f_liste = pool.submit(db_ticket.query, sql_liste, (id_tk_liste,))
         f_call = pool.submit(db_bo.query, sql_call, (id_tk_liste,))
         f_motifs = pool.submit(_load_motifs_anomalie)
+        f_offres = pool.submit(_load_offres_ref)
         rows_liste = f_liste.result()
         rows_call = f_call.result()
         motifs_anomalie = f_motifs.result()
+        offre_libs = f_offres.result()
     if not rows_liste:
         return {"error": "Ticket introuvable"}
     tk_liste = rows_liste[0]
@@ -246,7 +251,9 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     mobile2 = mobile2_raw if is_my_call else _mask_phone(mobile2_raw)
 
     # Vague 2 : Salarie + Salarie_Coordonnees + Panier en parallele (3 queries,
-    # 2 bases differentes). Toutes independantes -> ThreadPoolExecutor max 3.
+    # 2 bases differentes). Toutes independantes -> 1 seul round-trip.
+    # NB : pas de JOIN SQL (le bridge encapsule chaque source dans un sous-objet
+    # JSON -> on joint en Python, comme partout dans le code).
     nom_vend = ""
     prenom_vend = ""
     gsm_vend_raw = ""
@@ -278,18 +285,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     if rows_coord:
         gsm_vend_raw = (rows_coord[0].get("TélMob") or "").strip()
     gsm_vend = gsm_vend_raw if is_my_call else _mask_phone(gsm_vend_raw)
-    # Lib_Offre via SFR_OffresProvad (base adv)
-    offre_ids = {_to_int(p.get("IDOffres_SFR")) for p in rows_panier}
-    offre_ids.discard(0)
-    offre_libs: dict[int, str] = {}
-    if offre_ids:
-        oids_sql = ",".join(str(i) for i in offre_ids)
-        rows_off = db_adv.query(
-            f"""SELECT IDOffres_SFR, Lib_Offre FROM SFR_OffresProvad
-            WHERE IDOffres_SFR IN ({oids_sql})"""
-        )
-        for o in rows_off:
-            offre_libs[_to_int(o.get("IDOffres_SFR"))] = (o.get("Lib_Offre") or "").strip()
+    # Lib_Offre via le referentiel SFR_OffresProvad mis en cache (vague 1).
 
     panier = []
     for p in rows_panier:

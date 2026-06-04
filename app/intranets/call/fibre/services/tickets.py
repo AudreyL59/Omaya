@@ -660,18 +660,9 @@ def list_tickets_traites(jour: str | None = None) -> list[dict]:
         salaries = f_sal.result()
         affectations = f_aff.result()
     if id_calls and rows_p:
-        # Lib_Offre via SFR_OffresProvad (cross-base avec ticket_bo donc 2e query)
-        offre_ids = {_to_int(p.get("IDOffres_SFR")) for p in rows_p}
-        offre_ids.discard(0)
-        offre_libs: dict[int, str] = {}
-        if offre_ids:
-            oids = ",".join(str(i) for i in offre_ids)
-            rows_off = db_adv.query(
-                f"""SELECT IDOffres_SFR, Lib_Offre FROM SFR_OffresProvad
-                WHERE IDOffres_SFR IN ({oids})"""
-            )
-            for o in rows_off:
-                offre_libs[_to_int(o.get("IDOffres_SFR"))] = (o.get("Lib_Offre") or "").strip()
+        # Lib_Offre via le referentiel SFR_OffresProvad mis en cache (10min) :
+        # plus de requete par page (avant : 1 SELECT ... IN sequentiel ici).
+        offre_libs = _load_offres_ref()
         for p in rows_p:
             id_call = _to_int(p.get("IDtk_CallSFR"))
             paniers.setdefault(id_call, []).append({
@@ -869,6 +860,34 @@ _ORGA_CACHE_TTL = 300.0  # 5 minutes
 _TK_STATUT_CACHE: dict[int, str] | None = None
 _TK_STATUT_CACHE_AT: float = 0.0
 _TK_STATUT_CACHE_TTL = 600.0  # 10 minutes
+
+# Cache module : referentiel SFR_OffresProvad (IDOffres_SFR -> Lib_Offre).
+# Le referentiel des offres change rarement -> on charge toute la table une
+# fois (TTL 10min) au lieu d'un SELECT ... IN (...) a chaque page/fiche.
+# Supprime une requete HFSQL (= un spawn de subprocess) cote fiche ET liste.
+_OFFRES_REF_CACHE: dict[int, str] | None = None
+_OFFRES_REF_AT: float = 0.0
+_OFFRES_REF_TTL = 600.0  # 10 minutes
+
+
+def _load_offres_ref() -> dict[int, str]:
+    """Charge le referentiel SFR_OffresProvad (base adv) : {id: lib}.
+
+    Cache 10min. Le 1er appel paie ~150ms, les suivants sont instantanes.
+    Partage par la fiche (services/fiche.py) et la liste des traites.
+    """
+    global _OFFRES_REF_CACHE, _OFFRES_REF_AT
+    now = time.monotonic()
+    if _OFFRES_REF_CACHE is not None and now - _OFFRES_REF_AT < _OFFRES_REF_TTL:
+        return _OFFRES_REF_CACHE
+    db_adv = get_connection("adv")
+    rows = db_adv.query("SELECT IDOffres_SFR, Lib_Offre FROM SFR_OffresProvad")
+    _OFFRES_REF_CACHE = {
+        _to_int(r.get("IDOffres_SFR")): (r.get("Lib_Offre") or "").strip()
+        for r in rows
+    }
+    _OFFRES_REF_AT = now
+    return _OFFRES_REF_CACHE
 
 # Cache module : libelles + gimmicks (logos Societe) des agences internes.
 # Les ids sont hardcodes (AGENCES_INTERNES), les libelles changent rarement.
