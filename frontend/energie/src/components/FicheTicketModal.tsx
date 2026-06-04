@@ -598,6 +598,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                     handleSaveOffre(next, false)
                   }
                 }}
+                onAskAnnulLigne={() => setAnnulLigneOpen(true)}
                 onSaveOffre={() => selectedOffre && handleSaveOffre(selectedOffre)}
                 savingOffre={savingOffre}
                 clarifAvailable={!!docClarif.url}
@@ -1008,6 +1009,7 @@ function ColonneDroite({
   offre,
   onOffreChange,
   onSaveStatutAuto,
+  onAskAnnulLigne,
   onSaveOffre,
   savingOffre,
   clarifAvailable,
@@ -1018,6 +1020,7 @@ function ColonneDroite({
   offre: FicheOffre | null
   onOffreChange: (patch: Partial<FicheOffre>) => void
   onSaveStatutAuto: (newStatut: number) => void
+  onAskAnnulLigne: () => void
   onSaveOffre: () => void
   savingOffre: boolean
   clarifAvailable: boolean
@@ -1054,7 +1057,18 @@ function ColonneDroite({
           <select
             value={offre.statut_prod}
             onChange={(e) => {
-              const v = parseInt(e.target.value, 10)
+              let v = parseInt(e.target.value, 10)
+              // Cas WinDev : statut = 2 (Annulee) -> ouvre la popup motif
+              // d'annulation au lieu de sauver directement.
+              if (v === 2) {
+                onAskAnnulLigne()
+                return
+              }
+              // Cas WinDev specifique Energie : si NumBS deja saisi et statut
+              // choisi = 1 (Validee), on bascule auto a 3 (Validee bureau).
+              if (v === 1 && (offre.num_bs || '').trim() !== '') {
+                v = 3
+              }
               onOffreChange({ statut_prod: v })
               onSaveStatutAuto(v)
             }}
