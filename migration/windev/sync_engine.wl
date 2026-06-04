@@ -403,9 +403,20 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
                           OR Gauche(sValSrc, 4) = "0000")
         IF NOT bEmpty THEN
             {sFilePG + "." + sColPG} = {sFileHF + "." + sColHF}
+            // Si l'affectation a leve une erreur HFSQL silencieuse (ex. erreur 80
+            // = format date invalide cote source : "24/01/20", textes pourris...),
+            // ErrorOccurred est positionne mais aucune exception WLangage n'est
+            // levee -> ce DO n'attrape rien. On force la rubrique a NULL pour ne
+            // pas que ErrorOccurred persiste sur le HAdd/HModify suivant et fasse
+            // perdre tout l'enregistrement a cause d'une date pas vitale (cas
+            // CVtheque.DateNaissance).
+            IF ErrorOccurred THEN
+                {sFilePG + "." + sColPG} = Null
+            END
         END
     DO
-        // affectation impossible (texte mal forme, annee invalide...) -> on laisse NULL
+        // affectation impossible (exception WLangage : DateVersChaine sur annee
+        // 0000, type mismatch...) -> on laisse NULL.
     END
 END
 
