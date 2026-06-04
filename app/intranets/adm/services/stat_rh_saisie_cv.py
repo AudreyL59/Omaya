@@ -70,8 +70,10 @@ def calculer_stats_saisie_cv(
     db_rec = get_pg_connection("recrutement")
     db_rh = get_pg_connection("rh")
 
-    param_deb = f"{date_debut}000000"
-    param_fin = f"{date_fin}235959"
+    # Conversion YYYYMMDD (HFSQL/WinDev) -> 'YYYY-MM-DD HH:MM:SS' (PostgreSQL ISO).
+    # PG refuse le format compact, il faut un timestamp ISO standard.
+    param_deb = f"{date_debut[:4]}-{date_debut[4:6]}-{date_debut[6:8]} 00:00:00"
+    param_fin = f"{date_fin[:4]}-{date_fin[4:6]}-{date_fin[6:8]} 23:59:59"
 
     # Filtres selon mode
     if type_recherche == "service":

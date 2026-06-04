@@ -72,8 +72,9 @@ def calculer_stats_annonceurs(
     db_rec = get_pg_connection("recrutement")
     db_rh = get_pg_connection("rh")
 
-    param_deb = f"{date_debut}000000"
-    param_fin = f"{date_fin}235959"
+    # Format PG ISO 'YYYY-MM-DD HH:MM:SS' (pas le compact HFSQL).
+    param_deb = f"{date_debut[:4]}-{date_debut[4:6]}-{date_debut[6:8]} 00:00:00"
+    param_fin = f"{date_fin[:4]}-{date_fin[4:6]}-{date_fin[6:8]} 23:59:59"
 
     # Filtre annonceur
     if id_annonceur is not None and id_annonceur > 0:

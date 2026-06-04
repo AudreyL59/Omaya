@@ -54,9 +54,10 @@ def calculer_stats_rdv(
     db_rec = get_pg_connection("recrutement")
     db_rh = get_pg_connection("rh")
 
-    # Bornes datetime format WinDev YYYYMMDDHHMMSS
-    param_deb = f"{date_debut}000000"
-    param_fin = f"{date_fin}235959"
+    # Bornes datetime au format PostgreSQL ISO ('YYYY-MM-DD HH:MM:SS').
+    # PG refuse le format compact WinDev YYYYMMDDHHMMSS sur les colonnes timestamp.
+    param_deb = f"{date_debut[:4]}-{date_debut[4:6]}-{date_debut[6:8]} 00:00:00"
+    param_fin = f"{date_fin[:4]}-{date_fin[4:6]}-{date_fin[6:8]} 23:59:59"
 
     # Choix du champ de filtre de date + du champ op_crea a utiliser
     if type_date == "planif":

@@ -90,8 +90,9 @@ def calculer_stats_entree_sortie(
     db_rh = get_pg_connection("rh")
     db_adv = get_pg_connection("adv")
 
-    param_deb = f"{date_debut}000000"
-    param_fin = f"{date_fin}235959"
+    # Format PG ISO 'YYYY-MM-DD HH:MM:SS' (pas le compact HFSQL).
+    param_deb = f"{date_debut[:4]}-{date_debut[4:6]}-{date_debut[6:8]} 00:00:00"
+    param_fin = f"{date_fin[:4]}-{date_fin[4:6]}-{date_fin[6:8]} 23:59:59"
 
     # --- Scope orga : descendants de toutes les orgas selectionnees -------
     orga_ids: Optional[set[int]] = None
