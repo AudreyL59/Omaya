@@ -1481,19 +1481,22 @@ function EmbaucheTab({
         />
       )}
 
-      {/* Boutons sortie (visibles si pas en activite, placeholder pour la
-          logique complete avec mails/tickets/etc.) */}
+      {/* Boutons sortie (toujours visibles, cf. GrBTN_Sortie WinDev qui depend
+          seulement de VerifDroit("Sa_FicheModif")). Placeholders en attendant
+          la phase B (popup confirm + mails + tickets + droits OMAYA). */}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-6">
+        <SortieButton label="Annul DUE" bgColor="#D97706" />
+        <SortieButton label="FPE entreprise" bgColor="#EF4444" />
+        <SortieButton label="Dém / FPE Salarié" bgColor="#DC2626" />
+        <SortieButton label="Dém présumée" bgColor="#475569" />
+        <SortieButton label="Licenciement" bgColor="#475569" />
+        <SortieButton label="Rupture conv" bgColor="#C026D3" />
+      </div>
+
+      {/* Blocs detail sortie (GrElemSortie : visible + editable seulement
+          si pas en activite, sinon caches/grises) */}
       {!edit.en_activite && (
         <>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-6">
-            <SortieButton label="Annul DUE" bgColor="#D97706" />
-            <SortieButton label="FPE entreprise" bgColor="#DC2626" />
-            <SortieButton label="Dém / FPE Salarié" bgColor="#DC2626" />
-            <SortieButton label="Dém présumée" bgColor="#DC2626" />
-            <SortieButton label="Licenciement" bgColor="#DC2626" />
-            <SortieButton label="Rupture conv" bgColor="#DC2626" />
-          </div>
-
           <div className="mt-6 grid grid-cols-3 gap-4">
             <SortieBlock title="Information de sortie">
               <LabeledField
