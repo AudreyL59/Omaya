@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
+import { showConfirm, showToast } from '@shared/ui/dialog'
 
 // --- Types ---------------------------------------------------------------
 
@@ -1251,8 +1252,13 @@ function EmbaucheTab({
   // Action de sortie (MVP : UPDATE en_activite/type_sortie/dates)
   const handleSortie = async (type: number, label: string) => {
     if (!edit) return
-    if (!window.confirm(`Vous êtes sur le point de sortir le salarié en "${label}".\n\nVoulez-vous continuer ?`))
-      return
+    const ok = await showConfirm({
+      title: 'Sortie du salarié',
+      message: `Vous êtes sur le point de sortir le salarié en "${label}". Voulez-vous continuer ?`,
+      confirmLabel: 'Continuer',
+      variant: 'danger',
+    })
+    if (!ok) return
     setSortieLoading(type)
     try {
       const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/sortie`, {
@@ -2041,8 +2047,9 @@ function OverlayPartenaires({
     try {
       // Endpoint à venir : POST /partenaires/portails/{id}/send-codes
       // Pour cette phase : juste un toast informatif.
-      alert(
-        "Envoi mail + SMS des codes : à brancher backend (route /partenaires/portails/{id}/send-codes).",
+      showToast(
+        'Envoi mail + SMS : à brancher backend (/partenaires/portails/{id}/send-codes)',
+        'info',
       )
     } finally {
       setSending(false)
@@ -2050,14 +2057,20 @@ function OverlayPartenaires({
   }
 
   const handleDeleteDpae = async (id: string) => {
-    if (!window.confirm("Voulez-vous supprimer cette association 'Ste de DPAE-Partenaire' ?")) return
+    const ok = await showConfirm({
+      title: 'Suppression',
+      message: "Voulez-vous supprimer cette association 'Société de DPAE - Partenaire' ?",
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    })
+    if (!ok) return
     const r = await fetch(`/api/adm/fiche-salarie/partenaires/dpae/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${getToken()}` },
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
-      alert(`Suppression échouée : ${j?.detail || r.status}`)
+      showToast(`Suppression échouée : ${j?.detail || r.status}`, 'error')
       return
     }
     reload()
@@ -2273,7 +2286,7 @@ function OverlayOrigineDPAE({
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
-        alert(`Erreur : ${j?.detail || r.status}`)
+        showToast(`Erreur : ${j?.detail || r.status}`, 'error')
         return
       }
       setSavedCv(true)
