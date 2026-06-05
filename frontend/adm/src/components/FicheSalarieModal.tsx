@@ -232,6 +232,60 @@ function formatShortDate(iso: string): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 }
 
+// --- AdmCheckbox : checkbox custom charte (vert fonce + coins arrondis) -
+
+function AdmCheckbox({
+  checked,
+  onChange,
+  disabled,
+  size = 18,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  disabled?: boolean
+  size?: number
+}) {
+  return (
+    <span
+      className="inline-flex shrink-0 cursor-pointer select-none"
+      onClick={(e) => {
+        if (disabled) return
+        e.preventDefault()
+        e.stopPropagation()
+        onChange(!checked)
+      }}
+      style={{ width: size, height: size, cursor: disabled ? 'not-allowed' : 'pointer' }}
+    >
+      <span
+        className="flex items-center justify-center transition"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 4,
+          backgroundColor: checked ? COLOR_PRIMARY : 'white',
+          border: `1.5px solid ${checked ? COLOR_PRIMARY : '#CBD5E1'}`,
+          opacity: disabled ? 0.5 : 1,
+        }}
+      >
+        {checked && (
+          <svg
+            viewBox="0 0 16 16"
+            width={size - 4}
+            height={size - 4}
+            fill="none"
+            stroke="white"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="3.5,8 7,11.5 12.5,5" />
+          </svg>
+        )}
+      </span>
+    </span>
+  )
+}
+
 // --- Composant principal (popup) -----------------------------------------
 
 export default function FicheSalarieModal({
@@ -669,11 +723,9 @@ function IdentiteTab({
               onChange={(v) => set({ civilite: v })}
             />
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
+              <AdmCheckbox
                 checked={edit.travailleur_handi}
-                onChange={(e) => set({ travailleur_handi: e.target.checked })}
-                className="w-4 h-4"
+                onChange={(v) => set({ travailleur_handi: v })}
               />
               <span style={{ color: COLOR_BRUN }}>Travailleur Handicapé</span>
             </label>
@@ -785,11 +837,9 @@ function IdentiteTab({
               ))}
             </select>
             <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
-              <input
-                type="checkbox"
+              <AdmCheckbox
                 checked={edit.avec_enfant}
-                onChange={(e) => set({ avec_enfant: e.target.checked })}
-                className="w-4 h-4"
+                onChange={(v) => set({ avec_enfant: v })}
               />
               <span className="font-normal" style={{ color: COLOR_BRUN }}>Avec Enfant</span>
             </label>
@@ -1206,11 +1256,9 @@ function EmbaucheTab({
           onChange={(v) => set({ en_activite: v })}
         />
         <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
-          <input
-            type="checkbox"
+          <AdmCheckbox
             checked={edit.multi_prod}
-            onChange={(e) => set({ multi_prod: e.target.checked })}
-            className="w-4 h-4"
+            onChange={(v) => set({ multi_prod: v })}
           />
           <span className="font-normal" style={{ color: COLOR_BRUN }}>
             Multi Produit
@@ -1642,12 +1690,7 @@ function EmbCheckDeco({
       ) : (
         <span className="w-7 h-7 shrink-0" />
       )}
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="w-4 h-4"
-      />
+      <AdmCheckbox checked={checked} onChange={onChange} />
       <span className="font-normal" style={{ color: COLOR_BRUN }}>
         {label}
       </span>
@@ -2065,11 +2108,9 @@ function OverlayOrigineDPAE({
         {/* Coopté */}
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm font-normal cursor-pointer min-w-[130px]">
-            <input
-              type="checkbox"
+            <AdmCheckbox
               checked={edit.coopte}
-              onChange={(e) => set({ coopte: e.target.checked })}
-              className="w-4 h-4"
+              onChange={(v) => set({ coopte: v })}
             />
             <span className="font-normal" style={{ color: COLOR_BRUN }}>
               Coopté
@@ -2094,11 +2135,9 @@ function OverlayOrigineDPAE({
         {/* JO directe */}
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm font-normal cursor-pointer min-w-[130px]">
-            <input
-              type="checkbox"
+            <AdmCheckbox
               checked={edit.j_odirecte}
-              onChange={(e) => set({ j_odirecte: e.target.checked })}
-              className="w-4 h-4"
+              onChange={(v) => set({ j_odirecte: v })}
             />
             <span className="font-normal" style={{ color: COLOR_BRUN }}>
               JO directe
