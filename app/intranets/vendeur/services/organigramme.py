@@ -202,7 +202,7 @@ def get_organigramme(
                 "id": _to_int(m.get("id_mutuelle")),
                 "lib": m.get("lib_mutuelle") or "",
                 "pas_adhesion": bool(m.get("mutuelle_pas_adhesion")),
-                "fin_date": m.get("mutuelle_pas_adhesion_jusquau") or "",
+                "fin_date": _iso(m.get("mutuelle_pas_adhesion_jusquau")),
             }
 
         # Absences (lib depuis TypeAbsence)
