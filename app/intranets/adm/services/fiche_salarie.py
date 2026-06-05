@@ -56,6 +56,46 @@ def _sql_str(v: Any) -> str:
     return str(v or "").replace("'", "''")
 
 
+def load_photo(id_salarie: int) -> tuple[bytes, str] | None:
+    """Retourne (bytes, content_type) ou None si pas de photo.
+
+    Detecte le type d'image via les magic bytes (JPEG/PNG/GIF/WebP).
+    Defaut : image/jpeg.
+    """
+    db = get_pg_connection("rh")
+    row = db.query_one(
+        "SELECT photo FROM rh.pgt_salarie WHERE id_salarie = ?",
+        (id_salarie,),
+    )
+    if not row:
+        return None
+    blob = row.get("photo")
+    if not blob:
+        return None
+    # psycopg2 renvoie bytea comme `memoryview` ou `bytes`
+    if isinstance(blob, memoryview):
+        blob = blob.tobytes()
+    if not isinstance(blob, (bytes, bytearray)):
+        return None
+    if len(blob) < 8:
+        return None
+
+    # Magic bytes
+    ct = "image/jpeg"
+    if blob[:3] == b"\xff\xd8\xff":
+        ct = "image/jpeg"
+    elif blob[:8] == b"\x89PNG\r\n\x1a\n":
+        ct = "image/png"
+    elif blob[:6] in (b"GIF87a", b"GIF89a"):
+        ct = "image/gif"
+    elif blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        ct = "image/webp"
+    elif blob[:2] == b"BM":
+        ct = "image/bmp"
+
+    return bytes(blob), ct
+
+
 def load_header(id_salarie: int) -> dict:
     """Header de la fiche : id + identite + statut + societe + poste."""
     db = get_pg_connection("rh")
@@ -80,7 +120,8 @@ def load_header(id_salarie: int) -> dict:
         "nom": _str(row.get("nom")),
         "prenom": _str(row.get("prenom")),
         "civilite": _int(row.get("civilite")),
-        "photo_url": "",  # TODO : si photo (bytea) -> endpoint dedie /photo
+        # Photo servie via /api/adm/fiche-salarie/{id}/photo (404 si pas de photo).
+        "photo_url": f"/api/adm/fiche-salarie/{id_salarie}/photo",
         "en_activite": bool(row.get("en_activite")),
         "en_pause": bool(row.get("en_pause")),
         "id_ste": _str_id(row.get("id_ste")),

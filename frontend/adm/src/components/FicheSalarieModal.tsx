@@ -528,12 +528,7 @@ function IdentiteTab({
       <div className="flex gap-8">
         {/* Avatar + bouton charger photo */}
         <div className="flex flex-col items-center gap-3 shrink-0">
-          <div
-            className="w-44 h-44 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden"
-            style={{ border: `2px solid ${COLOR_BG_SOFT}` }}
-          >
-            <UserIcon className="w-20 h-20 text-gray-400" />
-          </div>
+          <PhotoAvatar photoUrl={header?.photo_url || ''} />
           <button
             disabled
             className="flex items-center gap-2 px-2 py-1 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
@@ -693,6 +688,58 @@ function IdentiteTab({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// --- Photo avatar avec fallback ------------------------------------------
+
+function PhotoAvatar({ photoUrl }: { photoUrl: string }) {
+  // L'endpoint est protege par Bearer token : on ne peut pas mettre l'URL
+  // dans <img src=...> tel quel (le navigateur n'envoie pas le header).
+  // On fetch en JS et on cree un objectURL revoque au cleanup.
+  const [blobUrl, setBlobUrl] = useState<string>('')
+
+  useEffect(() => {
+    if (!photoUrl) {
+      setBlobUrl('')
+      return
+    }
+    let cancelled = false
+    let createdUrl = ''
+    ;(async () => {
+      try {
+        const r = await fetch(photoUrl, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+        if (!r.ok) {
+          if (!cancelled) setBlobUrl('')
+          return
+        }
+        const blob = await r.blob()
+        if (cancelled) return
+        createdUrl = URL.createObjectURL(blob)
+        setBlobUrl(createdUrl)
+      } catch {
+        if (!cancelled) setBlobUrl('')
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [photoUrl])
+
+  return (
+    <div
+      className="w-44 h-44 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden"
+      style={{ border: `2px solid ${COLOR_BG_SOFT}` }}
+    >
+      {blobUrl ? (
+        <img src={blobUrl} alt="Photo salarié" className="w-full h-full object-cover" />
+      ) : (
+        <UserIcon className="w-20 h-20 text-gray-400" />
+      )}
     </div>
   )
 }
