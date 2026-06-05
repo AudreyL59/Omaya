@@ -1431,7 +1431,7 @@ function EmbaucheTab({
           />
           <EmbCheckDeco
             icon={<Crown className="w-4 h-4" />}
-            iconBg="#EA580C"
+            iconBg="#F97316"
             label="Responsable Adjoint"
             checked={edit.resp_adjoint}
             onChange={(v) => set({ resp_adjoint: v })}
@@ -1531,7 +1531,7 @@ function EmbaucheTab({
         />
         <SortieButton
           label="FPE entreprise"
-          bgColor="#EF4444"
+          bgColor="#C2410C"
           onClick={() => handleSortie(3, 'FPE entreprise')}
           disabled={sortieLoading !== null}
         />
@@ -1803,15 +1803,22 @@ function OverlayButton({
   onClick?: () => void
   disabled?: boolean
 }) {
+  const [hover, setHover] = useState(false)
+  const highlight = (hover || active) && !disabled
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       disabled={disabled}
-      className="flex items-center gap-2 px-2 py-1 text-sm font-normal rounded transition disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
       style={{
-        color: COLOR_BRUN,
-        textDecoration: active ? 'underline' : 'none',
-        textUnderlineOffset: 4,
+        color: highlight ? 'white' : COLOR_BRUN,
+        backgroundColor: highlight
+          ? active
+            ? COLOR_PRIMARY
+            : 'rgba(23, 73, 78, 0.55)'
+          : 'transparent',
       }}
       title={disabled ? 'À implémenter' : ''}
     >
@@ -1837,12 +1844,18 @@ function SortieButton({
   onClick?: () => void
   disabled?: boolean
 }) {
+  const [hover, setHover] = useState(false)
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       disabled={disabled}
-      className="flex items-center gap-2 px-2 py-1 text-sm font-normal rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-      style={{ color: COLOR_BRUN }}
+      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{
+        color: hover && !disabled ? 'white' : COLOR_BRUN,
+        backgroundColor: hover && !disabled ? 'rgba(23, 73, 78, 0.55)' : 'transparent',
+      }}
       title={disabled ? 'En cours...' : label}
     >
       <span

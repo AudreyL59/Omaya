@@ -753,7 +753,7 @@ function SalarieRow({
           )}
           {s.is_resp_adjoint && (
             <Crown
-              className="w-3 h-3 text-orange-600 shrink-0"
+              className="w-3 h-3 text-orange-500 shrink-0"
               aria-label="Responsable adjoint"
             />
           )}
