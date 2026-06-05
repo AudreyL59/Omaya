@@ -13,6 +13,7 @@ joint en Python sur IDTK_Liste.
 """
 
 import base64
+import threading
 import time
 from datetime import date as _date, datetime
 from typing import Any
@@ -1066,6 +1067,36 @@ def get_last_modif_call_fibre() -> str:
     return f"{max_modif}#{suivi_hash}"
 
 
+# Cache process du token de change-detection. Tous les long-polls Fibre
+# calculent EXACTEMENT le meme token -> on le mutualise (TTL ~1s, sous lock).
+# Sans ca, chaque poller spawn 3 requetes bridge toutes les 0.75s : sous N
+# operateurs c'est une tempete de subprocess qui sature HFSQL et fait
+# attendre les ouvertures de fiche (TTFB ~24s observe en prod).
+_LASTMODIF_CACHE: dict = {"val": "", "at": 0.0}
+_LASTMODIF_TTL = 1.0
+_LASTMODIF_LOCK = threading.Lock()
+
+
+def get_last_modif_call_fibre_cached() -> str:
+    """Version mutualisee (cache process ~1s) de get_last_modif_call_fibre.
+
+    Quel que soit le nombre de pollers concurrents, le token (= 3 requetes
+    bridge) est recalcule au plus une fois par seconde pour tout le serveur.
+    """
+    now = time.monotonic()
+    if _LASTMODIF_CACHE["val"] and now - _LASTMODIF_CACHE["at"] < _LASTMODIF_TTL:
+        return _LASTMODIF_CACHE["val"]
+    with _LASTMODIF_LOCK:
+        # Double-check : un autre thread a pu rafraichir pendant l'attente du lock.
+        now = time.monotonic()
+        if _LASTMODIF_CACHE["val"] and now - _LASTMODIF_CACHE["at"] < _LASTMODIF_TTL:
+            return _LASTMODIF_CACHE["val"]
+        val = get_last_modif_call_fibre()
+        _LASTMODIF_CACHE["val"] = val
+        _LASTMODIF_CACHE["at"] = time.monotonic()
+        return val
+
+
 def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 0.75) -> tuple[bool, str]:
     """Long polling : attend qu'un changement survienne sur Call Fibre.
 
@@ -1079,12 +1110,12 @@ def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: floa
     un chargement initial.
     """
     if not since:
-        return True, get_last_modif_call_fibre()
+        return True, get_last_modif_call_fibre_cached()
 
     deadline = time.monotonic() + timeout_seconds
     latest = ""
     while True:
-        latest = get_last_modif_call_fibre()
+        latest = get_last_modif_call_fibre_cached()
         if latest and latest != since:
             return True, latest
         if time.monotonic() >= deadline:
@@ -1102,7 +1133,7 @@ def load_page_en_cours(user_id: int, user_id_poste: int) -> dict:
     return {
         "tickets_en_cours": en_cours,
         "serveur_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "last_modif": get_last_modif_call_fibre(),
+        "last_modif": get_last_modif_call_fibre_cached(),
     }
 
 

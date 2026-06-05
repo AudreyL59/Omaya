@@ -13,6 +13,7 @@ joint en Python sur IDTK_Liste.
 """
 
 import base64
+import threading
 import time
 from datetime import date as _date, datetime
 from typing import Any
@@ -1092,6 +1093,28 @@ def get_last_modif_call_energie() -> str:
     return f"{max_modif}#{suivi_hash}"
 
 
+# Cache process du token (cf. Call Fibre) : mutualise le calcul entre tous les
+# long-polls Energie pour eviter la tempete de subprocess bridge sous charge.
+_LASTMODIF_CACHE: dict = {"val": "", "at": 0.0}
+_LASTMODIF_TTL = 1.0
+_LASTMODIF_LOCK = threading.Lock()
+
+
+def get_last_modif_call_energie_cached() -> str:
+    """Version mutualisee (cache process ~1s) de get_last_modif_call_energie."""
+    now = time.monotonic()
+    if _LASTMODIF_CACHE["val"] and now - _LASTMODIF_CACHE["at"] < _LASTMODIF_TTL:
+        return _LASTMODIF_CACHE["val"]
+    with _LASTMODIF_LOCK:
+        now = time.monotonic()
+        if _LASTMODIF_CACHE["val"] and now - _LASTMODIF_CACHE["at"] < _LASTMODIF_TTL:
+            return _LASTMODIF_CACHE["val"]
+        val = get_last_modif_call_energie()
+        _LASTMODIF_CACHE["val"] = val
+        _LASTMODIF_CACHE["at"] = time.monotonic()
+        return val
+
+
 def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: float = 0.75) -> tuple[bool, str]:
     """Long polling : attend qu'un changement survienne sur Call Energie.
 
@@ -1105,12 +1128,12 @@ def wait_for_change(since: str, timeout_seconds: float = 25, poll_interval: floa
     un chargement initial.
     """
     if not since:
-        return True, get_last_modif_call_energie()
+        return True, get_last_modif_call_energie_cached()
 
     deadline = time.monotonic() + timeout_seconds
     latest = ""
     while True:
-        latest = get_last_modif_call_energie()
+        latest = get_last_modif_call_energie_cached()
         if latest and latest != since:
             return True, latest
         if time.monotonic() >= deadline:
@@ -1128,7 +1151,7 @@ def load_page_en_cours(user_id: int, user_id_poste: int) -> dict:
     return {
         "tickets_en_cours": en_cours,
         "serveur_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "last_modif": get_last_modif_call_energie(),
+        "last_modif": get_last_modif_call_energie_cached(),
     }
 
 
