@@ -10,7 +10,7 @@ Tables (Bdd_Omaya_RH) :
 
 import base64
 import struct
-from datetime import datetime
+from datetime import date, datetime
 
 from app.core.database.pg import get_pg_connection
 
@@ -38,6 +38,18 @@ def _to_int(v) -> int:
 
 def _today_windev() -> str:
     return datetime.now().strftime("%Y%m%d")
+
+
+def _iso(v) -> str:
+    """PG renvoie des date/datetime natifs ; on serialise en ISO 'YYYY-MM-DD'.
+    Accepte aussi None/string et retourne "" pour les valeurs vides."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(v, date):
+        return v.strftime("%Y-%m-%d")
+    return str(v).strip()
 
 
 def _descendants(all_orgas: list[dict], root_ids: set[int]) -> set[int]:
@@ -222,8 +234,8 @@ def get_organigramme(
             absence_by_sal[sid] = {
                 "type_id": id_type,
                 "lib": type_abs_map.get(id_type, ""),
-                "date_debut": a.get("date_debut") or "",
-                "date_fin": a.get("date_fin") or "",
+                "date_debut": _iso(a.get("date_debut")),
+                "date_fin": _iso(a.get("date_fin")),
             }
 
     # Dernier contrat signé par vendeur (tous partenaires confondus)
@@ -264,14 +276,13 @@ def get_organigramme(
                 for rows in pool.map(fetch_contrat, prefixes):
                     for r in rows:
                         sid = _to_int(r.get("id_salarie"))
-                        d = (
+                        # PG renvoie date natif sur max(DateSignature) -> _iso le serialise
+                        d = _iso(
                             r.get("maxdate")
                             or r.get("MaxDate")
                             or r.get("max")
-                            or ""
                         )
-                        d = (d or "").strip()
-                        if d and d > dernier_ctt_by_sal.get(sid, "20070101"):
+                        if d and d > dernier_ctt_by_sal.get(sid, "2007-01-01"):
                             dernier_ctt_by_sal[sid] = d
 
     # Ancienneté en jours
@@ -301,7 +312,7 @@ def get_organigramme(
         info_poste = poste_map.get(_to_int(s.get("id_type_poste")), {})
         mut = mutuelle_by_sal.get(sid, {})
         absence = absence_by_sal.get(sid, {})
-        date_debut = s.get("date_anciennete") or s.get("date_debut") or ""
+        date_debut = _iso(s.get("date_anciennete") or s.get("date_debut"))
         salaries_by_orga.setdefault(orga_id, []).append({
             "id_salarie": str(sid),
             "nom": s.get("nom") or "",
