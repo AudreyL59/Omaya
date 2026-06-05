@@ -702,7 +702,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 {data ? ` — ${data.client.nom_format}` : ''}
               </h2>
               {data?.is_statut_34 && (
-                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded">
                   Vente mobile en différé
                 </span>
               )}
@@ -1265,8 +1265,8 @@ function ColonneDroite({
     <div className="col-span-4 flex flex-col gap-4">
       {/* Bloc anomalie mobile en HAUT (visible uniquement si AnomalieMobile=1) */}
       {editAnomalie.active && (
-        <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
-          <h3 className="text-sm font-bold text-blue-700 mb-2">Vente mobile en différé</h3>
+        <div className="bg-red-50 rounded-lg border border-red-200 p-4">
+          <h3 className="text-sm font-bold text-red-700 mb-2">Vente mobile en différé</h3>
           <div className="space-y-2 text-xs">
             <SelectField
               label="Motif"
@@ -1283,7 +1283,7 @@ function ColonneDroite({
               multi
               onChange={(v) => onAnomalieChange({ info_cplt: v })}
             />
-            <div className="font-semibold text-blue-700 mt-2">Demande de dégroupage Panier</div>
+            <div className="font-semibold text-red-700 mt-2">Demande de dégroupage Panier</div>
           </div>
         </div>
       )}
