@@ -109,6 +109,7 @@ class StatsEnergie(BaseModel):
 class TicketsEnCoursResponse(BaseModel):
     tickets_en_cours: list[TicketEnCours]
     serveur_now: str
+    suivi_dermodif: str = ""      # SuiviTicketCall.DerModif (dernier calcul serveur)
     last_modif: str = ""
 
 
