@@ -1333,7 +1333,7 @@ function EmbaucheTab({
           />
         </div>
 
-        <div className="space-y-3 pt-1">
+        <div className="space-y-3 pt-1 pl-12">
           <EmbCheckDeco
             icon={<Crown className="w-4 h-4" />}
             iconBg="#F59E0B"
