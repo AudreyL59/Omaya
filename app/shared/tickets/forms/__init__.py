@@ -31,6 +31,7 @@ from . import (
     mutuelle,
     rdvtech,
     resa,
+    sortie_rh,
     sosbo,
     sosju,
     ulease,
@@ -46,6 +47,7 @@ FORM_HANDLERS: dict[int, object] = {
     9: resa,          # Réservation
     10: avance,       # Demande d'avance
     11: sosbo,        # SOS BO
+    12: sortie_rh,    # Sortie RH (sans SDTC)
     13: conges,       # Congés
     17: sosju,        # SOS Juridique
     19: rdvtech,      # Retour RDV Tech FIBRE
@@ -61,6 +63,8 @@ FORM_HANDLERS: dict[int, object] = {
     33: facturedr,    # Facture BO (FI_FactureDR)
     34: ulease,       # Signature Doc ULEASE (FI_DocUlease)
     35: ulease_pv,    # PV Liv/Rest ULEASE (FI_UleasePVLivRest)
+    36: sortie_rh,    # Sortie FPE / Démission (FI_SortieRH)
+    37: sortie_rh,    # Sortie Licenciement / Rupture (FI_SortieRH)
     38: code_vendeur,  # Demande Code Vendeur (FI_DemandeCodeVendeur)
     39: code_vendeur,  # Désactivation Code Vendeur (FI_DemandeCodeVendeur)
     40: cttw_demande,  # Contrat W - Demande

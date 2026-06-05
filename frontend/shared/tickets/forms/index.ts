@@ -24,6 +24,7 @@ import FIFourniture from './FIFourniture'
 import FIMutuelle from './FIMutuelle'
 import FIRDVTech from './FIRDVTech'
 import FIResa from './FIResa'
+import FISortieRH from './FISortieRH'
 import FISOSBO from './FISOSBO'
 import FISOSJU from './FISOSJU'
 import FIUlease from './FIUlease'
@@ -45,6 +46,7 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '9': FIResa,       // Réservation
   '10': FIAvance,    // Demande d'avance
   '11': FISOSBO,     // SOS BO
+  '12': FISortieRH,  // Sortie RH (sans SDTC)
   '13': FIConges,    // Congés
   '17': FISOSJU,     // SOS Juridique
   '19': FIRDVTech,   // Retour RDV Tech FIBRE
@@ -60,6 +62,8 @@ export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {
   '33': FIFactureDR,   // Facture BO
   '34': FIUlease,      // Signature Doc ULEASE
   '35': FIUleasePVLivRest, // PV Liv/Rest ULEASE
+  '36': FISortieRH,    // Sortie FPE / Démission
+  '37': FISortieRH,    // Sortie Licenciement / Rupture
   '38': FICodeVendeur, // Demande Code Vendeur
   '39': FICodeVendeur, // Désactivation Code Vendeur
   '40': FICttWDemande, // Contrat W - Demande
