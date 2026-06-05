@@ -1101,6 +1101,11 @@ function EmbaucheTab({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>('')
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
+  // IMPORTANT : tous les useState doivent etre AVANT les early returns
+  // (loading / error) sinon "Rendered more hooks than during the previous render".
+  const [overlay, setOverlay] = useState<
+    null | 'partenaires' | 'origine_dpae' | 'formation_iag' | 'scool'
+  >(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1182,7 +1187,6 @@ function EmbaucheTab({
     setEdit((prev) => (prev ? { ...prev, ...patch } : prev))
 
   // Overlay actif sous la ligne de boutons (analogue WinDev Cell_*..Visible)
-  const [overlay, setOverlay] = useState<null | 'partenaires' | 'origine_dpae' | 'formation_iag' | 'scool'>(null)
   const toggleOverlay = (k: typeof overlay) =>
     setOverlay((cur) => (cur === k ? null : k))
 
