@@ -1291,7 +1291,15 @@ function EmbaucheTab({
       <div className="flex items-center gap-6 mb-5">
         <ActivToggle
           en_activite={edit.en_activite}
-          onChange={(v) => set({ en_activite: v })}
+          onChange={(v) => {
+            // Transposition WinDev AffInfoSortie() : au passage en Sorti(e),
+            // si DateSortieDemandee est vide -> la mettre a aujourd'hui.
+            const patch: Partial<FicheEmbauche> = { en_activite: v }
+            if (!v && !edit.date_sortie_demandee) {
+              patch.date_sortie_demandee = new Date().toISOString().slice(0, 10)
+            }
+            set(patch)
+          }}
         />
         <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
           <AdmCheckbox
@@ -1567,10 +1575,19 @@ function EmbaucheTab({
         />
       </div>
 
-      {/* Blocs detail sortie (GrElemSortie : visible + editable seulement
-          si pas en activite, sinon caches/grises) */}
-      {!edit.en_activite && (
-        <>
+      {/* Blocs detail sortie : transposition WinDev AffInfoSortie() +
+          GrSortie..Visible = pas EnActivite.
+          - Sorti + type<=1 (rien ou Annul DUE) : seul bloc Information visible.
+          - Sorti + type>1 : 3 blocs visibles. Courrier FPE actif si type
+            2-4, sinon grise.
+      */}
+      {!edit.en_activite && (() => {
+        const t = edit.id_type_sortie
+        const showCourrierAndSdtc = t > 1
+        const fpeEditable = t >= 2 && t <= 4
+        // Si pas de type encore choisi : seul "Information de sortie" pour
+        // permettre a l'utilisateur d'en saisir un.
+        return (
           <div className="mt-6 grid grid-cols-3 gap-4">
             <SortieBlock title="Information de sortie">
               <StackedField
@@ -1598,59 +1615,67 @@ function EmbaucheTab({
               />
             </SortieBlock>
 
-            <SortieBlock title="Courrier FPE / DEM">
-              <StackedField
-                label="Envoyé le"
-                type="date"
-                value={edit.courrier_date_envoi}
-                onChange={(v) => set({ courrier_date_envoi: v })}
-              />
-              <StackedField
-                label="Reçu le"
-                type="date"
-                value={edit.courrier_date_recep}
-                onChange={(v) => set({ courrier_date_recep: v })}
-              />
-              <StackedField
-                label="Num Suivi"
-                value={edit.courrier_num_suivi}
-                onChange={(v) => set({ courrier_num_suivi: v })}
-              />
-              <StackedField
-                label="Délai Prév."
-                value={edit.courrier_delai_prev}
-                onChange={(v) => set({ courrier_delai_prev: v })}
-              />
-            </SortieBlock>
+            {showCourrierAndSdtc ? (
+              <SortieBlock title="Courrier FPE / DEM" disabled={!fpeEditable}>
+                <StackedField
+                  label="Envoyé le"
+                  type="date"
+                  value={edit.courrier_date_envoi}
+                  onChange={(v) => set({ courrier_date_envoi: v })}
+                />
+                <StackedField
+                  label="Reçu le"
+                  type="date"
+                  value={edit.courrier_date_recep}
+                  onChange={(v) => set({ courrier_date_recep: v })}
+                />
+                <StackedField
+                  label="Num Suivi"
+                  value={edit.courrier_num_suivi}
+                  onChange={(v) => set({ courrier_num_suivi: v })}
+                />
+                <StackedField
+                  label="Délai Prév."
+                  value={edit.courrier_delai_prev}
+                  onChange={(v) => set({ courrier_delai_prev: v })}
+                />
+              </SortieBlock>
+            ) : (
+              <div />
+            )}
 
-            <SortieBlock title="Solde de tout compte">
-              <StackedField
-                label="Envoyé le"
-                type="date"
-                value={edit.stc_date_envoi}
-                onChange={(v) => set({ stc_date_envoi: v })}
-              />
-              <StackedField
-                label="Reçu le"
-                type="date"
-                value={edit.stc_date_recep}
-                onChange={(v) => set({ stc_date_recep: v })}
-              />
-              <StackedField
-                label="Num Suivi"
-                value={edit.stc_num_suivi}
-                onChange={(v) => set({ stc_num_suivi: v })}
-              />
-              <StackedField
-                label="Retourné le"
-                type="date"
-                value={edit.stc_retourne_le}
-                onChange={(v) => set({ stc_retourne_le: v })}
-              />
-            </SortieBlock>
+            {showCourrierAndSdtc ? (
+              <SortieBlock title="Solde de tout compte">
+                <StackedField
+                  label="Envoyé le"
+                  type="date"
+                  value={edit.stc_date_envoi}
+                  onChange={(v) => set({ stc_date_envoi: v })}
+                />
+                <StackedField
+                  label="Reçu le"
+                  type="date"
+                  value={edit.stc_date_recep}
+                  onChange={(v) => set({ stc_date_recep: v })}
+                />
+                <StackedField
+                  label="Num Suivi"
+                  value={edit.stc_num_suivi}
+                  onChange={(v) => set({ stc_num_suivi: v })}
+                />
+                <StackedField
+                  label="Retourné le"
+                  type="date"
+                  value={edit.stc_retourne_le}
+                  onChange={(v) => set({ stc_retourne_le: v })}
+                />
+              </SortieBlock>
+            ) : (
+              <div />
+            )}
           </div>
-        </>
-      )}
+        )
+      })()}
     </div>
   )
 }
@@ -1872,12 +1897,21 @@ function SortieButton({
 function SortieBlock({
   title,
   children,
+  disabled,
 }: {
   title: string
   children: React.ReactNode
+  disabled?: boolean
 }) {
   return (
-    <div className="border rounded p-3" style={{ borderColor: COLOR_BG_SOFT }}>
+    <div
+      className="border rounded p-3"
+      style={{
+        borderColor: COLOR_BG_SOFT,
+        opacity: disabled ? 0.5 : 1,
+        pointerEvents: disabled ? 'none' : 'auto',
+      }}
+    >
       <h4
         className="text-xs uppercase tracking-wide font-normal mb-2 pb-1 border-b"
         style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
