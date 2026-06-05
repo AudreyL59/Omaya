@@ -1070,7 +1070,7 @@ function ColonneCentre({
   const canAnnulerLigne = !!selectedOffre && selectedOffre.statut_prod !== 2
   return (
     <div className="col-span-4 flex flex-col gap-3">
-      <div className="bg-white rounded-lg border border-c-line overflow-hidden flex-1 flex flex-col">
+      <div className="bg-white rounded-lg border border-c-line overflow-hidden flex flex-col" style={{ maxHeight: '40vh' }}>
         <div className="bg-gray-50 border-b border-c-line text-xs font-semibold text-c-ink-soft grid grid-cols-[80px_1fr_60px_70px]">
           <div className="px-2 py-2">Type</div>
           <div className="px-2 py-2">Lib Offre</div>
