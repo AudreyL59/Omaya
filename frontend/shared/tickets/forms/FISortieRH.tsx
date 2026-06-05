@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  CheckCircle, ExternalLink, FileText, Loader2, Save, Wallet, XCircle,
+  CheckCircle, ExternalLink, FileText, Loader2, Printer, Save, Wallet, XCircle,
 } from 'lucide-react'
 
 import type { FIProps } from './index'
@@ -238,6 +238,32 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
     showToast('Solde de tout compte : module à brancher (Fen_SDTC)', 'info')
   }
 
+  const handleCourrierFPE = async () => {
+    if (!data?.id_salarie) return
+    const delaiPrev = embaucheEdit?.courrier_delai_prev || ''
+    const url =
+      `${fsaBase}/fiche-salarie/${data.id_salarie}/sortie/courrier-fpe.pdf` +
+      `?delai_prev=${encodeURIComponent(delaiPrev)}`
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        showToast(`Échec : ${(j as { detail?: string })?.detail || r.status}`, 'error')
+        return
+      }
+      const blob = await r.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      // Ouvrir dans un nouvel onglet (apercu/impression)
+      window.open(blobUrl, '_blank')
+      // Liberation differee (le navigateur a besoin du blob le temps de l'ouvrir)
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000)
+    } catch {
+      showToast('Erreur réseau (PDF Courrier FPE).', 'error')
+    }
+  }
+
   const setEmb = (patch: Partial<FicheEmbauche>) =>
     setEmbaucheEdit((prev) => (prev ? { ...prev, ...patch } : prev))
 
@@ -458,6 +484,15 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
                 value={embaucheEdit.courrier_delai_prev}
                 onChange={(v) => setEmb({ courrier_delai_prev: v })}
               />
+              <button
+                onClick={handleCourrierFPE}
+                className="w-full flex items-center justify-center gap-2 mt-2 px-3 py-1.5 text-xs font-normal rounded hover:bg-[#ECF1F2] border"
+                style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
+                title="Générer le courrier de rupture de période d'essai"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Courrier Type FPE
+              </button>
             </BlockBox>
           ) : (
             <div />

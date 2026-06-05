@@ -2,12 +2,14 @@
 
 import sys
 import traceback
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
+from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.schemas.fiche_salarie import (
     FicheCoordonnees,
     FicheEmbauche,
@@ -164,6 +166,37 @@ def get_embauche(id_salarie: int = Path(...), user: UserToken = Depends(get_curr
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/sortie/courrier-fpe.pdf")
+def get_courrier_fpe_pdf(
+    id_salarie: int = Path(...),
+    delai_prev: str = Query("", description="Delai de prevenance (texte affiche)"),
+    user: UserToken = Depends(get_current_user),
+):
+    """Genere et renvoie le PDF du courrier de rupture de periode d'essai
+    (EtatCourrierFPE WinDev). Requiert WeasyPrint installe.
+    """
+    try:
+        data, filename = courrier_fpe_svc.generate_courrier_fpe(id_salarie, delai_prev)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ImportError as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(
+            status_code=500,
+            detail=f"WeasyPrint non installé sur le serveur : {e}",
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+    cd = f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": cd},
+    )
 
 
 @router.post("/{id_salarie}/sortie", response_model=SortieSalarieResponse)
