@@ -108,6 +108,24 @@ const API_BASE = '/api/call/fibre'
 // Pas d'interval cote client (juste une boucle qui relance des qu'elle
 // recoit une reponse).
 
+// Resout quand l'onglet redevient visible (ou tout de suite s'il l'est deja).
+// Sert a mettre le long-poll en pause quand l'onglet est en arriere-plan :
+// le navigateur limite a 6 connexions par domaine, partagees entre onglets ;
+// un long-poll d'onglet cache tiendrait une connexion ~25s et pourrait
+// retarder l'ouverture d'une fiche dans l'onglet actif.
+function waitUntilVisible(): Promise<void> {
+  if (typeof document === 'undefined' || !document.hidden) return Promise.resolve()
+  return new Promise((resolve) => {
+    const onVis = () => {
+      if (!document.hidden) {
+        document.removeEventListener('visibilitychange', onVis)
+        resolve()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+  })
+}
+
 export default function TicketsCallPage() {
   // 2 etats separes : on affiche les "en cours" des qu'on les a, sans
   // attendre les "traites" + stats (chargement plus long).
@@ -157,6 +175,12 @@ export default function TicketsCallPage() {
   // Long polling sur les EN COURS uniquement (le bas est rafraichi separement).
   const poll = useCallback(async () => {
     while (!stoppedRef.current) {
+      // Onglet en arriere-plan -> on suspend le long-poll (libere la connexion
+      // HTTP pour que l'onglet actif puisse ouvrir une fiche sans faire la queue).
+      if (document.hidden) {
+        await waitUntilVisible()
+        if (stoppedRef.current) break
+      }
       try {
         const since = encodeURIComponent(lastModifRef.current)
         const r = await fetch(`${API_BASE}/tickets/live?since=${since}`, {
