@@ -10,8 +10,10 @@ Stratégie de chargement de la page principale (transposition WinDev) :
 
 from datetime import date as _date
 import sys
+import time
 import traceback
 
+import anyio
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 
@@ -294,19 +296,34 @@ def get_lettre_resil(
 
 
 @router.get("/tickets/live", response_model=TicketsLiveResponse)
-def get_tickets_live(
+async def get_tickets_live(
     user: UserToken = Depends(get_current_user),
     since: str = Query("", description="last_modif precedent. Vide = chargement initial."),
     timeout: int = Query(25, ge=1, le=55, description="Long polling timeout (s)."),
 ):
-    """Long polling : ne renvoie QUE les en-cours quand un changement est detecte.
+    """Long polling ASYNC : ne renvoie QUE les en-cours quand un changement
+    est detecte. L'attente (`await anyio.sleep`) ne monopolise AUCUN thread du
+    pool ; seul le check du token (mis en cache ~1s) emprunte un thread
+    quelques ms. Sous N operateurs, le pool reste libre pour les fiches.
 
     Le tableau du bas n'est pas concerne (re-fetcher /tickets/traites
     apres changement si necessaire).
     """
-    changed, latest = svc.wait_for_change(since, timeout_seconds=timeout)
-    if not changed:
-        return {"changed": False, "page": None, "last_modif": latest}
+    if not since:
+        # Chargement initial -> renvoie tout de suite la page.
+        page = await anyio.to_thread.run_sync(
+            lambda: svc.load_page_en_cours(user.id_salarie or 0, 0)
+        )
+        return {"changed": True, "page": page, "last_modif": page["last_modif"]}
 
-    page = svc.load_page_en_cours(user_id=user.id_salarie, user_id_poste=0)
-    return {"changed": True, "page": page, "last_modif": page["last_modif"]}
+    deadline = time.monotonic() + timeout
+    while True:
+        latest = await anyio.to_thread.run_sync(svc.get_last_modif_call_fibre_cached)
+        if latest and latest != since:
+            page = await anyio.to_thread.run_sync(
+                lambda: svc.load_page_en_cours(user.id_salarie or 0, 0)
+            )
+            return {"changed": True, "page": page, "last_modif": page["last_modif"]}
+        if time.monotonic() >= deadline:
+            return {"changed": False, "page": None, "last_modif": latest}
+        await anyio.sleep(0.75)

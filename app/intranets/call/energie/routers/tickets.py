@@ -6,9 +6,11 @@ Structure miroir de Call Fibre, mais sans la response stats globales
 """
 
 import sys
+import time
 import traceback
 from datetime import date as _date
 
+import anyio
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 
@@ -270,18 +272,32 @@ def export_tickets_traites(
 
 
 @router.get("/tickets/live", response_model=TicketsLiveResponse)
-def get_tickets_live(
+async def get_tickets_live(
     user: UserToken = Depends(get_current_user),
     since: str = Query("", description="last_modif precedent. Vide = chargement initial."),
     timeout: int = Query(25, ge=1, le=55, description="Long polling timeout (s)."),
 ):
-    """Long polling : renvoie les en-cours quand un changement est detecte."""
+    """Long polling ASYNC : l'attente (`await anyio.sleep`) ne monopolise aucun
+    thread du pool ; seul le check du token (cache ~1s) emprunte un thread
+    quelques ms. Sous N operateurs, le pool reste libre pour les fiches."""
     try:
-        changed, latest = svc.wait_for_change(since, timeout_seconds=timeout)
-        if not changed:
-            return {"changed": False, "page": None, "last_modif": latest}
-        page = svc.load_page_en_cours(user_id=user.id_salarie, user_id_poste=0)
-        return {"changed": True, "page": page, "last_modif": page["last_modif"]}
+        if not since:
+            page = await anyio.to_thread.run_sync(
+                lambda: svc.load_page_en_cours(user.id_salarie or 0, 0)
+            )
+            return {"changed": True, "page": page, "last_modif": page["last_modif"]}
+
+        deadline = time.monotonic() + timeout
+        while True:
+            latest = await anyio.to_thread.run_sync(svc.get_last_modif_call_energie_cached)
+            if latest and latest != since:
+                page = await anyio.to_thread.run_sync(
+                    lambda: svc.load_page_en_cours(user.id_salarie or 0, 0)
+                )
+                return {"changed": True, "page": page, "last_modif": page["last_modif"]}
+            if time.monotonic() >= deadline:
+                return {"changed": False, "page": None, "last_modif": latest}
+            await anyio.sleep(0.75)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
