@@ -1035,7 +1035,7 @@ function ColonneCentre({
       {/* Boutons d'action panier */}
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
-          <ActionButton label="Valider le panier" disabled={!canValider} onClick={onAskValider} />
+          <ActionButton label="Valider le panier" disabled={!canValider} variant="green" onClick={onAskValider} />
           <ActionButton label="Annuler toute la vente" disabled={!canAnnulerVente} onClick={onAskAnnulVente} />
         </div>
         <ActionButton label="Renvoyer le panier pour complément" variant="orange" full onClick={onAskRenvoi} />
@@ -1410,11 +1410,16 @@ function ActionButton({
 }: {
   label: string
   disabled?: boolean
-  variant?: 'dark' | 'orange'
+  variant?: 'dark' | 'orange' | 'green'
   full?: boolean
   onClick?: () => void
 }) {
-  const cls = variant === 'orange' ? 'bg-orange-500 text-white' : 'bg-gray-900 text-white'
+  const cls =
+    variant === 'green'
+      ? 'bg-green-600 text-white'
+      : variant === 'orange'
+        ? 'bg-orange-500 text-white'
+        : 'bg-gray-900 text-white'
   return (
     <button
       onClick={onClick}

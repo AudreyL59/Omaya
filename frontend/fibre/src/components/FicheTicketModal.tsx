@@ -1205,7 +1205,7 @@ function ColonneCentre({
           <ActionButton
             label="Valider le panier"
             disabled={!canValider}
-            variant="dark"
+            variant="green"
             onClick={onAskValider}
           />
           <ActionButton
@@ -1599,14 +1599,16 @@ function ActionButton({
 }: {
   label: string
   disabled?: boolean
-  variant: 'dark' | 'orange'
+  variant: 'dark' | 'orange' | 'green'
   full?: boolean
   onClick?: () => void
 }) {
   const cls =
-    variant === 'orange'
-      ? 'bg-orange-500 text-white'
-      : 'bg-gray-900 text-white'
+    variant === 'green'
+      ? 'bg-green-600 text-white'
+      : variant === 'orange'
+        ? 'bg-orange-500 text-white'
+        : 'bg-gray-900 text-white'
   return (
     <button
       onClick={onClick}
