@@ -359,7 +359,7 @@ export default function FicheSalarieModal({
           </span>
           <button
             onClick={onClose}
-            className="ml-3 p-1 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded"
+            className="ml-3 p-1 text-gray-500 hover:text-gray-800 hover:bg-[#ECF1F2] rounded"
             title="Fermer (Esc)"
           >
             <X className="w-4 h-4" />
@@ -504,7 +504,7 @@ function HeaderAction({ icon, label }: { icon: React.ReactNode; label: string })
   return (
     <button
       disabled
-      className="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-gray-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-[#ECF1F2] rounded disabled:opacity-50 disabled:cursor-not-allowed"
       style={{ color: COLOR_BRUN }}
       title="À implémenter"
     >
@@ -1066,7 +1066,7 @@ function CoordonneesTab({ idSalarie }: { idSalarie: string }) {
             <div className="flex justify-end pr-12 py-1">
               <button
                 onClick={swapEmails}
-                className="p-1 rounded hover:bg-gray-100"
+                className="p-1 rounded hover:bg-[#ECF1F2]"
                 style={{ color: COLOR_PRIMARY }}
                 title="Permuter Courriel 1 et Courriel 2"
               >
@@ -1380,7 +1380,7 @@ function EmbaucheTab({
               </select>
               <button
                 disabled
-                className="shrink-0 p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="shrink-0 p-1 rounded hover:bg-[#ECF1F2] disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ color: COLOR_PRIMARY }}
                 title="Modifier la société (à implémenter)"
               >
@@ -2040,7 +2040,7 @@ function OverlayPartenaires({
         </h3>
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-gray-100"
+          className="p-1 rounded hover:bg-[#ECF1F2]"
           style={{ color: COLOR_BRUN }}
           title="Fermer"
         >
@@ -2060,7 +2060,7 @@ function OverlayPartenaires({
           <div className="flex items-center justify-between mb-2">
             <button
               disabled
-              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1 rounded hover:bg-[#ECF1F2] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ color: COLOR_PRIMARY }}
               title="Ajouter (Fen_DPAE_Nouvelle, à venir)"
             >
@@ -2069,7 +2069,7 @@ function OverlayPartenaires({
             <button
               onClick={handleSendCodes}
               disabled={!selectedPortail || sending}
-              className="flex items-center gap-1.5 px-2 py-1 text-xs font-normal rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-2 py-1 text-xs font-normal rounded hover:bg-[#ECF1F2] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ color: COLOR_PRIMARY }}
               title="Renvoyer les codes par mail + SMS"
             >
@@ -2135,7 +2135,7 @@ function OverlayPartenaires({
           <div className="flex items-center gap-1 mb-2">
             <button
               disabled
-              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1 rounded hover:bg-[#ECF1F2] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ color: COLOR_PRIMARY }}
               title="Ajouter (Fen_PartDpae, à venir)"
             >
@@ -2143,7 +2143,7 @@ function OverlayPartenaires({
             </button>
             <button
               disabled
-              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="p-1 rounded hover:bg-[#ECF1F2] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ color: COLOR_PRIMARY }}
               title="Modifier (Fen_PartDpae, à venir)"
             >
@@ -2270,7 +2270,7 @@ function OverlayOrigineDPAE({
         </h3>
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-gray-100"
+          className="p-1 rounded hover:bg-[#ECF1F2]"
           style={{ color: COLOR_BRUN }}
           title="Fermer"
         >
@@ -2293,7 +2293,7 @@ function OverlayOrigineDPAE({
           <button
             onClick={() => setPickerFor('coopteur')}
             disabled={!edit.coopte}
-            className="flex-1 flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            className="flex-1 flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#ECF1F2]"
             style={{
               color: edit.coopteur_lib ? COLOR_BRUN : '#9CA3AF',
               borderColor: COLOR_BG_SOFT,
@@ -2320,7 +2320,7 @@ function OverlayOrigineDPAE({
           <button
             onClick={() => setPickerFor('jo_coopteur')}
             disabled={!edit.j_odirecte}
-            className="flex-1 flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            className="flex-1 flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#ECF1F2]"
             style={{
               color: edit.jo_coopteur_lib ? COLOR_BRUN : '#9CA3AF',
               borderColor: COLOR_BG_SOFT,
@@ -2337,7 +2337,7 @@ function OverlayOrigineDPAE({
         <div className="flex items-center gap-3">
           <button
             disabled={!edit.id_cvtheque}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-w-[130px]"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#ECF1F2] min-w-[130px]"
             style={{
               color: COLOR_BRUN,
               borderColor: COLOR_BG_SOFT,
@@ -2361,7 +2361,7 @@ function OverlayOrigineDPAE({
           <button
             onClick={handleSaveCv}
             disabled={savingCv}
-            className="shrink-0 w-9 h-9 rounded flex items-center justify-center hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="shrink-0 w-9 h-9 rounded flex items-center justify-center hover:bg-[#ECF1F2] disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               color: savedCv ? '#059669' : COLOR_PRIMARY,
               border: `1px solid ${COLOR_BG_SOFT}`,
@@ -2479,7 +2479,7 @@ function OverlayScool({
         </h3>
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-gray-100"
+          className="p-1 rounded hover:bg-[#ECF1F2]"
           style={{ color: COLOR_BRUN }}
           title="Fermer"
         >
@@ -2537,7 +2537,7 @@ function OverlayScool({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-medium border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-medium border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#ECF1F2]"
             style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -2571,7 +2571,7 @@ function OverlayFormationIAG({
         </h3>
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-gray-100"
+          className="p-1 rounded hover:bg-[#ECF1F2]"
           style={{ color: COLOR_BRUN }}
           title="Fermer"
         >
@@ -2717,7 +2717,7 @@ function FieldWithCopy({
       <button
         onClick={handleCopy}
         disabled={!value}
-        className="shrink-0 w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="shrink-0 w-8 h-8 rounded flex items-center justify-center hover:bg-[#ECF1F2] disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: COLOR_PRIMARY }}
         title="Copier"
       >
