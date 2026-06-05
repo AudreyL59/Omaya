@@ -84,9 +84,30 @@ class ToggleStatusPayload(BaseModel):
 
 
 class SortieSalariePayload(BaseModel):
-    """Body POST /{id}/sortie : declenche une action de sortie."""
+    """Body POST /{id}/sortie : declenche une action de sortie.
+
+    Tous les champs sortie sont optionnels : ils permettent de reprendre les
+    valeurs courantes du formulaire (cf. WinDev sortirSalarie qui injecte
+    les valeurs des champs ecrans dans le UPDATE salarie_sortie).
+    """
     type_sortie: int  # 1=Annul DUE, 2=FPE Salarie, 3=FPE entreprise, 4=Demission,
                       # 5=Licenciement, 6=Rupture conv, 10=Dem presumee
+    info_cpl: str = ""
+    courrier_date_envoi: str = ""
+    courrier_num_suivi: str = ""
+    courrier_date_recep: str = ""
+    courrier_delai_prev: str = ""
+    stc_date_envoi: str = ""
+    stc_num_suivi: str = ""
+    stc_date_recep: str = ""
+    stc_retourne_le: str = ""
+
+
+class SortieSalarieResponse(BaseModel):
+    ok: bool = True
+    mail_envoye: bool = False
+    id_ticket_sortie: str = ""
+    id_ticket_codes_ohm: str = ""
 
 
 # --- Onglet 2 : Coordonnees ---------------------------------------------

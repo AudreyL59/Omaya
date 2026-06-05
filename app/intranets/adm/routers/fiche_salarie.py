@@ -23,6 +23,7 @@ from app.intranets.adm.schemas.fiche_salarie import (
     SaveIdentitePayload,
     SaveResponse,
     SortieSalariePayload,
+    SortieSalarieResponse,
     ToggleStatusPayload,
 )
 from app.intranets.adm.services import fiche_salarie as svc
@@ -165,17 +166,23 @@ def get_embauche(id_salarie: int = Path(...), user: UserToken = Depends(get_curr
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
-@router.post("/{id_salarie}/sortie", response_model=SaveResponse)
+@router.post("/{id_salarie}/sortie", response_model=SortieSalarieResponse)
 def sortir(
     payload: SortieSalariePayload,
     id_salarie: int = Path(...),
     user: UserToken = Depends(get_current_user),
 ):
-    """Action de sortie (MVP : update en_activite/type_sortie/dates).
-    Phase B : creation TK_Liste + TK_DemandeSortieRH + envois de mails.
+    """Action de sortie (phase B complete) :
+    - UPDATE salarie_embauche en_activite=FALSE + salarie_sortie avec les champs
+      du formulaire (info_cpl, courrier_*, stc_*).
+    - Si codes Ohm existent : creation TK_DemandeCodeVendeur + TK_Liste.
+    - Si TypeSortie > 1 : creation TK_Liste + TK_DemandeSortieRH (Service BO
+      type 36 si <=4, Service JU type 37 sinon).
+    - Envoi mail RH avec destinataires conditionnels (juriste si CDI/CDD,
+      Cci fpe/juriste si TypeSortie > 1, etc.).
     """
     try:
-        return svc.sortir_salarie(id_salarie, payload.type_sortie, user.id_salarie)
+        return svc.sortir_salarie(id_salarie, payload.model_dump(), user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

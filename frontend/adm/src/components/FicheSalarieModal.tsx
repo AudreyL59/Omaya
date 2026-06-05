@@ -1261,19 +1261,35 @@ function EmbaucheTab({
     if (!ok) return
     setSortieLoading(type)
     try {
+      // Body : reprend les champs du formulaire (cf. WinDev sortirSalarie qui
+      // injecte les valeurs courantes dans le UPDATE salarie_sortie).
+      const body = {
+        type_sortie: type,
+        info_cpl: edit.info_cpl,
+        courrier_date_envoi: edit.courrier_date_envoi,
+        courrier_num_suivi: edit.courrier_num_suivi,
+        courrier_date_recep: edit.courrier_date_recep,
+        courrier_delai_prev: edit.courrier_delai_prev,
+        stc_date_envoi: edit.stc_date_envoi,
+        stc_num_suivi: edit.stc_num_suivi,
+        stc_date_recep: edit.stc_date_recep,
+        stc_retourne_le: edit.stc_retourne_le,
+      }
       const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/sortie`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ type_sortie: type }),
+        body: JSON.stringify(body),
       })
       if (!r.ok) {
         const j = await r.json().catch(() => ({}))
         setToast({ kind: 'err', msg: `Erreur : ${j?.detail || r.status}` })
         return
       }
+      const result = await r.json().catch(() => ({}))
+
       // Recharge la fiche embauche pour avoir les nouvelles valeurs
       const reload = await fetch(`/api/adm/fiche-salarie/${idSalarie}/embauche`, {
         headers: { Authorization: `Bearer ${getToken()}` },
@@ -1284,10 +1300,27 @@ function EmbaucheTab({
         setEdit(d)
         onAfterSave(d.en_activite)
       }
-      setToast({ kind: 'ok', msg: `Sortie enregistrée : ${label}` })
+
+      if (result.mail_envoye) {
+        showToast(`Sortie enregistrée + mail envoyé : ${label}`, 'success')
+      } else {
+        showToast(`Sortie enregistrée : ${label}`, 'success')
+      }
+
+      // Si type > 1 et mail envoye : propose de cloturer le ticket (cf. WinDev)
+      if (type > 1 && result.mail_envoye && result.id_ticket_sortie) {
+        const cloture = await showConfirm({
+          title: 'Clôturer le ticket',
+          message: 'Voulez-vous clôturer le ticket de sortie ?',
+          confirmLabel: 'Clôturer',
+        })
+        if (cloture) {
+          // TODO endpoint cloture ticket - placeholder pour l'instant
+          showToast('Clôture ticket : à brancher backend', 'info')
+        }
+      }
     } finally {
       setSortieLoading(null)
-      window.setTimeout(() => setToast(null), 3000)
     }
   }
 

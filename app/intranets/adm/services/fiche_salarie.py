@@ -271,25 +271,81 @@ def set_en_pause(id_salarie: int, value: bool) -> dict:
     return {"ok": True}
 
 
-def sortir_salarie(id_salarie: int, type_sortie: int, demandeur_id: int) -> dict:
+# IDs et constantes WinDev partagees pour sortirSalarie
+ID_PARTENAIRE_OHM = 562949953421321
+SOCIETES_AVEC_JURISTE_ANNUL_DUE = {301, 312}
+
+
+def _new_ticket_id() -> int:
+    """Equivalent idEntierDateHeureSys WinDev : YYYYMMDDHHMMSSmmm en bigint."""
+    now = datetime.now()
+    return int(now.strftime("%Y%m%d%H%M%S") + f"{now.microsecond // 1000:03d}")
+
+
+def _ste_label(db_rh, id_ste: int) -> str:
+    """Libelle d'une societe pour affichage dans le mail."""
+    if not id_ste:
+        return ""
+    row = db_rh.query_one(
+        "SELECT rs_interne, raison_sociale FROM rh.pgt_societe WHERE id_ste = ?",
+        (id_ste,),
+    )
+    if not row:
+        return ""
+    return _str(row.get("rs_interne")) or _str(row.get("raison_sociale"))
+
+
+def _poste_label(db_rh, id_type_poste: int) -> str:
+    if not id_type_poste:
+        return ""
+    row = db_rh.query_one(
+        "SELECT lib_poste FROM rh.pgt_type_poste WHERE id_type_poste = ?",
+        (id_type_poste,),
+    )
+    return _str(row.get("lib_poste")) if row else ""
+
+
+def _ctt_label(db_rh, id_type_ctt: int) -> str:
+    if not id_type_ctt:
+        return ""
+    row = db_rh.query_one(
+        "SELECT intitule FROM rh.pgt_type_ctt_travail WHERE id_type_ctt = ?",
+        (id_type_ctt,),
+    )
+    return _str(row.get("intitule")) if row else ""
+
+
+def _set_date(field: str, value: str) -> str:
+    """SQL SET clause pour une date : NULL si vide, sinon 'YYYY-MM-DD'."""
+    if value:
+        return f"{field} = '{str(value)[:10]}'"
+    return f"{field} = NULL"
+
+
+def sortir_salarie(id_salarie: int, payload: dict, demandeur_id: int) -> dict:
     """Action de sortie d'un salarie (transposition WinDev sortirSalarie).
 
-    MVP : passe en_activite a FALSE, met le type de sortie + dates.
-    A venir (phase B) : creation TK_Liste + TK_DemandeSortieRH + mails RH /
-    juriste / oncall / reset droits OMAYA selon le type.
+    Phase B complete :
+    - B1 : UPDATE salarie_embauche + salarie_sortie avec tous les champs du
+      formulaire (info_cpl, courrier_*, stc_*).
+    - B2 : Creation TK_Liste + TK_DemandeSortieRH si TypeSortie > 1.
+      Creation TK_DemandeCodeVendeur + TK_Liste si codes Ohm existent.
+    - B3 : Envoi mail RH avec destinataires conditionnels (juriste si CDI/CDD,
+      Cci si TypeSortie > 1, etc.).
     """
-    db = get_pg_connection("rh")
+    type_sortie = _int(payload.get("type_sortie"))
+    db_rh = get_pg_connection("rh")
 
-    # Garantit l'existence des lignes salarie_embauche + salarie_sortie
+    # Garantit l'existence des lignes
     for tbl in ("rh.pgt_salarie_embauche", "rh.pgt_salarie_sortie"):
-        if not db.query_one(f"SELECT 1 FROM {tbl} WHERE id_salarie = ?", (id_salarie,)):
-            db.query(
+        if not db_rh.query_one(f"SELECT 1 FROM {tbl} WHERE id_salarie = ?", (id_salarie,)):
+            db_rh.query(
                 f"INSERT INTO {tbl} (id_salarie, modif_date, modif_elem) "
                 f"VALUES ({_int(id_salarie)}, NOW(), 'new')"
             )
 
-    # 1) Update salarie_embauche : en_activite = FALSE
-    db.query(
+    # --- B1.1 UPDATE salarie_embauche : EnActivite = FALSE -------------
+    db_rh.query(
         f"""UPDATE rh.pgt_salarie_embauche SET
             en_activite = FALSE,
             modif_date = NOW(),
@@ -298,31 +354,245 @@ def sortir_salarie(id_salarie: int, type_sortie: int, demandeur_id: int) -> dict
         WHERE id_salarie = {_int(id_salarie)}"""
     )
 
-    # 2) Update salarie_sortie : type_sortie + date_sortie_demandee + demandeur
-    #    Si Annul DUE (1) : date_sortie_reelle = date_debut
-    sets = [
-        f"id_type_sortie = {_int(type_sortie)}",
+    # --- B1.2 UPDATE salarie_sortie ------------------------------------
+    sortie_sets = [
+        f"id_type_sortie = {type_sortie}",
         "date_sortie_demandee = NOW()",
         f"demandeur_sortie = {_int(demandeur_id)}",
+        f"info_cpl = '{_sql_str(payload.get('info_cpl'))}'",
+        _set_date("courrier_date_envoi", payload.get("courrier_date_envoi") or ""),
+        f"courrier_num_suivi = '{_sql_str(payload.get('courrier_num_suivi'))}'",
+        _set_date("courrier_date_recep", payload.get("courrier_date_recep") or ""),
+        f"courrier_delai_prev = '{_sql_str(payload.get('courrier_delai_prev'))}'",
+        _set_date("stc_date_envoi", payload.get("stc_date_envoi") or ""),
+        f"stc_num_suivi = '{_sql_str(payload.get('stc_num_suivi'))}'",
+        _set_date("stc_date_recep", payload.get("stc_date_recep") or ""),
+        _set_date("stc_retourne_le", payload.get("stc_retourne_le") or ""),
         "modif_date = NOW()",
         f"modif_op = {_int(demandeur_id)}",
         "modif_elem = 'modif'",
     ]
-    if type_sortie == 1:
-        # Annul DUE : date_sortie_reelle = date_debut (cf. WinDev)
-        emb = db.query_one(
-            "SELECT date_debut FROM rh.pgt_salarie_embauche WHERE id_salarie = ?",
-            (id_salarie,),
-        )
-        if emb and emb.get("date_debut"):
-            sets.append(f"date_sortie_reelle = '{_iso(emb.get('date_debut'))}'")
 
-    db.query(
-        f"""UPDATE rh.pgt_salarie_sortie SET {', '.join(sets)}
+    # Annul DUE : date_sortie_reelle = date_debut (cf. WinDev)
+    emb = db_rh.query_one(
+        """SELECT date_debut, date_fin_per_essai, dpae_num, id_type_poste,
+            id_type_ctt, id_ste
+        FROM rh.pgt_salarie_embauche WHERE id_salarie = ?""",
+        (id_salarie,),
+    )
+    date_debut = emb.get("date_debut") if emb else None
+    if type_sortie == 1 and date_debut:
+        sortie_sets.append(f"date_sortie_reelle = '{_iso(date_debut)}'")
+
+    db_rh.query(
+        f"""UPDATE rh.pgt_salarie_sortie SET {', '.join(sortie_sets)}
         WHERE id_salarie = {_int(id_salarie)}"""
     )
 
-    return {"ok": True}
+    # --- B1.3 UPDATE salarie.modif_date --------------------------------
+    db_rh.query(
+        f"""UPDATE rh.pgt_salarie SET modif_date = NOW()
+        WHERE id_salarie = {_int(id_salarie)}"""
+    )
+
+    # --- Recup salarie info pour le mail ------------------------------
+    sal = db_rh.query_one(
+        "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ?",
+        (id_salarie,),
+    )
+    nom_salarie = f"{_str(sal.get('nom'))} {_capitalize_first(_str(sal.get('prenom')))}".strip() if sal else str(id_salarie)
+
+    # Lib_Sortie pour le sujet
+    type_sortie_row = db_rh.query_one(
+        "SELECT lib_sortie FROM rh.pgt_type_sortie_salarie WHERE id_type_sortie = ?",
+        (type_sortie,),
+    )
+    lib_sortie = _str(type_sortie_row.get("lib_sortie")) if type_sortie_row else f"Type {type_sortie}"
+
+    id_ticket_codes_ohm = ""
+    id_ticket_sortie = ""
+
+    # --- B2.1 Si codes Ohm existent : TK_DemandeCodeVendeur + TK_Liste -
+    try:
+        sp = db_rh.query_one(
+            f"""SELECT code, login, mdp
+            FROM rh.pgt_salarie_partenaire
+            WHERE id_partenaire = {ID_PARTENAIRE_OHM}
+              AND id_salarie = ?
+              AND mdp IS NOT NULL AND mdp <> ''
+              AND modif_elem <> 'supp'""",
+            (id_salarie,),
+        )
+        if sp:
+            id_new = _new_ticket_id()
+            id_ticket_codes_ohm = str(id_new)
+            db_bo = get_pg_connection("ticket_bo")
+            db_bo.query(
+                f"""INSERT INTO ticket_bo.pgt_tk_demande_code_vendeur
+                    (id_tk_demande_code_vendeur, id_tk_liste, type_ori,
+                     id_elem, id_partenaire, code, login, mdp,
+                     modif_date, modif_elem, modif_op)
+                VALUES ({id_new}, {id_new}, 'DPAE',
+                        {_int(id_salarie)}, {ID_PARTENAIRE_OHM},
+                        '{_sql_str(sp.get('code'))}',
+                        '{_sql_str(sp.get('login'))}',
+                        '{_sql_str(sp.get('mdp'))}',
+                        NOW(), 'new', {_int(demandeur_id)})"""
+            )
+            db_ticket = get_pg_connection("ticket")
+            db_ticket.query(
+                f"""INSERT INTO ticket.pgt_tk_liste
+                    (id_tk_liste, id_tk_liste_auto, date_crea, op_crea, op_dest,
+                     service, id_tk_type_demande, id_tk_statut,
+                     cloturee, modif_date, modif_op, modif_elem,
+                     op_traitement_staff, ordre_traitement_staff)
+                VALUES ({id_new}, {id_new}, NOW(), {_int(demandeur_id)}, {_int(demandeur_id)},
+                        'BO', 39, 1,
+                        FALSE, NOW(), {_int(demandeur_id)}, 'new',
+                        0, 0)"""
+            )
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+
+    # --- B2.2 Si TypeSortie > 1 : TK_Liste + TK_DemandeSortieRH -------
+    if type_sortie > 1:
+        try:
+            id_ticket = _new_ticket_id()
+            id_ticket_sortie = str(id_ticket)
+            service = "BO" if type_sortie <= 4 else "JU"
+            id_type_demande = 36 if type_sortie <= 4 else 37
+
+            db_ticket = get_pg_connection("ticket")
+            db_ticket.query(
+                f"""INSERT INTO ticket.pgt_tk_liste
+                    (id_tk_liste, id_tk_liste_auto, date_crea, op_crea, op_dest,
+                     service, id_tk_type_demande, id_tk_statut,
+                     cloturee, modif_date, modif_op, modif_elem,
+                     op_traitement_staff, ordre_traitement_staff)
+                VALUES ({id_ticket}, {id_ticket}, NOW(), {_int(demandeur_id)}, {_int(id_salarie)},
+                        '{service}', {id_type_demande}, 1,
+                        FALSE, NOW(), {_int(demandeur_id)}, 'new',
+                        0, 0)"""
+            )
+            db_tkrh = get_pg_connection("ticket_rh")
+            db_tkrh.query(
+                f"""INSERT INTO ticket_rh.pgt_tk_demande_sortie_rh
+                    (id_tk_demande_sortie_rh, id_tk_demande_sortie_rh_auto,
+                     id_tk_liste, id_salarie, type_sortie,
+                     info_cplt, doc_sortie,
+                     modif_op, modif_date, modif_elem)
+                VALUES ({id_ticket}, {id_ticket},
+                        {id_ticket}, {_int(id_salarie)}, '{type_sortie}',
+                        '', FALSE,
+                        {_int(demandeur_id)}, NOW(), 'new')"""
+            )
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+
+    # --- B3 Envoi mail RH ----------------------------------------------
+    mail_envoye = False
+    try:
+        from app.core.config import (
+            MAIL_TECH, MAIL_SUPPORT, MAIL_RESP_RH,
+            MAIL_RESP_JURISTE, MAIL_JURISTE_1, MAIL_JURISTE_2,
+        )
+        from app.shared.notifications.mail import envoi_mail_rh
+
+        # Recup infos pour le mail
+        id_ste = _int(emb.get("id_ste")) if emb else 0
+        ste_lib = _ste_label(db_rh, id_ste)
+        poste_lib = _poste_label(db_rh, _int(emb.get("id_type_poste"))) if emb else ""
+        ctt_lib = _ctt_label(db_rh, _int(emb.get("id_type_ctt"))) if emb else ""
+        type_ctt = _int(emb.get("id_type_ctt")) if emb else 0
+
+        # Recup mail du demandeur
+        dem_row = db_rh.query_one(
+            """SELECT sc.mail FROM rh.pgt_salarie_coordonnees sc
+            WHERE sc.id_salarie = ?""",
+            (demandeur_id,),
+        )
+        mail_demandeur = _str(dem_row.get("mail")).lower() if dem_row else ""
+
+        # Sujet
+        sujet = f"{lib_sortie} pour {nom_salarie}"
+        if type_ctt in (4, 5) and ctt_lib:
+            sujet += f" ({ctt_lib})"
+
+        # Destinataires (dedupes, sans le demandeur s'il est deja dans les fixes)
+        dest_set = []
+        def _add(addr):
+            a = (addr or "").strip().lower()
+            if a and a not in dest_set:
+                dest_set.append(a)
+        _add(mail_demandeur)
+        if mail_demandeur != MAIL_TECH.lower():
+            _add(MAIL_TECH)
+        if mail_demandeur != MAIL_SUPPORT.lower():
+            _add(MAIL_SUPPORT)
+        if mail_demandeur != MAIL_RESP_RH.lower():
+            _add(MAIL_RESP_RH)
+
+        cci = []
+        if type_ctt in (4, 5):
+            if MAIL_JURISTE_1:
+                cci.append(MAIL_JURISTE_1)
+        if type_sortie > 1:
+            cci.append("fpe@exosphere.fr")
+            for j in (MAIL_JURISTE_1, MAIL_JURISTE_2, MAIL_RESP_JURISTE):
+                if j and j not in cci:
+                    cci.append(j)
+        if type_sortie == 1 and id_ste in SOCIETES_AVEC_JURISTE_ANNUL_DUE:
+            if MAIL_JURISTE_1 and MAIL_JURISTE_1 not in cci:
+                cci.append(MAIL_JURISTE_1)
+
+        # HTML du mail
+        date_debut_fr = _date_fr(date_debut) if date_debut else ""
+        fin_per_essai_fr = _date_fr(emb.get("date_fin_per_essai")) if emb else ""
+        dpae_num = _str(emb.get("dpae_num")) if emb else ""
+
+        html = '<font face="arial" style="font-size:10pt;"><p>Bonjour,</p>'
+        html += f"<p>{lib_sortie} pour {nom_salarie}</p>"
+        html += f"<p><b>Fiche N° :</b> {id_salarie}</p>"
+        html += f"<p><b>Demande faite par :</b> {mail_demandeur or demandeur_id}</p>"
+        if type_sortie > 1:
+            html += "<p><b><u>Information Embauche :</u></b></p>"
+            html += f"<p><b>Date embauche :</b> {date_debut_fr}<br/>"
+            html += f"<b>Date de fin de période d'essai :</b> {fin_per_essai_fr}<br/>"
+            html += f"<b>DPAE Num :</b> {dpae_num}<br/>"
+            html += f"<b>Poste :</b> {poste_lib}<br/>"
+            html += f"<b>Société :</b> {ste_lib}</p>"
+        html += "<p>Cdt</p><p>Service RH EXOSPHERE</p></font>"
+
+        if dest_set:
+            mail_envoye = envoi_mail_rh(sujet, html, dest_set, cci or None)
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        mail_envoye = False
+
+    return {
+        "ok": True,
+        "mail_envoye": mail_envoye,
+        "id_ticket_sortie": id_ticket_sortie,
+        "id_ticket_codes_ohm": id_ticket_codes_ohm,
+    }
+
+
+def _capitalize_first(s: str) -> str:
+    return s[:1].upper() + s[1:].lower() if s else ""
+
+
+def _date_fr(v: Any) -> str:
+    """Format DD/MM/YYYY (vide si pas de date)."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%d/%m/%Y")
+    if isinstance(v, date):
+        return v.strftime("%d/%m/%Y")
+    s = str(v)
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return f"{s[8:10]}/{s[5:7]}/{s[0:4]}"
+    return ""
 
 
 # --- Onglet 2 : Coordonnees ---------------------------------------------
