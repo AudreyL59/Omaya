@@ -10,9 +10,12 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.fiche_salarie import (
     FicheCoordonnees,
+    FicheEmbauche,
+    FicheEmbaucheRefs,
     FicheHeader,
     FicheIdentite,
     SaveCoordonneesPayload,
+    SaveEmbauchePayload,
     SaveIdentitePayload,
     SaveResponse,
     ToggleStatusPayload,
@@ -131,6 +134,41 @@ def save_coordonnees(
     try:
         body = payload.model_dump(exclude_unset=True)
         return svc.save_coordonnees(id_salarie, body)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 3 : Infos Embauche ------------------------------------------
+
+@router.get("/embauche/refs", response_model=FicheEmbaucheRefs)
+def get_embauche_refs(user: UserToken = Depends(get_current_user)):
+    """Combos pour l'onglet (societes, postes, type_ctt, type_horaire, type_sortie)."""
+    try:
+        return svc.list_embauche_refs()
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/embauche", response_model=FicheEmbauche)
+def get_embauche(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
+    try:
+        return svc.load_embauche(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/embauche", response_model=SaveResponse)
+def save_embauche(
+    payload: SaveEmbauchePayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        body = payload.model_dump(exclude_unset=True)
+        return svc.save_embauche(id_salarie, body)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

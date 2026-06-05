@@ -61,6 +61,63 @@ interface FicheCoordonnees {
   bic: string
 }
 
+interface RefOption { id: number; label: string }
+interface StringRefOption { id: string; label: string }
+
+interface FicheEmbaucheRefs {
+  societes: StringRefOption[]
+  postes: RefOption[]
+  type_ctt: RefOption[]
+  type_horaire: RefOption[]
+  type_sortie: RefOption[]
+}
+
+interface FicheEmbauche {
+  id_salarie: string
+  date_debut: string
+  date_fin_per_essai: string
+  date_anciennete: string
+  en_activite: boolean
+  dpae_date: string
+  dpae_num: string
+  dpae_ope: string
+  id_type_poste: number
+  id_type_ctt: number
+  id_type_horaire: number
+  id_ste: string
+  id_ste_dpae_energie: string
+  id_ste_dpae_fibre: string
+  coopte: boolean
+  coopteur: string
+  coopteur_lib: string
+  j_odirecte: boolean
+  jo_coopteur: string
+  jo_coopteur_lib: string
+  resp_equipe: boolean
+  resp_adjoint: boolean
+  chauffeur: boolean
+  multi_prod: boolean
+  cin_envoyee: boolean
+  cj_envoye: boolean
+  formation_iag: boolean
+  formation_iag_date: string
+  formation_iag_score: number
+  id_cvtheque: string
+  id_type_sortie: number
+  date_sortie_demandee: string
+  date_sortie_reelle: string
+  demandeur_sortie: string
+  info_cpl: string
+  courrier_date_envoi: string
+  courrier_num_suivi: string
+  courrier_date_recep: string
+  courrier_delai_prev: string
+  stc_date_envoi: string
+  stc_num_suivi: string
+  stc_date_recep: string
+  stc_retourne_le: string
+}
+
 interface FicheIdentite {
   id_salarie: string
   civilite: number
@@ -124,7 +181,7 @@ const SITUATION_FAM: { v: number; l: string }[] = [
 const MENU: MenuItem[] = [
   { key: 'identite',        label: 'Infos Principales', coded: true },
   { key: 'coordonnees',     label: 'Coordonnées',       coded: true },
-  { key: 'infos_embauche',  label: 'Infos Embauche',    coded: false },
+  { key: 'infos_embauche',  label: 'Infos Embauche',    coded: true },
   { key: 'orga_suivi',      label: 'Organigramme',      coded: false },
   { key: 'suivi_adm',       label: 'Suivi ADM',         coded: false },
   { key: 'contrat_travail', label: 'Contrat de travail',coded: false },
@@ -251,14 +308,24 @@ export default function FicheSalarieModal({
             {activeTab === 'coordonnees' && (
               <CoordonneesTab idSalarie={idSalarie} />
             )}
-            {activeTab !== 'identite' && activeTab !== 'coordonnees' && (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400 italic">
-                <div className="text-lg mb-2">
-                  {MENU.find((m) => m.key === activeTab)?.label}
-                </div>
-                <div className="text-sm">À implémenter dans une prochaine itération.</div>
-              </div>
+            {activeTab === 'infos_embauche' && (
+              <EmbaucheTab
+                idSalarie={idSalarie}
+                onAfterSave={(en_activite) => {
+                  if (header) setHeader({ ...header, en_activite })
+                }}
+              />
             )}
+            {activeTab !== 'identite' &&
+              activeTab !== 'coordonnees' &&
+              activeTab !== 'infos_embauche' && (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400 italic">
+                  <div className="text-lg mb-2">
+                    {MENU.find((m) => m.key === activeTab)?.label}
+                  </div>
+                  <div className="text-sm">À implémenter dans une prochaine itération.</div>
+                </div>
+              )}
           </div>
         </div>
       </motion.div>
@@ -674,7 +741,7 @@ function IdentiteTab({
             <select
               value={edit.situation_fam}
               onChange={(e) => set({ situation_fam: parseInt(e.target.value, 10) })}
-              className="px-3 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1"
+              className="px-3 py-1.5 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
               style={{
                 border: `1px solid ${COLOR_BG_SOFT}`,
                 color: COLOR_BRUN,
@@ -687,24 +754,24 @@ function IdentiteTab({
                 </option>
               ))}
             </select>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
               <input
                 type="checkbox"
                 checked={edit.avec_enfant}
                 onChange={(e) => set({ avec_enfant: e.target.checked })}
                 className="w-4 h-4"
               />
-              <span style={{ color: COLOR_BRUN }}>Avec Enfant</span>
+              <span className="font-normal" style={{ color: COLOR_BRUN }}>Avec Enfant</span>
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-sm" style={{ color: COLOR_BRUN }}>
+              <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
                 Nb Enfants
               </span>
               <input
                 type="number"
                 value={edit.nb_enfants || ''}
                 onChange={(e) => set({ nb_enfants: parseInt(e.target.value, 10) || 0 })}
-                className="w-16 px-2 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1 text-center"
+                className="w-16 px-2 py-1.5 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1 text-center"
                 style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
               />
             </div>
@@ -992,6 +1059,555 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     >
       {children}
     </h3>
+  )
+}
+
+// --- Onglet 3 : Infos Embauche ------------------------------------------
+
+function EmbaucheTab({
+  idSalarie,
+  onAfterSave,
+}: {
+  idSalarie: string
+  onAfterSave: (en_activite: boolean) => void
+}) {
+  const [data, setData] = useState<FicheEmbauche | null>(null)
+  const [edit, setEdit] = useState<FicheEmbauche | null>(null)
+  const [refs, setRefs] = useState<FicheEmbaucheRefs | null>(null)
+  const [loadingTab, setLoadingTab] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string>('')
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingTab(true)
+    setError('')
+    Promise.all([
+      fetch(`/api/adm/fiche-salarie/${idSalarie}/embauche`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) =>
+        r.ok ? r.json() : r.json().then((j) => Promise.reject(j?.detail || r.status)),
+      ),
+      fetch(`/api/adm/fiche-salarie/embauche/refs`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) =>
+        r.ok ? r.json() : r.json().then((j) => Promise.reject(j?.detail || r.status)),
+      ),
+    ])
+      .then(([emb, refsData]) => {
+        if (cancelled) return
+        setData(emb)
+        setEdit(emb)
+        setRefs(refsData)
+      })
+      .catch((e) => !cancelled && setError(String(e)))
+      .finally(() => !cancelled && setLoadingTab(false))
+    return () => {
+      cancelled = true
+    }
+  }, [idSalarie])
+
+  const dirty = useMemo(() => {
+    if (!data || !edit) return false
+    return JSON.stringify(data) !== JSON.stringify(edit)
+  }, [data, edit])
+
+  const handleSave = async () => {
+    if (!edit) return
+    setSaving(true)
+    setToast(null)
+    try {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/embauche`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(edit),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Erreur : ${j?.detail || r.status}` })
+        return
+      }
+      setData(edit)
+      onAfterSave(edit.en_activite)
+      setToast({ kind: 'ok', msg: 'Informations enregistrées' })
+    } finally {
+      setSaving(false)
+      setTimeout(() => setToast(null), 3000)
+    }
+  }
+
+  if (loadingTab) {
+    return (
+      <div className="flex items-center gap-2 text-gray-500 p-6">
+        <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
+      </div>
+    )
+  }
+  if (error || !edit || !refs) {
+    return (
+      <div className="text-red-600 text-sm flex items-center gap-2 p-6">
+        <AlertCircle className="w-4 h-4" /> {error || 'Pas de données'}
+      </div>
+    )
+  }
+
+  const set = (patch: Partial<FicheEmbauche>) =>
+    setEdit((prev) => (prev ? { ...prev, ...patch } : prev))
+
+  return (
+    <div className="p-6">
+      {/* Top bar */}
+      <div className="flex items-center gap-6 mb-5">
+        <ActivToggle
+          en_activite={edit.en_activite}
+          onChange={(v) => set({ en_activite: v })}
+        />
+        <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+          <input
+            type="checkbox"
+            checked={edit.multi_prod}
+            onChange={(e) => set({ multi_prod: e.target.checked })}
+            className="w-4 h-4"
+          />
+          <span className="font-normal" style={{ color: COLOR_BRUN }}>
+            Multi Produit
+          </span>
+        </label>
+        <div className="flex-1" />
+        <div
+          className="w-9 h-9 rounded flex items-center justify-center"
+          style={{ backgroundColor: '#FEE2E2', color: '#DC2626' }}
+          title="Indicateur d'alerte"
+        >
+          <AlertTriangle className="w-4 h-4" />
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className="flex items-center gap-2 px-4 py-2 text-white rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
+          style={{ backgroundColor: COLOR_PRIMARY }}
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Enregistrer
+        </button>
+      </div>
+
+      {toast && (
+        <div
+          className={`mb-3 px-3 py-2 rounded text-sm ${
+            toast.kind === 'ok'
+              ? 'bg-emerald-50 text-emerald-800'
+              : 'bg-red-50 text-red-800'
+          }`}
+        >
+          {toast.msg}
+        </div>
+      )}
+
+      {/* 3 colonnes principales */}
+      <div className="grid grid-cols-3 gap-8 max-w-6xl">
+        <div className="space-y-2">
+          <LabeledField
+            label="Date d'embauche"
+            type="date"
+            value={edit.date_debut}
+            onChange={(v) => set({ date_debut: v })}
+          />
+          <LabeledField
+            label="Fin Période Essai"
+            type="date"
+            value={edit.date_fin_per_essai}
+            onChange={(v) => set({ date_fin_per_essai: v })}
+          />
+          <LabeledField
+            label="Date Ancienneté"
+            type="date"
+            value={edit.date_anciennete}
+            onChange={(v) => set({ date_anciennete: v })}
+          />
+          <LabeledSelectNum
+            label="Poste"
+            value={edit.id_type_poste}
+            options={refs.postes}
+            onChange={(v) => set({ id_type_poste: v })}
+          />
+          <LabeledSelectStr
+            label="Société"
+            value={edit.id_ste}
+            options={refs.societes}
+            onChange={(v) => set({ id_ste: v })}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <LabeledField
+            label="Date DPAE"
+            type="date"
+            value={edit.dpae_date}
+            onChange={(v) => set({ dpae_date: v })}
+          />
+          <LabeledField
+            label="N° DPAE"
+            value={edit.dpae_num}
+            onChange={(v) => set({ dpae_num: v })}
+          />
+          <LabeledField
+            label="DPAE Opé"
+            value={edit.dpae_ope}
+            onChange={(v) => set({ dpae_ope: v })}
+          />
+          <LabeledSelectNum
+            label="Type Ctt"
+            value={edit.id_type_ctt}
+            options={refs.type_ctt}
+            onChange={(v) => set({ id_type_ctt: v })}
+          />
+          <LabeledSelectNum
+            label="Horaire"
+            value={edit.id_type_horaire}
+            options={refs.type_horaire}
+            onChange={(v) => set({ id_type_horaire: v })}
+          />
+        </div>
+
+        <div className="space-y-3 pt-1">
+          <EmbCheck
+            label="Responsable d'équipe"
+            checked={edit.resp_equipe}
+            onChange={(v) => set({ resp_equipe: v })}
+          />
+          <EmbCheck
+            label="Responsable Adjoint"
+            checked={edit.resp_adjoint}
+            onChange={(v) => set({ resp_adjoint: v })}
+          />
+          <EmbCheck
+            label="Chauffeur"
+            checked={edit.chauffeur}
+            onChange={(v) => set({ chauffeur: v })}
+          />
+          <EmbCheck
+            label="Casier judiciaire envoyé"
+            checked={edit.cj_envoye}
+            onChange={(v) => set({ cj_envoye: v })}
+          />
+          <EmbCheck
+            label="CIN envoyée"
+            checked={edit.cin_envoyee}
+            onChange={(v) => set({ cin_envoyee: v })}
+          />
+        </div>
+      </div>
+
+      {/* Boutons overlays (placeholder pour cette phase) */}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-8">
+        <OverlayButton label="Partenaires" />
+        <OverlayButton label="Origine DPAE" />
+        <OverlayButton label="Formation IAG" />
+        <OverlayButton label="S'Cool" />
+      </div>
+
+      {/* Boutons sortie (visibles si pas en activite, placeholder pour la
+          logique complete avec mails/tickets/etc.) */}
+      {!edit.en_activite && (
+        <>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-6">
+            <SortieButton label="Annul DUE" />
+            <SortieButton label="FPE entreprise" />
+            <SortieButton label="Dém / FPE Salarié" />
+            <SortieButton label="Dém présumée" />
+            <SortieButton label="Licenciement" />
+            <SortieButton label="Rupture conv" />
+          </div>
+
+          <div className="mt-6 grid grid-cols-3 gap-4">
+            <SortieBlock title="Information de sortie">
+              <LabeledField
+                label="Date Sortie Demandée"
+                type="date"
+                value={edit.date_sortie_demandee}
+                onChange={(v) => set({ date_sortie_demandee: v })}
+              />
+              <LabeledField
+                label="Date Sortie Réelle"
+                type="date"
+                value={edit.date_sortie_reelle}
+                onChange={(v) => set({ date_sortie_reelle: v })}
+              />
+              <LabeledSelectNum
+                label="Type Sortie"
+                value={edit.id_type_sortie}
+                options={refs.type_sortie}
+                onChange={(v) => set({ id_type_sortie: v })}
+              />
+              <LabeledField
+                label="Info Cplt"
+                value={edit.info_cpl}
+                onChange={(v) => set({ info_cpl: v })}
+              />
+            </SortieBlock>
+
+            <SortieBlock title="Courrier FPE / DEM">
+              <LabeledField
+                label="Envoyé le"
+                type="date"
+                value={edit.courrier_date_envoi}
+                onChange={(v) => set({ courrier_date_envoi: v })}
+              />
+              <LabeledField
+                label="Reçu le"
+                type="date"
+                value={edit.courrier_date_recep}
+                onChange={(v) => set({ courrier_date_recep: v })}
+              />
+              <LabeledField
+                label="Num Suivi"
+                value={edit.courrier_num_suivi}
+                onChange={(v) => set({ courrier_num_suivi: v })}
+              />
+              <LabeledField
+                label="Délai Prév."
+                value={edit.courrier_delai_prev}
+                onChange={(v) => set({ courrier_delai_prev: v })}
+              />
+            </SortieBlock>
+
+            <SortieBlock title="Solde de tout compte">
+              <LabeledField
+                label="Envoyé le"
+                type="date"
+                value={edit.stc_date_envoi}
+                onChange={(v) => set({ stc_date_envoi: v })}
+              />
+              <LabeledField
+                label="Reçu le"
+                type="date"
+                value={edit.stc_date_recep}
+                onChange={(v) => set({ stc_date_recep: v })}
+              />
+              <LabeledField
+                label="Num Suivi"
+                value={edit.stc_num_suivi}
+                onChange={(v) => set({ stc_num_suivi: v })}
+              />
+              <LabeledField
+                label="Retourné le"
+                type="date"
+                value={edit.stc_retourne_le}
+                onChange={(v) => set({ stc_retourne_le: v })}
+              />
+            </SortieBlock>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// --- Helpers UI Embauche -------------------------------------------------
+
+function ActivToggle({
+  en_activite,
+  onChange,
+}: {
+  en_activite: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div
+      className="flex items-center rounded overflow-hidden"
+      style={{ border: `1px solid ${COLOR_PRIMARY}` }}
+    >
+      <button
+        onClick={() => onChange(false)}
+        className="px-4 py-1 text-sm transition"
+        style={{
+          backgroundColor: !en_activite ? COLOR_PRIMARY : 'transparent',
+          color: !en_activite ? 'white' : COLOR_PRIMARY,
+          fontWeight: 600,
+        }}
+      >
+        Sorti(e)
+      </button>
+      <button
+        onClick={() => onChange(true)}
+        className="px-4 py-1 text-sm transition"
+        style={{
+          backgroundColor: en_activite ? COLOR_PRIMARY : 'transparent',
+          color: en_activite ? 'white' : COLOR_PRIMARY,
+          fontWeight: 600,
+        }}
+      >
+        En Activité
+      </button>
+    </div>
+  )
+}
+
+function LabeledField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+}) {
+  return (
+    <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
+      <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
+        {label}
+      </span>
+      <input
+        type={type}
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+      />
+    </div>
+  )
+}
+
+function LabeledSelectNum({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: number
+  options: RefOption[]
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
+      <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
+        className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+      >
+        <option value={0}>—</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function LabeledSelectStr({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: StringRefOption[]
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
+      <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+      >
+        <option value="">—</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function EmbCheck({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4"
+      />
+      <span className="font-normal" style={{ color: COLOR_BRUN }}>
+        {label}
+      </span>
+    </label>
+  )
+}
+
+function OverlayButton({ label }: { label: string }) {
+  return (
+    <button
+      disabled
+      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{ color: COLOR_BRUN }}
+      title="À implémenter"
+    >
+      {label}
+    </button>
+  )
+}
+
+function SortieButton({ label }: { label: string }) {
+  return (
+    <button
+      disabled
+      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
+      title="À implémenter (action de sortie complète à venir)"
+    >
+      {label}
+    </button>
+  )
+}
+
+function SortieBlock({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="border rounded p-3" style={{ borderColor: COLOR_BG_SOFT }}>
+      <h4
+        className="text-xs uppercase tracking-wide font-normal mb-2 pb-1 border-b"
+        style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
+      >
+        {title}
+      </h4>
+      <div className="space-y-2">{children}</div>
+    </div>
   )
 }
 

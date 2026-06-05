@@ -102,6 +102,118 @@ class FicheCoordonnees(BaseModel):
     bic: str = ""
 
 
+# --- Onglet 3 : Infos Embauche ------------------------------------------
+
+class RefOption(BaseModel):
+    id: int
+    label: str
+
+
+class StringRefOption(BaseModel):
+    id: str
+    label: str
+
+
+class FicheEmbaucheRefs(BaseModel):
+    """Combos pour l'onglet Infos Embauche."""
+    societes: list[StringRefOption] = []
+    postes: list[RefOption] = []
+    type_ctt: list[RefOption] = []
+    type_horaire: list[RefOption] = []
+    type_sortie: list[RefOption] = []
+
+
+class FicheEmbauche(BaseModel):
+    """Onglet 3 : Infos Embauche (salarie_embauche + salarie_sortie)."""
+    id_salarie: str
+    # Embauche
+    date_debut: str = ""
+    date_fin_per_essai: str = ""
+    date_anciennete: str = ""
+    en_activite: bool = False
+    dpae_date: str = ""
+    dpae_num: str = ""
+    dpae_ope: str = ""
+    id_type_poste: int = 0
+    id_type_ctt: int = 0
+    id_type_horaire: int = 0
+    id_ste: str = ""
+    id_ste_dpae_energie: str = ""
+    id_ste_dpae_fibre: str = ""
+    coopte: bool = False
+    coopteur: str = ""
+    coopteur_lib: str = ""
+    j_odirecte: bool = False
+    jo_coopteur: str = ""
+    jo_coopteur_lib: str = ""
+    resp_equipe: bool = False
+    resp_adjoint: bool = False
+    chauffeur: bool = False
+    multi_prod: bool = False
+    cin_envoyee: bool = False
+    cj_envoye: bool = False
+    formation_iag: bool = False
+    formation_iag_date: str = ""
+    formation_iag_score: int = 0
+    id_cvtheque: str = ""
+    # Sortie
+    id_type_sortie: int = 0
+    date_sortie_demandee: str = ""
+    date_sortie_reelle: str = ""
+    demandeur_sortie: str = ""
+    info_cpl: str = ""
+    courrier_date_envoi: str = ""
+    courrier_num_suivi: str = ""
+    courrier_date_recep: str = ""
+    courrier_delai_prev: str = ""
+    stc_date_envoi: str = ""
+    stc_num_suivi: str = ""
+    stc_date_recep: str = ""
+    stc_retourne_le: str = ""
+
+
+class SaveEmbauchePayload(BaseModel):
+    date_debut: str | None = None
+    date_fin_per_essai: str | None = None
+    date_anciennete: str | None = None
+    en_activite: bool | None = None
+    dpae_date: str | None = None
+    dpae_num: str | None = None
+    dpae_ope: str | None = None
+    id_type_poste: int | None = None
+    id_type_ctt: int | None = None
+    id_type_horaire: int | None = None
+    id_ste: str | None = None
+    id_ste_dpae_energie: str | None = None
+    id_ste_dpae_fibre: str | None = None
+    coopte: bool | None = None
+    coopteur: str | None = None
+    j_odirecte: bool | None = None
+    jo_coopteur: str | None = None
+    resp_equipe: bool | None = None
+    resp_adjoint: bool | None = None
+    chauffeur: bool | None = None
+    multi_prod: bool | None = None
+    cin_envoyee: bool | None = None
+    cj_envoye: bool | None = None
+    formation_iag: bool | None = None
+    formation_iag_date: str | None = None
+    formation_iag_score: int | None = None
+    # Sortie (modifiable depuis les blocs INFORMATION DE SORTIE / COURRIER / SDTC)
+    id_type_sortie: int | None = None
+    date_sortie_demandee: str | None = None
+    date_sortie_reelle: str | None = None
+    info_cpl: str | None = None
+    courrier_date_envoi: str | None = None
+    courrier_num_suivi: str | None = None
+    courrier_date_recep: str | None = None
+    courrier_delai_prev: str | None = None
+    stc_date_envoi: str | None = None
+    stc_num_suivi: str | None = None
+    stc_date_recep: str | None = None
+    stc_retourne_le: str | None = None
+
+
 class SaveCoordonneesPayload(BaseModel):
     adresse1: str | None = None
     adresse2: str | None = None

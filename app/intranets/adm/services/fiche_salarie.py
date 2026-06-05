@@ -336,6 +336,261 @@ def _format_mail(v: str) -> str:
     return (v or "").replace(" ", "").lower()
 
 
+# --- Onglet 3 : Infos Embauche ------------------------------------------
+
+def list_embauche_refs() -> dict:
+    """Combos pour l'onglet : societes (internes), postes, type_ctt,
+    type_horaire, type_sortie."""
+    db = get_pg_connection("rh")
+    societes = db.query(
+        """SELECT id_ste, rs_interne, raison_sociale
+        FROM rh.pgt_societe
+        WHERE modif_elem NOT LIKE '%suppr%'
+          AND id_type_orga = 1
+        ORDER BY raison_sociale ASC NULLS LAST"""
+    )
+    postes = db.query(
+        """SELECT id_type_poste, lib_poste
+        FROM rh.pgt_type_poste
+        WHERE modif_elem NOT LIKE '%suppr%'
+        ORDER BY lib_poste ASC NULLS LAST"""
+    )
+    type_ctt = db.query(
+        """SELECT id_type_ctt, intitule
+        FROM rh.pgt_type_ctt_travail
+        WHERE modif_elem NOT LIKE '%suppr%'
+        ORDER BY intitule ASC NULLS LAST"""
+    )
+    type_horaire = db.query(
+        """SELECT id_type_horaire, lib_horaire
+        FROM rh.pgt_type_horaire_travail
+        WHERE modif_elem NOT LIKE '%suppr%'
+        ORDER BY lib_horaire ASC NULLS LAST"""
+    )
+    type_sortie = db.query(
+        """SELECT id_type_sortie, lib_sortie
+        FROM rh.pgt_type_sortie_salarie
+        WHERE modif_elem NOT LIKE '%suppr%'
+        ORDER BY lib_sortie ASC NULLS LAST"""
+    )
+    return {
+        "societes": [
+            {
+                "id": _str_id(r.get("id_ste")),
+                "label": _str(r.get("rs_interne")) or _str(r.get("raison_sociale")),
+            }
+            for r in societes
+        ],
+        "postes": [
+            {"id": _int(r.get("id_type_poste")), "label": _str(r.get("lib_poste"))}
+            for r in postes
+        ],
+        "type_ctt": [
+            {"id": _int(r.get("id_type_ctt")), "label": _str(r.get("intitule"))}
+            for r in type_ctt
+        ],
+        "type_horaire": [
+            {"id": _int(r.get("id_type_horaire")), "label": _str(r.get("lib_horaire"))}
+            for r in type_horaire
+        ],
+        "type_sortie": [
+            {"id": _int(r.get("id_type_sortie")), "label": _str(r.get("lib_sortie"))}
+            for r in type_sortie
+        ],
+    }
+
+
+def _salarie_lib(db, id_salarie_str: str) -> str:
+    """Petit helper pour afficher 'Nom Prenom' d'un coopteur."""
+    sid = _int(id_salarie_str)
+    if not sid:
+        return ""
+    row = db.query_one(
+        "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ?",
+        (sid,),
+    )
+    if not row:
+        return ""
+    return f"{_str(row.get('nom'))} {_str(row.get('prenom'))}".strip()
+
+
+def load_embauche(id_salarie: int) -> dict:
+    """Charge salarie_embauche + salarie_sortie. Cree les lignes si absentes
+    (comportement WinDev avec HAjoute si HTrouve = Faux)."""
+    db = get_pg_connection("rh")
+
+    emb = db.query_one(
+        """SELECT *
+        FROM rh.pgt_salarie_embauche
+        WHERE id_salarie = ?""",
+        (id_salarie,),
+    )
+    if not emb:
+        # Cree la ligne minimale
+        db.query(
+            f"""INSERT INTO rh.pgt_salarie_embauche
+                (id_salarie, modif_date, modif_elem)
+            VALUES ({_int(id_salarie)}, NOW(), 'new')"""
+        )
+        emb = {}
+
+    sor = db.query_one(
+        """SELECT *
+        FROM rh.pgt_salarie_sortie
+        WHERE id_salarie = ?""",
+        (id_salarie,),
+    )
+    if not sor:
+        db.query(
+            f"""INSERT INTO rh.pgt_salarie_sortie
+                (id_salarie, modif_date, modif_elem)
+            VALUES ({_int(id_salarie)}, NOW(), 'new')"""
+        )
+        sor = {}
+
+    coopteur_id = _str_id(emb.get("coopteur"))
+    jo_coopteur_id = _str_id(emb.get("jo_coopteur"))
+
+    return {
+        "id_salarie": _str_id(id_salarie),
+        # Embauche
+        "date_debut": _iso(emb.get("date_debut")),
+        "date_fin_per_essai": _iso(emb.get("date_fin_per_essai")),
+        "date_anciennete": _iso(emb.get("date_anciennete")),
+        "en_activite": bool(emb.get("en_activite")),
+        "dpae_date": _iso(emb.get("dpae_date")),
+        "dpae_num": _str(emb.get("dpae_num")),
+        "dpae_ope": _str_id(emb.get("dpae_ope")),
+        "id_type_poste": _int(emb.get("id_type_poste")),
+        "id_type_ctt": _int(emb.get("id_type_ctt")),
+        "id_type_horaire": _int(emb.get("id_type_horaire")),
+        "id_ste": _str_id(emb.get("id_ste")),
+        "id_ste_dpae_energie": _str_id(emb.get("id_ste_dpae_energie")),
+        "id_ste_dpae_fibre": _str_id(emb.get("id_ste_dpae_fibre")),
+        "coopte": bool(emb.get("coopte")),
+        "coopteur": coopteur_id,
+        "coopteur_lib": _salarie_lib(db, coopteur_id) if coopteur_id else "",
+        "j_odirecte": bool(emb.get("j_odirecte")),
+        "jo_coopteur": jo_coopteur_id,
+        "jo_coopteur_lib": _salarie_lib(db, jo_coopteur_id) if jo_coopteur_id else "",
+        "resp_equipe": bool(emb.get("resp_equipe")),
+        "resp_adjoint": bool(emb.get("resp_adjoint")),
+        "chauffeur": bool(emb.get("chauffeur")),
+        "multi_prod": bool(emb.get("multi_prod")),
+        "cin_envoyee": bool(emb.get("cin_envoyee")),
+        "cj_envoye": bool(emb.get("cj_envoye")),
+        "formation_iag": bool(emb.get("formation_iag")),
+        "formation_iag_date": _iso(emb.get("formation_iag_date")),
+        "formation_iag_score": _int(emb.get("formation_iag_score")),
+        "id_cvtheque": _str_id(emb.get("id_cvtheque")),
+        # Sortie
+        "id_type_sortie": _int(sor.get("id_type_sortie")),
+        "date_sortie_demandee": _iso(sor.get("date_sortie_demandee")),
+        "date_sortie_reelle": _iso(sor.get("date_sortie_reelle")),
+        "demandeur_sortie": _str_id(sor.get("demandeur_sortie")),
+        "info_cpl": _str(sor.get("info_cpl")),
+        "courrier_date_envoi": _iso(sor.get("courrier_date_envoi")),
+        "courrier_num_suivi": _str(sor.get("courrier_num_suivi")),
+        "courrier_date_recep": _iso(sor.get("courrier_date_recep")),
+        "courrier_delai_prev": _str(sor.get("courrier_delai_prev")),
+        "stc_date_envoi": _iso(sor.get("stc_date_envoi")),
+        "stc_num_suivi": _str(sor.get("stc_num_suivi")),
+        "stc_date_recep": _iso(sor.get("stc_date_recep")),
+        "stc_retourne_le": _iso(sor.get("stc_retourne_le")),
+    }
+
+
+def save_embauche(id_salarie: int, payload: dict) -> dict:
+    """UPDATE partiel sur pgt_salarie_embauche + pgt_salarie_sortie."""
+    db = get_pg_connection("rh")
+
+    # Garantit l'existence des lignes
+    for tbl in ("rh.pgt_salarie_embauche", "rh.pgt_salarie_sortie"):
+        if not db.query_one(f"SELECT 1 FROM {tbl} WHERE id_salarie = ?", (id_salarie,)):
+            db.query(
+                f"INSERT INTO {tbl} (id_salarie, modif_date, modif_elem) "
+                f"VALUES ({_int(id_salarie)}, NOW(), 'new')"
+            )
+
+    # --- pgt_salarie_embauche ---
+    emb_sets: list[str] = ["modif_date = NOW()", "modif_elem = 'modif'"]
+    date_fields_emb = [
+        "date_debut", "date_fin_per_essai", "date_anciennete", "dpae_date",
+        "formation_iag_date",
+    ]
+    text_fields_emb = ["dpae_num"]
+    int_fields_emb = ["id_type_poste", "id_type_ctt", "id_type_horaire",
+                      "formation_iag_score"]
+    bigint_str_fields_emb = ["dpae_ope", "id_ste", "id_ste_dpae_energie",
+                             "id_ste_dpae_fibre", "coopteur", "jo_coopteur"]
+    bool_fields_emb = ["en_activite", "coopte", "j_odirecte", "resp_equipe",
+                       "resp_adjoint", "chauffeur", "multi_prod",
+                       "cin_envoyee", "cj_envoye", "formation_iag"]
+
+    for f in date_fields_emb:
+        if f in payload:
+            v = payload.get(f)
+            if v:
+                emb_sets.append(f"{f} = '{str(v)[:10]}'")
+            else:
+                emb_sets.append(f"{f} = NULL")
+    for f in text_fields_emb:
+        if f in payload:
+            emb_sets.append(f"{f} = '{_sql_str(payload.get(f))}'")
+    for f in int_fields_emb:
+        if f in payload:
+            emb_sets.append(f"{f} = {_int(payload.get(f))}")
+    for f in bigint_str_fields_emb:
+        if f in payload:
+            v = _int(payload.get(f))
+            emb_sets.append(f"{f} = {v if v else 'NULL'}")
+    for f in bool_fields_emb:
+        if f in payload:
+            emb_sets.append(f"{f} = {'TRUE' if payload.get(f) else 'FALSE'}")
+
+    db.query(
+        f"""UPDATE rh.pgt_salarie_embauche SET {', '.join(emb_sets)}
+        WHERE id_salarie = {_int(id_salarie)}"""
+    )
+
+    # --- pgt_salarie_sortie ---
+    sor_sets: list[str] = ["modif_date = NOW()", "modif_elem = 'modif'"]
+    date_fields_sor = [
+        "date_sortie_demandee", "date_sortie_reelle",
+        "courrier_date_envoi", "courrier_date_recep",
+        "stc_date_envoi", "stc_date_recep", "stc_retourne_le",
+    ]
+    text_fields_sor = ["info_cpl", "courrier_num_suivi", "courrier_delai_prev",
+                       "stc_num_suivi"]
+    int_fields_sor = ["id_type_sortie"]
+
+    sor_touched = False
+    for f in date_fields_sor:
+        if f in payload:
+            v = payload.get(f)
+            if v:
+                sor_sets.append(f"{f} = '{str(v)[:10]}'")
+            else:
+                sor_sets.append(f"{f} = NULL")
+            sor_touched = True
+    for f in text_fields_sor:
+        if f in payload:
+            sor_sets.append(f"{f} = '{_sql_str(payload.get(f))}'")
+            sor_touched = True
+    for f in int_fields_sor:
+        if f in payload:
+            sor_sets.append(f"{f} = {_int(payload.get(f))}")
+            sor_touched = True
+
+    if sor_touched:
+        db.query(
+            f"""UPDATE rh.pgt_salarie_sortie SET {', '.join(sor_sets)}
+            WHERE id_salarie = {_int(id_salarie)}"""
+        )
+
+    return {"ok": True}
+
+
 def save_coordonnees(id_salarie: int, payload: dict) -> dict:
     """UPDATE pgt_salarie_coordonnees (PATCH partiel).
 
