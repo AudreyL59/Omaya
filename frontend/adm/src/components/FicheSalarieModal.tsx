@@ -22,6 +22,13 @@ import {
   Send,
   Users,
   FileText as FileTextIcon,
+  ShoppingBasket,
+  GraduationCap,
+  Laptop,
+  ContactRound,
+  Crown,
+  Car as CarIcon,
+  Scale,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
@@ -1267,12 +1274,32 @@ function EmbaucheTab({
             options={refs.postes}
             onChange={(v) => set({ id_type_poste: v })}
           />
-          <LabeledSelectStr
-            label="Société"
-            value={edit.id_ste}
-            options={refs.societes}
-            onChange={(v) => set({ id_ste: v })}
-          />
+          <div className="grid grid-cols-[120px_1fr_auto] gap-2 items-center">
+            <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
+              Société
+            </span>
+            <select
+              value={edit.id_ste}
+              onChange={(e) => set({ id_ste: e.target.value })}
+              className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+              style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+            >
+              <option value="">—</option>
+              {refs.societes.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              disabled
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: COLOR_PRIMARY }}
+              title="Modifier la société (à implémenter)"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -1307,27 +1334,35 @@ function EmbaucheTab({
         </div>
 
         <div className="space-y-3 pt-1">
-          <EmbCheck
+          <EmbCheckDeco
+            icon={<Crown className="w-4 h-4" />}
+            iconBg="#F59E0B"
             label="Responsable d'équipe"
             checked={edit.resp_equipe}
             onChange={(v) => set({ resp_equipe: v })}
           />
-          <EmbCheck
+          <EmbCheckDeco
+            icon={<Crown className="w-4 h-4" />}
+            iconBg="#F59E0B"
             label="Responsable Adjoint"
             checked={edit.resp_adjoint}
             onChange={(v) => set({ resp_adjoint: v })}
           />
-          <EmbCheck
+          <EmbCheckDeco
+            icon={<CarIcon className="w-4 h-4" />}
+            iconBg="#7C3AED"
             label="Chauffeur"
             checked={edit.chauffeur}
             onChange={(v) => set({ chauffeur: v })}
           />
-          <EmbCheck
+          <EmbCheckDeco
+            icon={<Scale className="w-4 h-4" />}
+            iconBg="#17494E"
             label="Casier judiciaire envoyé"
             checked={edit.cj_envoye}
             onChange={(v) => set({ cj_envoye: v })}
           />
-          <EmbCheck
+          <EmbCheckDeco
             label="CIN envoyée"
             checked={edit.cin_envoyee}
             onChange={(v) => set({ cin_envoyee: v })}
@@ -1339,22 +1374,30 @@ function EmbaucheTab({
       <div className="mt-6 flex flex-wrap items-center justify-center gap-8">
         <OverlayButton
           label="Partenaires"
+          icon={<ShoppingBasket className="w-4 h-4" />}
+          bgColor="#4E1D17"
           active={overlay === 'partenaires'}
           onClick={() => toggleOverlay('partenaires')}
         />
         <OverlayButton
           label="Origine DPAE"
+          icon={<Users className="w-4 h-4" />}
+          bgColor="#7C3AED"
           active={overlay === 'origine_dpae'}
           onClick={() => toggleOverlay('origine_dpae')}
         />
         <OverlayButton
           label="Formation IAG"
+          icon={<GraduationCap className="w-4 h-4" />}
+          bgColor="#0F766E"
           active={overlay === 'formation_iag'}
           onClick={() => toggleOverlay('formation_iag')}
           disabled
         />
         <OverlayButton
           label="S'Cool"
+          icon={<Laptop className="w-4 h-4" />}
+          bgColor="#1E3A8A"
           active={overlay === 'scool'}
           onClick={() => toggleOverlay('scool')}
           disabled
@@ -1382,12 +1425,12 @@ function EmbaucheTab({
       {!edit.en_activite && (
         <>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-6">
-            <SortieButton label="Annul DUE" />
-            <SortieButton label="FPE entreprise" />
-            <SortieButton label="Dém / FPE Salarié" />
-            <SortieButton label="Dém présumée" />
-            <SortieButton label="Licenciement" />
-            <SortieButton label="Rupture conv" />
+            <SortieButton label="Annul DUE" bgColor="#D97706" />
+            <SortieButton label="FPE entreprise" bgColor="#DC2626" />
+            <SortieButton label="Dém / FPE Salarié" bgColor="#DC2626" />
+            <SortieButton label="Dém présumée" bgColor="#DC2626" />
+            <SortieButton label="Licenciement" bgColor="#DC2626" />
+            <SortieButton label="Rupture conv" bgColor="#DC2626" />
           </div>
 
           <div className="mt-6 grid grid-cols-3 gap-4">
@@ -1574,50 +1617,31 @@ function LabeledSelectNum({
   )
 }
 
-function LabeledSelectStr({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string
-  value: string
-  options: StringRefOption[]
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
-      <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
-        {label}
-      </span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
-        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
-      >
-        <option value="">—</option>
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
-
-function EmbCheck({
+function EmbCheckDeco({
+  icon,
+  iconBg,
   label,
   checked,
   onChange,
 }: {
+  icon?: React.ReactNode
+  iconBg?: string
   label: string
   checked: boolean
   onChange: (v: boolean) => void
 }) {
   return (
     <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+      {icon ? (
+        <span
+          className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white"
+          style={{ backgroundColor: iconBg }}
+        >
+          {icon}
+        </span>
+      ) : (
+        <span className="w-7 h-7 shrink-0" />
+      )}
       <input
         type="checkbox"
         checked={checked}
@@ -1633,11 +1657,15 @@ function EmbCheck({
 
 function OverlayButton({
   label,
+  icon,
+  bgColor,
   active,
   onClick,
   disabled,
 }: {
   label: string
+  icon: React.ReactNode
+  bgColor: string
   active?: boolean
   onClick?: () => void
   disabled?: boolean
@@ -1646,27 +1674,45 @@ function OverlayButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border transition disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex items-center gap-2 px-2 py-1 text-sm font-normal rounded transition disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
       style={{
-        color: active ? 'white' : COLOR_BRUN,
-        backgroundColor: active ? COLOR_PRIMARY : 'transparent',
-        borderColor: active ? COLOR_PRIMARY : COLOR_BG_SOFT,
+        color: COLOR_BRUN,
+        textDecoration: active ? 'underline' : 'none',
+        textUnderlineOffset: 4,
       }}
       title={disabled ? 'À implémenter' : ''}
     >
+      <span
+        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white"
+        style={{ backgroundColor: bgColor }}
+      >
+        {icon}
+      </span>
       {label}
     </button>
   )
 }
 
-function SortieButton({ label }: { label: string }) {
+function SortieButton({
+  label,
+  bgColor,
+}: {
+  label: string
+  bgColor: string
+}) {
   return (
     <button
       disabled
-      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed"
-      style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
+      className="flex items-center gap-2 px-2 py-1 text-sm font-normal rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+      style={{ color: COLOR_BRUN }}
       title="À implémenter (action de sortie complète à venir)"
     >
+      <span
+        className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white"
+        style={{ backgroundColor: bgColor }}
+      >
+        <ContactRound className="w-4 h-4" />
+      </span>
       {label}
     </button>
   )
