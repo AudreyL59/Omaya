@@ -1306,19 +1306,10 @@ function EmbaucheTab({
       } else {
         showToast(`Sortie enregistrée : ${label}`, 'success')
       }
-
-      // Si type > 1 et mail envoye : propose de cloturer le ticket (cf. WinDev)
-      if (type > 1 && result.mail_envoye && result.id_ticket_sortie) {
-        const cloture = await showConfirm({
-          title: 'Clôturer le ticket',
-          message: 'Voulez-vous clôturer le ticket de sortie ?',
-          confirmLabel: 'Clôturer',
-        })
-        if (cloture) {
-          // TODO endpoint cloture ticket - placeholder pour l'instant
-          showToast('Clôture ticket : à brancher backend', 'info')
-        }
-      }
+      // Note WinDev : la proposition "Voulez-vous cloturer le ticket ?"
+      // ne s'applique que si la fenetre embauche a ete ouverte depuis un
+      // ticket existant (parametre `type` du MaFenetre). Ouverture depuis
+      // la fiche salarie ADM = type=0, donc cette proposition est skipped.
     } finally {
       setSortieLoading(null)
     }
