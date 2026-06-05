@@ -1431,7 +1431,7 @@ function EmbaucheTab({
           />
           <EmbCheckDeco
             icon={<Crown className="w-4 h-4" />}
-            iconBg="#DC2626"
+            iconBg="#EA580C"
             label="Responsable Adjoint"
             checked={edit.resp_adjoint}
             onChange={(v) => set({ resp_adjoint: v })}
@@ -1573,25 +1573,25 @@ function EmbaucheTab({
         <>
           <div className="mt-6 grid grid-cols-3 gap-4">
             <SortieBlock title="Information de sortie">
-              <LabeledField
+              <StackedField
                 label="Date Sortie Demandée"
                 type="date"
                 value={edit.date_sortie_demandee}
                 onChange={(v) => set({ date_sortie_demandee: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Date Sortie Réelle"
                 type="date"
                 value={edit.date_sortie_reelle}
                 onChange={(v) => set({ date_sortie_reelle: v })}
               />
-              <LabeledSelectNum
+              <StackedSelectNum
                 label="Type Sortie"
                 value={edit.id_type_sortie}
                 options={refs.type_sortie}
                 onChange={(v) => set({ id_type_sortie: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Info Cplt"
                 value={edit.info_cpl}
                 onChange={(v) => set({ info_cpl: v })}
@@ -1599,24 +1599,24 @@ function EmbaucheTab({
             </SortieBlock>
 
             <SortieBlock title="Courrier FPE / DEM">
-              <LabeledField
+              <StackedField
                 label="Envoyé le"
                 type="date"
                 value={edit.courrier_date_envoi}
                 onChange={(v) => set({ courrier_date_envoi: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Reçu le"
                 type="date"
                 value={edit.courrier_date_recep}
                 onChange={(v) => set({ courrier_date_recep: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Num Suivi"
                 value={edit.courrier_num_suivi}
                 onChange={(v) => set({ courrier_num_suivi: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Délai Prév."
                 value={edit.courrier_delai_prev}
                 onChange={(v) => set({ courrier_delai_prev: v })}
@@ -1624,24 +1624,24 @@ function EmbaucheTab({
             </SortieBlock>
 
             <SortieBlock title="Solde de tout compte">
-              <LabeledField
+              <StackedField
                 label="Envoyé le"
                 type="date"
                 value={edit.stc_date_envoi}
                 onChange={(v) => set({ stc_date_envoi: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Reçu le"
                 type="date"
                 value={edit.stc_date_recep}
                 onChange={(v) => set({ stc_date_recep: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Num Suivi"
                 value={edit.stc_num_suivi}
                 onChange={(v) => set({ stc_num_suivi: v })}
               />
-              <LabeledField
+              <StackedField
                 label="Retourné le"
                 type="date"
                 value={edit.stc_retourne_le}
@@ -1872,6 +1872,72 @@ function SortieBlock({
         {title}
       </h4>
       <div className="space-y-2">{children}</div>
+    </div>
+  )
+}
+
+function StackedField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <label
+        className="text-xs font-normal shrink-0 w-24 leading-tight"
+        style={{ color: COLOR_BRUN }}
+      >
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 min-w-0 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+      />
+    </div>
+  )
+}
+
+function StackedSelectNum({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: number
+  options: RefOption[]
+  onChange: (v: number) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <label
+        className="text-xs font-normal shrink-0 w-24 leading-tight"
+        style={{ color: COLOR_BRUN }}
+      >
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
+        className="flex-1 min-w-0 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+      >
+        <option value={0}>—</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }

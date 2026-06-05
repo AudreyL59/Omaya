@@ -701,12 +701,10 @@ function SalarieRow({
             />
           )}
           {s.is_resp_adjoint && (
-            <span
-              className="inline-flex items-center px-1 py-px rounded-full text-[8px] font-bold text-blue-700 bg-blue-100 border border-blue-200"
-              title="Responsable adjoint"
-            >
-              ADJ
-            </span>
+            <Crown
+              className="w-3 h-3 text-orange-600 shrink-0"
+              aria-label="Responsable adjoint"
+            />
           )}
         </div>
         <div className={`${featured ? 'text-xs' : 'text-[10px]'} text-gray-500 truncate`}>
