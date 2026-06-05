@@ -27,7 +27,7 @@ from fastapi.responses import Response
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.core.auth.security import decode_access_token
-from app.core.database import get_connection
+from app.core.database.pg import get_pg_connection
 
 from .forms import FORM_HANDLERS
 from .info_ticket import donne_info_ticket_batch
@@ -384,22 +384,20 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             raise HTTPException(400, "Statut manquant")
 
         ids_sql = ",".join(str(i) for i in ids)
-        now = _now_windev()
-        db = get_connection("ticket")
+        db = get_pg_connection("ticket")
         try:
             if req.cloturee:
                 db.query(
-                    f"""UPDATE TK_Liste
-                    SET Cloturée = 1, DateCloture = ?, ModifDate = ?
-                    WHERE IDTK_Liste IN ({ids_sql})""",
-                    (now, now),
+                    f"""UPDATE pgt_tk_liste
+                    SET cloturee = TRUE, date_cloture = NOW(), modif_date = NOW()
+                    WHERE id_tk_liste IN ({ids_sql})"""
                 )
             else:
                 db.query(
-                    f"""UPDATE TK_Liste
-                    SET IDTK_Statut = ?, ModifDate = ?
-                    WHERE IDTK_Liste IN ({ids_sql})""",
-                    (int(req.id_statut), now),
+                    f"""UPDATE pgt_tk_liste
+                    SET id_tk_statut = ?, modif_date = NOW()
+                    WHERE id_tk_liste IN ({ids_sql})""",
+                    (int(req.id_statut),),
                 )
         except Exception as e:
             raise HTTPException(500, f"Erreur lors du statut : {e}")
@@ -428,14 +426,13 @@ def get_tickets_router(droit_field: str) -> APIRouter:
             raise HTTPException(400, "Aucun ticket sélectionné")
 
         ids_sql = ",".join(str(i) for i in ids)
-        now = _now_windev()
-        db = get_connection("ticket")
+        db = get_pg_connection("ticket")
         try:
             db.query(
-                f"""UPDATE TK_Liste
-                SET ModifELEM = 'suppr', ModifDate = ?, ModifOP = ?
-                WHERE IDTK_Liste IN ({ids_sql})""",
-                (now, int(user.id_salarie)),
+                f"""UPDATE pgt_tk_liste
+                SET modif_elem = 'suppr', modif_date = NOW(), modif_op = ?
+                WHERE id_tk_liste IN ({ids_sql})""",
+                (int(user.id_salarie),),
             )
         except Exception as e:
             raise HTTPException(500, f"Erreur lors de la suppression : {e}")

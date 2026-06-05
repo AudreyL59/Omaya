@@ -9,7 +9,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from app.core.database import get_connection
 from app.core.database.pg import get_pg_connection
 
 
@@ -81,15 +80,21 @@ def _now_windev() -> str:
     return now.strftime("%Y%m%d%H%M%S") + f"{now.microsecond // 1000:03d}"
 
 
-def _windev_to_iso(s: str) -> str:
-    """Format WinDev (YYYYMMDDHHMMSS[mmm]) → ISO 'YYYY-MM-DD HH:MM:SS'.
-
-    Si la chaîne est déjà ISO ou un format reconnaissable, on la renvoie telle
-    quelle (juste tronquée à 19 chars max).
+def _windev_to_iso(v) -> str:
+    """Convertit en ISO 'YYYY-MM-DD HH:MM:SS' :
+    - datetime/date natifs PG
+    - chaine WinDev compact (YYYYMMDDHHMMSS[mmm])
+    - chaine ISO deja
+    Retourne "" si vide.
     """
-    if not s:
+    if v is None or v == "":
         return ""
-    s = str(s).strip()
+    # PG renvoie des objets natifs apres bascule
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    if hasattr(v, "year") and hasattr(v, "month") and hasattr(v, "day"):
+        return v.strftime("%Y-%m-%d")
+    s = str(v).strip()
     if not s:
         return ""
     # WinDev compact (14 ou 17 chiffres)
@@ -392,53 +397,66 @@ def list_tickets_modified_since(
     Ces 2 champs servent au générateur SSE pour faire avancer son curseur
     et discriminer added vs modified.
     """
-    if not cursor_compact:
-        cursor_compact = "00000000000000000"
-    if not date_du:
-        date_du = "20010101000000000"
-    if not date_au:
-        date_au = "30610101000000000"
-    # POINT D'ATTENTION (phase 1 hybride) : on garde ce SELECT sur HFSQL
-    # car PG a un lag de sync de 15-30 min, ce qui rendrait le long-polling
-    # incapable de detecter les changements recents. A bouger sur PG au
-    # cutover quand HFSQL ne sera plus la source.
-    db = get_connection("ticket")
+    # Conversion cursor / dates compact WinDev -> ISO PG.
+    def _to_pg_ts(s: str, default_iso: str) -> str:
+        s = (s or "").strip()
+        if not s:
+            return default_iso
+        # WinDev compact (14 chiffres min)
+        if len(s) >= 14 and s[:8].isdigit() and s[8:14].isdigit():
+            return f"{s[0:4]}-{s[4:6]}-{s[6:8]} {s[8:10]}:{s[10:12]}:{s[12:14]}"
+        # ISO deja
+        if len(s) >= 10 and s[4] == "-":
+            return s[:19]
+        return default_iso
+
+    cursor_pg = _to_pg_ts(cursor_compact, "2001-01-01 00:00:00")
+    date_du_pg = _to_pg_ts(date_du, "2001-01-01 00:00:00")
+    date_au_pg = _to_pg_ts(date_au, "3061-01-01 00:00:00")
+
+    db = get_pg_connection("ticket")
     rows = db.query(
-        f"""SELECT TOP {int(limit)}
-            IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
-            IDTK_TypeDemande, IDTK_Statut, DateReport,
-            Cloturée, DateCloture, ModifDate, modification,
-            OpTraitementStaff
-        FROM TK_Liste
-        WHERE IDTK_TypeDemande = ?
-          AND ModifELEM NOT LIKE '%suppr%'
-          AND Cloturée = ?
-          AND ModifDate > ?
-          AND DATECREA BETWEEN ? AND ?
-          AND IDTK_Statut <> 28
-        ORDER BY ModifDate DESC""",
-        (int(id_type_demande), 1 if cloturee else 0, cursor_compact, date_du, date_au),
+        f"""SELECT id_tk_liste, date_crea, op_crea, op_dest, service,
+            id_tk_type_demande, id_tk_statut, date_report,
+            cloturee, date_cloture, modif_date, modification,
+            op_traitement_staff
+        FROM pgt_tk_liste
+        WHERE id_tk_type_demande = ?
+          AND modif_elem NOT LIKE '%suppr%'
+          AND cloturee = ?
+          AND modif_date > ?
+          AND date_crea BETWEEN ? AND ?
+          AND id_tk_statut <> 28
+        ORDER BY modif_date DESC
+        LIMIT {int(limit)}""",
+        (int(id_type_demande), bool(cloturee), cursor_pg, date_du_pg, date_au_pg),
     )
     out: list[dict] = []
     for r in rows:
-        md_raw = str(r.get("ModifDate") or "").strip()
-        dc_raw = str(r.get("DATECREA") or "").strip()
+        md = r.get("modif_date")
+        dc = r.get("date_crea")
+        md_iso = _windev_to_iso(md)
+        dc_iso = _windev_to_iso(dc)
+        # Cursor compact reconstruit a partir de l'ISO pour rester compatible
+        # avec le long-polling client qui repasse cette valeur en cursor.
+        md_compact = md_iso.replace("-", "").replace(":", "").replace(" ", "") + "000" if md_iso else ""
+        dc_compact = dc_iso.replace("-", "").replace(":", "").replace(" ", "") + "000" if dc_iso else ""
         out.append({
-            "id_ticket": _str_id(r.get("IDTK_Liste")),
-            "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
-            "service": (r.get("Service") or "").strip(),
-            "id_statut": _to_int(r.get("IDTK_Statut")),
-            "date_crea": _windev_to_iso(dc_raw),
-            "op_crea": _str_id(r.get("OPCREA")),
-            "op_dest": _str_id(r.get("OPDEST")),
-            "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
-            "cloturee": bool(r.get("Cloturée")),
-            "date_cloture": _windev_to_iso(r.get("DateCloture")),
-            "date_report": _windev_to_iso(r.get("DateReport")),
-            "modif_date": _windev_to_iso(md_raw),
+            "id_ticket": _str_id(r.get("id_tk_liste")),
+            "id_type_demande": _str_id(r.get("id_tk_type_demande")),
+            "service": (r.get("service") or "").strip(),
+            "id_statut": _to_int(r.get("id_tk_statut")),
+            "date_crea": dc_iso,
+            "op_crea": _str_id(r.get("op_crea")),
+            "op_dest": _str_id(r.get("op_dest")),
+            "op_traitement_staff": _str_id(r.get("op_traitement_staff")),
+            "cloturee": bool(r.get("cloturee")),
+            "date_cloture": _windev_to_iso(r.get("date_cloture")),
+            "date_report": _windev_to_iso(r.get("date_report")),
+            "modif_date": md_iso,
             "modification": bool(r.get("modification")),
-            "_modif_compact": md_raw,
-            "_date_crea_compact": dc_raw,
+            "_modif_compact": md_compact,
+            "_date_crea_compact": dc_compact,
         })
     return out
 
@@ -689,36 +707,32 @@ def get_lib_type_demande(id_type: int) -> str:
 
 
 def load_ticket_raw(id_ticket: int) -> dict | None:
-    """Lit une ligne TK_Liste (1 ticket) — mêmes champs que la liste.
-
-    Garde sur HFSQL : ce read est utilise comme prelude a un UPDATE
-    (apply_ouverture / save_ticket_infos), donc lag PG = incoherence.
-    """
-    db = get_connection("ticket")
+    """Lit une ligne pgt_tk_liste (1 ticket) — mêmes champs que la liste."""
+    db = get_pg_connection("ticket")
     r = db.query_one(
-        """SELECT IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
-            IDTK_TypeDemande, IDTK_Statut, DateReport,
-            Cloturée, DateCloture, ModifDate, modification,
-            OpTraitementStaff
-        FROM TK_Liste
-        WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, date_crea, op_crea, op_dest, service,
+            id_tk_type_demande, id_tk_statut, date_report,
+            cloturee, date_cloture, modif_date, modification,
+            op_traitement_staff
+        FROM pgt_tk_liste
+        WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return None
     return {
-        "id_ticket": _str_id(r.get("IDTK_Liste")),
-        "id_type_demande": _str_id(r.get("IDTK_TypeDemande")),
-        "service": (r.get("Service") or "").strip(),
-        "id_statut": _to_int(r.get("IDTK_Statut")),
-        "date_crea": _windev_to_iso(r.get("DATECREA")),
-        "op_crea": _str_id(r.get("OPCREA")),
-        "op_dest": _str_id(r.get("OPDEST")),
-        "op_traitement_staff": _str_id(r.get("OpTraitementStaff")),
-        "cloturee": bool(r.get("Cloturée")),
-        "date_cloture": _windev_to_iso(r.get("DateCloture")),
-        "date_report": _windev_to_iso(r.get("DateReport")),
-        "modif_date": _windev_to_iso(r.get("ModifDate")),
+        "id_ticket": _str_id(r.get("id_tk_liste")),
+        "id_type_demande": _str_id(r.get("id_tk_type_demande")),
+        "service": (r.get("service") or "").strip(),
+        "id_statut": _to_int(r.get("id_tk_statut")),
+        "date_crea": _windev_to_iso(r.get("date_crea")),
+        "op_crea": _str_id(r.get("op_crea")),
+        "op_dest": _str_id(r.get("op_dest")),
+        "op_traitement_staff": _str_id(r.get("op_traitement_staff")),
+        "cloturee": bool(r.get("cloturee")),
+        "date_cloture": _windev_to_iso(r.get("date_cloture")),
+        "date_report": _windev_to_iso(r.get("date_report")),
+        "modif_date": _windev_to_iso(r.get("modif_date")),
     }
 
 
@@ -732,13 +746,12 @@ def apply_ouverture(id_ticket: int, user_id: int) -> dict | None:
         return None
     id_type = int(raw["id_type_demande"]) if raw["id_type_demande"].isdigit() else 0
     if id_type not in (38, 39) and raw["id_statut"] < 2:
-        now = _now_windev()
-        db = get_connection("ticket")
+        db = get_pg_connection("ticket")
         db.query(
-            """UPDATE TK_Liste
-            SET IDTK_Statut = 2, ModifDate = ?, ModifOP = ?, ModifELEM = 'modif'
-            WHERE IDTK_Liste = ?""",
-            (now, int(user_id), int(id_ticket)),
+            """UPDATE pgt_tk_liste
+            SET id_tk_statut = 2, modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_tk_liste = ?""",
+            (int(user_id), int(id_ticket)),
         )
         raw["id_statut"] = 2
     return raw
@@ -746,15 +759,15 @@ def apply_ouverture(id_ticket: int, user_id: int) -> dict | None:
 
 def maj_op_traitement_ticket(id_ticket: int, id_cial: int) -> None:
     """Transposition MajOpTraitementTicket (procédure globale WinDev) :
-    UPDATE TK_Liste SET OpTraitementStaff = user, ModifDate = now.
+    UPDATE pgt_tk_liste SET op_traitement_staff = user, modif_date = NOW().
     Appelée par les FI_* après enregistrement.
     """
-    db = get_connection("ticket")
+    db = get_pg_connection("ticket")
     db.query(
-        """UPDATE TK_Liste
-        SET OpTraitementStaff = ?, ModifDate = ?
-        WHERE IDTK_Liste = ?""",
-        (int(id_cial), _now_windev(), int(id_ticket)),
+        """UPDATE pgt_tk_liste
+        SET op_traitement_staff = ?, modif_date = NOW()
+        WHERE id_tk_liste = ?""",
+        (int(id_cial), int(id_ticket)),
     )
 
 
@@ -853,16 +866,15 @@ def rtf_to_text(text: str) -> str:
 
 
 def ajout_histo_tk(id_ticket: int, id_statut: int, id_cial: int) -> None:
-    """Ajoute une ligne TK_Histo (transposition AjoutHistoTK globale)."""
-    now = _now_windev()
-    new_id = int(now)  # idEntierDateHeureSys()
-    db = get_connection("ticket")
+    """Ajoute une ligne pgt_tk_histo (transposition AjoutHistoTK globale)."""
+    new_id = int(_now_windev())  # idEntierDateHeureSys() : YYYYMMDDHHMMSSmmm
+    db = get_pg_connection("ticket")
     db.query(
-        """INSERT INTO TK_Histo
-        (IDTK_Histo, IDTK_Liste, operateur, dateHisto, IDTK_Statut,
-         ModifDate, ModifELEM, ModifOP)
-        VALUES (?, ?, ?, ?, ?, ?, 'new', ?)""",
-        (new_id, int(id_ticket), int(id_cial), now, int(id_statut), now, int(id_cial)),
+        """INSERT INTO pgt_tk_histo
+        (id_tk_histo, id_tk_liste, operateur, date_histo, id_tk_statut,
+         modif_date, modif_elem, modif_op)
+        VALUES (?, ?, ?, NOW(), ?, NOW(), 'new', ?)""",
+        (new_id, int(id_ticket), int(id_cial), int(id_statut), int(id_cial)),
     )
 
 
@@ -883,33 +895,35 @@ def save_ticket_infos(
     if not raw:
         return {"ok": False, "closed": False}
     old_statut = raw["id_statut"]
-    now = _now_windev()
 
-    sets = ["IDTK_Statut = ?", "ModifOP = ?", "ModifDate = ?", "ModifELEM = 'modif'"]
-    params: list = [int(id_statut), int(user_id), now]
+    sets = ["id_tk_statut = ?", "modif_op = ?", "modif_date = NOW()", "modif_elem = 'modif'"]
+    params: list = [int(id_statut), int(user_id)]
     if op_dest and str(op_dest).isdigit():
-        sets.append("OPDEST = ?")
+        sets.append("op_dest = ?")
         params.append(int(op_dest))
     if prendre_en_charge:
-        # "Je m'occupe de ce ticket" : OpTraitementStaff = user courant
-        sets.append("OpTraitementStaff = ?")
+        sets.append("op_traitement_staff = ?")
         params.append(int(user_id))
     elif op_traitement_staff and str(op_traitement_staff).isdigit():
-        sets.append("OpTraitementStaff = ?")
+        sets.append("op_traitement_staff = ?")
         params.append(int(op_traitement_staff))
     if cloturee:
-        dc = (date_cloture or "").replace("-", "")[:8]
-        dc_wd = f"{dc}000000000" if len(dc) == 8 and dc.isdigit() else now
-        sets.append("Cloturée = 1")
-        sets.append("DateCloture = ?")
-        params.append(dc_wd)
+        # date_cloture : 'YYYY-MM-DD' fourni, sinon NOW()
+        dc_iso = (date_cloture or "").strip()
+        if len(dc_iso) >= 10 and dc_iso[4] == "-":
+            sets.append("cloturee = TRUE")
+            sets.append("date_cloture = ?")
+            params.append(dc_iso[:10])
+        else:
+            sets.append("cloturee = TRUE")
+            sets.append("date_cloture = NOW()")
     else:
-        sets.append("Cloturée = 0")
+        sets.append("cloturee = FALSE")
     params.append(int(id_ticket))
 
-    db = get_connection("ticket")
+    db = get_pg_connection("ticket")
     db.query(
-        f"UPDATE TK_Liste SET {', '.join(sets)} WHERE IDTK_Liste = ?",
+        f"UPDATE pgt_tk_liste SET {', '.join(sets)} WHERE id_tk_liste = ?",
         tuple(params),
     )
     if int(id_statut) != int(old_statut):
