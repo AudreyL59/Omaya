@@ -710,7 +710,7 @@ def _envoyer_sms_vendeur_prise_appel(
         nom_ope = f"{(rows_op[0].get('Nom') or '').strip()} {_capitalize((rows_op[0].get('Prenom') or '').strip())}".strip()
     nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
     texte = f"Attention, vous allez bientot recevoir un appel du CALL pour votre client {nom_clt}."
-    return envoi_sms(texte, gsm, emetteur="Omaya-Fibre")
+    return envoi_sms(texte, gsm, emetteur="Omaya-Call")
 
 
 def _envoyer_sms_vendeur_renvoi_complement(
@@ -727,7 +727,7 @@ def _envoyer_sms_vendeur_renvoi_complement(
         return "Pas de GSM vendeur"
     nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
     texte = f"Attention, votre panier pour le client {nom_clt} est renvoye pour complement."
-    return envoi_sms(texte, gsm, emetteur="Omaya-Fibre")
+    return envoi_sms(texte, gsm, emetteur="Omaya-Call")
 
 
 def _envoyer_sms_vendeur_validation_degroupage(
@@ -744,7 +744,7 @@ def _envoyer_sms_vendeur_validation_degroupage(
         return "Pas de GSM vendeur"
     nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
     texte = f"Le CALL vient d'envoyer le panier degroupe SFR pour votre client {nom_clt}."
-    return envoi_sms(texte, gsm, emetteur="Omaya-Fibre")
+    return envoi_sms(texte, gsm, emetteur="Omaya-Call")
 
 
 def _format_nom_client_sms(nom: str, nom_marital: str, prenom: str) -> str:

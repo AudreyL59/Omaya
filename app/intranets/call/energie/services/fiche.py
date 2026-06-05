@@ -751,7 +751,7 @@ def _envoyer_sms_prise_appel(
         return "Pas de GSM vendeur"
     nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
     texte = f"Attention, vous allez bientot recevoir un appel du CALL pour votre client {nom_clt}."
-    return envoi_sms(texte, gsm, emetteur="Omaya-ENI")
+    return envoi_sms(texte, gsm, emetteur="Omaya-Call")
 
 
 def _envoyer_sms_renvoi_complement(
@@ -764,7 +764,7 @@ def _envoyer_sms_renvoi_complement(
         return "Pas de GSM vendeur"
     nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
     texte = f"Attention, votre panier pour le client {nom_clt} est renvoye pour complement."
-    return envoi_sms(texte, gsm, emetteur="Omaya-ENI")
+    return envoi_sms(texte, gsm, emetteur="Omaya-Call")
 
 
 def _envoyer_sms_renvoi_clarification(
@@ -778,7 +778,7 @@ def _envoyer_sms_renvoi_clarification(
         return "Pas de GSM vendeur"
     nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
     texte = f"Attention, votre panier pour le client {nom_clt} est renvoye car il manque la fiche de clarification."
-    return envoi_sms(texte, gsm, emetteur="Omaya-ENI")
+    return envoi_sms(texte, gsm, emetteur="Omaya-Call")
 
 
 # --- Actions panier -------------------------------------------------------
