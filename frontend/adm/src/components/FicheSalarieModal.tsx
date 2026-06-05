@@ -1813,12 +1813,12 @@ function OverlayButton({
       disabled={disabled}
       className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
       style={{
-        color: highlight ? 'white' : COLOR_BRUN,
-        backgroundColor: highlight
-          ? active
-            ? COLOR_PRIMARY
-            : 'rgba(23, 73, 78, 0.55)'
-          : 'transparent',
+        color: active ? 'white' : COLOR_BRUN,
+        backgroundColor: active
+          ? COLOR_PRIMARY
+          : highlight
+            ? '#ECF1F2'
+            : 'transparent',
       }}
       title={disabled ? 'À implémenter' : ''}
     >
@@ -1853,8 +1853,8 @@ function SortieButton({
       disabled={disabled}
       className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded transition disabled:opacity-50 disabled:cursor-not-allowed"
       style={{
-        color: hover && !disabled ? 'white' : COLOR_BRUN,
-        backgroundColor: hover && !disabled ? 'rgba(23, 73, 78, 0.55)' : 'transparent',
+        color: COLOR_BRUN,
+        backgroundColor: hover && !disabled ? '#ECF1F2' : 'transparent',
       }}
       title={disabled ? 'En cours...' : label}
     >
