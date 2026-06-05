@@ -1322,31 +1322,33 @@ function EmbaucheTab({
             options={refs.postes}
             onChange={(v) => set({ id_type_poste: v })}
           />
-          <div className="grid grid-cols-[120px_1fr_auto] gap-2 items-center">
+          <div className="grid grid-cols-[120px_1fr] gap-2 items-center">
             <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
               Société
             </span>
-            <select
-              value={edit.id_ste}
-              onChange={(e) => set({ id_ste: e.target.value })}
-              className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
-              style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
-            >
-              <option value="">—</option>
-              {refs.societes.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <button
-              disabled
-              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ color: COLOR_PRIMARY }}
-              title="Modifier la société (à implémenter)"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 min-w-0">
+              <select
+                value={edit.id_ste}
+                onChange={(e) => set({ id_ste: e.target.value })}
+                className="flex-1 min-w-0 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+                style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+              >
+                <option value="">—</option>
+                {refs.societes.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                disabled
+                className="shrink-0 p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ color: COLOR_PRIMARY }}
+                title="Modifier la société (à implémenter)"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1384,14 +1386,14 @@ function EmbaucheTab({
         <div className="space-y-3 pt-1 pl-12">
           <EmbCheckDeco
             icon={<Crown className="w-4 h-4" />}
-            iconBg="#F59E0B"
+            iconBg="#DC2626"
             label="Responsable d'équipe"
             checked={edit.resp_equipe}
             onChange={(v) => set({ resp_equipe: v })}
           />
           <EmbCheckDeco
             icon={<Crown className="w-4 h-4" />}
-            iconBg="#F59E0B"
+            iconBg="#DC2626"
             label="Responsable Adjoint"
             checked={edit.resp_adjoint}
             onChange={(v) => set({ resp_adjoint: v })}

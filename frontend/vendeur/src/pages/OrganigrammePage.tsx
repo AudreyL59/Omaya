@@ -696,7 +696,7 @@ function SalarieRow({
           </span>
           {s.is_resp && (
             <Crown
-              className="w-3 h-3 text-amber-500 shrink-0"
+              className="w-3 h-3 text-red-600 shrink-0"
               aria-label="Responsable"
             />
           )}
@@ -911,7 +911,7 @@ function SalariePopup({
             <h2 className="text-lg font-bold text-gray-900">
               {salarie.nom} {salarie.prenom}
             </h2>
-            {salarie.is_resp && <Crown className="w-4 h-4 text-amber-500" />}
+            {salarie.is_resp && <Crown className="w-4 h-4 text-red-600" />}
           </div>
           <p className="text-sm text-gray-500 mt-0.5">{salarie.poste}</p>
 
