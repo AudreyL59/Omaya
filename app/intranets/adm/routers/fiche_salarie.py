@@ -9,8 +9,10 @@ from fastapi.responses import Response
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.fiche_salarie import (
+    FicheCoordonnees,
     FicheHeader,
     FicheIdentite,
+    SaveCoordonneesPayload,
     SaveIdentitePayload,
     SaveResponse,
     ToggleStatusPayload,
@@ -104,6 +106,31 @@ def toggle_en_pause(
 ):
     try:
         return svc.set_en_pause(id_salarie, payload.value)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 2 : Coordonnees ---------------------------------------------
+
+@router.get("/{id_salarie}/coordonnees", response_model=FicheCoordonnees)
+def get_coordonnees(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
+    try:
+        return svc.load_coordonnees(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/coordonnees", response_model=SaveResponse)
+def save_coordonnees(
+    payload: SaveCoordonneesPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        body = payload.model_dump(exclude_unset=True)
+        return svc.save_coordonnees(id_salarie, body)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

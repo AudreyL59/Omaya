@@ -16,6 +16,16 @@ class FicheHeader(BaseModel):
     rs_societe: str = ""
     id_type_poste: int = 0
     lib_poste: str = ""
+    # Embauche / sortie (pour le bandeau "Emb. le ... / sorti(e) en ...")
+    date_debut: str = ""
+    date_sortie_demandee: str = ""
+    date_sortie_reelle: str = ""
+    lib_sortie: str = ""
+    # Tooltip "Fiche creee le ... par X / Derniere modif le ... par Y"
+    datecrea: str = ""
+    op_crea: str = ""
+    modif_date: str = ""
+    modif_op: str = ""
 
 
 class FicheIdentite(BaseModel):
@@ -71,3 +81,38 @@ class SaveResponse(BaseModel):
 class ToggleStatusPayload(BaseModel):
     """Body POST /actif ou /en-pause : nouvelle valeur."""
     value: bool
+
+
+# --- Onglet 2 : Coordonnees ---------------------------------------------
+
+class FicheCoordonnees(BaseModel):
+    id_salarie: str
+    adresse1: str = ""
+    adresse2: str = ""
+    cp: str = ""
+    ville: str = ""
+    tel_fixe: str = ""
+    tel_mob: str = ""
+    mail: str = ""
+    mail2: str = ""
+    urg_nom: str = ""
+    urg_lien: str = ""
+    urg_tel: str = ""
+    iban: str = ""
+    bic: str = ""
+
+
+class SaveCoordonneesPayload(BaseModel):
+    adresse1: str | None = None
+    adresse2: str | None = None
+    cp: str | None = None
+    ville: str | None = None
+    tel_fixe: str | None = None
+    tel_mob: str | None = None
+    mail: str | None = None
+    mail2: str | None = None
+    urg_nom: str | None = None
+    urg_lien: str | None = None
+    urg_tel: str | None = None
+    iban: str | None = None
+    bic: str | None = None

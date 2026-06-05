@@ -32,6 +32,31 @@ interface FicheHeader {
   rs_societe: string
   id_type_poste: number
   lib_poste: string
+  date_debut: string
+  date_sortie_demandee: string
+  date_sortie_reelle: string
+  lib_sortie: string
+  datecrea: string
+  op_crea: string
+  modif_date: string
+  modif_op: string
+}
+
+interface FicheCoordonnees {
+  id_salarie: string
+  adresse1: string
+  adresse2: string
+  cp: string
+  ville: string
+  tel_fixe: string
+  tel_mob: string
+  mail: string
+  mail2: string
+  urg_nom: string
+  urg_lien: string
+  urg_tel: string
+  iban: string
+  bic: string
 }
 
 interface FicheIdentite {
@@ -96,7 +121,7 @@ const SITUATION_FAM: { v: number; l: string }[] = [
 
 const MENU: MenuItem[] = [
   { key: 'identite',        label: 'Infos Principales', coded: true },
-  { key: 'coordonnees',     label: 'Coordonnées',       coded: false },
+  { key: 'coordonnees',     label: 'Coordonnées',       coded: true },
   { key: 'infos_embauche',  label: 'Infos Embauche',    coded: false },
   { key: 'orga_suivi',      label: 'Organigramme',      coded: false },
   { key: 'suivi_adm',       label: 'Suivi ADM',         coded: false },
@@ -221,7 +246,10 @@ export default function FicheSalarieModal({
             {activeTab === 'identite' && (
               <IdentiteTab idSalarie={idSalarie} header={header} loading={loading} />
             )}
-            {activeTab !== 'identite' && (
+            {activeTab === 'coordonnees' && (
+              <CoordonneesTab idSalarie={idSalarie} />
+            )}
+            {activeTab !== 'identite' && activeTab !== 'coordonnees' && (
               <div className="flex flex-col items-center justify-center h-full text-gray-400 italic">
                 <div className="text-lg mb-2">
                   {MENU.find((m) => m.key === activeTab)?.label}
@@ -465,7 +493,7 @@ function IdentiteTab({
 
   return (
     <div className="p-6">
-      {/* Bandeau infos + actions enregistrer */}
+      {/* Bandeau infos + actions enregistrer (cf. WinDev CallbackInfoEmbauche) */}
       <div className="flex items-start justify-between mb-4">
         <div className="text-sm" style={{ color: COLOR_BRUN }}>
           {header && (
@@ -473,14 +501,7 @@ function IdentiteTab({
               <div className="font-semibold">
                 {header.lib_poste || '—'} =&gt; {header.rs_societe || '—'}
               </div>
-              <div>
-                {data?.date_naiss
-                  ? `Emb. le ${formatShortDate(data.date_naiss)}, `
-                  : ''}
-                {header.en_activite
-                  ? 'tjrs en activité'
-                  : 'sorti'}
-              </div>
+              <div>{buildEmbaucheLine(header)}</div>
             </>
           )}
           {loading && !header && (
@@ -688,6 +709,264 @@ function IdentiteTab({
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// --- Bandeau Embauche / Sortie ------------------------------------------
+
+function buildEmbaucheLine(h: FicheHeader): string {
+  const parts: string[] = []
+  if (h.date_debut) parts.push(`Emb. le ${formatShortDate(h.date_debut)}`)
+  if (h.en_activite) {
+    parts.push('tjrs en activité')
+  } else if (h.lib_sortie) {
+    let s = `sorti(e) en ${h.lib_sortie}`
+    if (h.date_sortie_demandee) {
+      s += ` le ${formatShortDate(h.date_sortie_demandee)}`
+    } else if (h.date_sortie_reelle) {
+      s += ` le ${formatShortDate(h.date_sortie_reelle)}`
+    }
+    parts.push(s)
+  } else {
+    parts.push('sorti(e)')
+  }
+  return parts.join(', ')
+}
+
+// --- Onglet 2 : Coordonnees ----------------------------------------------
+
+function CoordonneesTab({ idSalarie }: { idSalarie: string }) {
+  const [data, setData] = useState<FicheCoordonnees | null>(null)
+  const [edit, setEdit] = useState<FicheCoordonnees | null>(null)
+  const [loadingTab, setLoadingTab] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string>('')
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
+
+  useEffect(() => {
+    setLoadingTab(true)
+    setError('')
+    fetch(`/api/adm/fiche-salarie/${idSalarie}/coordonnees`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) =>
+        r.ok ? r.json() : r.json().then((j) => Promise.reject(j?.detail || r.status)),
+      )
+      .then((d: FicheCoordonnees) => {
+        setData(d)
+        setEdit(d)
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoadingTab(false))
+  }, [idSalarie])
+
+  const dirty = useMemo(() => {
+    if (!data || !edit) return false
+    return JSON.stringify(data) !== JSON.stringify(edit)
+  }, [data, edit])
+
+  const handleSave = async () => {
+    if (!edit) return
+    setSaving(true)
+    setToast(null)
+    try {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/coordonnees`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(edit),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Erreur : ${j?.detail || r.status}` })
+        return
+      }
+      // Recharge depuis le serveur pour recuperer les valeurs normalisees (tel, mail)
+      const reload = await fetch(`/api/adm/fiche-salarie/${idSalarie}/coordonnees`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (reload.ok) {
+        const d = (await reload.json()) as FicheCoordonnees
+        setData(d)
+        setEdit(d)
+      } else {
+        setData(edit)
+      }
+      setToast({ kind: 'ok', msg: 'Informations enregistrées' })
+    } finally {
+      setSaving(false)
+      setTimeout(() => setToast(null), 3000)
+    }
+  }
+
+  if (loadingTab) {
+    return (
+      <div className="flex items-center gap-2 text-gray-500 p-6">
+        <Loader2 className="w-4 h-4 animate-spin" /> Chargement des coordonnées…
+      </div>
+    )
+  }
+  if (error || !edit) {
+    return (
+      <div className="text-red-600 text-sm flex items-center gap-2 p-6">
+        <AlertCircle className="w-4 h-4" /> {error || 'Pas de données'}
+      </div>
+    )
+  }
+
+  const set = (patch: Partial<FicheCoordonnees>) =>
+    setEdit((prev) => (prev ? { ...prev, ...patch } : prev))
+
+  return (
+    <div className="p-6">
+      {/* Bouton enregistrer */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold" style={{ color: COLOR_BRUN }}>
+          Coordonnées
+        </h2>
+        <button
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          className="flex items-center gap-2 px-4 py-2 text-white rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
+          style={{ backgroundColor: COLOR_PRIMARY }}
+        >
+          {saving ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          Enregistrer
+        </button>
+      </div>
+
+      {toast && (
+        <div
+          className={`mb-3 px-3 py-2 rounded text-sm ${
+            toast.kind === 'ok'
+              ? 'bg-emerald-50 text-emerald-800'
+              : 'bg-red-50 text-red-800'
+          }`}
+        >
+          {toast.msg}
+        </div>
+      )}
+
+      <div className="max-w-3xl space-y-5">
+        <SubSection title="Adresse">
+          <InlineField
+            label="Adresse 1"
+            value={edit.adresse1}
+            onChange={(v) => set({ adresse1: v })}
+            labelWidth={90}
+          />
+          <InlineField
+            label="Adresse 2"
+            value={edit.adresse2}
+            onChange={(v) => set({ adresse2: v })}
+            labelWidth={90}
+          />
+          <div className="grid grid-cols-[100px_1fr] gap-3">
+            <InlineField
+              label="CP"
+              value={edit.cp}
+              onChange={(v) => set({ cp: v })}
+              labelWidth={30}
+            />
+            <InlineField
+              label="Ville"
+              value={edit.ville}
+              onChange={(v) => set({ ville: v })}
+              labelWidth={45}
+            />
+          </div>
+        </SubSection>
+
+        <SubSection title="Contact">
+          <div className="grid grid-cols-2 gap-3">
+            <InlineField
+              label="Tél fixe"
+              value={edit.tel_fixe}
+              onChange={(v) => set({ tel_fixe: v })}
+              labelWidth={70}
+            />
+            <InlineField
+              label="Tél mobile"
+              value={edit.tel_mob}
+              onChange={(v) => set({ tel_mob: v })}
+              labelWidth={70}
+            />
+          </div>
+          <InlineField
+            label="Courriel"
+            type="email"
+            value={edit.mail}
+            onChange={(v) => set({ mail: v })}
+            labelWidth={90}
+          />
+          <InlineField
+            label="Courriel 2"
+            type="email"
+            value={edit.mail2}
+            onChange={(v) => set({ mail2: v })}
+            labelWidth={90}
+          />
+        </SubSection>
+
+        <SubSection title="Personne à contacter en cas d'urgence">
+          <div className="grid grid-cols-[2fr_1fr_2fr] gap-3">
+            <InlineField
+              label="Nom"
+              value={edit.urg_nom}
+              onChange={(v) => set({ urg_nom: v })}
+              labelWidth={40}
+            />
+            <InlineField
+              label="Lien"
+              value={edit.urg_lien}
+              onChange={(v) => set({ urg_lien: v })}
+              labelWidth={40}
+            />
+            <InlineField
+              label="Téléphone"
+              value={edit.urg_tel}
+              onChange={(v) => set({ urg_tel: v })}
+              labelWidth={70}
+            />
+          </div>
+        </SubSection>
+
+        <SubSection title="Coordonnées bancaires">
+          <InlineField
+            label="IBAN"
+            value={edit.iban}
+            onChange={(v) => set({ iban: v })}
+            labelWidth={50}
+          />
+          <InlineField
+            label="BIC"
+            value={edit.bic}
+            onChange={(v) => set({ bic: v })}
+            labelWidth={50}
+          />
+        </SubSection>
+      </div>
+    </div>
+  )
+}
+
+function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h3
+        className="text-xs uppercase tracking-wide font-semibold mb-2 pb-1 border-b"
+        style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
+      >
+        {title}
+      </h3>
+      <div className="space-y-2 mt-2">{children}</div>
     </div>
   )
 }
