@@ -2069,12 +2069,26 @@ function OverlayPartenaires({
     if (!selectedPortail) return
     setSending(true)
     try {
-      // Endpoint à venir : POST /partenaires/portails/{id}/send-codes
-      // Pour cette phase : juste un toast informatif.
-      showToast(
-        'Envoi mail + SMS : à brancher backend (/partenaires/portails/{id}/send-codes)',
-        'info',
+      const r = await fetch(
+        `/api/adm/fiche-salarie/partenaires/portails/${selectedPortail.id_salarie_partenaire}/send-codes`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
       )
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        showToast(`Échec : ${j?.detail || r.status}`, 'error')
+        return
+      }
+      const parts: string[] = []
+      if (j.mail_envoye) parts.push('mail envoyé')
+      if (j.sms_envoye) parts.push('SMS envoyé')
+      if (parts.length === 0) {
+        showToast(`Aucun envoi (${j.sms_result || 'pas de mail ni GSM'})`, 'error')
+      } else {
+        showToast(`Codes : ${parts.join(' + ')}`, 'success')
+      }
     } finally {
       setSending(false)
     }

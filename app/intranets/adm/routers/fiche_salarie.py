@@ -270,6 +270,23 @@ def del_part_dpae(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
+@router.post("/partenaires/portails/{id_salarie_partenaire}/send-codes")
+def post_send_portail_codes(
+    id_salarie_partenaire: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Renvoie les codes du portail au salarie par mail + SMS.
+
+    Transposition WinDev bouton 'Renvoyer les codes' (overlay Partenaires).
+    Retourne { ok, mail_envoye, sms_envoye, sms_result }.
+    """
+    try:
+        return svc.send_portail_codes(id_salarie_partenaire, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 # --- Overlay "S'Cool" : fiche Formateur ---------------------------------
 
 @router.get("/{id_salarie}/formateur", response_model=FicheFormateur)

@@ -1053,6 +1053,104 @@ def delete_salarie_part_dpae(id_salarie_partenaire: int, op_id: int) -> dict:
     return {"ok": True}
 
 
+def send_portail_codes(id_salarie_partenaire: int, demandeur_id: int) -> dict:
+    """Renvoie les codes d'un portail partenaire au salarie (mail + SMS).
+
+    Transposition du bouton WinDev "Renvoyer les codes" de l'overlay Partenaires
+    de la fiche salarie ADM.
+
+    Retourne {ok, mail_envoye, sms_envoye, sms_result, error?}.
+    """
+    db_rh = get_pg_connection("rh")
+
+    # 1. Recuperer le portail + libelle partenaire + infos salarie
+    row = db_rh.query_one(
+        """SELECT
+            sp.id_salarie_partenaire, sp.id_salarie, sp.id_partenaire,
+            sp.code, sp.login, sp.mdp,
+            p.lib_partenaire,
+            s.nom, s.prenom,
+            sc.mail, sc.tel_mob
+        FROM rh.pgt_salarie_partenaire sp
+        LEFT JOIN adv.pgt_partenaire p ON p.id_partenaire = sp.id_partenaire
+        LEFT JOIN rh.pgt_salarie s ON s.id_salarie = sp.id_salarie
+        LEFT JOIN rh.pgt_salarie_coordonnees sc ON sc.id_salarie = sp.id_salarie
+        WHERE sp.id_salarie_partenaire = ?""",
+        (id_salarie_partenaire,),
+    )
+    if not row:
+        return {"ok": False, "error": "Portail introuvable"}
+
+    nom = _str(row.get("nom"))
+    prenom = _str(row.get("prenom"))
+    nom_prenom = f"{nom} {_capitalize_first(prenom)}".strip()
+    mail = _str(row.get("mail")).lower()
+    gsm_raw = _str(row.get("tel_mob"))
+    lib_partenaire = _str(row.get("lib_partenaire"))
+    code = _str(row.get("code"))
+    login = _str(row.get("login"))
+    mdp = _str(row.get("mdp"))
+
+    # 2. Envoi mail
+    mail_envoye = False
+    mail_err = ""
+    if mail:
+        try:
+            from app.core.config import MAIL_SUPPORT
+            from app.shared.notifications.mail import envoi_mail_rh
+
+            sujet = f"Vos Codes {lib_partenaire}"
+            html = (
+                '<font face="arial" style="font-size:10pt;">'
+                '<p>Bonjour,</p>'
+                f'<p>{nom_prenom} :<br/>'
+                '<ul>'
+                f'<li><b>Partenaire :</b> {lib_partenaire}</li>'
+                f'<li><b>Code :</b> {code}</li>'
+                f'<li><b>Login :</b> {login}</li>'
+                f'<li><b>Mdp :</b> {mdp}</li>'
+                '</ul>'
+                '</p><br/>---'
+                'Cdt.<br/>'
+                '<p><i>PS : Ceci est un mail automatique, ne pas répondre. Merci.</i></p>'
+                '</font>'
+            )
+            cci = [MAIL_SUPPORT] if MAIL_SUPPORT else []
+            mail_envoye = envoi_mail_rh(sujet, html, [mail], cci)
+        except Exception as e:
+            traceback.print_exc(file=sys.stderr)
+            mail_err = f"{type(e).__name__}: {e}"
+
+    # 3. Envoi SMS (numero normalise sans separateurs)
+    sms_envoye = False
+    sms_result = ""
+    if gsm_raw:
+        try:
+            from app.shared.notifications.sms import envoi_sms
+            gsm = "".join(c for c in gsm_raw if c.isdigit() or c == "+")
+            texte = (
+                f"Vos codes {lib_partenaire}\n"
+                f"Code : {code}\n"
+                f"Login : {login}\n"
+                f"MDP : {mdp}"
+            )
+            sms_result = envoi_sms(texte, gsm, "", "OMAYA-Info")
+            # Le service envoi_sms renvoie une chaine ; succes = pas de mot "erreur"
+            low = sms_result.lower()
+            sms_envoye = "envoy" in low and "erreur" not in low and "non config" not in low
+        except Exception as e:
+            traceback.print_exc(file=sys.stderr)
+            sms_result = f"{type(e).__name__}: {e}"
+
+    return {
+        "ok": mail_envoye or sms_envoye,
+        "mail_envoye": mail_envoye,
+        "mail_err": mail_err,
+        "sms_envoye": sms_envoye,
+        "sms_result": sms_result,
+    }
+
+
 def save_coordonnees(id_salarie: int, payload: dict) -> dict:
     """UPDATE pgt_salarie_coordonnees (PATCH partiel).
 
