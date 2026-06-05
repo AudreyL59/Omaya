@@ -1163,6 +1163,7 @@ function EmbaucheTab({
   const [overlay, setOverlay] = useState<
     null | 'partenaires' | 'origine_dpae' | 'formation_iag' | 'scool'
   >(null)
+  const [sortieLoading, setSortieLoading] = useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1246,6 +1247,43 @@ function EmbaucheTab({
   // Overlay actif sous la ligne de boutons (analogue WinDev Cell_*..Visible)
   const toggleOverlay = (k: typeof overlay) =>
     setOverlay((cur) => (cur === k ? null : k))
+
+  // Action de sortie (MVP : UPDATE en_activite/type_sortie/dates)
+  const handleSortie = async (type: number, label: string) => {
+    if (!edit) return
+    if (!window.confirm(`Vous êtes sur le point de sortir le salarié en "${label}".\n\nVoulez-vous continuer ?`))
+      return
+    setSortieLoading(type)
+    try {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/sortie`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ type_sortie: type }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Erreur : ${j?.detail || r.status}` })
+        return
+      }
+      // Recharge la fiche embauche pour avoir les nouvelles valeurs
+      const reload = await fetch(`/api/adm/fiche-salarie/${idSalarie}/embauche`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (reload.ok) {
+        const d = (await reload.json()) as FicheEmbauche
+        setData(d)
+        setEdit(d)
+        onAfterSave(d.en_activite)
+      }
+      setToast({ kind: 'ok', msg: `Sortie enregistrée : ${label}` })
+    } finally {
+      setSortieLoading(null)
+      window.setTimeout(() => setToast(null), 3000)
+    }
+  }
 
   return (
     <div className="p-6">
@@ -1485,12 +1523,48 @@ function EmbaucheTab({
           seulement de VerifDroit("Sa_FicheModif")). Placeholders en attendant
           la phase B (popup confirm + mails + tickets + droits OMAYA). */}
       <div className="mt-6 flex flex-wrap items-center justify-center gap-6">
-        <SortieButton label="Annul DUE" bgColor="#D97706" />
-        <SortieButton label="FPE entreprise" bgColor="#EF4444" />
-        <SortieButton label="Dém / FPE Salarié" bgColor="#DC2626" />
-        <SortieButton label="Dém présumée" bgColor="#475569" />
-        <SortieButton label="Licenciement" bgColor="#475569" />
-        <SortieButton label="Rupture conv" bgColor="#C026D3" />
+        <SortieButton
+          label="Annul DUE"
+          bgColor="#D97706"
+          onClick={() => handleSortie(1, 'Annulation DUE')}
+          disabled={sortieLoading !== null}
+        />
+        <SortieButton
+          label="FPE entreprise"
+          bgColor="#EF4444"
+          onClick={() => handleSortie(3, 'FPE entreprise')}
+          disabled={sortieLoading !== null}
+        />
+        <SortieButton
+          label="Dém / FPE Salarié"
+          bgColor="#DC2626"
+          onClick={() => {
+            // Cf. WinDev : si Fin_Periode_Essai >= aujourd'hui -> FPE salarie (2),
+            // sinon -> Demission (4).
+            const today = new Date().toISOString().slice(0, 10)
+            const type = edit.date_fin_per_essai && edit.date_fin_per_essai >= today ? 2 : 4
+            handleSortie(type, type === 2 ? 'FPE salarié' : 'Démission')
+          }}
+          disabled={sortieLoading !== null}
+        />
+        <SortieButton
+          label="Dém présumée"
+          bgColor="#475569"
+          onClick={() => handleSortie(10, 'Démission présumée')}
+          disabled={sortieLoading !== null}
+        />
+        <SortieButton
+          label="Licenciement"
+          bgColor="#475569"
+          onClick={() => handleSortie(5, 'Licenciement')}
+          disabled={sortieLoading !== null}
+        />
+        <SortieButton
+          label="Rupture conv"
+          bgColor="#C026D3"
+          onClick={() => handleSortie(6, 'Rupture conventionnelle')}
+          disabled={sortieLoading !== null}
+        />
       </div>
 
       {/* Blocs detail sortie (GrElemSortie : visible + editable seulement
@@ -1755,16 +1829,21 @@ function OverlayButton({
 function SortieButton({
   label,
   bgColor,
+  onClick,
+  disabled,
 }: {
   label: string
   bgColor: string
+  onClick?: () => void
+  disabled?: boolean
 }) {
   return (
     <button
-      disabled
+      onClick={onClick}
+      disabled={disabled}
       className="flex items-center gap-2 px-2 py-1 text-sm font-normal rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
       style={{ color: COLOR_BRUN }}
-      title="À implémenter (action de sortie complète à venir)"
+      title={disabled ? 'En cours...' : label}
     >
       <span
         className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-white"

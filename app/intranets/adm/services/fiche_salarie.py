@@ -271,6 +271,60 @@ def set_en_pause(id_salarie: int, value: bool) -> dict:
     return {"ok": True}
 
 
+def sortir_salarie(id_salarie: int, type_sortie: int, demandeur_id: int) -> dict:
+    """Action de sortie d'un salarie (transposition WinDev sortirSalarie).
+
+    MVP : passe en_activite a FALSE, met le type de sortie + dates.
+    A venir (phase B) : creation TK_Liste + TK_DemandeSortieRH + mails RH /
+    juriste / oncall / reset droits OMAYA selon le type.
+    """
+    db = get_pg_connection("rh")
+
+    # Garantit l'existence des lignes salarie_embauche + salarie_sortie
+    for tbl in ("rh.pgt_salarie_embauche", "rh.pgt_salarie_sortie"):
+        if not db.query_one(f"SELECT 1 FROM {tbl} WHERE id_salarie = ?", (id_salarie,)):
+            db.query(
+                f"INSERT INTO {tbl} (id_salarie, modif_date, modif_elem) "
+                f"VALUES ({_int(id_salarie)}, NOW(), 'new')"
+            )
+
+    # 1) Update salarie_embauche : en_activite = FALSE
+    db.query(
+        f"""UPDATE rh.pgt_salarie_embauche SET
+            en_activite = FALSE,
+            modif_date = NOW(),
+            modif_op = {_int(demandeur_id)},
+            modif_elem = 'modif'
+        WHERE id_salarie = {_int(id_salarie)}"""
+    )
+
+    # 2) Update salarie_sortie : type_sortie + date_sortie_demandee + demandeur
+    #    Si Annul DUE (1) : date_sortie_reelle = date_debut
+    sets = [
+        f"id_type_sortie = {_int(type_sortie)}",
+        "date_sortie_demandee = NOW()",
+        f"demandeur_sortie = {_int(demandeur_id)}",
+        "modif_date = NOW()",
+        f"modif_op = {_int(demandeur_id)}",
+        "modif_elem = 'modif'",
+    ]
+    if type_sortie == 1:
+        # Annul DUE : date_sortie_reelle = date_debut (cf. WinDev)
+        emb = db.query_one(
+            "SELECT date_debut FROM rh.pgt_salarie_embauche WHERE id_salarie = ?",
+            (id_salarie,),
+        )
+        if emb and emb.get("date_debut"):
+            sets.append(f"date_sortie_reelle = '{_iso(emb.get('date_debut'))}'")
+
+    db.query(
+        f"""UPDATE rh.pgt_salarie_sortie SET {', '.join(sets)}
+        WHERE id_salarie = {_int(id_salarie)}"""
+    )
+
+    return {"ok": True}
+
+
 # --- Onglet 2 : Coordonnees ---------------------------------------------
 
 def load_coordonnees(id_salarie: int) -> dict:

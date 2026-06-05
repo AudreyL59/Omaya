@@ -83,6 +83,12 @@ class ToggleStatusPayload(BaseModel):
     value: bool
 
 
+class SortieSalariePayload(BaseModel):
+    """Body POST /{id}/sortie : declenche une action de sortie."""
+    type_sortie: int  # 1=Annul DUE, 2=FPE Salarie, 3=FPE entreprise, 4=Demission,
+                      # 5=Licenciement, 6=Rupture conv, 10=Dem presumee
+
+
 # --- Onglet 2 : Coordonnees ---------------------------------------------
 
 class FicheCoordonnees(BaseModel):

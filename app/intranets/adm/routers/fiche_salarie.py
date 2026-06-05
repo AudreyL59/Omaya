@@ -22,6 +22,7 @@ from app.intranets.adm.schemas.fiche_salarie import (
     SaveFormateurPayload,
     SaveIdentitePayload,
     SaveResponse,
+    SortieSalariePayload,
     ToggleStatusPayload,
 )
 from app.intranets.adm.services import fiche_salarie as svc
@@ -159,6 +160,22 @@ def get_embauche_refs(user: UserToken = Depends(get_current_user)):
 def get_embauche(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
     try:
         return svc.load_embauche(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/sortie", response_model=SaveResponse)
+def sortir(
+    payload: SortieSalariePayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Action de sortie (MVP : update en_activite/type_sortie/dates).
+    Phase B : creation TK_Liste + TK_DemandeSortieRH + envois de mails.
+    """
+    try:
+        return svc.sortir_salarie(id_salarie, payload.type_sortie, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
