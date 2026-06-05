@@ -522,7 +522,8 @@ def save_embauche(id_salarie: int, payload: dict) -> dict:
     int_fields_emb = ["id_type_poste", "id_type_ctt", "id_type_horaire",
                       "formation_iag_score"]
     bigint_str_fields_emb = ["dpae_ope", "id_ste", "id_ste_dpae_energie",
-                             "id_ste_dpae_fibre", "coopteur", "jo_coopteur"]
+                             "id_ste_dpae_fibre", "coopteur", "jo_coopteur",
+                             "id_cvtheque"]
     bool_fields_emb = ["en_activite", "coopte", "j_odirecte", "resp_equipe",
                        "resp_adjoint", "chauffeur", "multi_prod",
                        "cin_envoyee", "cj_envoye", "formation_iag"]

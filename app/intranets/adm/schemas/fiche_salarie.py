@@ -190,6 +190,7 @@ class SaveEmbauchePayload(BaseModel):
     coopteur: str | None = None
     j_odirecte: bool | None = None
     jo_coopteur: str | None = None
+    id_cvtheque: str | None = None
     resp_equipe: bool | None = None
     resp_adjoint: bool | None = None
     chauffeur: bool | None = None

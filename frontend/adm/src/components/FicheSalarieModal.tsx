@@ -1370,6 +1370,7 @@ function EmbaucheTab({
       )}
       {overlay === 'origine_dpae' && (
         <OverlayOrigineDPAE
+          idSalarie={idSalarie}
           edit={edit}
           set={set}
           onClose={() => setOverlay(null)}
@@ -1947,15 +1948,43 @@ function OverlayPartenaires({
 // --- Overlay "Origine DPAE" (Coopte/JO directe + Fiche CV) --------------
 
 function OverlayOrigineDPAE({
+  idSalarie,
   edit,
   set,
   onClose,
 }: {
+  idSalarie: string
   edit: FicheEmbauche
   set: (patch: Partial<FicheEmbauche>) => void
   onClose: () => void
 }) {
   const [pickerFor, setPickerFor] = useState<null | 'coopteur' | 'jo_coopteur'>(null)
+  const [savingCv, setSavingCv] = useState(false)
+  const [savedCv, setSavedCv] = useState(false)
+
+  const handleSaveCv = async () => {
+    setSavingCv(true)
+    setSavedCv(false)
+    try {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/embauche`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id_cvtheque: edit.id_cvtheque || '' }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        alert(`Erreur : ${j?.detail || r.status}`)
+        return
+      }
+      setSavedCv(true)
+      window.setTimeout(() => setSavedCv(false), 1500)
+    } finally {
+      setSavingCv(false)
+    }
+  }
 
   const pickCoopteur = (s: SalarieItem) => {
     const lib = `${s.nom} ${capitalize(s.prenom)}`
@@ -2064,10 +2093,30 @@ function OverlayOrigineDPAE({
           </span>
           <input
             value={edit.id_cvtheque || ''}
-            readOnly
-            className="flex-1 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none"
+            onChange={(e) => set({ id_cvtheque: e.target.value })}
+            placeholder="ID CVthèque"
+            className="flex-1 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
             style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
           />
+          {/* Bouton disquette : save direct (UPDATE id_cvtheque uniquement) */}
+          <button
+            onClick={handleSaveCv}
+            disabled={savingCv}
+            className="shrink-0 w-9 h-9 rounded flex items-center justify-center hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              color: savedCv ? '#059669' : COLOR_PRIMARY,
+              border: `1px solid ${COLOR_BG_SOFT}`,
+            }}
+            title="Enregistrer l'ID CVthèque"
+          >
+            {savingCv ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : savedCv ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+          </button>
         </div>
       </div>
 
