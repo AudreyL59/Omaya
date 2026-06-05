@@ -25,6 +25,8 @@ import {
   Circle,
   FileText,
   Ban,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import DocumentViewerModal from '@/components/DocumentViewerModal'
@@ -174,6 +176,40 @@ function pushRefAppelHistory(value: string): string[] {
     /* quota/private mode : on ignore */
   }
   return next
+}
+
+// ISO 'YYYY-MM-DD' -> 'DD/MM/YYYY' (format a copier). Vide si non parsable.
+function isoToFr(iso: string): string {
+  if (!iso || iso.length < 10) return iso || ''
+  const [y, m, d] = iso.slice(0, 10).split('-')
+  if (!y || !m || !d) return iso
+  return `${d}/${m}/${y}`
+}
+
+// Petit bouton "copier dans le presse-papier" avec feedback (coche 1.5s).
+function CopyButton({ value, title }: { value: string; title?: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard indisponible (http non sécurisé / permission) */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={!value}
+      title={title || 'Copier'}
+      className="shrink-0 w-9 h-9 rounded border border-c-line hover:bg-c-brand-soft flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+    >
+      {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-c-ink-soft" />}
+    </button>
+  )
 }
 
 export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: Props) {
@@ -901,12 +937,17 @@ function ColonneGauche({
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="Né(e) le"
-              type="date"
-              value={c.date_naiss}
-              onChange={(v) => onClientChange({ date_naiss: v })}
-            />
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Field
+                  label="Né(e) le"
+                  type="date"
+                  value={c.date_naiss}
+                  onChange={(v) => onClientChange({ date_naiss: v })}
+                />
+              </div>
+              <CopyButton value={isoToFr(c.date_naiss)} title="Copier la date de naissance" />
+            </div>
             <Field
               label="Dép"
               value={c.dep_naiss ? String(c.dep_naiss).padStart(2, '0') : ''}
@@ -1067,8 +1108,8 @@ function ColonneCentre({
         </div>
       </div>
 
-      {/* Bloc vendeur (sous le panier) */}
-      <div className="bg-white rounded-lg border border-c-line p-4">
+      {/* Bloc vendeur (sous le panier) - encadre vert clair */}
+      <div className="bg-green-50 rounded-lg border border-green-300 p-4">
         <h3 className="text-sm font-bold text-c-ink mb-3">Information Vendeur</h3>
         <div className="space-y-2.5 text-xs">
           <Field label="Nom" value={v.nom} />

@@ -26,6 +26,8 @@ import {
   Eye,
   EyeOff,
   Ban,
+  Copy,
+  Check,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import DocumentViewerModal from '@/components/DocumentViewerModal'
@@ -143,6 +145,40 @@ interface Props {
   idTicket: string | null
   onClose: () => void
   onAfterAction?: () => void
+}
+
+// ISO 'YYYY-MM-DD' -> 'DD/MM/YYYY' (format a copier). Vide si non parsable.
+function isoToFr(iso: string): string {
+  if (!iso || iso.length < 10) return iso || ''
+  const [y, m, d] = iso.slice(0, 10).split('-')
+  if (!y || !m || !d) return iso
+  return `${d}/${m}/${y}`
+}
+
+// Petit bouton "copier dans le presse-papier" avec feedback (coche 1.5s).
+function CopyButton({ value, title }: { value: string; title?: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* clipboard indisponible */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={!value}
+      title={title || 'Copier'}
+      className="shrink-0 w-9 h-9 rounded border border-c-line hover:bg-c-brand-soft flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+    >
+      {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-c-ink-soft" />}
+    </button>
+  )
 }
 
 // --- Component principal -------------------------------------------------
@@ -568,9 +604,6 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 kbisAvailable={!!docKbis.url}
                 onOpenCin={() => setViewerOpen('cin')}
                 onOpenKbis={() => setViewerOpen('kbis')}
-                verrouLoading={verrouLoading}
-                onPrendreAppel={() => handlePrendreAppel(false)}
-                onLacherAppel={handleLacherAppel}
               />
               <ColonneCentre
                 data={data}
@@ -585,6 +618,9 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 onAskValider={() => setActionDialog('valider')}
                 onAskAnnulVente={() => setActionDialog('annulVente')}
                 onAskRenvoi={() => setActionDialog('renvoi')}
+                verrouLoading={verrouLoading}
+                onPrendreAppel={() => handlePrendreAppel(false)}
+                onLacherAppel={handleLacherAppel}
               />
               <ColonneDroite
                 data={data}
@@ -701,9 +737,6 @@ function ColonneGauche({
   kbisAvailable,
   onOpenCin,
   onOpenKbis,
-  verrouLoading,
-  onPrendreAppel,
-  onLacherAppel,
 }: {
   data: FicheData
   client: FicheClient
@@ -712,12 +745,8 @@ function ColonneGauche({
   kbisAvailable: boolean
   onOpenCin: () => void
   onOpenKbis: () => void
-  verrouLoading: boolean
-  onPrendreAppel: () => void
-  onLacherAppel: () => void
 }) {
   const c = client
-  const v = data.vendeur
   return (
     <div className="col-span-4 flex flex-col gap-4">
       <div className="bg-white rounded-lg border border-c-line p-4">
@@ -752,7 +781,12 @@ function ColonneGauche({
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Né(e) le" type="date" value={c.date_naiss} onChange={(v) => onClientChange({ date_naiss: v })} />
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Field label="Né(e) le" type="date" value={c.date_naiss} onChange={(v) => onClientChange({ date_naiss: v })} />
+              </div>
+              <CopyButton value={isoToFr(c.date_naiss)} title="Copier la date de naissance" />
+            </div>
             <Field
               label="Dép"
               value={c.dep_naiss ? String(c.dep_naiss).padStart(2, '0') : ''}
@@ -807,40 +841,6 @@ function ColonneGauche({
           )}
         </div>
       </div>
-
-      <div className="bg-white rounded-lg border border-c-line p-4">
-        <h3 className="text-sm font-bold text-c-ink mb-3">Information Vendeur</h3>
-        <div className="space-y-2.5 text-xs">
-          <Field label="Nom" value={v.nom} />
-          <Field label="Prénom" value={v.prenom} />
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
-            </div>
-            {data.is_my_call ? (
-              <button
-                onClick={onLacherAppel}
-                disabled={verrouLoading}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-red-600 bg-red-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
-                title="Raccrocher / libérer le verrou"
-              >
-                {verrouLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneOff className="w-3.5 h-3.5" />}
-                Lâcher l'appel
-              </button>
-            ) : (
-              <button
-                onClick={onPrendreAppel}
-                disabled={verrouLoading}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-green-600 bg-green-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
-                title="Démarrer l'appel (pose le verrou, démasque les mobiles, envoie un SMS au vendeur)"
-              >
-                {verrouLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
-                Démarrer l'appel
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -860,6 +860,9 @@ function ColonneCentre({
   onAskValider,
   onAskAnnulVente,
   onAskRenvoi,
+  verrouLoading,
+  onPrendreAppel,
+  onLacherAppel,
 }: {
   data: FicheData
   editOffres: Record<string, FicheOffre>
@@ -873,7 +876,11 @@ function ColonneCentre({
   onAskValider: () => void
   onAskAnnulVente: () => void
   onAskRenvoi: () => void
+  verrouLoading: boolean
+  onPrendreAppel: () => void
+  onLacherAppel: () => void
 }) {
+  const v = data.vendeur
   const offresList = data.panier.map((p) => editOffres[p.id] || p)
   const nbValide = offresList.filter((o) => o.statut_prod === 1 || o.statut_prod === 3).length
   const nbAnnule = offresList.filter((o) => o.statut_prod === 2).length
@@ -915,6 +922,41 @@ function ColonneCentre({
               )
             })
           )}
+        </div>
+      </div>
+
+      {/* Bloc vendeur (sous le panier) - encadre vert clair */}
+      <div className="bg-green-50 rounded-lg border border-green-300 p-4">
+        <h3 className="text-sm font-bold text-c-ink mb-3">Information Vendeur</h3>
+        <div className="space-y-2.5 text-xs">
+          <Field label="Nom" value={v.nom} />
+          <Field label="Prénom" value={v.prenom} />
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
+            </div>
+            {data.is_my_call ? (
+              <button
+                onClick={onLacherAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-red-600 bg-red-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Raccrocher / libérer le verrou"
+              >
+                {verrouLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PhoneOff className="w-3.5 h-3.5" />}
+                Lâcher l'appel
+              </button>
+            ) : (
+              <button
+                onClick={onPrendreAppel}
+                disabled={verrouLoading}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded border border-green-600 bg-green-600 text-white text-xs hover:brightness-110 disabled:opacity-60"
+                title="Démarrer l'appel (pose le verrou, démasque les mobiles, envoie un SMS au vendeur)"
+              >
+                {verrouLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
+                Démarrer l'appel
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
