@@ -89,6 +89,7 @@ interface Stats {
 interface EnCoursPayload {
   tickets_en_cours: TicketEnCours[]
   serveur_now: string
+  suivi_dermodif: string
   last_modif: string
 }
 
@@ -195,7 +196,7 @@ export default function TicketsCallPage() {
           if (!stoppedRef.current) {
             setEnCours(body.page)
             lastModifRef.current = body.last_modif
-            setClientNow(new Date().toLocaleString('fr-FR'))
+            setClientNow(frDateTime(new Date()))
             // Quand un ticket bouge cote serveur, rafraichir aussi les traites
             // (un ticket peut etre passe de "en cours" a "traite").
             fetchTraites(jourBasRef.current)
@@ -258,7 +259,7 @@ export default function TicketsCallPage() {
       {/* DASHBOARD EN HAUT : titre + 4 stats + agences (Interne/Power/Fox + carrousel) */}
       <DashboardCard
         clientNow={clientNow}
-        serveurNow={enCours.serveur_now}
+        suiviDerModif={enCours.suivi_dermodif}
         stats={stats}
       />
 
@@ -327,11 +328,11 @@ export default function TicketsCallPage() {
 
 function DashboardCard({
   clientNow,
-  serveurNow,
+  suiviDerModif,
   stats,
 }: {
   clientNow: string
-  serveurNow: string
+  suiviDerModif: string
   stats: Stats | undefined
 }) {
   const totInterneFibre = stats?.agences_internes.reduce((s, a) => s + a.nb_fibre, 0) ?? 0
@@ -353,7 +354,7 @@ function DashboardCard({
           <div>
             <h1 className="text-2xl font-bold text-c-ink leading-tight">Call SFR</h1>
             <p className="text-[11px] text-c-ink-faint">
-              Dernière vérif {clientNow || '—'} · serveur {serveurNow || '—'}
+              Dernière vérif intranet le {clientNow || '—'}, dernier calcul serveur le {suiviDerModif ? frDateTime(suiviDerModif) : '—'}
             </p>
           </div>
         </div>
@@ -891,4 +892,18 @@ function shortDateTime(iso: string): string {
   const parts = date.split('-')
   if (parts.length !== 3) return d
   return `${parts[2]}/${parts[1]} ${time || ''}`.trim()
+}
+
+// Formate une Date ou un ISO 'YYYY-MM-DD HH:MM:SS' en 'JJ/MM/AAAA à HH:mm:SS'.
+function frDateTime(input: string | Date): string {
+  let d: Date
+  if (input instanceof Date) {
+    d = input
+  } else {
+    if (!input) return ''
+    d = new Date(input.replace(' ', 'T'))
+    if (isNaN(d.getTime())) return input
+  }
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} à ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }

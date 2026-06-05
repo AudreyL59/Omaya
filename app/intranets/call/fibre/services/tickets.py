@@ -1130,9 +1130,16 @@ def load_page_en_cours(user_id: int, user_id_poste: int) -> dict:
     Le tableau du bas + stats sont charges separement (load_page_traites).
     """
     en_cours = list_tickets_en_cours(user_id, user_id_poste)
+    # DerModif de SuiviTicketCall = horodatage du dernier calcul serveur (exe externe)
+    db_divers = get_connection("divers")
+    rows_suivi = db_divers.query(
+        "SELECT DerModif FROM SuiviTicketCall WHERE TypeCall = 'FIBRE'"
+    )
+    suivi_dermodif = _iso(rows_suivi[0].get("DerModif")) if rows_suivi else ""
     return {
         "tickets_en_cours": en_cours,
         "serveur_now": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "suivi_dermodif": suivi_dermodif,
         "last_modif": get_last_modif_call_fibre_cached(),
     }
 

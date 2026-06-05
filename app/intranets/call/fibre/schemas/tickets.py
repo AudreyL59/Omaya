@@ -104,7 +104,8 @@ class TicketsEnCoursResponse(BaseModel):
     Charge en premier au mount (~5 queries HFSQL).
     """
     tickets_en_cours: list[TicketEnCours]
-    serveur_now: str              # ISO YYYY-MM-DD HH:MM:SS
+    serveur_now: str              # ISO YYYY-MM-DD HH:MM:SS (heure serveur courante)
+    suivi_dermodif: str = ""      # SuiviTicketCall.DerModif (dernier calcul serveur)
     last_modif: str = ""          # token pour /tickets/live
 
 

@@ -1442,7 +1442,6 @@ function EmbaucheTab({
           bgColor="#0F766E"
           active={overlay === 'formation_iag'}
           onClick={() => toggleOverlay('formation_iag')}
-          disabled
         />
         <OverlayButton
           label="S'Cool"
@@ -1464,6 +1463,13 @@ function EmbaucheTab({
       {overlay === 'origine_dpae' && (
         <OverlayOrigineDPAE
           idSalarie={idSalarie}
+          edit={edit}
+          set={set}
+          onClose={() => setOverlay(null)}
+        />
+      )}
+      {overlay === 'formation_iag' && (
+        <OverlayFormationIAG
           edit={edit}
           set={set}
           onClose={() => setOverlay(null)}
@@ -2220,6 +2226,86 @@ function OverlayOrigineDPAE({
 
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
+}
+
+// --- Overlay "Formation IAG" --------------------------------------------
+
+function OverlayFormationIAG({
+  edit,
+  set,
+  onClose,
+}: {
+  edit: FicheEmbauche
+  set: (patch: Partial<FicheEmbauche>) => void
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="mt-4 border rounded-lg p-4"
+      style={{ borderColor: COLOR_BG_SOFT, backgroundColor: '#FFFDFB' }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-normal uppercase tracking-wide" style={{ color: COLOR_BRUN }}>
+          Formation IAG
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1 rounded hover:bg-gray-100"
+          style={{ color: COLOR_BRUN }}
+          title="Fermer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="space-y-3 max-w-md">
+        {/* Checkbox Formation IAG */}
+        <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+          <AdmCheckbox
+            checked={edit.formation_iag}
+            onChange={(v) => set({ formation_iag: v })}
+          />
+          <span className="font-normal" style={{ color: COLOR_BRUN }}>
+            Formation IAG
+          </span>
+        </label>
+
+        {/* Faite le */}
+        <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+          <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
+            Faite le
+          </span>
+          <input
+            type="date"
+            value={edit.formation_iag_date || ''}
+            onChange={(e) => set({ formation_iag_date: e.target.value })}
+            disabled={!edit.formation_iag}
+            className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+          />
+        </div>
+
+        {/* Score */}
+        <div className="grid grid-cols-[80px_1fr] gap-2 items-center">
+          <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
+            Score
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={edit.formation_iag_score || 0}
+            onChange={(e) =>
+              set({ formation_iag_score: parseInt(e.target.value, 10) || 0 })
+            }
+            disabled={!edit.formation_iag}
+            className="w-20 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1 disabled:opacity-50 disabled:cursor-not-allowed text-center"
+            style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+          />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function Th2({ children }: { children: React.ReactNode }) {
