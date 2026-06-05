@@ -17,6 +17,9 @@ import {
   Download,
   ChevronRight,
   ArrowDownUp,
+  Plus,
+  Pencil,
+  Send,
 } from 'lucide-react'
 import { getToken } from '@/api'
 
@@ -70,6 +73,23 @@ interface FicheEmbaucheRefs {
   type_ctt: RefOption[]
   type_horaire: RefOption[]
   type_sortie: RefOption[]
+}
+
+interface SalariePortail {
+  id_salarie_partenaire: string
+  id_partenaire: string
+  lib_partenaire: string
+  code: string
+  login: string
+  mdp: string
+}
+
+interface SalariePartDpae {
+  id_salarie_partenaire: string
+  id_partenaire: string
+  lib_partenaire: string
+  id_ste: string
+  rs_societe: string
 }
 
 interface FicheEmbauche {
@@ -1158,6 +1178,11 @@ function EmbaucheTab({
   const set = (patch: Partial<FicheEmbauche>) =>
     setEdit((prev) => (prev ? { ...prev, ...patch } : prev))
 
+  // Overlay actif sous la ligne de boutons (analogue WinDev Cell_*..Visible)
+  const [overlay, setOverlay] = useState<null | 'partenaires' | 'origine_dpae' | 'formation_iag' | 'scool'>(null)
+  const toggleOverlay = (k: typeof overlay) =>
+    setOverlay((cur) => (cur === k ? null : k))
+
   return (
     <div className="p-6">
       {/* Top bar */}
@@ -1303,13 +1328,40 @@ function EmbaucheTab({
         </div>
       </div>
 
-      {/* Boutons overlays (placeholder pour cette phase) */}
+      {/* Boutons overlays (analogue WinDev Cellule3) */}
       <div className="mt-6 flex flex-wrap items-center justify-center gap-8">
-        <OverlayButton label="Partenaires" />
-        <OverlayButton label="Origine DPAE" />
-        <OverlayButton label="Formation IAG" />
-        <OverlayButton label="S'Cool" />
+        <OverlayButton
+          label="Partenaires"
+          active={overlay === 'partenaires'}
+          onClick={() => toggleOverlay('partenaires')}
+        />
+        <OverlayButton
+          label="Origine DPAE"
+          active={overlay === 'origine_dpae'}
+          onClick={() => toggleOverlay('origine_dpae')}
+          disabled
+        />
+        <OverlayButton
+          label="Formation IAG"
+          active={overlay === 'formation_iag'}
+          onClick={() => toggleOverlay('formation_iag')}
+          disabled
+        />
+        <OverlayButton
+          label="S'Cool"
+          active={overlay === 'scool'}
+          onClick={() => toggleOverlay('scool')}
+          disabled
+        />
       </div>
+
+      {/* Panneau overlay actif */}
+      {overlay === 'partenaires' && (
+        <OverlayPartenaires
+          idSalarie={idSalarie}
+          onClose={() => setOverlay(null)}
+        />
+      )}
 
       {/* Boutons sortie (visibles si pas en activite, placeholder pour la
           logique complete avec mails/tickets/etc.) */}
@@ -1565,13 +1617,28 @@ function EmbCheck({
   )
 }
 
-function OverlayButton({ label }: { label: string }) {
+function OverlayButton({
+  label,
+  active,
+  onClick,
+  disabled,
+}: {
+  label: string
+  active?: boolean
+  onClick?: () => void
+  disabled?: boolean
+}) {
   return (
     <button
-      disabled
-      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-      style={{ color: COLOR_BRUN }}
-      title="À implémenter"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border transition disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{
+        color: active ? 'white' : COLOR_BRUN,
+        backgroundColor: active ? COLOR_PRIMARY : 'transparent',
+        borderColor: active ? COLOR_PRIMARY : COLOR_BG_SOFT,
+      }}
+      title={disabled ? 'À implémenter' : ''}
     >
       {label}
     </button>
@@ -1608,6 +1675,274 @@ function SortieBlock({
       </h4>
       <div className="space-y-2">{children}</div>
     </div>
+  )
+}
+
+// --- Overlay "Partenaires" (codes portails + societes DPAE) -------------
+
+function OverlayPartenaires({
+  idSalarie,
+  onClose,
+}: {
+  idSalarie: string
+  onClose: () => void
+}) {
+  const [portails, setPortails] = useState<SalariePortail[]>([])
+  const [dpae, setDpae] = useState<SalariePartDpae[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>('')
+  const [selectedPortailId, setSelectedPortailId] = useState<string>('')
+  const [selectedDpaeId, setSelectedDpaeId] = useState<string>('')
+  const [sending, setSending] = useState(false)
+
+  const reload = () => {
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/adm/fiche-salarie/${idSalarie}/partenaires/portails`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) =>
+        r.ok ? r.json() : r.json().then((j) => Promise.reject(j?.detail || r.status)),
+      ),
+      fetch(`/api/adm/fiche-salarie/${idSalarie}/partenaires/dpae`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) =>
+        r.ok ? r.json() : r.json().then((j) => Promise.reject(j?.detail || r.status)),
+      ),
+    ])
+      .then(([ps, ds]) => {
+        setPortails(ps)
+        setDpae(ds)
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idSalarie])
+
+  const selectedPortail = portails.find((p) => p.id_salarie_partenaire === selectedPortailId) || null
+
+  const handleSendCodes = async () => {
+    if (!selectedPortail) return
+    setSending(true)
+    try {
+      // Endpoint à venir : POST /partenaires/portails/{id}/send-codes
+      // Pour cette phase : juste un toast informatif.
+      alert(
+        "Envoi mail + SMS des codes : à brancher backend (route /partenaires/portails/{id}/send-codes).",
+      )
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleDeleteDpae = async (id: string) => {
+    if (!window.confirm("Voulez-vous supprimer cette association 'Ste de DPAE-Partenaire' ?")) return
+    const r = await fetch(`/api/adm/fiche-salarie/partenaires/dpae/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      alert(`Suppression échouée : ${j?.detail || r.status}`)
+      return
+    }
+    reload()
+  }
+
+  return (
+    <div
+      className="mt-4 border rounded-lg p-4"
+      style={{ borderColor: COLOR_BG_SOFT, backgroundColor: '#FFFDFB' }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-normal uppercase tracking-wide" style={{ color: COLOR_BRUN }}>
+          Partenaires
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1 rounded hover:bg-gray-100"
+          style={{ color: COLOR_BRUN }}
+          title="Fermer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-3 text-red-600 text-sm flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" /> {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-6">
+        {/* Tableau 1 : Portails partenaires */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <button
+              disabled
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: COLOR_PRIMARY }}
+              title="Ajouter (Fen_DPAE_Nouvelle, à venir)"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleSendCodes}
+              disabled={!selectedPortail || sending}
+              className="flex items-center gap-1.5 px-2 py-1 text-xs font-normal rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: COLOR_PRIMARY }}
+              title="Renvoyer les codes par mail + SMS"
+            >
+              {sending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )}
+              Renvoyer les codes
+            </button>
+          </div>
+          <div className="border rounded overflow-hidden" style={{ borderColor: COLOR_BG_SOFT }}>
+            <table className="w-full text-xs">
+              <thead style={{ backgroundColor: COLOR_BG_SOFT }}>
+                <tr style={{ color: COLOR_BRUN }}>
+                  <Th2>Partenaire</Th2>
+                  <Th2>Code</Th2>
+                  <Th2>Login</Th2>
+                  <Th2>MDP</Th2>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="px-2 py-3 text-center text-gray-400 italic">
+                      Chargement…
+                    </td>
+                  </tr>
+                ) : portails.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-2 py-3 text-center text-gray-400 italic">
+                      Aucun portail
+                    </td>
+                  </tr>
+                ) : (
+                  portails.map((p) => {
+                    const sel = p.id_salarie_partenaire === selectedPortailId
+                    return (
+                      <tr
+                        key={p.id_salarie_partenaire}
+                        onClick={() => setSelectedPortailId(p.id_salarie_partenaire)}
+                        className="cursor-pointer border-t"
+                        style={{
+                          backgroundColor: sel ? '#EFF6FF' : 'white',
+                          borderColor: COLOR_BG_SOFT,
+                        }}
+                      >
+                        <Td2>{p.lib_partenaire}</Td2>
+                        <Td2 mono>{p.code}</Td2>
+                        <Td2 mono>{p.login}</Td2>
+                        <Td2 mono>{p.mdp}</Td2>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Tableau 2 : Sociétés DPAE par partenaire */}
+        <div>
+          <div className="flex items-center gap-1 mb-2">
+            <button
+              disabled
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: COLOR_PRIMARY }}
+              title="Ajouter (Fen_PartDpae, à venir)"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            <button
+              disabled
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: COLOR_PRIMARY }}
+              title="Modifier (Fen_PartDpae, à venir)"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => selectedDpaeId && handleDeleteDpae(selectedDpaeId)}
+              disabled={!selectedDpaeId}
+              className="p-1 rounded hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ color: '#DC2626' }}
+              title="Supprimer l'association sélectionnée"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="border rounded overflow-hidden" style={{ borderColor: COLOR_BG_SOFT }}>
+            <table className="w-full text-xs">
+              <thead style={{ backgroundColor: COLOR_BG_SOFT }}>
+                <tr style={{ color: COLOR_BRUN }}>
+                  <Th2>Partenaire</Th2>
+                  <Th2>Société</Th2>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={2} className="px-2 py-3 text-center text-gray-400 italic">
+                      Chargement…
+                    </td>
+                  </tr>
+                ) : dpae.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="px-2 py-3 text-center text-gray-400 italic">
+                      Aucune association
+                    </td>
+                  </tr>
+                ) : (
+                  dpae.map((d) => {
+                    const sel = d.id_salarie_partenaire === selectedDpaeId
+                    return (
+                      <tr
+                        key={d.id_salarie_partenaire}
+                        onClick={() => setSelectedDpaeId(d.id_salarie_partenaire)}
+                        className="cursor-pointer border-t"
+                        style={{
+                          backgroundColor: sel ? '#EFF6FF' : 'white',
+                          borderColor: COLOR_BG_SOFT,
+                        }}
+                      >
+                        <Td2>{d.lib_partenaire}</Td2>
+                        <Td2>{d.rs_societe}</Td2>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Th2({ children }: { children: React.ReactNode }) {
+  return <th className="px-2 py-1.5 text-left text-xs font-normal">{children}</th>
+}
+
+function Td2({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+  return (
+    <td
+      className={`px-2 py-1.5 text-xs ${mono ? 'font-mono' : ''}`}
+      style={{ color: COLOR_BRUN }}
+    >
+      {children}
+    </td>
   )
 }
 

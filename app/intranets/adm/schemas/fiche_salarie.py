@@ -214,6 +214,27 @@ class SaveEmbauchePayload(BaseModel):
     stc_retourne_le: str | None = None
 
 
+# --- Overlays embauche : Partenaires + DPAE -----------------------------
+
+class SalariePortail(BaseModel):
+    """Une ligne du tableau "portails partenaire du salarie"."""
+    id_salarie_partenaire: str
+    id_partenaire: str
+    lib_partenaire: str = ""
+    code: str = ""
+    login: str = ""
+    mdp: str = ""
+
+
+class SalariePartDpae(BaseModel):
+    """Une ligne du tableau "associations Partenaire <-> Societe DPAE"."""
+    id_salarie_partenaire: str
+    id_partenaire: str
+    lib_partenaire: str = ""
+    id_ste: str
+    rs_societe: str = ""
+
+
 class SaveCoordonneesPayload(BaseModel):
     adresse1: str | None = None
     adresse2: str | None = None

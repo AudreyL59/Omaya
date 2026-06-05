@@ -14,6 +14,8 @@ from app.intranets.adm.schemas.fiche_salarie import (
     FicheEmbaucheRefs,
     FicheHeader,
     FicheIdentite,
+    SalariePartDpae,
+    SalariePortail,
     SaveCoordonneesPayload,
     SaveEmbauchePayload,
     SaveIdentitePayload,
@@ -169,6 +171,41 @@ def save_embauche(
     try:
         body = payload.model_dump(exclude_unset=True)
         return svc.save_embauche(id_salarie, body)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Overlay Partenaires (codes portails + societes DPAE) ----------------
+
+@router.get("/{id_salarie}/partenaires/portails", response_model=list[SalariePortail])
+def get_portails(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
+    """Codes/login/MDP des portails partenaires du salarie."""
+    try:
+        return svc.list_salarie_portails(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/partenaires/dpae", response_model=list[SalariePartDpae])
+def get_part_dpae(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
+    """Associations Partenaire <-> Societe DPAE pour ce salarie."""
+    try:
+        return svc.list_salarie_part_dpae(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/partenaires/dpae/{id_salarie_partenaire}", response_model=SaveResponse)
+def del_part_dpae(
+    id_salarie_partenaire: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Suppression logique d'une association Partenaire-Societe DPAE."""
+    try:
+        return svc.delete_salarie_part_dpae(id_salarie_partenaire, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

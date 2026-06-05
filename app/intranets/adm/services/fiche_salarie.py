@@ -591,6 +591,80 @@ def save_embauche(id_salarie: int, payload: dict) -> dict:
     return {"ok": True}
 
 
+# --- Overlays embauche : Partenaires + DPAE -----------------------------
+
+def list_salarie_portails(id_salarie: int) -> list[dict]:
+    """Liste des portails partenaire du salarie (login + mdp par partenaire).
+
+    JOIN avec adv.pgt_partenaire pour avoir le libelle.
+    """
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT
+            sp.id_salarie_partenaire, sp.id_partenaire,
+            sp.code, sp.login, sp.mdp,
+            p.lib_partenaire
+        FROM rh.pgt_salarie_partenaire sp
+        LEFT JOIN adv.pgt_partenaire p ON p.id_partenaire = sp.id_partenaire
+        WHERE sp.modif_elem NOT LIKE '%suppr%'
+          AND sp.id_salarie = ?
+        ORDER BY p.lib_partenaire ASC NULLS LAST""",
+        (id_salarie,),
+    )
+    return [
+        {
+            "id_salarie_partenaire": _str_id(r.get("id_salarie_partenaire")),
+            "id_partenaire": _str_id(r.get("id_partenaire")),
+            "lib_partenaire": _str(r.get("lib_partenaire")),
+            "code": _str(r.get("code")),
+            "login": _str(r.get("login")),
+            "mdp": _str(r.get("mdp")),
+        }
+        for r in rows
+    ]
+
+
+def list_salarie_part_dpae(id_salarie: int) -> list[dict]:
+    """Liste des associations 'societe DPAE par partenaire' pour le salarie."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT
+            spd.id_salarie_partenaire, spd.id_partenaire, spd.id_ste,
+            p.lib_partenaire,
+            soc.rs_interne, soc.raison_sociale
+        FROM rh.pgt_salarie_part_dpae spd
+        LEFT JOIN adv.pgt_partenaire p ON p.id_partenaire = spd.id_partenaire
+        LEFT JOIN rh.pgt_societe soc ON soc.id_ste = spd.id_ste
+        WHERE spd.modif_elem NOT LIKE '%suppr%'
+          AND spd.id_salarie = ?
+        ORDER BY p.lib_partenaire ASC NULLS LAST""",
+        (id_salarie,),
+    )
+    return [
+        {
+            "id_salarie_partenaire": _str_id(r.get("id_salarie_partenaire")),
+            "id_partenaire": _str_id(r.get("id_partenaire")),
+            "lib_partenaire": _str(r.get("lib_partenaire")),
+            "id_ste": _str_id(r.get("id_ste")),
+            "rs_societe": _str(r.get("rs_interne")) or _str(r.get("raison_sociale")),
+        }
+        for r in rows
+    ]
+
+
+def delete_salarie_part_dpae(id_salarie_partenaire: int, op_id: int) -> dict:
+    """Suppression logique (ModifElem='suppr') d'une association Partenaire-Ste DPAE."""
+    db = get_pg_connection("rh")
+    db.query(
+        f"""UPDATE rh.pgt_salarie_part_dpae SET
+            modif_date = NOW(),
+            modif_elem = 'suppr',
+            modif_op = {_int(op_id)}
+        WHERE id_salarie_partenaire = {_int(id_salarie_partenaire)}"""
+    )
+    return {"ok": True}
+
+
 def save_coordonnees(id_salarie: int, payload: dict) -> dict:
     """UPDATE pgt_salarie_coordonnees (PATCH partiel).
 
