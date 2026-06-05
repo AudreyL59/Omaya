@@ -262,6 +262,57 @@ export default function OrganigrammePage() {
 
   const searchLower = search.trim().toLowerCase()
 
+  // Auto-deplie les ancetres des noeuds qui matchent la recherche + scroll vers
+  // le premier match. Se declenche a chaque changement de search ou de root.
+  useEffect(() => {
+    if (!searchLower || !selectedRoot) return
+
+    const ancestorsToExpand = new Set<string>()
+    let firstMatchId: string | null = null
+
+    const walk = (node: OrgaNode, ancestors: string[]): boolean => {
+      const nodeMatches = node.lib.toLowerCase().includes(searchLower)
+      const salarieMatches = node.salaries.some((s) =>
+        `${s.nom} ${s.prenom}`.toLowerCase().includes(searchLower),
+      )
+      let childHasMatch = false
+      for (const c of node.children) {
+        if (walk(c, [...ancestors, node.id])) childHasMatch = true
+      }
+      const hasMatch = nodeMatches || salarieMatches || childHasMatch
+      if (hasMatch) {
+        ancestors.forEach((a) => ancestorsToExpand.add(a))
+        if ((nodeMatches || salarieMatches) && !firstMatchId) {
+          firstMatchId = node.id
+        }
+      }
+      return hasMatch
+    }
+    walk(selectedRoot, [])
+
+    // Deplie les ancetres (retire du Set collapsed)
+    setCollapsed((prev) => {
+      let changed = false
+      const next = new Set(prev)
+      ancestorsToExpand.forEach((id) => {
+        if (next.delete(id)) changed = true
+      })
+      return changed ? next : prev
+    })
+
+    // Scroll vers le premier match apres que le DOM se soit reorganise
+    if (firstMatchId) {
+      const targetId = firstMatchId
+      window.setTimeout(() => {
+        const el = document.getElementById(`orga-node-${targetId}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+        }
+      }, 150)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchLower, selectedRoot])
+
   const toggleCollapse = (id: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -481,7 +532,7 @@ function OrgaTree({
   const highlight = !!searchLower && (nodeMatches || salarieMatches)
 
   return (
-    <div className="flex flex-col items-center">
+    <div id={`orga-node-${node.id}`} className="flex flex-col items-center">
       <OrgaCard
         node={node}
         depth={depth}
