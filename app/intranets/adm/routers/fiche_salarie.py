@@ -12,12 +12,14 @@ from app.intranets.adm.schemas.fiche_salarie import (
     FicheCoordonnees,
     FicheEmbauche,
     FicheEmbaucheRefs,
+    FicheFormateur,
     FicheHeader,
     FicheIdentite,
     SalariePartDpae,
     SalariePortail,
     SaveCoordonneesPayload,
     SaveEmbauchePayload,
+    SaveFormateurPayload,
     SaveIdentitePayload,
     SaveResponse,
     ToggleStatusPayload,
@@ -206,6 +208,33 @@ def del_part_dpae(
     """Suppression logique d'une association Partenaire-Societe DPAE."""
     try:
         return svc.delete_salarie_part_dpae(id_salarie_partenaire, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Overlay "S'Cool" : fiche Formateur ---------------------------------
+
+@router.get("/{id_salarie}/formateur", response_model=FicheFormateur)
+def get_formateur(id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)):
+    """Charge la fiche formateur du salarie (exists=False si pas creee)."""
+    try:
+        return svc.load_formateur(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/formateur", response_model=SaveResponse)
+def save_formateur(
+    payload: SaveFormateurPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Insert (si pas existe) ou Update partiel de la fiche formateur."""
+    try:
+        body = payload.model_dump(exclude_unset=True)
+        return svc.save_formateur(id_salarie, body, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

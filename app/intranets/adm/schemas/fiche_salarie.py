@@ -215,6 +215,21 @@ class SaveEmbauchePayload(BaseModel):
     stc_retourne_le: str | None = None
 
 
+# --- Overlay "S'Cool" : fiche Formateur ---------------------------------
+
+class FicheFormateur(BaseModel):
+    """Fiche formateur d'un salarie (table scool.pgt_formateur)."""
+    id_formateur: str
+    niveau: int = 0           # 0 = pas defini, 1 = Debutant, 2 = Formateur
+    formateur_actif: bool = False
+    exists: bool = False      # False si pas encore enregistre
+
+
+class SaveFormateurPayload(BaseModel):
+    niveau: int | None = None
+    formateur_actif: bool | None = None
+
+
 # --- Overlays embauche : Partenaires + DPAE -----------------------------
 
 class SalariePortail(BaseModel):

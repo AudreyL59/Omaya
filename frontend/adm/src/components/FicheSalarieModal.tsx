@@ -1449,7 +1449,6 @@ function EmbaucheTab({
           bgColor="#1E3A8A"
           active={overlay === 'scool'}
           onClick={() => toggleOverlay('scool')}
-          disabled
         />
       </div>
 
@@ -1472,6 +1471,12 @@ function EmbaucheTab({
         <OverlayFormationIAG
           edit={edit}
           set={set}
+          onClose={() => setOverlay(null)}
+        />
+      )}
+      {overlay === 'scool' && (
+        <OverlayScool
+          idSalarie={idSalarie}
           onClose={() => setOverlay(null)}
         />
       )}
@@ -2226,6 +2231,161 @@ function OverlayOrigineDPAE({
 
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
+}
+
+// --- Overlay "S'Cool" : fiche Formateur ---------------------------------
+
+const NIVEAU_FORMATEUR: { v: number; l: string }[] = [
+  { v: 0, l: '—' },
+  { v: 1, l: 'Formateur Débutant' },
+  { v: 2, l: 'Formateur' },
+]
+
+function OverlayScool({
+  idSalarie,
+  onClose,
+}: {
+  idSalarie: string
+  onClose: () => void
+}) {
+  const [niveau, setNiveau] = useState<number>(0)
+  const [actif, setActif] = useState<boolean>(false)
+  const [exists, setExists] = useState<boolean>(false)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [saving, setSaving] = useState<boolean>(false)
+  const [error, setError] = useState<string>('')
+  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    fetch(`/api/adm/fiche-salarie/${idSalarie}/formateur`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) =>
+        r.ok ? r.json() : r.json().then((j) => Promise.reject(j?.detail || r.status)),
+      )
+      .then((d) => {
+        if (cancelled) return
+        setNiveau(d.niveau || 0)
+        setActif(!!d.formateur_actif)
+        setExists(!!d.exists)
+      })
+      .catch((e) => !cancelled && setError(String(e)))
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [idSalarie])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setToast(null)
+    try {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/formateur`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          niveau: niveau || 1, // 1 par défaut si jamais 0 lors de la 1ère création (cf. WinDev)
+          formateur_actif: actif,
+        }),
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setToast({ kind: 'err', msg: `Erreur : ${j?.detail || r.status}` })
+        return
+      }
+      setExists(true)
+      setToast({ kind: 'ok', msg: 'Infos formateur enregistrées' })
+    } finally {
+      setSaving(false)
+      window.setTimeout(() => setToast(null), 3000)
+    }
+  }
+
+  return (
+    <div
+      className="mt-4 border rounded-lg p-4"
+      style={{ borderColor: COLOR_BG_SOFT, backgroundColor: '#FFFDFB' }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-normal uppercase tracking-wide" style={{ color: COLOR_BRUN }}>
+          S'Cool — Fiche Formateur
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1 rounded hover:bg-gray-100"
+          style={{ color: COLOR_BRUN }}
+          title="Fermer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-3 text-red-600 text-sm flex items-center gap-2">
+          <AlertCircle className="w-4 h-4" /> {error}
+        </div>
+      )}
+
+      {toast && (
+        <div
+          className={`mb-3 px-3 py-2 rounded text-sm ${
+            toast.kind === 'ok'
+              ? 'bg-emerald-50 text-emerald-800'
+              : 'bg-red-50 text-red-800'
+          }`}
+        >
+          {toast.msg}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-500">
+          <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
+        </div>
+      ) : (
+        <div className="space-y-3 max-w-md">
+          {/* Combo Niveau */}
+          <select
+            value={niveau}
+            onChange={(e) => setNiveau(parseInt(e.target.value, 10))}
+            className="w-full px-3 py-1.5 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+            style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+          >
+            {NIVEAU_FORMATEUR.map((n) => (
+              <option key={n.v} value={n.v}>
+                {n.l}
+              </option>
+            ))}
+          </select>
+
+          {/* Checkbox Formateur Actif */}
+          <label className="flex items-center gap-2 text-sm font-normal cursor-pointer">
+            <AdmCheckbox checked={actif} onChange={setActif} />
+            <span className="font-normal" style={{ color: COLOR_BRUN }}>
+              Formateur Actif
+            </span>
+          </label>
+
+          {/* Bouton Enregistrer */}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-medium border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {exists ? 'Enregistrer infos formateur' : 'Créer une fiche formateur'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // --- Overlay "Formation IAG" --------------------------------------------

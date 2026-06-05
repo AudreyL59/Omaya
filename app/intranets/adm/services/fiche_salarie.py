@@ -592,6 +592,69 @@ def save_embauche(id_salarie: int, payload: dict) -> dict:
     return {"ok": True}
 
 
+# --- Overlay "S'Cool" : fiche Formateur ---------------------------------
+
+def load_formateur(id_salarie: int) -> dict:
+    """Charge la fiche formateur du salarie (schema scool).
+
+    Retourne exists=False si pas encore enregistree (cas WinDev HTrouve = Faux).
+    """
+    db = get_pg_connection("scool")
+    row = db.query_one(
+        """SELECT id_formateur, niveau, formateur_actif
+        FROM scool.pgt_formateur
+        WHERE id_formateur = ?""",
+        (id_salarie,),
+    )
+    if not row:
+        return {
+            "id_formateur": _str_id(id_salarie),
+            "niveau": 0,
+            "formateur_actif": False,
+            "exists": False,
+        }
+    return {
+        "id_formateur": _str_id(row.get("id_formateur")),
+        "niveau": _int(row.get("niveau")),
+        "formateur_actif": bool(row.get("formateur_actif")),
+        "exists": True,
+    }
+
+
+def save_formateur(id_salarie: int, payload: dict, op_id: int) -> dict:
+    """Enregistre la fiche formateur (INSERT si pas existante, UPDATE sinon)."""
+    db = get_pg_connection("scool")
+    exists = db.query_one(
+        "SELECT 1 FROM scool.pgt_formateur WHERE id_formateur = ?",
+        (id_salarie,),
+    )
+    if not exists:
+        # INSERT : niveau = payload.get('niveau') ou 1 par defaut (cf. WinDev)
+        niveau = _int(payload.get("niveau", 1)) or 1
+        actif = bool(payload.get("formateur_actif", False))
+        db.query(
+            f"""INSERT INTO scool.pgt_formateur
+                (id_formateur, niveau, formateur_actif, modif_date, modif_op, modif_elem)
+            VALUES ({_int(id_salarie)}, {niveau}, {'TRUE' if actif else 'FALSE'},
+                    NOW(), {_int(op_id)}, 'new')"""
+        )
+        return {"ok": True}
+
+    # UPDATE partiel
+    sets = ["modif_date = NOW()", "modif_elem = 'modif'", f"modif_op = {_int(op_id)}"]
+    if "niveau" in payload:
+        sets.append(f"niveau = {_int(payload.get('niveau'))}")
+    if "formateur_actif" in payload:
+        sets.append(
+            f"formateur_actif = {'TRUE' if payload.get('formateur_actif') else 'FALSE'}"
+        )
+    db.query(
+        f"""UPDATE scool.pgt_formateur SET {', '.join(sets)}
+        WHERE id_formateur = {_int(id_salarie)}"""
+    )
+    return {"ok": True}
+
+
 # --- Overlays embauche : Partenaires + DPAE -----------------------------
 
 def list_salarie_portails(id_salarie: int) -> list[dict]:
