@@ -86,6 +86,8 @@ class FicheTicketEnergieResponse(BaseModel):
     id_tk_statut: int
     is_cloture: bool
     is_my_call: bool
+    appel_en_cours: bool = False
+    ope_en_cours_nom: str = ""
     client: FicheClient
     vendeur: FicheVendeur
     vente: FicheVente

@@ -86,6 +86,8 @@ class FicheTicketFibreResponse(BaseModel):
     is_cloture: bool
     is_statut_34: bool            # afficher libelle special
     is_my_call: bool              # mobile demasque ou pas
+    appel_en_cours: bool = False  # un ope a un appel en cours sur ce ticket
+    ope_en_cours_nom: str = ""    # nom de l'ope en ligne (si autre que moi)
     client: FicheClient
     vendeur: FicheVendeur
     vente: FicheVente

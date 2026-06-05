@@ -115,6 +115,8 @@ interface FicheData {
   is_cloture: boolean
   is_statut_34: boolean
   is_my_call: boolean
+  appel_en_cours: boolean
+  ope_en_cours_nom: string
   client: FicheClient
   vendeur: FicheVendeur
   vente: FicheVente
@@ -236,6 +238,8 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
   const [actionDialog, setActionDialog] = useState<null | 'valider' | 'annulVente' | 'renvoi'>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [annulLigneOpen, setAnnulLigneOpen] = useState(false)
+  // Alerte "un autre ope est en appel sur ce ticket" (nom de l'ope, ou null)
+  const [appelEnCoursAlert, setAppelEnCoursAlert] = useState<string | null>(null)
   // Historique de saisie Réf Appel (local au poste)
   const [refAppelHistory, setRefAppelHistory] = useState<string[]>(() => loadRefAppelHistory())
 
@@ -246,6 +250,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
     setError('')
     setData(null)
     setSelectedPanierId('')
+    setAppelEnCoursAlert(null)
     setDocCin({ url: '', kind: '' })
     setDocKbis({ url: '', kind: '' })
     setDocLettre({ url: '', kind: '' })
@@ -267,6 +272,10 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
         }
         const d = (await r.json()) as FicheData
         setData(d)
+        // Alerte si un AUTRE ope a un appel en cours sur ce ticket
+        if (d.appel_en_cours && !d.is_my_call && d.ope_en_cours_nom) {
+          setAppelEnCoursAlert(d.ope_en_cours_nom)
+        }
         // Init des states d'edition (copies)
         setEditClient({ ...d.client })
         setEditVente({ ...d.vente })
@@ -859,6 +868,41 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
           onConfirm={handleConfirmAction}
           onCancel={() => setActionDialog(null)}
         />
+
+        {/* Alerte : un autre ope a un appel en cours sur ce ticket */}
+        <AnimatePresence>
+          {appelEnCoursAlert && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAppelEnCoursAlert(null)}
+              className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 text-center space-y-4"
+              >
+                <div className="w-12 h-12 mx-auto rounded-full bg-orange-100 flex items-center justify-center">
+                  <Phone className="w-6 h-6 text-orange-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-c-ink">Appel en cours</h3>
+                <p className="text-sm text-c-ink-soft">
+                  L'opérateur <span className="font-semibold text-c-ink">{appelEnCoursAlert}</span> est en cours d'appel sur ce ticket.
+                </p>
+                <button
+                  onClick={() => setAppelEnCoursAlert(null)}
+                  className="px-4 py-2 rounded bg-gray-900 text-white text-sm font-semibold hover:brightness-110"
+                >
+                  Fermer
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Toast feedback save */}
         {toast && (

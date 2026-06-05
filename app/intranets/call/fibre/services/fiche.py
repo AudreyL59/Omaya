@@ -257,13 +257,20 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     nom_vend = ""
     prenom_vend = ""
     gsm_vend_raw = ""
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    ope_en_cours_nom = ""
+    # Si un AUTRE ope a un appel en cours sur ce ticket, on recupere son nom
+    # (pour la boite d'alerte affichee a l'ouverture de la fiche).
+    need_ope = appel_en_cours and ope_appel_id and not is_my_call
+    with ThreadPoolExecutor(max_workers=4) as pool:
         f_sal = pool.submit(
             db_rh.query, "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?", (id_salarie,)
         ) if id_salarie else None
         f_coord = pool.submit(
             db_rh.query, "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?", (id_salarie,)
         ) if id_salarie else None
+        f_ope = pool.submit(
+            db_rh.query, "SELECT Nom, Prenom FROM Salarie WHERE IDSalarie = ?", (ope_appel_id,)
+        ) if need_ope else None
         f_panier = pool.submit(
             db_bo.query,
             """SELECT
@@ -277,6 +284,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         )
         rows_sal = f_sal.result() if f_sal else []
         rows_coord = f_coord.result() if f_coord else []
+        rows_ope = f_ope.result() if f_ope else []
         rows_panier = f_panier.result()
     if rows_sal:
         s = rows_sal[0]
@@ -284,6 +292,9 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         prenom_vend = _capitalize((s.get("Prenom") or "").strip())
     if rows_coord:
         gsm_vend_raw = (rows_coord[0].get("TélMob") or "").strip()
+    if rows_ope:
+        o = rows_ope[0]
+        ope_en_cours_nom = f"{(o.get('Nom') or '').strip()} {_capitalize((o.get('Prenom') or '').strip())}".strip()
     gsm_vend = gsm_vend_raw if is_my_call else _mask_phone(gsm_vend_raw)
     # Lib_Offre via le referentiel SFR_OffresProvad mis en cache (vague 1).
 
@@ -332,6 +343,8 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         "is_cloture": _bool(tk_liste.get("cloturee")),
         "is_statut_34": id_tk_statut == 34,  # Affiche libelle special
         "is_my_call": is_my_call,  # mobile demasque ou non
+        "appel_en_cours": appel_en_cours,  # un ope a un appel en cours sur ce ticket
+        "ope_en_cours_nom": ope_en_cours_nom,  # nom de l'ope en ligne (si autre que moi)
         "client": {
             "civilite": _to_int(tc.get("CivilitéClient")),
             "nom": (tc.get("NomClient") or "").strip(),
