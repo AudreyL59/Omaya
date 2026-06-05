@@ -387,8 +387,8 @@ function Sidebar({
             className="w-full flex items-center justify-between px-4 py-2 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               backgroundColor: active ? COLOR_PRIMARY : 'transparent',
-              color: active ? 'white' : COLOR_BRUN,
-              fontWeight: active ? 600 : 400,
+              color: active ? 'white' : COLOR_PRIMARY,
+              fontWeight: 600,
             }}
             onMouseEnter={(e) => {
               if (!active && item.coded) {
@@ -960,7 +960,7 @@ function CoordonneesTab({ idSalarie }: { idSalarie: string }) {
           <SectionTitle>Coordonnées bancaires</SectionTitle>
           <div className="space-y-2">
             <div className="grid grid-cols-[60px_1fr] gap-2 items-center">
-              <label className="text-sm" style={{ color: COLOR_BRUN }}>
+              <label className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
                 IBAN
               </label>
               <PlainInput
@@ -969,7 +969,7 @@ function CoordonneesTab({ idSalarie }: { idSalarie: string }) {
               />
             </div>
             <div className="grid grid-cols-[60px_1fr] gap-2 items-center">
-              <label className="text-sm" style={{ color: COLOR_BRUN }}>
+              <label className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
                 BIC
               </label>
               <PlainInput
@@ -987,7 +987,7 @@ function CoordonneesTab({ idSalarie }: { idSalarie: string }) {
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h3
-      className="text-sm uppercase tracking-wide font-semibold mb-3"
+      className="text-sm uppercase tracking-wide font-normal mb-3"
       style={{ color: COLOR_BRUN }}
     >
       {children}
@@ -1012,7 +1012,7 @@ function PlainInput({
       value={value || ''}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full px-3 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1 placeholder:italic placeholder:text-gray-400"
+      className="w-full px-3 py-1.5 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1 placeholder:italic placeholder:text-gray-400 placeholder:font-normal"
       style={{
         border: `1px solid ${COLOR_BG_SOFT}`,
         color: COLOR_BRUN,
@@ -1051,7 +1051,7 @@ function FieldWithCopy({
     <div className="flex items-center gap-2">
       {label && (
         <span
-          className="text-sm shrink-0"
+          className="text-sm font-normal shrink-0"
           style={{ color: COLOR_BRUN, minWidth: labelWidth }}
         >
           {label}
@@ -1062,7 +1062,7 @@ function FieldWithCopy({
         value={value || ''}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="flex-1 px-3 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1 placeholder:italic placeholder:text-gray-400"
+        className="flex-1 px-3 py-1.5 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1 placeholder:italic placeholder:text-gray-400 placeholder:font-normal"
         style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
       />
       <button
@@ -1185,9 +1185,9 @@ function InlineField({
   labelWidth?: number
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex items-center gap-2 text-sm font-normal">
       <span
-        className="shrink-0"
+        className="shrink-0 font-normal"
         style={{
           color: COLOR_BRUN,
           minWidth: labelWidth,
@@ -1199,7 +1199,7 @@ function InlineField({
         type={type}
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
-        className="flex-1 px-2 py-1 rounded text-sm bg-white focus:outline-none focus:ring-1"
+        className="flex-1 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
         style={{
           border: `1px solid ${COLOR_BG_SOFT}`,
           color: COLOR_BRUN,
