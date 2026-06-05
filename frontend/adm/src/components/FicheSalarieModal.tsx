@@ -12,9 +12,11 @@ import {
   Wallet,
   Printer,
   Copy,
+  Check,
   Save,
   Download,
   ChevronRight,
+  ArrowDownUp,
 } from 'lucide-react'
 import { getToken } from '@/api'
 
@@ -820,13 +822,12 @@ function CoordonneesTab({ idSalarie }: { idSalarie: string }) {
   const set = (patch: Partial<FicheCoordonnees>) =>
     setEdit((prev) => (prev ? { ...prev, ...patch } : prev))
 
+  const swapEmails = () => set({ mail: edit.mail2, mail2: edit.mail })
+
   return (
     <div className="p-6">
-      {/* Bouton enregistrer */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold" style={{ color: COLOR_BRUN }}>
-          Coordonnées
-        </h2>
+      {/* Bouton enregistrer en haut a droite */}
+      <div className="flex justify-end mb-4">
         <button
           onClick={handleSave}
           disabled={!dirty || saving}
@@ -854,119 +855,225 @@ function CoordonneesTab({ idSalarie }: { idSalarie: string }) {
         </div>
       )}
 
-      <div className="max-w-3xl space-y-5">
-        <SubSection title="Adresse">
-          <InlineField
-            label="Adresse 1"
-            value={edit.adresse1}
-            onChange={(v) => set({ adresse1: v })}
-            labelWidth={90}
-          />
-          <InlineField
-            label="Adresse 2"
-            value={edit.adresse2}
-            onChange={(v) => set({ adresse2: v })}
-            labelWidth={90}
-          />
-          <div className="grid grid-cols-[100px_1fr] gap-3">
-            <InlineField
-              label="CP"
-              value={edit.cp}
-              onChange={(v) => set({ cp: v })}
-              labelWidth={30}
-            />
-            <InlineField
-              label="Ville"
-              value={edit.ville}
-              onChange={(v) => set({ ville: v })}
-              labelWidth={45}
-            />
-          </div>
-        </SubSection>
+      {/* Layout 2 colonnes */}
+      <div className="grid grid-cols-2 gap-12 max-w-5xl">
+        {/* Colonne gauche : Postales + telephoniques + emails */}
+        <div>
+          <SectionTitle>Coordonnées postales et téléphoniques</SectionTitle>
 
-        <SubSection title="Contact">
-          <div className="grid grid-cols-2 gap-3">
-            <InlineField
-              label="Tél fixe"
+          <div className="space-y-2 mb-5">
+            <PlainInput
+              placeholder="Adresse 1"
+              value={edit.adresse1}
+              onChange={(v) => set({ adresse1: v })}
+            />
+            <PlainInput
+              placeholder="Complément"
+              value={edit.adresse2}
+              onChange={(v) => set({ adresse2: v })}
+            />
+            <div className="grid grid-cols-[100px_1fr] gap-2">
+              <PlainInput
+                placeholder="CP"
+                value={edit.cp}
+                onChange={(v) => set({ cp: v })}
+              />
+              <PlainInput
+                placeholder="Ville"
+                value={edit.ville}
+                onChange={(v) => set({ ville: v })}
+              />
+            </div>
+          </div>
+
+          {/* Telephones */}
+          <div className="space-y-2 mb-5">
+            <FieldWithCopy
+              placeholder="Téléphone fixe"
               value={edit.tel_fixe}
               onChange={(v) => set({ tel_fixe: v })}
-              labelWidth={70}
             />
-            <InlineField
-              label="Tél mobile"
+            <FieldWithCopy
+              placeholder="Téléphone mobile"
               value={edit.tel_mob}
               onChange={(v) => set({ tel_mob: v })}
-              labelWidth={70}
             />
           </div>
-          <InlineField
-            label="Courriel"
-            type="email"
-            value={edit.mail}
-            onChange={(v) => set({ mail: v })}
-            labelWidth={90}
-          />
-          <InlineField
-            label="Courriel 2"
-            type="email"
-            value={edit.mail2}
-            onChange={(v) => set({ mail2: v })}
-            labelWidth={90}
-          />
-        </SubSection>
 
-        <SubSection title="Personne à contacter en cas d'urgence">
-          <div className="grid grid-cols-[2fr_1fr_2fr] gap-3">
-            <InlineField
-              label="Nom"
+          {/* Emails avec swap */}
+          <div className="space-y-1">
+            <FieldWithCopy
+              label="Courriel 1*"
+              type="email"
+              value={edit.mail}
+              onChange={(v) => set({ mail: v })}
+              labelWidth={75}
+            />
+            <div
+              className="text-xs italic ml-[83px]"
+              style={{ color: '#C97064' }}
+            >
+              * Adresse mail utilisée dans OMAYA
+            </div>
+            {/* Bouton swap entre les 2 emails */}
+            <div className="flex justify-end pr-12 py-1">
+              <button
+                onClick={swapEmails}
+                className="p-1 rounded hover:bg-gray-100"
+                style={{ color: COLOR_PRIMARY }}
+                title="Permuter Courriel 1 et Courriel 2"
+              >
+                <ArrowDownUp className="w-4 h-4" />
+              </button>
+            </div>
+            <FieldWithCopy
+              label="Courriel 2"
+              type="email"
+              value={edit.mail2}
+              onChange={(v) => set({ mail2: v })}
+              labelWidth={75}
+            />
+          </div>
+        </div>
+
+        {/* Colonne droite : Urgence + Bancaires */}
+        <div>
+          <SectionTitle>Personnes à contacter en cas d'urgence</SectionTitle>
+          <div className="space-y-2 mb-8">
+            <PlainInput
+              placeholder="Nom et prénom"
               value={edit.urg_nom}
               onChange={(v) => set({ urg_nom: v })}
-              labelWidth={40}
             />
-            <InlineField
-              label="Lien"
+            <PlainInput
+              placeholder="Lien (époux, parent...)"
               value={edit.urg_lien}
               onChange={(v) => set({ urg_lien: v })}
-              labelWidth={40}
             />
-            <InlineField
-              label="Téléphone"
+            <PlainInput
+              placeholder="Téléphone"
               value={edit.urg_tel}
               onChange={(v) => set({ urg_tel: v })}
-              labelWidth={70}
             />
           </div>
-        </SubSection>
 
-        <SubSection title="Coordonnées bancaires">
-          <InlineField
-            label="IBAN"
-            value={edit.iban}
-            onChange={(v) => set({ iban: v })}
-            labelWidth={50}
-          />
-          <InlineField
-            label="BIC"
-            value={edit.bic}
-            onChange={(v) => set({ bic: v })}
-            labelWidth={50}
-          />
-        </SubSection>
+          <SectionTitle>Coordonnées bancaires</SectionTitle>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[60px_1fr] gap-2 items-center">
+              <label className="text-sm" style={{ color: COLOR_BRUN }}>
+                IBAN
+              </label>
+              <PlainInput
+                value={edit.iban}
+                onChange={(v) => set({ iban: v })}
+              />
+            </div>
+            <div className="grid grid-cols-[60px_1fr] gap-2 items-center">
+              <label className="text-sm" style={{ color: COLOR_BRUN }}>
+                BIC
+              </label>
+              <PlainInput
+                value={edit.bic}
+                onChange={(v) => set({ bic: v })}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <h3
-        className="text-xs uppercase tracking-wide font-semibold mb-2 pb-1 border-b"
-        style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
+    <h3
+      className="text-sm uppercase tracking-wide font-semibold mb-3"
+      style={{ color: COLOR_BRUN }}
+    >
+      {children}
+    </h3>
+  )
+}
+
+function PlainInput({
+  placeholder,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  placeholder?: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+}) {
+  return (
+    <input
+      type={type}
+      value={value || ''}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-3 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1 placeholder:italic placeholder:text-gray-400"
+      style={{
+        border: `1px solid ${COLOR_BG_SOFT}`,
+        color: COLOR_BRUN,
+      }}
+    />
+  )
+}
+
+function FieldWithCopy({
+  label,
+  placeholder,
+  value,
+  onChange,
+  type = 'text',
+  labelWidth,
+}: {
+  label?: string
+  placeholder?: string
+  value: string
+  onChange: (v: string) => void
+  type?: string
+  labelWidth?: number
+}) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      /* indispo */
+    }
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {label && (
+        <span
+          className="text-sm shrink-0"
+          style={{ color: COLOR_BRUN, minWidth: labelWidth }}
+        >
+          {label}
+        </span>
+      )}
+      <input
+        type={type}
+        value={value || ''}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 px-3 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1 placeholder:italic placeholder:text-gray-400"
+        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+      />
+      <button
+        onClick={handleCopy}
+        disabled={!value}
+        className="shrink-0 w-8 h-8 rounded flex items-center justify-center hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ color: COLOR_PRIMARY }}
+        title="Copier"
       >
-        {title}
-      </h3>
-      <div className="space-y-2 mt-2">{children}</div>
+        {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+      </button>
     </div>
   )
 }
