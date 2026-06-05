@@ -11,7 +11,7 @@
  * renvoie la page complete et on met a jour.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Loader2,
   FileSpreadsheet,
@@ -825,6 +825,38 @@ function TableTraites({
   onSelect: (id: string) => void
   onOpenFiche: (id: string) => void
 }) {
+  const [filters, setFilters] = useState({
+    date: '', client: '', cp: '', ville: '', commercial: '', agence: '', etat: '', ref: '',
+  })
+  const setF = (k: keyof typeof filters) => (v: string) => setFilters((f) => ({ ...f, [k]: v }))
+  const agences = useMemo(
+    () => [...new Set(rows.map((r) => r.agence).filter(Boolean))].sort(),
+    [rows],
+  )
+  const etats = useMemo(
+    () => [...new Set(rows.map((r) => r.lib_statut).filter(Boolean))].sort(),
+    [rows],
+  )
+  const ct = (val: string, f: string) => !f || (val || '').toLowerCase().includes(f.toLowerCase())
+  const filtered = useMemo(
+    () =>
+      rows.filter(
+        (t) =>
+          ct(shortDateTime(t.date_crea), filters.date) &&
+          ct(t.nom_client, filters.client) &&
+          ct(t.cp, filters.cp) &&
+          ct(t.ville, filters.ville) &&
+          ct(t.nom_vendeur, filters.commercial) &&
+          (!filters.agence || t.agence === filters.agence) &&
+          (!filters.etat || t.lib_statut === filters.etat) &&
+          ct(t.ref_appel, filters.ref),
+      ),
+    [rows, filters],
+  )
+  const hasFilter = Object.values(filters).some((v) => v)
+  // colonnes : 8 fixes + N partenaires + 1 (Ref Appel)
+  const colCount = 9 + partenaires.length
+
   if (!rows.length) {
     return (
       <div className="border border-c-line rounded-md p-6 text-center text-c-ink-faint text-sm bg-white">
@@ -850,9 +882,31 @@ function TableTraites({
             ))}
             <Th>Réf Appel</Th>
           </tr>
+          {/* Ligne de filtres par colonne */}
+          <tr className="bg-white border-b border-c-line">
+            <FilterCell><FilterInput value={filters.date} onChange={setF('date')} /></FilterCell>
+            <FilterCell><FilterInput value={filters.client} onChange={setF('client')} /></FilterCell>
+            <FilterCell><FilterInput value={filters.cp} onChange={setF('cp')} /></FilterCell>
+            <FilterCell><FilterInput value={filters.ville} onChange={setF('ville')} /></FilterCell>
+            <FilterCell><FilterInput value={filters.commercial} onChange={setF('commercial')} /></FilterCell>
+            <FilterCell><FilterSelect value={filters.agence} onChange={setF('agence')} options={agences} /></FilterCell>
+            <FilterCell><FilterSelect value={filters.etat} onChange={setF('etat')} options={etats} /></FilterCell>
+            <FilterCell />
+            {partenaires.map((p) => (
+              <FilterCell key={p.prefix} />
+            ))}
+            <FilterCell><FilterInput value={filters.ref} onChange={setF('ref')} /></FilterCell>
+          </tr>
         </thead>
         <tbody>
-          {rows.map((t) => {
+          {hasFilter && filtered.length === 0 && (
+            <tr>
+              <td colSpan={colCount} className="px-3 py-4 text-center text-c-ink-faint italic">
+                Aucun ticket ne correspond aux filtres.
+              </td>
+            </tr>
+          )}
+          {filtered.map((t) => {
             // Coloration ligne (WinDev) :
             //  - delai NUM >= 1h apres Datecrea : fond ROUGE (priorite max)
             //  - VendeurDistrib : fond GRIS (vendeur du reseau distrib externe)
@@ -918,6 +972,49 @@ function Th({ children, className = '' }: { children: React.ReactNode; className
 
 function Td({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-3 py-2 ${className}`}>{children}</td>
+}
+
+// --- Filtres de colonne (tableau des traites) ---------------------------
+
+function FilterCell({ children }: { children?: React.ReactNode }) {
+  return <th className="px-2 pb-2 align-top font-normal">{children}</th>
+}
+
+function FilterInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Filtrer…"
+      className="w-full px-1.5 py-1 border border-c-line rounded text-xs font-normal bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none"
+    />
+  )
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string
+  onChange: (v: string) => void
+  options: string[]
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-1.5 py-1 border border-c-line rounded text-xs font-normal bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none"
+    >
+      <option value="">Tous</option>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
+  )
 }
 
 function shortDateTime(iso: string): string {
