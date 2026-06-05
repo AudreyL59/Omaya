@@ -20,8 +20,11 @@ import {
   Plus,
   Pencil,
   Send,
+  Users,
+  FileText as FileTextIcon,
 } from 'lucide-react'
 import { getToken } from '@/api'
+import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
 
 // --- Types ---------------------------------------------------------------
 
@@ -1339,7 +1342,6 @@ function EmbaucheTab({
           label="Origine DPAE"
           active={overlay === 'origine_dpae'}
           onClick={() => toggleOverlay('origine_dpae')}
-          disabled
         />
         <OverlayButton
           label="Formation IAG"
@@ -1359,6 +1361,13 @@ function EmbaucheTab({
       {overlay === 'partenaires' && (
         <OverlayPartenaires
           idSalarie={idSalarie}
+          onClose={() => setOverlay(null)}
+        />
+      )}
+      {overlay === 'origine_dpae' && (
+        <OverlayOrigineDPAE
+          edit={edit}
+          set={set}
           onClose={() => setOverlay(null)}
         />
       )}
@@ -1929,6 +1938,148 @@ function OverlayPartenaires({
       </div>
     </div>
   )
+}
+
+// --- Overlay "Origine DPAE" (Coopte/JO directe + Fiche CV) --------------
+
+function OverlayOrigineDPAE({
+  edit,
+  set,
+  onClose,
+}: {
+  edit: FicheEmbauche
+  set: (patch: Partial<FicheEmbauche>) => void
+  onClose: () => void
+}) {
+  const [pickerFor, setPickerFor] = useState<null | 'coopteur' | 'jo_coopteur'>(null)
+
+  const pickCoopteur = (s: SalarieItem) => {
+    const lib = `${s.nom} ${capitalize(s.prenom)}`
+    if (pickerFor === 'coopteur') {
+      set({ coopteur: s.id_salarie, coopteur_lib: lib })
+    } else if (pickerFor === 'jo_coopteur') {
+      set({ jo_coopteur: s.id_salarie, jo_coopteur_lib: lib })
+    }
+    setPickerFor(null)
+  }
+
+  return (
+    <div
+      className="mt-4 border rounded-lg p-4"
+      style={{ borderColor: COLOR_BG_SOFT, backgroundColor: '#FFFDFB' }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-normal uppercase tracking-wide" style={{ color: COLOR_BRUN }}>
+          Origine DPAE
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1 rounded hover:bg-gray-100"
+          style={{ color: COLOR_BRUN }}
+          title="Fermer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="space-y-3 max-w-xl">
+        {/* Coopté */}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-normal cursor-pointer min-w-[130px]">
+            <input
+              type="checkbox"
+              checked={edit.coopte}
+              onChange={(e) => set({ coopte: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <span className="font-normal" style={{ color: COLOR_BRUN }}>
+              Coopté
+            </span>
+          </label>
+          <button
+            onClick={() => setPickerFor('coopteur')}
+            disabled={!edit.coopte}
+            className="flex-1 flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            style={{
+              color: edit.coopteur_lib ? COLOR_BRUN : '#9CA3AF',
+              borderColor: COLOR_BG_SOFT,
+              fontStyle: edit.coopteur_lib ? 'normal' : 'italic',
+            }}
+            title="Choisir le coopteur"
+          >
+            <Users className="w-4 h-4 shrink-0" style={{ color: COLOR_PRIMARY }} />
+            {edit.coopteur_lib || 'Choisir le coopteur'}
+          </button>
+        </div>
+
+        {/* JO directe */}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-normal cursor-pointer min-w-[130px]">
+            <input
+              type="checkbox"
+              checked={edit.j_odirecte}
+              onChange={(e) => set({ j_odirecte: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <span className="font-normal" style={{ color: COLOR_BRUN }}>
+              JO directe
+            </span>
+          </label>
+          <button
+            onClick={() => setPickerFor('jo_coopteur')}
+            disabled={!edit.j_odirecte}
+            className="flex-1 flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            style={{
+              color: edit.jo_coopteur_lib ? COLOR_BRUN : '#9CA3AF',
+              borderColor: COLOR_BG_SOFT,
+              fontStyle: edit.jo_coopteur_lib ? 'normal' : 'italic',
+            }}
+            title="Choisir le coopteur JO"
+          >
+            <Users className="w-4 h-4 shrink-0" style={{ color: COLOR_PRIMARY }} />
+            {edit.jo_coopteur_lib || 'Choisir le coopteur JO'}
+          </button>
+        </div>
+
+        {/* Fiche CV */}
+        <div className="flex items-center gap-3">
+          <button
+            disabled={!edit.id_cvtheque}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-normal rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 min-w-[130px]"
+            style={{
+              color: COLOR_BRUN,
+              borderColor: COLOR_BG_SOFT,
+            }}
+            title="Ouvrir la fiche CV (à implémenter)"
+          >
+            <FileTextIcon className="w-4 h-4 shrink-0" style={{ color: COLOR_PRIMARY }} />
+            Fiche CV
+          </button>
+          <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
+            IdCV
+          </span>
+          <input
+            value={edit.id_cvtheque || ''}
+            readOnly
+            className="flex-1 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none"
+            style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+          />
+        </div>
+      </div>
+
+      {pickerFor && (
+        <PersonnePicker
+          title={pickerFor === 'coopteur' ? 'Choisir le coopteur' : 'Choisir le coopteur JO'}
+          onClose={() => setPickerFor(null)}
+          onSelect={pickCoopteur}
+        />
+      )}
+    </div>
+  )
+}
+
+function capitalize(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
 }
 
 function Th2({ children }: { children: React.ReactNode }) {
