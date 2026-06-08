@@ -25,6 +25,7 @@ import EmbaucheTab, {
   COLOR_BRUN,
   COLOR_BG_SOFT,
 } from '@shared/fiche/EmbaucheTab'
+import OrgaSuiviTab from './fiche/OrgaSuiviTab'
 
 // --- Types ---------------------------------------------------------------
 
@@ -133,7 +134,7 @@ const MENU: MenuItem[] = [
   { key: 'identite',        label: 'Infos Principales', coded: true },
   { key: 'coordonnees',     label: 'Coordonnées',       coded: true },
   { key: 'infos_embauche',  label: 'Infos Embauche',    coded: true },
-  { key: 'orga_suivi',      label: 'Organigramme',      coded: false },
+  { key: 'orga_suivi',      label: 'Organigramme',      coded: true },
   { key: 'suivi_adm',       label: 'Suivi ADM',         coded: false },
   { key: 'contrat_travail', label: 'Contrat de travail',coded: false },
   { key: 'documents',       label: 'Documents',         coded: false },
@@ -269,9 +270,15 @@ export default function FicheSalarieModal({
                 }}
               />
             )}
+            {activeTab === 'orga_suivi' && (
+              <div className="p-5">
+                <OrgaSuiviTab idSalarie={idSalarie} />
+              </div>
+            )}
             {activeTab !== 'identite' &&
               activeTab !== 'coordonnees' &&
-              activeTab !== 'infos_embauche' && (
+              activeTab !== 'infos_embauche' &&
+              activeTab !== 'orga_suivi' && (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400 italic">
                   <div className="text-lg mb-2">
                     {MENU.find((m) => m.key === activeTab)?.label}
