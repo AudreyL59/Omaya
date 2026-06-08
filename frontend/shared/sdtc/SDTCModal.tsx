@@ -95,6 +95,25 @@ interface ContratsData {
   type_etats: Record<string, { lib_type: string; couleur: string }>
 }
 
+interface ProduitSTC {
+  lib_produit: string
+  qte: number
+  nb_pts: number
+  valeur: number
+}
+
+interface BaremeResult {
+  nb_selectionnes: number
+  selection_ids: string[]
+  produits: ProduitSTC[]
+  nb_tot_pts: number
+  nb_tot_ctts: number
+  total_valeurs: number
+  bareme: number
+  comm_pts_ctts: number
+  comm_tot_stc: number
+}
+
 type Tab =
   | 'resume'
   | 'deja_traites'
@@ -132,6 +151,8 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
   const [tab, setTab] = useState<Tab>('resume')
   const [selectedSdtc, setSelectedSdtc] = useState<Set<string>>(new Set())
   const [selectedTraites, setSelectedTraites] = useState<Set<string>>(new Set())
+  const [bareme, setBareme] = useState<BaremeResult | null>(null)
+  const [computing, setComputing] = useState(false)
 
   useEffect(() => {
     if (!open || !idSalarie) return
@@ -142,6 +163,7 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
     setContrats(null)
     setSelectedSdtc(new Set())
     setSelectedTraites(new Set())
+    setBareme(null)
     setTab('resume')
     const auth = { Authorization: `Bearer ${getToken()}` }
 
@@ -274,18 +296,56 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               loading={loadingContrats}
               selected={selectedSdtc}
               setSelected={setSelectedSdtc}
-              onValidate={() => {
-                showToast(
-                  `${selectedSdtc.size} contrat(s) sélectionné(s) — calcul barème à implémenter`,
-                  'info',
-                )
+              computing={computing}
+              onValidate={async () => {
+                if (selectedSdtc.size === 0) return
+                setComputing(true)
+                try {
+                  const r = await fetch(
+                    `/api/shared/sdtc/${idSalarie}/compute-bareme`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${getToken()}`,
+                      },
+                      body: JSON.stringify({
+                        contrat_ids: Array.from(selectedSdtc),
+                      }),
+                    },
+                  )
+                  if (!r.ok) {
+                    const j = await r.json().catch(() => ({}))
+                    throw new Error(
+                      (j as { detail?: string })?.detail || String(r.status),
+                    )
+                  }
+                  const j = (await r.json()) as BaremeResult
+                  setBareme(j)
+                  setTab('resume_stc')
+                  showToast(
+                    `${j.nb_selectionnes} contrat(s) — ${j.comm_tot_stc.toFixed(2)} €`,
+                    'success',
+                  )
+                } catch (e) {
+                  showToast(
+                    `Échec calcul barème : ${(e as Error).message}`,
+                    'error',
+                  )
+                } finally {
+                  setComputing(false)
+                }
               }}
             />
+          )}
+          {!loading && data && tab === 'resume_stc' && (
+            <ResumeSTCTab bareme={bareme} onGoToSelection={() => setTab('contrats_sdtc')} />
           )}
           {!loading && data &&
             tab !== 'resume' &&
             tab !== 'deja_traites' &&
-            tab !== 'contrats_sdtc' && (
+            tab !== 'contrats_sdtc' &&
+            tab !== 'resume_stc' && (
               <ComingSoon label={TABS.find((t) => t.key === tab)?.label || ''} />
             )}
         </div>
@@ -621,9 +681,10 @@ function DejaTraitesTab({ contrats, loading, selected, setSelected }: TabProps) 
 
 interface TabSDTCProps extends TabProps {
   onValidate: () => void
+  computing: boolean
 }
 
-function ContratsSDTCTab({ contrats, loading, selected, setSelected, onValidate }: TabSDTCProps) {
+function ContratsSDTCTab({ contrats, loading, selected, setSelected, onValidate, computing }: TabSDTCProps) {
   const toggle = (id: string) => {
     const next = new Set(selected)
     if (next.has(id)) next.delete(id)
@@ -675,11 +736,16 @@ function ContratsSDTCTab({ contrats, loading, selected, setSelected, onValidate 
         <button
           type="button"
           onClick={onValidate}
-          disabled={selected.size === 0}
+          disabled={selected.size === 0 || computing}
           className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded text-white disabled:opacity-40"
           style={{ backgroundColor: COLOR_PRIMARY }}
         >
-          <Check className="w-4 h-4" /> Valider la sélection et passer à l'étape suivante
+          {computing ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Check className="w-4 h-4" />
+          )}
+          Valider la sélection et passer à l'étape suivante
         </button>
       </div>
       <div className="flex-1 overflow-y-auto border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
@@ -693,6 +759,128 @@ function ContratsSDTCTab({ contrats, loading, selected, setSelected, onValidate 
           />
         ))}
       </div>
+    </div>
+  )
+}
+
+// --- Onglet "Résumé Solde de tout compte" -------------------------------
+
+function fmtEur(n: number): string {
+  return `${n.toFixed(2).replace('.', ',')} €`
+}
+
+function ResumeSTCTab({
+  bareme,
+  onGoToSelection,
+}: {
+  bareme: BaremeResult | null
+  onGoToSelection: () => void
+}) {
+  if (!bareme) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-sm" style={{ color: COLOR_BRUN }}>
+        <p style={{ opacity: 0.7 }}>
+          Aucun calcul disponible — valider d'abord une sélection dans l'onglet « Contrats SDTC ».
+        </p>
+        <button
+          type="button"
+          onClick={onGoToSelection}
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border"
+          style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
+        >
+          Aller à la sélection
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="grid grid-cols-4 gap-3 pb-3">
+        <SummaryCard label="Nb contrats" value={String(bareme.nb_tot_ctts)} />
+        <SummaryCard label="Nb points" value={String(bareme.nb_tot_pts)} />
+        <SummaryCard label="Barème" value={fmtEur(bareme.bareme)} />
+        <SummaryCard label="Total STC" value={fmtEur(bareme.comm_tot_stc)} highlight />
+      </div>
+      <div className="grid grid-cols-3 gap-3 pb-3 text-xs" style={{ color: COLOR_BRUN }}>
+        <Detail label="Comm. par points" value={fmtEur(bareme.comm_pts_ctts)} />
+        <Detail label="Total valeurs (forfait)" value={fmtEur(bareme.total_valeurs)} />
+        <Detail label="Sélection" value={`${bareme.nb_selectionnes} ctt(s)`} />
+      </div>
+
+      <div className="flex-1 overflow-y-auto border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
+        <div
+          className="grid items-center gap-2 px-2 py-2 text-xs font-semibold border-b sticky top-0 z-10"
+          style={{
+            gridTemplateColumns: '1fr 80px 100px 100px',
+            color: COLOR_BRUN,
+            backgroundColor: COLOR_BG_SOFT,
+            borderColor: COLOR_BG_SOFT,
+          }}
+        >
+          <div>Libellé Produit</div>
+          <div className="text-right">Qté</div>
+          <div className="text-right">Nb Pts</div>
+          <div className="text-right">Valeur</div>
+        </div>
+        {bareme.produits.map((p) => (
+          <div
+            key={p.lib_produit}
+            className="grid items-center gap-2 px-2 py-1 text-xs border-b"
+            style={{
+              gridTemplateColumns: '1fr 80px 100px 100px',
+              borderColor: COLOR_BG_SOFT,
+              color: COLOR_BRUN,
+            }}
+          >
+            <div className="truncate font-medium" title={p.lib_produit}>
+              {p.lib_produit}
+            </div>
+            <div className="text-right">{p.qte}</div>
+            <div className="text-right">{p.nb_pts}</div>
+            <div className="text-right">{fmtEur(p.valeur)}</div>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
+        « Génération du tableau », « PDFs+XLS+Mail » et « Mail SDTC » seront branchés dans des commits dédiés.
+      </p>
+    </div>
+  )
+}
+
+function SummaryCard({
+  label,
+  value,
+  highlight,
+}: {
+  label: string
+  value: string
+  highlight?: boolean
+}) {
+  return (
+    <div
+      className="border rounded p-3"
+      style={{
+        borderColor: COLOR_BG_SOFT,
+        backgroundColor: highlight ? COLOR_PRIMARY : 'white',
+        color: highlight ? 'white' : COLOR_BRUN,
+      }}
+    >
+      <div className="text-xs" style={{ opacity: highlight ? 0.85 : 0.7 }}>
+        {label}
+      </div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  )
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-2 px-3 py-2 border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
+      <span style={{ opacity: 0.7 }}>{label}</span>
+      <span className="font-semibold">{value}</span>
     </div>
   )
 }
