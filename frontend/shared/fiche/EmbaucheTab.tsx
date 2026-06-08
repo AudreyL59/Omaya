@@ -746,9 +746,10 @@ export default function EmbaucheTab({
                   value={edit.courrier_num_suivi}
                   onChange={(v) => set({ courrier_num_suivi: v })}
                 />
-                <StackedField
+                <StackedSelectStr
                   label="Délai Prév."
                   value={edit.courrier_delai_prev}
+                  options={DELAI_PREV_OPTIONS}
                   onChange={(v) => set({ courrier_delai_prev: v })}
                 />
                 <button
@@ -1133,6 +1134,43 @@ function StackedSelectNum({
     </div>
   )
 }
+
+function StackedSelectStr({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: string[]
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <label
+        className="text-xs font-normal shrink-0 w-24 leading-tight"
+        style={{ color: COLOR_BRUN }}
+      >
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 min-w-0 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o || '—'}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+const DELAI_PREV_OPTIONS = ['', 'sans', '24 heures', '48 heures', '2 semaines', '1 mois']
 
 // --- Overlay "Partenaires" (codes portails + societes DPAE) -------------
 
