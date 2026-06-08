@@ -188,6 +188,7 @@ class FicheEmbauche(BaseModel):
     date_sortie_demandee: str = ""
     date_sortie_reelle: str = ""
     demandeur_sortie: str = ""
+    demandeur_sortie_lib: str = ""
     info_cpl: str = ""
     courrier_date_envoi: str = ""
     courrier_num_suivi: str = ""

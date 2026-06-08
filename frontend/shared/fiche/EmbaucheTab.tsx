@@ -117,6 +117,7 @@ export interface FicheEmbauche {
   date_sortie_demandee: string
   date_sortie_reelle: string
   demandeur_sortie: string
+  demandeur_sortie_lib: string
   info_cpl: string
   courrier_date_envoi: string
   courrier_num_suivi: string
@@ -714,6 +715,21 @@ export default function EmbaucheTab({
                 value={edit.date_sortie_reelle}
                 onChange={(v) => set({ date_sortie_reelle: v })}
               />
+              <div className="flex items-center gap-2">
+                <label
+                  className="text-xs font-normal shrink-0 w-24 leading-tight"
+                  style={{ color: COLOR_BRUN }}
+                >
+                  Demandeur
+                </label>
+                <span
+                  className="flex-1 min-w-0 px-2 py-1 text-sm font-normal truncate"
+                  style={{ color: COLOR_BRUN }}
+                  title={edit.demandeur_sortie_lib || ''}
+                >
+                  {edit.demandeur_sortie_lib || '—'}
+                </span>
+              </div>
               <StackedSelectNum
                 label="Type Sortie"
                 value={edit.id_type_sortie}

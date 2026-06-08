@@ -812,6 +812,7 @@ def load_embauche(id_salarie: int) -> dict:
         "date_sortie_demandee": _iso(sor.get("date_sortie_demandee")),
         "date_sortie_reelle": _iso(sor.get("date_sortie_reelle")),
         "demandeur_sortie": _str_id(sor.get("demandeur_sortie")),
+        "demandeur_sortie_lib": _salarie_lib(db, _str_id(sor.get("demandeur_sortie"))) if sor.get("demandeur_sortie") else "",
         "info_cpl": _str(sor.get("info_cpl")),
         "courrier_date_envoi": _iso(sor.get("courrier_date_envoi")),
         "courrier_num_suivi": _str(sor.get("courrier_num_suivi")),
