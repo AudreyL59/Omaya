@@ -21,9 +21,9 @@
  *   - Recap Ctts pour le BO (recap par produit)
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Loader2, Wallet, X } from 'lucide-react'
+import { Check, CheckSquare, Loader2, Square, Wallet, X } from 'lucide-react'
 
 import { showToast } from '../ui/dialog'
 
@@ -66,6 +66,35 @@ interface SDTCData {
   date_dernier_ctt: string
 }
 
+interface ContratItem {
+  id_contrat: string
+  partenaire: string
+  num_bs: string
+  info_interne: string
+  lib_produit: string
+  type_prod: string
+  date_signature: string
+  mois_paiement: string
+  id_etat_contrat: number
+  etat_contrat_lib: string
+  id_type_etat: number
+  type_etat_lib: string
+  couleur_fond: string
+  nb_points: number
+  client_nom: string
+  client_adresse: string
+  client_cp: string
+  client_ville: string
+  client_mail: string
+  client_gsm: string
+}
+
+interface ContratsData {
+  traites: ContratItem[]
+  a_traiter: ContratItem[]
+  type_etats: Record<string, { lib_type: string; couleur: string }>
+}
+
 type Tab =
   | 'resume'
   | 'deja_traites'
@@ -97,18 +126,26 @@ function fmtDate(iso: string): string {
 
 export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props) {
   const [data, setData] = useState<SDTCData | null>(null)
+  const [contrats, setContrats] = useState<ContratsData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingContrats, setLoadingContrats] = useState(false)
   const [tab, setTab] = useState<Tab>('resume')
+  const [selectedSdtc, setSelectedSdtc] = useState<Set<string>>(new Set())
+  const [selectedTraites, setSelectedTraites] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!open || !idSalarie) return
     let cancelled = false
     setLoading(true)
+    setLoadingContrats(true)
     setData(null)
+    setContrats(null)
+    setSelectedSdtc(new Set())
+    setSelectedTraites(new Set())
     setTab('resume')
-    fetch(`/api/shared/sdtc/${idSalarie}/load`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
+    const auth = { Authorization: `Bearer ${getToken()}` }
+
+    fetch(`/api/shared/sdtc/${idSalarie}/load`, { headers: auth })
       .then(async (r) => {
         if (!r.ok) {
           const j = await r.json().catch(() => ({}))
@@ -125,6 +162,25 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
         showToast(`Échec chargement SDTC : ${e?.message || e}`, 'error')
       })
       .finally(() => !cancelled && setLoading(false))
+
+    fetch(`/api/shared/sdtc/${idSalarie}/contrats`, { headers: auth })
+      .then(async (r) => {
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          throw new Error((j as { detail?: string })?.detail || String(r.status))
+        }
+        return r.json()
+      })
+      .then((j) => {
+        if (cancelled) return
+        setContrats(j as ContratsData)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        showToast(`Échec chargement contrats SDTC : ${e?.message || e}`, 'error')
+      })
+      .finally(() => !cancelled && setLoadingContrats(false))
+
     return () => {
       cancelled = true
     }
@@ -204,7 +260,34 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
             </div>
           )}
           {!loading && data && tab === 'resume' && <ResumeTab data={data} />}
-          {!loading && data && tab !== 'resume' && <ComingSoon label={TABS.find((t) => t.key === tab)?.label || ''} />}
+          {!loading && data && tab === 'deja_traites' && (
+            <DejaTraitesTab
+              contrats={contrats}
+              loading={loadingContrats}
+              selected={selectedTraites}
+              setSelected={setSelectedTraites}
+            />
+          )}
+          {!loading && data && tab === 'contrats_sdtc' && (
+            <ContratsSDTCTab
+              contrats={contrats}
+              loading={loadingContrats}
+              selected={selectedSdtc}
+              setSelected={setSelectedSdtc}
+              onValidate={() => {
+                showToast(
+                  `${selectedSdtc.size} contrat(s) sélectionné(s) — calcul barème à implémenter`,
+                  'info',
+                )
+              }}
+            />
+          )}
+          {!loading && data &&
+            tab !== 'resume' &&
+            tab !== 'deja_traites' &&
+            tab !== 'contrats_sdtc' && (
+              <ComingSoon label={TABS.find((t) => t.key === tab)?.label || ''} />
+            )}
         </div>
       </motion.div>
     </motion.div>
@@ -306,6 +389,310 @@ function ComingSoon({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-center h-full text-sm italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
       « {label} » — à brancher dans un prochain commit.
+    </div>
+  )
+}
+
+// --- Helpers communs aux grilles contrats -------------------------------
+
+function fmtFrenchDate(iso: string): string {
+  if (!iso || iso.length < 10) return ''
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+}
+
+function fmtMoisFr(iso: string): string {
+  // 'YYYY-MM' -> 'MM/YYYY'
+  if (!iso || iso.length < 7) return ''
+  return `${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+}
+
+const COLS_WIDTHS = {
+  select: '38px',
+  partenaire: '70px',
+  produit: '1fr',
+  type_prod: '110px',
+  num_bs: '120px',
+  date: '90px',
+  type_etat: '120px',
+  etat: '160px',
+  mois: '80px',
+} as const
+
+const GRID_TEMPLATE = `${COLS_WIDTHS.select} ${COLS_WIDTHS.partenaire} ${COLS_WIDTHS.produit} ${COLS_WIDTHS.type_prod} ${COLS_WIDTHS.num_bs} ${COLS_WIDTHS.date} ${COLS_WIDTHS.type_etat} ${COLS_WIDTHS.etat}`
+const GRID_TEMPLATE_TRAITES = `${GRID_TEMPLATE} ${COLS_WIDTHS.mois}`
+
+interface RowProps {
+  ct: ContratItem
+  checked: boolean
+  onToggle: (id: string) => void
+  showMois?: boolean
+}
+
+function ContratRow({ ct, checked, onToggle, showMois }: RowProps) {
+  return (
+    <div
+      className="grid items-center gap-2 px-2 py-1 text-xs border-b cursor-pointer"
+      style={{
+        gridTemplateColumns: showMois ? GRID_TEMPLATE_TRAITES : GRID_TEMPLATE,
+        backgroundColor: ct.couleur_fond || '#FFFFFF',
+        borderColor: COLOR_BG_SOFT,
+        color: COLOR_BRUN,
+      }}
+      onClick={() => onToggle(ct.id_contrat)}
+    >
+      <div className="flex justify-center">
+        {checked ? (
+          <CheckSquare className="w-4 h-4" style={{ color: COLOR_PRIMARY }} />
+        ) : (
+          <Square className="w-4 h-4" style={{ opacity: 0.4 }} />
+        )}
+      </div>
+      <div className="font-semibold truncate" title={ct.partenaire}>
+        {ct.partenaire}
+      </div>
+      <div className="truncate" title={ct.lib_produit}>
+        {ct.lib_produit}
+      </div>
+      <div className="truncate" title={ct.type_prod}>
+        {ct.type_prod}
+      </div>
+      <div className="truncate" title={ct.num_bs}>
+        {ct.num_bs}
+      </div>
+      <div>{fmtFrenchDate(ct.date_signature)}</div>
+      <div className="truncate" title={ct.type_etat_lib}>
+        {ct.type_etat_lib}
+      </div>
+      <div className="truncate" title={ct.etat_contrat_lib}>
+        {ct.etat_contrat_lib}
+      </div>
+      {showMois && <div>{fmtMoisFr(ct.mois_paiement)}</div>}
+    </div>
+  )
+}
+
+function GridHeader({ showMois }: { showMois?: boolean }) {
+  return (
+    <div
+      className="grid items-center gap-2 px-2 py-2 text-xs font-semibold border-b sticky top-0 z-10"
+      style={{
+        gridTemplateColumns: showMois ? GRID_TEMPLATE_TRAITES : GRID_TEMPLATE,
+        color: COLOR_BRUN,
+        backgroundColor: COLOR_BG_SOFT,
+        borderColor: COLOR_BG_SOFT,
+      }}
+    >
+      <div></div>
+      <div>Part.</div>
+      <div>Libellé Produit</div>
+      <div>Type Prod.</div>
+      <div>N° BS</div>
+      <div>Date Sign.</div>
+      <div>Type État</div>
+      <div>État Contrat</div>
+      {showMois && <div>Mois Pmt</div>}
+    </div>
+  )
+}
+
+// --- Onglet "Contrats déjà traités" -------------------------------------
+
+interface TabProps {
+  contrats: ContratsData | null
+  loading: boolean
+  selected: Set<string>
+  setSelected: (s: Set<string>) => void
+}
+
+function DejaTraitesTab({ contrats, loading, selected, setSelected }: TabProps) {
+  // Liste distincte des mois de paiement présents (descendant)
+  const moisDispos = useMemo(() => {
+    if (!contrats) return [] as string[]
+    const set = new Set<string>()
+    for (const c of contrats.traites) {
+      if (c.mois_paiement) set.add(c.mois_paiement)
+    }
+    return Array.from(set).sort((a, b) => b.localeCompare(a))
+  }, [contrats])
+
+  const [moisFiltre, setMoisFiltre] = useState<string>('')
+
+  useEffect(() => {
+    if (moisDispos.length > 0 && !moisFiltre) setMoisFiltre(moisDispos[0])
+  }, [moisDispos, moisFiltre])
+
+  const filtered = useMemo(() => {
+    if (!contrats) return [] as ContratItem[]
+    if (!moisFiltre) return contrats.traites
+    return contrats.traites.filter((c) => c.mois_paiement === moisFiltre)
+  }, [contrats, moisFiltre])
+
+  const toggle = (id: string) => {
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelected(next)
+  }
+
+  // "Valider" WinDev : coche toutes les lignes "VALID*" du mois sélectionné
+  const validerMois = () => {
+    if (!contrats || !moisFiltre) return
+    const next = new Set(selected)
+    let added = 0
+    for (const c of contrats.traites) {
+      if (
+        c.mois_paiement === moisFiltre &&
+        c.type_etat_lib.toUpperCase().includes('VALID')
+      ) {
+        if (!next.has(c.id_contrat)) {
+          next.add(c.id_contrat)
+          added++
+        }
+      }
+    }
+    setSelected(next)
+    showToast(`${added} contrat(s) ajouté(s) à la sélection`, 'info')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm" style={{ color: COLOR_BRUN }}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Chargement des contrats…
+      </div>
+    )
+  }
+  if (!contrats || contrats.traites.length === 0) {
+    return (
+      <div className="text-sm italic" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
+        Aucun contrat déjà traité pour ce salarié.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 pb-2">
+        <label className="text-sm" style={{ color: COLOR_BRUN }}>
+          Mois de paiement :
+        </label>
+        <select
+          value={moisFiltre}
+          onChange={(e) => setMoisFiltre(e.target.value)}
+          className="text-sm px-2 py-1 border rounded"
+          style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
+        >
+          <option value="">(tous)</option>
+          {moisDispos.map((m) => (
+            <option key={m} value={m}>
+              {fmtMoisFr(m)}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={validerMois}
+          disabled={!moisFiltre}
+          className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded text-white disabled:opacity-40"
+          style={{ backgroundColor: COLOR_PRIMARY }}
+        >
+          <Check className="w-4 h-4" /> Valider (lignes VALID du mois)
+        </button>
+      </div>
+      <div className="text-xs pb-2" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
+        {filtered.length} contrat(s) — {selected.size} sélectionné(s)
+      </div>
+      <div className="flex-1 overflow-y-auto border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
+        <GridHeader showMois />
+        {filtered.map((c) => (
+          <ContratRow
+            key={c.id_contrat}
+            ct={c}
+            checked={selected.has(c.id_contrat)}
+            onToggle={toggle}
+            showMois
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- Onglet "Contrats SDTC" --------------------------------------------
+
+interface TabSDTCProps extends TabProps {
+  onValidate: () => void
+}
+
+function ContratsSDTCTab({ contrats, loading, selected, setSelected, onValidate }: TabSDTCProps) {
+  const toggle = (id: string) => {
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelected(next)
+  }
+
+  const toggleAll = () => {
+    if (!contrats) return
+    if (selected.size === contrats.a_traiter.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(contrats.a_traiter.map((c) => c.id_contrat)))
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-sm" style={{ color: COLOR_BRUN }}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Chargement des contrats…
+      </div>
+    )
+  }
+  if (!contrats || contrats.a_traiter.length === 0) {
+    return (
+      <div className="text-sm italic" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
+        Aucun contrat éligible au SDTC pour ce salarié.
+      </div>
+    )
+  }
+
+  const allSelected = selected.size === contrats.a_traiter.length
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 pb-2">
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border"
+          style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
+        >
+          {allSelected ? <Square className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+          {allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
+        </button>
+        <div className="text-xs" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
+          {contrats.a_traiter.length} contrat(s) à traiter — {selected.size} sélectionné(s)
+        </div>
+        <button
+          type="button"
+          onClick={onValidate}
+          disabled={selected.size === 0}
+          className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded text-white disabled:opacity-40"
+          style={{ backgroundColor: COLOR_PRIMARY }}
+        >
+          <Check className="w-4 h-4" /> Valider la sélection et passer à l'étape suivante
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
+        <GridHeader />
+        {contrats.a_traiter.map((c) => (
+          <ContratRow
+            key={c.id_contrat}
+            ct={c}
+            checked={selected.has(c.id_contrat)}
+            onToggle={toggle}
+          />
+        ))}
+      </div>
     </div>
   )
 }
