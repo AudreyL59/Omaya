@@ -341,13 +341,62 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
           {!loading && data && tab === 'resume_stc' && (
             <ResumeSTCTab bareme={bareme} onGoToSelection={() => setTab('contrats_sdtc')} />
           )}
-          {!loading && data &&
-            tab !== 'resume' &&
-            tab !== 'deja_traites' &&
-            tab !== 'contrats_sdtc' &&
-            tab !== 'resume_stc' && (
-              <ComingSoon label={TABS.find((t) => t.key === tab)?.label || ''} />
-            )}
+          {!loading && data && tab === 'a_editer' && (
+            <AEditerTab
+              contrats={contrats}
+              selectedTraites={selectedTraites}
+              selectedSdtc={selectedSdtc}
+              computing={computing}
+              onRecalculate={async () => {
+                if (selectedSdtc.size === 0) {
+                  showToast('Aucun contrat SDTC sélectionné', 'info')
+                  return
+                }
+                setComputing(true)
+                try {
+                  const r = await fetch(
+                    `/api/shared/sdtc/${idSalarie}/compute-bareme`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${getToken()}`,
+                      },
+                      body: JSON.stringify({
+                        contrat_ids: Array.from(selectedSdtc),
+                      }),
+                    },
+                  )
+                  if (!r.ok) {
+                    const j = await r.json().catch(() => ({}))
+                    throw new Error(
+                      (j as { detail?: string })?.detail || String(r.status),
+                    )
+                  }
+                  const j = (await r.json()) as BaremeResult
+                  setBareme(j)
+                  showToast(
+                    `STC recalculé : ${j.comm_tot_stc.toFixed(2)} €`,
+                    'success',
+                  )
+                } catch (e) {
+                  showToast(
+                    `Échec recalcul STC : ${(e as Error).message}`,
+                    'error',
+                  )
+                } finally {
+                  setComputing(false)
+                }
+              }}
+            />
+          )}
+          {!loading && data && tab === 'recap_bo' && (
+            <RecapBOTab
+              contrats={contrats}
+              selectedTraites={selectedTraites}
+              selectedSdtc={selectedSdtc}
+            />
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -881,6 +930,331 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-2 px-3 py-2 border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
       <span style={{ opacity: 0.7 }}>{label}</span>
       <span className="font-semibold">{value}</span>
+    </div>
+  )
+}
+
+// --- Onglet "Contrats à éditer pour le salarié" -------------------------
+// Transposition WinDev TableContratTOT : concatenation des contrats deja
+// traites + selection SDTC, avec flag STC=true pour la selection.
+
+interface AEditerProps {
+  contrats: ContratsData | null
+  selectedTraites: Set<string>
+  selectedSdtc: Set<string>
+  computing: boolean
+  onRecalculate: () => void
+}
+
+function AEditerTab({
+  contrats,
+  selectedTraites,
+  selectedSdtc,
+  computing,
+  onRecalculate,
+}: AEditerProps) {
+  const rows = useMemo(() => {
+    if (!contrats) return [] as Array<ContratItem & { stc: boolean }>
+    const t = (contrats.traites || [])
+      .filter((c) => selectedTraites.has(c.id_contrat))
+      .map((c) => ({ ...c, stc: false }))
+    const s = (contrats.a_traiter || [])
+      .filter((c) => selectedSdtc.has(c.id_contrat))
+      .map((c) => ({ ...c, stc: true }))
+    return [...t, ...s]
+  }, [contrats, selectedTraites, selectedSdtc])
+
+  if (!contrats) {
+    return (
+      <div className="flex items-center gap-2 text-sm" style={{ color: COLOR_BRUN }}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
+      </div>
+    )
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="text-sm italic" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
+        Aucun contrat sélectionné. Cocher des lignes dans « Contrats déjà traités » ou « Contrats SDTC ».
+      </div>
+    )
+  }
+
+  const template = '40px 70px 1fr 130px 90px 110px 70px 70px 60px'
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-3 pb-2">
+        <div className="text-xs" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
+          {rows.length} contrat(s) au tableau — {rows.filter((r) => r.stc).length} marqué(s) STC
+        </div>
+        <button
+          type="button"
+          onClick={onRecalculate}
+          disabled={computing || selectedSdtc.size === 0}
+          className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded text-white disabled:opacity-40"
+          style={{ backgroundColor: COLOR_PRIMARY }}
+        >
+          {computing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Recalculer STC
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
+        <div
+          className="grid items-center gap-2 px-2 py-2 text-xs font-semibold border-b sticky top-0 z-10"
+          style={{
+            gridTemplateColumns: template,
+            color: COLOR_BRUN,
+            backgroundColor: COLOR_BG_SOFT,
+            borderColor: COLOR_BG_SOFT,
+          }}
+        >
+          <div className="text-center">STC</div>
+          <div>Part.</div>
+          <div>Client / Ville</div>
+          <div>Lib Produit</div>
+          <div>N° BS</div>
+          <div>Date Sign.</div>
+          <div>Mois P.</div>
+          <div>Type État</div>
+          <div className="text-right">Pts</div>
+        </div>
+        {rows.map((r) => (
+          <div
+            key={`${r.id_contrat}-${r.stc ? 'stc' : 'tr'}`}
+            className="grid items-center gap-2 px-2 py-1 text-xs border-b"
+            style={{
+              gridTemplateColumns: template,
+              backgroundColor: r.couleur_fond || '#FFFFFF',
+              borderColor: COLOR_BG_SOFT,
+              color: COLOR_BRUN,
+            }}
+          >
+            <div className="flex justify-center">
+              {r.stc ? (
+                <CheckSquare className="w-4 h-4" style={{ color: COLOR_PRIMARY }} />
+              ) : (
+                <Square className="w-4 h-4" style={{ opacity: 0.4 }} />
+              )}
+            </div>
+            <div className="font-semibold truncate">{r.partenaire}</div>
+            <div className="truncate" title={`${r.client_nom} ${r.client_ville} (${r.client_cp})`}>
+              {r.client_nom} <span style={{ opacity: 0.6 }}>{r.client_ville}</span>
+            </div>
+            <div className="truncate" title={r.lib_produit}>
+              {r.lib_produit}
+            </div>
+            <div className="truncate">{r.num_bs}</div>
+            <div>{fmtFrenchDate(r.date_signature)}</div>
+            <div>{fmtMoisFr(r.mois_paiement)}</div>
+            <div className="truncate">{r.type_etat_lib}</div>
+            <div className="text-right">{r.nb_points}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- Onglet "Récap Ctts pour le BO" --------------------------------------
+// Transposition WinDev TableRecapProd + TableRecapProdPts : agrege par produit
+// (regroupement Hachette) selon le Type_Etat de chaque contrat.
+
+const COL_ETATS = [
+  { key: 'temporaire', label: 'En attente CONTRAT', match: ['TEMPORAIRE'] },
+  { key: 'attente_ope', label: 'Envoyé chez OPE', match: ['EN ATTENTE OP'] },
+  { key: 'rejets', label: 'Rejets BO', match: ['REJET', 'ANOMALIE'] },
+  { key: 'resiliation', label: 'Résiliation', match: ['RESILIATION', 'RÉSILIATION'] },
+  { key: 'valide_paye', label: 'Validé-Payé', match: ['VALID'] },
+  { key: 'decommission', label: 'Décommission', match: ['DECOMMISSION', 'DÉCOMMISSION'] },
+] as const
+
+type EtatKey = (typeof COL_ETATS)[number]['key']
+
+interface RecapRow {
+  lib_produit: string
+  counts: Record<EtatKey, number>
+  pts: Record<EtatKey, number>
+}
+
+function matchEtat(type_etat_lib: string): EtatKey | null {
+  const up = (type_etat_lib || '').toUpperCase()
+  for (const c of COL_ETATS) {
+    for (const m of c.match) if (up.includes(m)) return c.key
+  }
+  return null
+}
+
+interface RecapBOProps {
+  contrats: ContratsData | null
+  selectedTraites: Set<string>
+  selectedSdtc: Set<string>
+}
+
+function RecapBOTab({ contrats, selectedTraites, selectedSdtc }: RecapBOProps) {
+  const { rows, totals } = useMemo(() => {
+    const empty = () => ({
+      temporaire: 0,
+      attente_ope: 0,
+      rejets: 0,
+      resiliation: 0,
+      valide_paye: 0,
+      decommission: 0,
+    }) as Record<EtatKey, number>
+
+    const map = new Map<string, RecapRow>()
+    if (!contrats) return { rows: [], totals: { counts: empty(), pts: empty() } }
+
+    const considere = [
+      ...contrats.traites.filter((c) => selectedTraites.has(c.id_contrat)),
+      ...contrats.a_traiter.filter((c) => selectedSdtc.has(c.id_contrat)),
+    ]
+
+    for (const c of considere) {
+      let nom = (c.lib_produit || '').split('(')[0].trim()
+      const up = nom.toUpperCase()
+      if (up === 'TELE 7 JOUR' || up === 'ELLE' || up === 'PARIS MATCH') {
+        nom = 'HACHETTE'
+      }
+      if (!nom) continue
+      let row = map.get(nom)
+      if (!row) {
+        row = { lib_produit: nom, counts: empty(), pts: empty() }
+        map.set(nom, row)
+      }
+      const k = matchEtat(c.type_etat_lib)
+      if (k) {
+        row.counts[k] += 1
+        row.pts[k] += c.nb_points || 0
+      }
+    }
+
+    const arr = Array.from(map.values()).sort((a, b) =>
+      a.lib_produit.localeCompare(b.lib_produit),
+    )
+    const totals = { counts: empty(), pts: empty() }
+    for (const r of arr) {
+      for (const c of COL_ETATS) {
+        totals.counts[c.key] += r.counts[c.key]
+        totals.pts[c.key] += r.pts[c.key]
+      }
+    }
+    return { rows: arr, totals }
+  }, [contrats, selectedTraites, selectedSdtc])
+
+  if (!contrats) {
+    return (
+      <div className="flex items-center gap-2 text-sm" style={{ color: COLOR_BRUN }}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
+      </div>
+    )
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="text-sm italic" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
+        Aucun contrat sélectionné. Cocher des lignes dans « Contrats déjà traités » ou « Contrats SDTC ».
+      </div>
+    )
+  }
+
+  const template = `1fr ${COL_ETATS.map(() => '110px').join(' ')}`
+
+  return (
+    <div className="flex flex-col h-full gap-3">
+      <RecapTable
+        title="Nombre de contrats"
+        template={template}
+        rows={rows}
+        totals={totals.counts}
+        kind="counts"
+      />
+      <RecapTable
+        title="Nombre de points"
+        template={template}
+        rows={rows}
+        totals={totals.pts}
+        kind="pts"
+      />
+    </div>
+  )
+}
+
+function RecapTable({
+  title,
+  template,
+  rows,
+  totals,
+  kind,
+}: {
+  title: string
+  template: string
+  rows: RecapRow[]
+  totals: Record<EtatKey, number>
+  kind: 'counts' | 'pts'
+}) {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden border rounded" style={{ borderColor: COLOR_BG_SOFT }}>
+      <div
+        className="px-3 py-2 text-xs font-semibold border-b"
+        style={{ backgroundColor: COLOR_PRIMARY, color: 'white' }}
+      >
+        {title}
+      </div>
+      <div
+        className="grid items-center gap-2 px-2 py-2 text-xs font-semibold border-b"
+        style={{
+          gridTemplateColumns: template,
+          color: COLOR_BRUN,
+          backgroundColor: COLOR_BG_SOFT,
+          borderColor: COLOR_BG_SOFT,
+        }}
+      >
+        <div>Produit</div>
+        {COL_ETATS.map((c) => (
+          <div key={c.key} className="text-right">
+            {c.label}
+          </div>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {rows.map((r) => (
+          <div
+            key={r.lib_produit}
+            className="grid items-center gap-2 px-2 py-1 text-xs border-b"
+            style={{ gridTemplateColumns: template, borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
+          >
+            <div className="font-medium truncate" title={r.lib_produit}>
+              {r.lib_produit}
+            </div>
+            {COL_ETATS.map((c) => {
+              const v = (kind === 'counts' ? r.counts[c.key] : r.pts[c.key]) as number
+              return (
+                <div
+                  key={c.key}
+                  className="text-right"
+                  style={{ opacity: v === 0 ? 0.3 : 1 }}
+                >
+                  {v}
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+      <div
+        className="grid items-center gap-2 px-2 py-2 text-xs font-semibold border-t"
+        style={{
+          gridTemplateColumns: template,
+          color: COLOR_BRUN,
+          backgroundColor: COLOR_BG_SOFT,
+          borderColor: COLOR_BG_SOFT,
+        }}
+      >
+        <div>Total</div>
+        {COL_ETATS.map((c) => (
+          <div key={c.key} className="text-right">
+            {totals[c.key]}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
