@@ -32,6 +32,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Printer,
   Save,
   Scale,
   Send,
@@ -354,6 +355,33 @@ export default function EmbaucheTab({
       // la fiche salarie ADM = type=0, donc cette proposition est skipped.
     } finally {
       setSortieLoading(null)
+    }
+  }
+
+  // Genere le courrier de rupture de periode d'essai au format PDF
+  // (WeasyPrint cote backend). Le delai_prev courant est passe en query
+  // string pour qu'il soit pris en compte meme si pas encore enregistre.
+  const handleCourrierFPE = async () => {
+    if (!edit) return
+    const delaiPrev = edit.courrier_delai_prev || ''
+    const url =
+      `${apiBase}/fiche-salarie/${idSalarie}/sortie/courrier-fpe.pdf` +
+      `?delai_prev=${encodeURIComponent(delaiPrev)}`
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        showToast(`Échec : ${(j as { detail?: string })?.detail || r.status}`, 'error')
+        return
+      }
+      const blob = await r.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank')
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000)
+    } catch {
+      showToast('Erreur réseau (PDF Courrier FPE).', 'error')
     }
   }
 
@@ -717,6 +745,16 @@ export default function EmbaucheTab({
                   value={edit.courrier_delai_prev}
                   onChange={(v) => set({ courrier_delai_prev: v })}
                 />
+                <button
+                  type="button"
+                  onClick={handleCourrierFPE}
+                  className="w-full flex items-center justify-center gap-2 mt-2 px-3 py-1.5 text-xs font-normal rounded hover:bg-[#ECF1F2] border"
+                  style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
+                  title="Générer le courrier de rupture de période d'essai (PDF)"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Courrier Type FPE
+                </button>
               </SortieBlock>
             ) : (
               <div />

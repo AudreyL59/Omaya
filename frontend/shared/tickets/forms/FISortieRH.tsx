@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  CheckCircle, ExternalLink, FileText, Loader2, Printer, Save, Wallet, XCircle,
+  CheckCircle, ExternalLink, FileText, Loader2, Save, Wallet, XCircle,
 } from 'lucide-react'
 
 import type { FIProps } from './index'
@@ -43,7 +43,9 @@ function formatShortDate(iso: string): string {
 //
 // Layout :
 //   - Header ticket : nom + actions globales (Enregistrer ticket / Cloturer /
-//     Voir doc / SDTC / Courrier Type FPE).
+//     Voir doc / SDTC). Le bouton "Courrier Type FPE" est porte par
+//     EmbaucheTab (bloc Courrier FPE / DEM) car c'est lui qui dispose de
+//     `delai_prev` en cours d'edition.
 //   - Bloc Sortie specifique au ticket : Type Sortie + Doc + InfoCplt
 //     (champs portes par la table TK_DemandeSortieRH).
 //   - <EmbaucheTab/> partage : fiche embauche complete + overlays Partenaires /
@@ -149,30 +151,6 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
     showToast('Solde de tout compte : module à brancher (Fen_SDTC)', 'info')
   }
 
-  const handleCourrierFPE = async () => {
-    if (!data?.id_salarie) return
-    // delai_prev sera lu en BDD si vide en query string (l'utilisateur doit
-    // d'abord enregistrer son delai dans EmbaucheTab pour qu'il soit persiste).
-    const url =
-      `${fsaBase}/fiche-salarie/${data.id_salarie}/sortie/courrier-fpe.pdf?delai_prev=`
-    try {
-      const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      })
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}))
-        showToast(`Échec : ${(j as { detail?: string })?.detail || r.status}`, 'error')
-        return
-      }
-      const blob = await r.blob()
-      const blobUrl = URL.createObjectURL(blob)
-      window.open(blobUrl, '_blank')
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000)
-    } catch {
-      showToast('Erreur réseau (PDF Courrier FPE).', 'error')
-    }
-  }
-
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -188,8 +166,6 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
       </div>
     )
   }
-
-  const fpeEditable = typeSortie >= 2 && typeSortie <= 4
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
@@ -244,17 +220,6 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
             >
               <Wallet className="w-4 h-4" />
               Solde de tout compte
-            </button>
-          )}
-          {fpeEditable && (
-            <button
-              onClick={handleCourrierFPE}
-              className="flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-normal hover:bg-[#ECF1F2] border"
-              style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
-              title="Générer le courrier de rupture de période d'essai"
-            >
-              <Printer className="w-4 h-4" />
-              Courrier Type FPE
             </button>
           )}
         </div>
