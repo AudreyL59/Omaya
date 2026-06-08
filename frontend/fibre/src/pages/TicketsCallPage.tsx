@@ -616,7 +616,7 @@ function TableEnCours({
                 <Td className="font-medium">{t.nom_client}</Td>
                 <Td>{t.cp}</Td>
                 <Td>{t.ville}</Td>
-                <Td>{t.nom_vendeur}</Td>
+                <Td className="font-medium">{t.nom_vendeur}</Td>
                 <Td className="text-c-ink-soft">{t.lib_equipe}</Td>
                 <Td className="text-center">
                   {t.fdv_interne && <Check className="w-4 h-4 text-c-brand inline" />}
@@ -754,7 +754,7 @@ function TableTraites({
                 <Td className="font-medium">{t.nom_client}</Td>
                 <Td>{t.cp}</Td>
                 <Td>{t.ville}</Td>
-                <Td>{t.nom_vendeur}</Td>
+                <Td className="font-medium">{t.nom_vendeur}</Td>
                 <Td className="text-c-ink-soft">{t.agence}</Td>
                 <Td>{t.lib_statut}</Td>
                 <Td className="text-center"><CountBadge value={t.nb_offres} /></Td>
