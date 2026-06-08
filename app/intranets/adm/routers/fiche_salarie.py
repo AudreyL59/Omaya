@@ -6,10 +6,12 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
+from app.intranets.adm.services import fiche_organigramme as orga_svc
 from app.intranets.adm.schemas.fiche_salarie import (
     FicheCoordonnees,
     FicheEmbauche,
@@ -309,6 +311,115 @@ def save_formateur(
     try:
         body = payload.model_dump(exclude_unset=True)
         return svc.save_formateur(id_salarie, body, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet Organigramme -------------------------------------------------
+
+
+class SaveRattachementPayload(BaseModel):
+    id_organigramme: str
+    date_debut: str = ""
+    date_fin: str = ""
+    aff_actif: bool = True
+    id_ste: str = ""
+
+
+@router.get("/{id_salarie}/orga")
+def get_orga_suivi(
+    id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)
+):
+    """Charge les 2 listes (rattachements + suivis) pour l'onglet 'Organigramme'."""
+    try:
+        return orga_svc.load_orga_suivi(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/orga/tree")
+def get_orga_children(
+    id_parent: int = Query(0, description="0 = racine"),
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste les organigrammes enfants d'un noeud (pour la navigation Arbre1)."""
+    try:
+        return {"items": orga_svc.load_orga_children(id_parent)}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/orga")
+def create_rattachement(
+    payload: SaveRattachementPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Cree un rattachement (insert pgt_salarie_organigramme) + ferme l'ancien
+    suivi 'changement d'equipe' et cree le nouveau (type=2)."""
+    try:
+        return orga_svc.save_rattachement(
+            id_salarie=id_salarie,
+            id_salarie_organigramme=0,
+            id_organigramme=int(payload.id_organigramme or 0),
+            date_debut=payload.date_debut,
+            date_fin=payload.date_fin,
+            aff_actif=payload.aff_actif,
+            id_ste=int(payload.id_ste or 0),
+            op_id=user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.put("/orga/{id_salarie_organigramme}")
+def update_rattachement(
+    payload: SaveRattachementPayload,
+    id_salarie_organigramme: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Modifie un rattachement existant (modif_elem='modif')."""
+    try:
+        return orga_svc.save_rattachement(
+            id_salarie=0,
+            id_salarie_organigramme=id_salarie_organigramme,
+            id_organigramme=int(payload.id_organigramme or 0),
+            date_debut=payload.date_debut,
+            date_fin=payload.date_fin,
+            aff_actif=payload.aff_actif,
+            id_ste=int(payload.id_ste or 0),
+            op_id=user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/orga/{id_salarie_organigramme}/duplicate")
+def duplicate_rattachement_route(
+    id_salarie_organigramme: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Duplique le rattachement (memes valeurs, modif_elem='new', nouvel ID)."""
+    try:
+        return orga_svc.duplicate_rattachement(id_salarie_organigramme, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/orga/{id_salarie_organigramme}")
+def delete_rattachement(
+    id_salarie_organigramme: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Soft delete (modif_elem='suppr')."""
+    try:
+        return orga_svc.soft_delete_rattachement(id_salarie_organigramme, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
