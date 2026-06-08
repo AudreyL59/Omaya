@@ -633,13 +633,6 @@ function Placeholder({ label, value }: { label: string; value: string }) {
   )
 }
 
-function ComingSoon({ label }: { label: string }) {
-  return (
-    <div className="flex items-center justify-center h-full text-sm italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
-      « {label} » — à brancher dans un prochain commit.
-    </div>
-  )
-}
 
 // --- Helpers communs aux grilles contrats -------------------------------
 

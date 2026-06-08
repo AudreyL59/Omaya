@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronRight, Loader2, Save, Users, X } from 'lucide-react'
 
-import { ADM_API, getToken } from '@/api'
+import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
 
@@ -54,7 +54,7 @@ export default function SalarieOrgaModal({
 
   // Chargement combo Societe
   useEffect(() => {
-    fetch(`${ADM_API}/fiche-salarie/orga/societes`, {
+    fetch(`/api/adm/fiche-salarie/orga/societes`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => (r.ok ? r.json() : { items: [] }))
@@ -69,7 +69,7 @@ export default function SalarieOrgaModal({
     setLoadingInit(true)
     // On recharge via la liste complete et on filtre cote front (l'endpoint
     // /orga renvoie deja tous les rattachements du salarie).
-    fetch(`${ADM_API}/fiche-salarie/${idSalarie}/orga`, {
+    fetch(`/api/adm/fiche-salarie/${idSalarie}/orga`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.json())
@@ -98,7 +98,7 @@ export default function SalarieOrgaModal({
   // Chargement de la racine de l'arbre a l'ouverture
   const loadChildren = useCallback(async (idParent: string): Promise<TreeNode[]> => {
     const r = await fetch(
-      `${ADM_API}/fiche-salarie/orga/tree?id_parent=${idParent || 0}`,
+      `/api/adm/fiche-salarie/orga/tree?id_parent=${idParent || 0}`,
       { headers: { Authorization: `Bearer ${getToken()}` } },
     )
     if (!r.ok) throw new Error(String(r.status))
@@ -158,8 +158,8 @@ export default function SalarieOrgaModal({
     setSaving(true)
     try {
       const url = idSalarieOrga
-        ? `${ADM_API}/fiche-salarie/orga/${idSalarieOrga}`
-        : `${ADM_API}/fiche-salarie/${idSalarie}/orga`
+        ? `/api/adm/fiche-salarie/orga/${idSalarieOrga}`
+        : `/api/adm/fiche-salarie/${idSalarie}/orga`
       const method = idSalarieOrga ? 'PUT' : 'POST'
       const r = await fetch(url, {
         method,

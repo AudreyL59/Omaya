@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Copy, Pencil, Plus, Trash2, Loader2 } from 'lucide-react'
 
-import { ADM_API, getToken } from '@/api'
+import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
 import SalarieOrgaModal from './SalarieOrgaModal'
@@ -72,7 +72,7 @@ export default function OrgaSuiviTab({ idSalarie }: Props) {
     if (!idSalarie) return
     setLoading(true)
     try {
-      const r = await fetch(`${ADM_API}/fiche-salarie/${idSalarie}/orga`, {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/orga`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       })
       if (!r.ok) throw new Error(String(r.status))
@@ -126,7 +126,7 @@ export default function OrgaSuiviTab({ idSalarie }: Props) {
     if (!ok) return
     try {
       const r = await fetch(
-        `${ADM_API}/fiche-salarie/orga/${selectedItem.id_salarie_organigramme}/duplicate`,
+        `/api/adm/fiche-salarie/orga/${selectedItem.id_salarie_organigramme}/duplicate`,
         { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } },
       )
       if (!r.ok) {
@@ -154,7 +154,7 @@ export default function OrgaSuiviTab({ idSalarie }: Props) {
     if (!ok) return
     try {
       const r = await fetch(
-        `${ADM_API}/fiche-salarie/orga/${selectedItem.id_salarie_organigramme}`,
+        `/api/adm/fiche-salarie/orga/${selectedItem.id_salarie_organigramme}`,
         { method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` } },
       )
       if (!r.ok) {
