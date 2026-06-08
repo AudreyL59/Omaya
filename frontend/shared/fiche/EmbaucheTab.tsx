@@ -785,6 +785,16 @@ export default function EmbaucheTab({
                   value={edit.stc_retourne_le}
                   onChange={(v) => set({ stc_retourne_le: v })}
                 />
+                <button
+                  type="button"
+                  onClick={() => showToast('Mail SDTC : à brancher', 'info')}
+                  className="w-full flex items-center justify-center gap-2 mt-2 px-3 py-1.5 text-xs font-normal rounded hover:bg-[#ECF1F2] border"
+                  style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
+                  title="Envoyer le mail de solde de tout compte (à brancher)"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Mail SDTC
+                </button>
               </SortieBlock>
             ) : (
               <div />
