@@ -10,6 +10,7 @@ import EmbaucheTab, {
   COLOR_BRUN,
   COLOR_BG_SOFT,
 } from '../../fiche/EmbaucheTab'
+import SDTCModal from '../../sdtc/SDTCModal'
 
 interface TypeSortieOption {
   id: number
@@ -58,6 +59,7 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
   const [saving, setSaving] = useState(false)
   const [typeSortie, setTypeSortie] = useState<number>(0)
   const [infoCplt, setInfoCplt] = useState<string>('')
+  const [sdtcOpen, setSdtcOpen] = useState(false)
 
   // apiBase pour les endpoints fiche-salarie : par defaut /api/adm
   // car les tickets sortie RH sont traites cote ADM. Si la fonction est
@@ -148,7 +150,8 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
   }
 
   const handleSDTC = () => {
-    showToast('Solde de tout compte : module à brancher (Fen_SDTC)', 'info')
+    if (!data?.id_salarie) return
+    setSdtcOpen(true)
   }
 
   if (loading) {
@@ -323,6 +326,13 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
           </a>
         )}
       </div>
+
+      <SDTCModal
+        open={sdtcOpen}
+        onClose={() => setSdtcOpen(false)}
+        getToken={getToken}
+        idSalarie={data.id_salarie}
+      />
     </div>
   )
 }
