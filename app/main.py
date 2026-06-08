@@ -17,6 +17,7 @@ from app.intranets.call.fibre.router import router as call_fibre_router
 from app.intranets.call.rh.router import router as call_rh_router
 from app.intranets.call.prise_rdv.router import router as call_prise_rdv_router
 from app.shared.email.router import router as shared_email_router
+from app.shared.sdtc.router import router as shared_sdtc_router
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 
@@ -65,6 +66,7 @@ app.include_router(call_fibre_router)
 app.include_router(call_rh_router)
 app.include_router(call_prise_rdv_router)
 app.include_router(shared_email_router)
+app.include_router(shared_sdtc_router)
 
 
 @app.get("/")
