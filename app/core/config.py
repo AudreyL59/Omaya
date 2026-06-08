@@ -78,12 +78,19 @@ MAIL_JURISTE_2 = os.getenv("MAIL_JURISTE_2", "")
 SMS_API_KEY = os.getenv("SMS_API_KEY", "")
 SMS_API_URL = os.getenv("SMS_API_URL", "api-old.smsmode.com")
 
-# SMTP Gmail RH
+# SMTP Gmail RH (envoi par defaut, transposition WinDev "envoiMailGmailRH")
 SMTP_RH_HOST = os.getenv("SMTP_RH_HOST", "smtp.gmail.com")
 SMTP_RH_PORT = int(os.getenv("SMTP_RH_PORT", "465"))
 SMTP_RH_USER = os.getenv("SMTP_RH_USER", "noreply.gestionrh@gmail.com")
 SMTP_RH_PASSWORD = os.getenv("SMTP_RH_PASSWORD", "")
 SMTP_RH_FROM = os.getenv("SMTP_RH_FROM", "gestion.dpae@omaya.fr")
+
+# SMTP OVH FPE (utilise quand l'expediteur = fpe@exosphere.fr, cf. Fen_EnvoieEmail WinDev)
+SMTP_FPE_HOST = os.getenv("SMTP_FPE_HOST", "ssl0.ovh.net")
+SMTP_FPE_PORT = int(os.getenv("SMTP_FPE_PORT", "465"))
+SMTP_FPE_USER = os.getenv("SMTP_FPE_USER", "fpe@exosphere.fr")
+SMTP_FPE_PASSWORD = os.getenv("SMTP_FPE_PASSWORD", "")
+SMTP_FPE_FROM = os.getenv("SMTP_FPE_FROM", "fpe@exosphere.fr")
 
 # Google Maps
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")

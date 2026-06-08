@@ -44,6 +44,7 @@ import {
 } from 'lucide-react'
 import { showConfirm, showToast } from '../ui/dialog'
 import PersonnePicker, { type SalarieItem } from './PersonnePicker'
+import SendEmailModal from '../email/SendEmailModal'
 
 // --- Constantes charte ---------------------------------------------------
 
@@ -208,6 +209,7 @@ export default function EmbaucheTab({
     null | 'partenaires' | 'origine_dpae' | 'formation_iag' | 'scool'
   >(null)
   const [sortieLoading, setSortieLoading] = useState<number | null>(null)
+  const [emailOpen, setEmailOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -787,10 +789,10 @@ export default function EmbaucheTab({
                 />
                 <button
                   type="button"
-                  onClick={() => showToast('Mail SDTC : à brancher', 'info')}
+                  onClick={() => setEmailOpen(true)}
                   className="w-full flex items-center justify-center gap-2 mt-2 px-3 py-1.5 text-xs font-normal rounded hover:bg-[#ECF1F2] border"
                   style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
-                  title="Envoyer le mail de solde de tout compte (à brancher)"
+                  title="Envoyer le mail de solde de tout compte"
                 >
                   <Send className="w-3.5 h-3.5" />
                   Mail SDTC
@@ -802,6 +804,14 @@ export default function EmbaucheTab({
           </div>
         )
       })()}
+
+      <SendEmailModal
+        open={emailOpen}
+        onClose={() => setEmailOpen(false)}
+        getToken={getToken}
+        subject={`Solde de tout compte - salarié ${idSalarie}`}
+        html={`<p>Bonjour,</p><p>Veuillez trouver ci-joint le solde de tout compte du salarié.</p><p>Cordialement.</p>`}
+      />
     </div>
   )
 }
