@@ -5,21 +5,14 @@ import {
 
 import type { FIProps } from './index'
 import { showConfirm, showToast } from '../../ui/dialog'
-
-const COLOR_PRIMARY = '#17494E'
-const COLOR_BRUN = '#4E1D17'
-const COLOR_BG_SOFT = '#EFE9E7'
+import EmbaucheTab, {
+  COLOR_PRIMARY,
+  COLOR_BRUN,
+  COLOR_BG_SOFT,
+} from '../../fiche/EmbaucheTab'
 
 interface TypeSortieOption {
   id: number
-  label: string
-}
-interface RefOption {
-  id: number
-  label: string
-}
-interface StringRefOption {
-  id: string
   label: string
 }
 
@@ -41,64 +34,24 @@ interface SortieRHData {
   date_dernier_ctt: string
 }
 
-interface FicheEmbauche {
-  id_salarie: string
-  date_debut: string
-  date_fin_per_essai: string
-  date_anciennete: string
-  en_activite: boolean
-  dpae_date: string
-  dpae_num: string
-  id_type_poste: number
-  id_type_ctt: number
-  id_type_horaire: number
-  id_ste: string
-  multi_prod: boolean
-  resp_equipe: boolean
-  resp_adjoint: boolean
-  chauffeur: boolean
-  cin_envoyee: boolean
-  cj_envoye: boolean
-  formation_iag: boolean
-  date_sortie_demandee: string
-  date_sortie_reelle: string
-  info_cpl: string
-  courrier_date_envoi: string
-  courrier_num_suivi: string
-  courrier_date_recep: string
-  courrier_delai_prev: string
-  stc_date_envoi: string
-  stc_num_suivi: string
-  stc_date_recep: string
-  stc_retourne_le: string
-}
-
-interface EmbaucheRefs {
-  societes: StringRefOption[]
-  postes: RefOption[]
-  type_ctt: RefOption[]
-  type_horaire: RefOption[]
-  type_sortie: RefOption[]
-}
-
 function formatShortDate(iso: string): string {
   if (!iso || iso.length < 10) return ''
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 }
 
-function refLabel(opts: RefOption[], id: number): string {
-  return opts.find((o) => o.id === id)?.label || ''
-}
-
 // FI_SortieRH (types 12 / 36 / 37) - Tickets de sortie RH.
-// Affiche le bandeau action ticket + la fiche infos embauche du salarie
-// (lecture seule sur les infos contractuelles) + edition complete de la
-// partie sortie (info_cplt + courrier FPE + SDTC).
+//
+// Layout :
+//   - Header ticket : nom + actions globales (Enregistrer ticket / Cloturer /
+//     Voir doc / SDTC / Courrier Type FPE).
+//   - Bloc Sortie specifique au ticket : Type Sortie + Doc + InfoCplt
+//     (champs portes par la table TK_DemandeSortieRH).
+//   - <EmbaucheTab/> partage : fiche embauche complete + overlays Partenaires /
+//     Origine DPAE / Formation IAG / S'Cool + blocs sortie (Information /
+//     Courrier FPE / SDTC). L'enregistrement de ces champs se fait via le
+//     bouton "Enregistrer" interne au composant shared.
 export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIProps) {
   const [data, setData] = useState<SortieRHData | null>(null)
-  const [embauche, setEmbauche] = useState<FicheEmbauche | null>(null)
-  const [embaucheEdit, setEmbaucheEdit] = useState<FicheEmbauche | null>(null)
-  const [refs, setRefs] = useState<EmbaucheRefs | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [typeSortie, setTypeSortie] = useState<number>(0)
@@ -121,25 +74,13 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
       if (dd) {
         setTypeSortie(dd.type_sortie || 0)
         setInfoCplt(dd.info_cplt || '')
-        // Charge embauche + refs en parallele
-        const [embR, refsR] = await Promise.all([
-          fetch(`${fsaBase}/fiche-salarie/${dd.id_salarie}/embauche`, {
-            headers: { Authorization: `Bearer ${getToken()}` },
-          }).then((res) => (res.ok ? res.json() : null)),
-          fetch(`${fsaBase}/fiche-salarie/embauche/refs`, {
-            headers: { Authorization: `Bearer ${getToken()}` },
-          }).then((res) => (res.ok ? res.json() : null)),
-        ])
-        setEmbauche(embR as FicheEmbauche | null)
-        setEmbaucheEdit(embR as FicheEmbauche | null)
-        setRefs(refsR as EmbaucheRefs | null)
       }
     } catch {
       setData(null)
     } finally {
       setLoading(false)
     }
-  }, [apiBase, idTicket, getToken, fsaBase])
+  }, [apiBase, idTicket, getToken])
 
   useEffect(() => {
     reload()
@@ -171,38 +112,8 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
   }
 
   const handleEnregistrer = async () => {
-    // 1. UPDATE ticket sortie RH (type_sortie + info_cplt)
     const r = await post({ action: 'enregistrer', type_sortie: typeSortie, info_cplt: infoCplt })
     if (!r) return
-
-    // 2. UPDATE embauche (champs sortie repris du formulaire)
-    if (embaucheEdit && data) {
-      try {
-        await fetch(`${fsaBase}/fiche-salarie/${data.id_salarie}/embauche`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${getToken()}`,
-          },
-          body: JSON.stringify({
-            date_sortie_demandee: embaucheEdit.date_sortie_demandee,
-            date_sortie_reelle: embaucheEdit.date_sortie_reelle,
-            info_cpl: embaucheEdit.info_cpl,
-            courrier_date_envoi: embaucheEdit.courrier_date_envoi,
-            courrier_num_suivi: embaucheEdit.courrier_num_suivi,
-            courrier_date_recep: embaucheEdit.courrier_date_recep,
-            courrier_delai_prev: embaucheEdit.courrier_delai_prev,
-            stc_date_envoi: embaucheEdit.stc_date_envoi,
-            stc_num_suivi: embaucheEdit.stc_num_suivi,
-            stc_date_recep: embaucheEdit.stc_date_recep,
-            stc_retourne_le: embaucheEdit.stc_retourne_le,
-          }),
-        })
-      } catch {
-        /* tolerant */
-      }
-    }
-
     showToast('Ticket enregistré', 'success')
     const ok = await showConfirm({
       title: 'Clôturer le ticket',
@@ -240,10 +151,10 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
 
   const handleCourrierFPE = async () => {
     if (!data?.id_salarie) return
-    const delaiPrev = embaucheEdit?.courrier_delai_prev || ''
+    // delai_prev sera lu en BDD si vide en query string (l'utilisateur doit
+    // d'abord enregistrer son delai dans EmbaucheTab pour qu'il soit persiste).
     const url =
-      `${fsaBase}/fiche-salarie/${data.id_salarie}/sortie/courrier-fpe.pdf` +
-      `?delai_prev=${encodeURIComponent(delaiPrev)}`
+      `${fsaBase}/fiche-salarie/${data.id_salarie}/sortie/courrier-fpe.pdf?delai_prev=`
     try {
       const r = await fetch(url, {
         headers: { Authorization: `Bearer ${getToken()}` },
@@ -255,17 +166,12 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
       }
       const blob = await r.blob()
       const blobUrl = URL.createObjectURL(blob)
-      // Ouvrir dans un nouvel onglet (apercu/impression)
       window.open(blobUrl, '_blank')
-      // Liberation differee (le navigateur a besoin du blob le temps de l'ouvrir)
       window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000)
     } catch {
       showToast('Erreur réseau (PDF Courrier FPE).', 'error')
     }
   }
-
-  const setEmb = (patch: Partial<FicheEmbauche>) =>
-    setEmbaucheEdit((prev) => (prev ? { ...prev, ...patch } : prev))
 
   if (loading) {
     return (
@@ -283,8 +189,6 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
     )
   }
 
-  const showCourrier = typeSortie > 1
-  const showSdtcBlock = typeSortie > 1
   const fpeEditable = typeSortie >= 2 && typeSortie <= 4
 
   return (
@@ -342,51 +246,27 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
               Solde de tout compte
             </button>
           )}
+          {fpeEditable && (
+            <button
+              onClick={handleCourrierFPE}
+              className="flex items-center justify-center gap-2 px-4 py-2 rounded text-sm font-normal hover:bg-[#ECF1F2] border"
+              style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
+              title="Générer le courrier de rupture de période d'essai"
+            >
+              <Printer className="w-4 h-4" />
+              Courrier Type FPE
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Bloc infos embauche (lecture seule) */}
-      {embauche && refs && (
-        <div className="border rounded-lg p-3" style={{ borderColor: COLOR_BG_SOFT }}>
-          <h3
-            className="text-xs uppercase tracking-wide font-normal mb-2 pb-1 border-b"
-            style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
-          >
-            Informations d'embauche
-          </h3>
-          <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
-            <Info label="Date d'embauche" value={formatShortDate(embauche.date_debut)} />
-            <Info label="Fin Période Essai" value={formatShortDate(embauche.date_fin_per_essai)} />
-            <Info label="Date Ancienneté" value={formatShortDate(embauche.date_anciennete)} />
-            <Info
-              label="Poste"
-              value={refLabel(refs.postes, embauche.id_type_poste)}
-            />
-            <Info
-              label="Type Ctt"
-              value={refLabel(refs.type_ctt, embauche.id_type_ctt)}
-            />
-            <Info
-              label="Horaire"
-              value={refLabel(refs.type_horaire, embauche.id_type_horaire)}
-            />
-            <Info
-              label="Société"
-              value={refs.societes.find((s) => s.id === embauche.id_ste)?.label || ''}
-            />
-            <Info label="Date DPAE" value={formatShortDate(embauche.dpae_date)} />
-            <Info label="N° DPAE" value={embauche.dpae_num} />
-          </div>
-        </div>
-      )}
-
-      {/* Bloc edition Sortie (Type Sortie + Doc + Info Cplt) */}
+      {/* Bloc edition Sortie specifique au TICKET (Type Sortie + Doc + Info Cplt) */}
       <div className="border rounded-lg p-3" style={{ borderColor: COLOR_BG_SOFT }}>
         <h3
           className="text-xs uppercase tracking-wide font-normal mb-3 pb-1 border-b"
           style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
         >
-          Sortie
+          Sortie (ticket)
         </h3>
         <div className="grid grid-cols-[200px_1fr] gap-x-4 gap-y-3">
           <label className="text-sm self-center" style={{ color: COLOR_BRUN }}>
@@ -437,100 +317,19 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
         </div>
       </div>
 
-      {/* Bloc detail sortie - 3 colonnes (Info de sortie / Courrier FPE / SDTC) */}
-      {embaucheEdit && (
-        <div className="grid grid-cols-3 gap-4">
-          <BlockBox title="Information de sortie">
-            <StackedInput
-              label="Date Sortie Demandée"
-              type="date"
-              value={embaucheEdit.date_sortie_demandee}
-              onChange={(v) => setEmb({ date_sortie_demandee: v })}
-            />
-            <StackedInput
-              label="Date Sortie Réelle"
-              type="date"
-              value={embaucheEdit.date_sortie_reelle}
-              onChange={(v) => setEmb({ date_sortie_reelle: v })}
-            />
-            <StackedInput
-              label="Info Cplt"
-              value={embaucheEdit.info_cpl}
-              onChange={(v) => setEmb({ info_cpl: v })}
-            />
-          </BlockBox>
+      {/* Fiche embauche complete partagee : infos embauche + 4 overlays
+          (Partenaires / Origine DPAE / Formation IAG / S'Cool) + blocs sortie
+          (Information / Courrier FPE / SDTC). Le bouton "Enregistrer" du
+          composant gere son propre UPDATE embauche. */}
+      <div className="border rounded-lg" style={{ borderColor: COLOR_BG_SOFT }}>
+        <EmbaucheTab
+          idSalarie={data.id_salarie}
+          apiBase={fsaBase}
+          getToken={getToken}
+        />
+      </div>
 
-          {showCourrier ? (
-            <BlockBox title="Courrier FPE / DEM" disabled={!fpeEditable}>
-              <StackedInput
-                label="Envoyé le"
-                type="date"
-                value={embaucheEdit.courrier_date_envoi}
-                onChange={(v) => setEmb({ courrier_date_envoi: v })}
-              />
-              <StackedInput
-                label="Reçu le"
-                type="date"
-                value={embaucheEdit.courrier_date_recep}
-                onChange={(v) => setEmb({ courrier_date_recep: v })}
-              />
-              <StackedInput
-                label="Num Suivi"
-                value={embaucheEdit.courrier_num_suivi}
-                onChange={(v) => setEmb({ courrier_num_suivi: v })}
-              />
-              <StackedInput
-                label="Délai Prév."
-                value={embaucheEdit.courrier_delai_prev}
-                onChange={(v) => setEmb({ courrier_delai_prev: v })}
-              />
-              <button
-                onClick={handleCourrierFPE}
-                className="w-full flex items-center justify-center gap-2 mt-2 px-3 py-1.5 text-xs font-normal rounded hover:bg-[#ECF1F2] border"
-                style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
-                title="Générer le courrier de rupture de période d'essai"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Courrier Type FPE
-              </button>
-            </BlockBox>
-          ) : (
-            <div />
-          )}
-
-          {showSdtcBlock ? (
-            <BlockBox title="Solde de tout compte">
-              <StackedInput
-                label="Envoyé le"
-                type="date"
-                value={embaucheEdit.stc_date_envoi}
-                onChange={(v) => setEmb({ stc_date_envoi: v })}
-              />
-              <StackedInput
-                label="Reçu le"
-                type="date"
-                value={embaucheEdit.stc_date_recep}
-                onChange={(v) => setEmb({ stc_date_recep: v })}
-              />
-              <StackedInput
-                label="Num Suivi"
-                value={embaucheEdit.stc_num_suivi}
-                onChange={(v) => setEmb({ stc_num_suivi: v })}
-              />
-              <StackedInput
-                label="Retourné le"
-                type="date"
-                value={embaucheEdit.stc_retourne_le}
-                onChange={(v) => setEmb({ stc_retourne_le: v })}
-              />
-            </BlockBox>
-          ) : (
-            <div />
-          )}
-        </div>
-      )}
-
-      {/* Lien fiche complete pour les overlays avances */}
+      {/* Lien fiche complete (raccourci optionnel) */}
       <div className="text-center pt-2">
         <a
           href={`/adm/salaries/registre`}
@@ -538,86 +337,12 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-xs hover:underline"
           style={{ color: COLOR_PRIMARY }}
-          title="Ouvrir le registre RH puis sélectionner le salarié pour accéder aux overlays Partenaires / Origine DPAE / Formation IAG / S'Cool"
+          title="Ouvrir la fiche salarié complète dans un nouvel onglet (autres tabs : Coordonnées, Identité, etc.)"
         >
           <ExternalLink className="w-3 h-3" />
           Voir la fiche salarié complète
         </a>
       </div>
-    </div>
-  )
-}
-
-// --- Helpers UI ---------------------------------------------------------
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-xs" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
-        {label}
-      </div>
-      <div className="text-sm" style={{ color: COLOR_BRUN }}>
-        {value || '—'}
-      </div>
-    </div>
-  )
-}
-
-function BlockBox({
-  title,
-  children,
-  disabled,
-}: {
-  title: string
-  children: React.ReactNode
-  disabled?: boolean
-}) {
-  return (
-    <div
-      className="border rounded p-3"
-      style={{
-        borderColor: COLOR_BG_SOFT,
-        opacity: disabled ? 0.5 : 1,
-        pointerEvents: disabled ? 'none' : 'auto',
-      }}
-    >
-      <h4
-        className="text-xs uppercase tracking-wide font-normal mb-2 pb-1 border-b"
-        style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
-      >
-        {title}
-      </h4>
-      <div className="space-y-2">{children}</div>
-    </div>
-  )
-}
-
-function StackedInput({
-  label,
-  value,
-  onChange,
-  type = 'text',
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  type?: string
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <label
-        className="text-xs font-normal shrink-0 w-24 leading-tight"
-        style={{ color: COLOR_BRUN }}
-      >
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-        className="flex-1 min-w-0 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
-        style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
-      />
     </div>
   )
 }
