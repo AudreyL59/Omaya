@@ -92,12 +92,15 @@ def load_orga_suivi(id_salarie: int) -> dict:
               so.date_debut,
               so.date_fin,
               so.aff_actif,
+              so.id_ste,
               o.lib_orga,
               o.id_type_produit,
-              tp.lib AS type_produit_lib
+              tp.lib AS type_produit_lib,
+              soc.rs_interne
            FROM rh.pgt_salarie_organigramme so
            LEFT JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
            LEFT JOIN rh.pgt_type_produit tp ON tp.id_type_produit = o.id_type_produit
+           LEFT JOIN rh.pgt_societe soc ON soc.id_ste = so.id_ste
            WHERE so.id_salarie = ?
              AND so.modif_elem NOT LIKE '%suppr%'
            ORDER BY so.date_debut DESC""",
@@ -134,6 +137,8 @@ def load_orga_suivi(id_salarie: int) -> dict:
                 "date_debut": _iso(r.get("date_debut")),
                 "date_fin": _iso(r.get("date_fin")),
                 "aff_actif": bool(r.get("aff_actif")),
+                "id_ste": str(r.get("id_ste") or ""),
+                "rs_interne": _str(r.get("rs_interne")),
             }
             for r in organigrammes
         ],
@@ -166,6 +171,28 @@ def _type_suivi_lib(type_id: int) -> str:
         2: "Changement d'équipe",
         3: "Changement d'entité",
     }.get(type_id, f"Type {type_id}" if type_id else "")
+
+
+# --- Liste des societes (pour le combo de la popup) -----------------------
+
+def list_societes() -> list[dict]:
+    """Liste les societes racines (id_type_orga=1) pour le combo 'Societe'
+    de la popup rattachement."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_ste, rs_interne, raison_sociale
+           FROM rh.pgt_societe
+           WHERE modif_elem NOT LIKE '%suppr%'
+             AND id_type_orga = 1
+           ORDER BY raison_sociale ASC NULLS LAST"""
+    )
+    return [
+        {
+            "id_ste": str(r.get("id_ste") or ""),
+            "lib": _str(r.get("rs_interne")) or _str(r.get("raison_sociale")),
+        }
+        for r in rows
+    ]
 
 
 # --- Arbre organigramme ---------------------------------------------------

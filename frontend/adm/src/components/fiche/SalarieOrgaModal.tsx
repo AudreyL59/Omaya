@@ -47,8 +47,20 @@ export default function SalarieOrgaModal({
   const [dateDebut, setDateDebut] = useState('')
   const [dateFin, setDateFin] = useState('')
   const [actif, setActif] = useState(true)
+  const [idSte, setIdSte] = useState<string>('')
+  const [societes, setSocietes] = useState<{ id_ste: string; lib: string }[]>([])
   const [saving, setSaving] = useState(false)
   const [loadingInit, setLoadingInit] = useState(false)
+
+  // Chargement combo Societe
+  useEffect(() => {
+    fetch(`${ADM_API}/fiche-salarie/orga/societes`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((j) => setSocietes((j as { items: { id_ste: string; lib: string }[] }).items || []))
+      .catch(() => {})
+  }, [])
 
   // Chargement initial : si modification, recupere les valeurs existantes
   useEffect(() => {
@@ -73,6 +85,7 @@ export default function SalarieOrgaModal({
           setDateDebut(item.date_debut || '')
           setDateFin(item.date_fin || '')
           setActif(!!item.aff_actif)
+          setIdSte(item.id_ste || '')
         }
       })
       .catch(() => {})
@@ -159,6 +172,7 @@ export default function SalarieOrgaModal({
           date_debut: dateDebut,
           date_fin: dateFin,
           aff_actif: actif,
+          id_ste: idSte,
         }),
       })
       if (!r.ok) {
@@ -301,6 +315,21 @@ export default function SalarieOrgaModal({
                   />
                   Rattachement actif
                 </label>
+              </Field>
+              <Field label="Société">
+                <select
+                  value={idSte}
+                  onChange={(e) => setIdSte(e.target.value)}
+                  className="w-full px-2 py-1 border rounded text-sm"
+                  style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
+                >
+                  <option value="">— (aucune) —</option>
+                  {societes.map((s) => (
+                    <option key={s.id_ste} value={s.id_ste}>
+                      {s.lib}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
           </div>

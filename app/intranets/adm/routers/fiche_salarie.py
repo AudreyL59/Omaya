@@ -352,6 +352,16 @@ def get_orga_children(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
+@router.get("/orga/societes")
+def get_orga_societes(user: UserToken = Depends(get_current_user)):
+    """Liste des societes (racine id_type_orga=1) pour le combo de la popup."""
+    try:
+        return {"items": orga_svc.list_societes()}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 @router.post("/{id_salarie}/orga")
 def create_rattachement(
     payload: SaveRattachementPayload,
