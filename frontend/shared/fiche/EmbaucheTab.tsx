@@ -210,6 +210,7 @@ export default function EmbaucheTab({
   >(null)
   const [sortieLoading, setSortieLoading] = useState<number | null>(null)
   const [emailOpen, setEmailOpen] = useState(false)
+  const [loadingFPE, setLoadingFPE] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -364,11 +365,12 @@ export default function EmbaucheTab({
   // (WeasyPrint cote backend). Le delai_prev courant est passe en query
   // string pour qu'il soit pris en compte meme si pas encore enregistre.
   const handleCourrierFPE = async () => {
-    if (!edit) return
+    if (!edit || loadingFPE) return
     const delaiPrev = edit.courrier_delai_prev || ''
     const url =
       `${apiBase}/fiche-salarie/${idSalarie}/sortie/courrier-fpe.pdf` +
       `?delai_prev=${encodeURIComponent(delaiPrev)}`
+    setLoadingFPE(true)
     try {
       const r = await fetch(url, {
         headers: { Authorization: `Bearer ${getToken()}` },
@@ -384,6 +386,8 @@ export default function EmbaucheTab({
       window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000)
     } catch {
       showToast('Erreur réseau (PDF Courrier FPE).', 'error')
+    } finally {
+      setLoadingFPE(false)
     }
   }
 
@@ -750,12 +754,17 @@ export default function EmbaucheTab({
                 <button
                   type="button"
                   onClick={handleCourrierFPE}
-                  className="w-full flex items-center justify-center gap-2 mt-2 px-3 py-1.5 text-xs font-normal rounded hover:bg-[#ECF1F2] border"
+                  disabled={loadingFPE}
+                  className="w-full flex items-center justify-center gap-2 mt-2 px-3 py-1.5 text-xs font-normal rounded hover:bg-[#ECF1F2] border disabled:opacity-60 disabled:cursor-wait"
                   style={{ color: COLOR_PRIMARY, borderColor: COLOR_BG_SOFT }}
-                  title="Générer le courrier de rupture de période d'essai (PDF)"
+                  title={loadingFPE ? 'Génération du PDF en cours…' : "Générer le courrier de rupture de période d'essai (PDF)"}
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  Courrier Type FPE
+                  {loadingFPE ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Printer className="w-3.5 h-3.5" />
+                  )}
+                  {loadingFPE ? 'Génération…' : 'Courrier Type FPE'}
                 </button>
               </SortieBlock>
             ) : (
