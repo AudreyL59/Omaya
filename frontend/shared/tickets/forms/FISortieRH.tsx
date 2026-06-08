@@ -169,9 +169,9 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
-      {/* Header : salarie + actions principales */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      {/* Header : salarie (gauche) + bloc Sortie ticket (milieu) + actions (droite) */}
+      <div className="flex items-start gap-4">
+        <div className="shrink-0 w-[220px]">
           <h2 className="text-base font-semibold" style={{ color: COLOR_BRUN }}>
             {data.lib_nom}
           </h2>
@@ -184,6 +184,64 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
             <p className="text-xs text-red-700 mt-1">Pas encore productif</p>
           )}
         </div>
+
+        {/* Bloc Sortie (ticket) : Type Sortie + Doc + InfoCplt — au milieu */}
+        <div className="flex-1 min-w-0 border rounded-lg p-3" style={{ borderColor: COLOR_BG_SOFT }}>
+          <h3
+            className="text-xs uppercase tracking-wide font-normal mb-2 pb-1 border-b"
+            style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
+          >
+            Sortie (ticket)
+          </h3>
+          <div className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-2">
+            <label className="text-sm self-center" style={{ color: COLOR_BRUN }}>
+              Type Sortie
+            </label>
+            <select
+              value={typeSortie}
+              onChange={(e) => setTypeSortie(parseInt(e.target.value, 10) || 0)}
+              className="min-w-0 w-full px-3 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1"
+              style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+            >
+              <option value={0}>—</option>
+              {data.type_sortie_options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+
+            <label className="text-sm self-center" style={{ color: COLOR_BRUN }}>
+              Doc de Sortie
+            </label>
+            <div className="flex items-center gap-2 text-sm">
+              {data.doc_sortie ? (
+                <>
+                  <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  <span style={{ color: COLOR_BRUN }}>Reçu</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="w-4 h-4 text-gray-400" />
+                  <span className="text-gray-400 italic">En attente</span>
+                </>
+              )}
+            </div>
+
+            <label className="text-sm pt-2" style={{ color: COLOR_BRUN }}>
+              InfoCplt (ticket)
+            </label>
+            <textarea
+              value={infoCplt}
+              onChange={(e) => setInfoCplt(e.target.value)}
+              rows={2}
+              className="min-w-0 w-full px-3 py-2 rounded text-sm bg-white focus:outline-none focus:ring-1 resize-y"
+              style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
+              placeholder="Informations complémentaires…"
+            />
+          </div>
+        </div>
+
         <div className="flex flex-col gap-2 shrink-0">
           <button
             onClick={handleEnregistrer}
@@ -222,63 +280,6 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpe
               Solde de tout compte
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Bloc edition Sortie specifique au TICKET (Type Sortie + Doc + Info Cplt) */}
-      <div className="border rounded-lg p-3" style={{ borderColor: COLOR_BG_SOFT }}>
-        <h3
-          className="text-xs uppercase tracking-wide font-normal mb-3 pb-1 border-b"
-          style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
-        >
-          Sortie (ticket)
-        </h3>
-        <div className="grid grid-cols-[200px_1fr] gap-x-4 gap-y-3">
-          <label className="text-sm self-center" style={{ color: COLOR_BRUN }}>
-            Type Sortie
-          </label>
-          <select
-            value={typeSortie}
-            onChange={(e) => setTypeSortie(parseInt(e.target.value, 10) || 0)}
-            className="px-3 py-1.5 rounded text-sm bg-white focus:outline-none focus:ring-1"
-            style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
-          >
-            <option value={0}>—</option>
-            {data.type_sortie_options.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-
-          <label className="text-sm self-center" style={{ color: COLOR_BRUN }}>
-            Doc de Sortie
-          </label>
-          <div className="flex items-center gap-2 text-sm">
-            {data.doc_sortie ? (
-              <>
-                <CheckCircle className="w-4 h-4 text-emerald-600" />
-                <span style={{ color: COLOR_BRUN }}>Reçu</span>
-              </>
-            ) : (
-              <>
-                <XCircle className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-400 italic">En attente</span>
-              </>
-            )}
-          </div>
-
-          <label className="text-sm pt-2" style={{ color: COLOR_BRUN }}>
-            InfoCplt (ticket)
-          </label>
-          <textarea
-            value={infoCplt}
-            onChange={(e) => setInfoCplt(e.target.value)}
-            rows={3}
-            className="px-3 py-2 rounded text-sm bg-white focus:outline-none focus:ring-1 resize-y"
-            style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
-            placeholder="Informations complémentaires…"
-          />
         </div>
       </div>
 
