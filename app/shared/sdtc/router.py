@@ -18,6 +18,7 @@ from app.core.auth.schemas import UserToken
 from app.shared.sdtc import service as svc
 from app.shared.sdtc.bareme import compute_bareme
 from app.shared.sdtc.contrats import load_contrats
+from app.shared.sdtc.pdf import build_pdf
 from app.shared.sdtc.xls import build_workbook
 
 router = APIRouter(prefix="/api/shared/sdtc", tags=["shared-sdtc"])
@@ -30,6 +31,13 @@ class ComputeBaremePayload(BaseModel):
 class ExportXlsPayload(BaseModel):
     contrat_ids_traites: list[str] = []
     contrat_ids_sdtc: list[str] = []
+
+
+class ExportPdfPayload(BaseModel):
+    contrat_ids_traites: list[str] = []
+    contrat_ids_sdtc: list[str] = []
+    commentaires: str = ""
+    nb_tr: int = 0
 
 
 def _parse_id(id_salarie: str) -> int:
@@ -128,5 +136,44 @@ def sdtc_export_xls(
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{id_salarie}/pdf")
+def sdtc_export_pdf(
+    id_salarie: str,
+    payload: ExportPdfPayload,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Genere le PDF EtatSTC_RecapPROD (7 infos + 3 sous-etats + commentaires)."""
+    sid = _parse_id(id_salarie)
+    base = svc.load(sid)
+    if not base.get("found"):
+        raise HTTPException(status_code=404, detail="Salarie introuvable.")
+
+    data = load_contrats(sid)
+    ids_traites = {x.strip() for x in payload.contrat_ids_traites if x and x.strip()}
+    ids_sdtc = {x.strip() for x in payload.contrat_ids_sdtc if x and x.strip()}
+    traites = [c for c in (data.get("traites") or []) if str(c.get("id_contrat")) in ids_traites]
+    sdtc = [c for c in (data.get("a_traiter") or []) if str(c.get("id_contrat")) in ids_sdtc]
+    consideres = traites + sdtc
+    if not consideres:
+        raise HTTPException(status_code=400, detail="Aucun contrat selectionne.")
+
+    bareme_obj = compute_bareme(sdtc).to_dict() if sdtc else compute_bareme([]).to_dict()
+
+    content = build_pdf(
+        salarie=base.get("salarie") or {},
+        bareme=bareme_obj,
+        contrats_consideres=consideres,
+        nb_tr=payload.nb_tr,
+        commentaires=payload.commentaires,
+    )
+    lib = (base.get("salarie") or {}).get("lib_nom") or ""
+    filename = f"SDTC_{lib.replace(' ', '_') or sid}.pdf"
+    return Response(
+        content=content,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

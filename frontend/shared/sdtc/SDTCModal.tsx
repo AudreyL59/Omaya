@@ -23,7 +23,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, CheckSquare, FileSpreadsheet, Loader2, Send, Square, Wallet, X } from 'lucide-react'
+import { Check, CheckSquare, FileSpreadsheet, FileText, Loader2, Send, Square, Wallet, X } from 'lucide-react'
 
 import SendEmailModal from '../email/SendEmailModal'
 import { showToast } from '../ui/dialog'
@@ -161,6 +161,8 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
     { name: string; size: number; contentB64: string }[]
   >([])
   const [preparingMail, setPreparingMail] = useState(false)
+  const [commentaires, setCommentaires] = useState('')
+  const [nbTr, setNbTr] = useState(0)
 
   useEffect(() => {
     if (!open || !idSalarie) return
@@ -216,27 +218,30 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
     }
   }, [open, idSalarie, getToken])
 
-  // --- Helpers Mail / XLS -------------------------------------------------
+  // --- Helpers Mail / XLS / PDF -------------------------------------------
 
-  const downloadXls = async (): Promise<{
-    name: string
-    size: number
-    contentB64: string
-  } | null> => {
+  const fetchAsAttachment = async (
+    endpoint: 'xls' | 'pdf',
+  ): Promise<{ name: string; size: number; contentB64: string } | null> => {
     if (selectedSdtc.size === 0 && selectedTraites.size === 0) {
       showToast('Aucun contrat sélectionné.', 'error')
       return null
     }
-    const r = await fetch(`/api/shared/sdtc/${idSalarie}/xls`, {
+    const body: Record<string, unknown> = {
+      contrat_ids_traites: Array.from(selectedTraites),
+      contrat_ids_sdtc: Array.from(selectedSdtc),
+    }
+    if (endpoint === 'pdf') {
+      body.commentaires = commentaires
+      body.nb_tr = nbTr || 0
+    }
+    const r = await fetch(`/api/shared/sdtc/${idSalarie}/${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${getToken()}`,
       },
-      body: JSON.stringify({
-        contrat_ids_traites: Array.from(selectedTraites),
-        contrat_ids_sdtc: Array.from(selectedSdtc),
-      }),
+      body: JSON.stringify(body),
     })
     if (!r.ok) {
       const j = await r.json().catch(() => ({}))
@@ -249,28 +254,46 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
     const b64 = btoa(bin)
     const lib = (data?.salarie.lib_nom || idSalarie).replace(/\s+/g, '_')
-    return { name: `SDTC_${lib}.xlsx`, size: bytes.length, contentB64: b64 }
+    const ext = endpoint === 'xls' ? 'xlsx' : 'pdf'
+    return { name: `SDTC_${lib}.${ext}`, size: bytes.length, contentB64: b64 }
+  }
+
+  const triggerDownload = (
+    pj: { name: string; contentB64: string },
+    mime: string,
+  ) => {
+    const bin = atob(pj.contentB64)
+    const arr = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+    const blob = new Blob([arr], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = pj.name
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const handleDownloadXls = async () => {
     try {
-      const pj = await downloadXls()
+      const pj = await fetchAsAttachment('xls')
       if (!pj) return
-      // Declenche le download cote navigateur
-      const bin = atob(pj.contentB64)
-      const arr = new Uint8Array(bin.length)
-      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
-      const blob = new Blob([arr], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = pj.name
-      a.click()
-      URL.revokeObjectURL(url)
+      triggerDownload(
+        pj,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      )
     } catch (e) {
       showToast(`Échec génération XLS : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const handleDownloadPdf = async () => {
+    try {
+      const pj = await fetchAsAttachment('pdf')
+      if (!pj) return
+      triggerDownload(pj, 'application/pdf')
+    } catch (e) {
+      showToast(`Échec génération PDF : ${(e as Error).message}`, 'error')
     }
   }
 
@@ -278,8 +301,16 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
     if (!data) return
     setPreparingMail(true)
     try {
-      const pj = await downloadXls()
-      setMailPj(pj ? [pj] : [])
+      const [xlsPj, pdfPj] = await Promise.all([
+        fetchAsAttachment('xls'),
+        fetchAsAttachment('pdf'),
+      ])
+      const pjs = [xlsPj, pdfPj].filter(Boolean) as {
+        name: string
+        size: number
+        contentB64: string
+      }[]
+      setMailPj(pjs)
       setMailOpen(true)
     } catch (e) {
       showToast(`Échec préparation mail : ${(e as Error).message}`, 'error')
@@ -428,8 +459,13 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               bareme={bareme}
               onGoToSelection={() => setTab('contrats_sdtc')}
               onDownloadXls={handleDownloadXls}
+              onDownloadPdf={handleDownloadPdf}
               onMailSdtc={handleOpenMailSdtc}
               preparingMail={preparingMail}
+              commentaires={commentaires}
+              setCommentaires={setCommentaires}
+              nbTr={nbTr}
+              setNbTr={setNbTr}
             />
           )}
           {!loading && data && tab === 'a_editer' && (
@@ -925,14 +961,24 @@ function ResumeSTCTab({
   bareme,
   onGoToSelection,
   onDownloadXls,
+  onDownloadPdf,
   onMailSdtc,
   preparingMail,
+  commentaires,
+  setCommentaires,
+  nbTr,
+  setNbTr,
 }: {
   bareme: BaremeResult | null
   onGoToSelection: () => void
   onDownloadXls: () => void | Promise<void>
+  onDownloadPdf: () => void | Promise<void>
   onMailSdtc: () => void | Promise<void>
   preparingMail: boolean
+  commentaires: string
+  setCommentaires: (v: string) => void
+  nbTr: number
+  setNbTr: (v: number) => void
 }) {
   if (!bareme) {
     return (
@@ -1001,6 +1047,30 @@ function ResumeSTCTab({
         ))}
       </div>
 
+      <div className="mt-3 grid grid-cols-[120px_1fr] gap-3 items-start">
+        <label className="text-sm pt-1" style={{ color: COLOR_BRUN }}>
+          Nombre de TR :
+        </label>
+        <input
+          type="number"
+          min={0}
+          value={nbTr}
+          onChange={(e) => setNbTr(Number(e.target.value) || 0)}
+          className="w-32 px-2 py-1 border rounded text-sm"
+          style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
+        />
+        <label className="text-sm pt-1" style={{ color: COLOR_BRUN }}>
+          Commentaires :
+        </label>
+        <textarea
+          value={commentaires}
+          onChange={(e) => setCommentaires(e.target.value)}
+          rows={3}
+          className="w-full px-2 py-1 border rounded text-sm"
+          style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN, resize: 'vertical' }}
+          placeholder="(zone reprise dans le PDF EtatSTC_RecapPROD)"
+        />
+      </div>
       <div className="mt-3 flex items-center gap-2">
         <button
           type="button"
@@ -1009,6 +1079,14 @@ function ResumeSTCTab({
           style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
         >
           <FileSpreadsheet className="w-4 h-4" /> Télécharger XLS
+        </button>
+        <button
+          type="button"
+          onClick={onDownloadPdf}
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border"
+          style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
+        >
+          <FileText className="w-4 h-4" /> Télécharger PDF
         </button>
         <button
           type="button"
@@ -1021,9 +1099,6 @@ function ResumeSTCTab({
           Mail SDTC
         </button>
       </div>
-      <p className="mt-3 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
-        Le PDF EtatSTC_RecapPROD sera branché une fois le template fourni.
-      </p>
     </div>
   )
 }
