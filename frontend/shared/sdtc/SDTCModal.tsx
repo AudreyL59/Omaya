@@ -23,8 +23,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, CheckSquare, Loader2, Square, Wallet, X } from 'lucide-react'
+import { Check, CheckSquare, FileSpreadsheet, Loader2, Send, Square, Wallet, X } from 'lucide-react'
 
+import SendEmailModal from '../email/SendEmailModal'
 import { showToast } from '../ui/dialog'
 
 const COLOR_PRIMARY = '#17494E'
@@ -55,6 +56,8 @@ interface SortieInfo {
   titre_sortie: string
   kind: string
   courrier_info: string
+  mail_objet: string
+  mail_contenu: string
 }
 
 interface SDTCData {
@@ -153,6 +156,11 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
   const [selectedTraites, setSelectedTraites] = useState<Set<string>>(new Set())
   const [bareme, setBareme] = useState<BaremeResult | null>(null)
   const [computing, setComputing] = useState(false)
+  const [mailOpen, setMailOpen] = useState(false)
+  const [mailPj, setMailPj] = useState<
+    { name: string; size: number; contentB64: string }[]
+  >([])
+  const [preparingMail, setPreparingMail] = useState(false)
 
   useEffect(() => {
     if (!open || !idSalarie) return
@@ -208,9 +216,86 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
     }
   }, [open, idSalarie, getToken])
 
+  // --- Helpers Mail / XLS -------------------------------------------------
+
+  const downloadXls = async (): Promise<{
+    name: string
+    size: number
+    contentB64: string
+  } | null> => {
+    if (selectedSdtc.size === 0 && selectedTraites.size === 0) {
+      showToast('Aucun contrat sélectionné.', 'error')
+      return null
+    }
+    const r = await fetch(`/api/shared/sdtc/${idSalarie}/xls`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({
+        contrat_ids_traites: Array.from(selectedTraites),
+        contrat_ids_sdtc: Array.from(selectedSdtc),
+      }),
+    })
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}))
+      throw new Error((j as { detail?: string })?.detail || String(r.status))
+    }
+    const blob = await r.blob()
+    const arrayBuf = await blob.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuf)
+    let bin = ''
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+    const b64 = btoa(bin)
+    const lib = (data?.salarie.lib_nom || idSalarie).replace(/\s+/g, '_')
+    return { name: `SDTC_${lib}.xlsx`, size: bytes.length, contentB64: b64 }
+  }
+
+  const handleDownloadXls = async () => {
+    try {
+      const pj = await downloadXls()
+      if (!pj) return
+      // Declenche le download cote navigateur
+      const bin = atob(pj.contentB64)
+      const arr = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+      const blob = new Blob([arr], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = pj.name
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      showToast(`Échec génération XLS : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const handleOpenMailSdtc = async () => {
+    if (!data) return
+    setPreparingMail(true)
+    try {
+      const pj = await downloadXls()
+      setMailPj(pj ? [pj] : [])
+      setMailOpen(true)
+    } catch (e) {
+      showToast(`Échec préparation mail : ${(e as Error).message}`, 'error')
+    } finally {
+      setPreparingMail(false)
+    }
+  }
+
   if (!open) return null
 
+  const sortieInfo = data?.sortie
+  const defaultMailSubject = sortieInfo?.mail_objet || `Solde de tout compte — ${data?.salarie.lib_nom || ''}`
+  const defaultMailHtml = sortieInfo?.mail_contenu || ''
+
   return (
+    <>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -339,7 +424,13 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
             />
           )}
           {!loading && data && tab === 'resume_stc' && (
-            <ResumeSTCTab bareme={bareme} onGoToSelection={() => setTab('contrats_sdtc')} />
+            <ResumeSTCTab
+              bareme={bareme}
+              onGoToSelection={() => setTab('contrats_sdtc')}
+              onDownloadXls={handleDownloadXls}
+              onMailSdtc={handleOpenMailSdtc}
+              preparingMail={preparingMail}
+            />
           )}
           {!loading && data && tab === 'a_editer' && (
             <AEditerTab
@@ -400,6 +491,18 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
         </div>
       </motion.div>
     </motion.div>
+    <SendEmailModal
+      open={mailOpen}
+      onClose={() => setMailOpen(false)}
+      getToken={getToken}
+      expediteur="fpe@exosphere.fr"
+      to={['service_paie@cneidf.cerfrance.fr']}
+      cc={['a.dubois@exosphere.fr', 'm.doineau@exosphere.fr', 'fpe@exosphere.fr']}
+      subject={defaultMailSubject}
+      html={defaultMailHtml}
+      initialAttachments={mailPj}
+    />
+    </>
   )
 }
 
@@ -821,9 +924,15 @@ function fmtEur(n: number): string {
 function ResumeSTCTab({
   bareme,
   onGoToSelection,
+  onDownloadXls,
+  onMailSdtc,
+  preparingMail,
 }: {
   bareme: BaremeResult | null
   onGoToSelection: () => void
+  onDownloadXls: () => void | Promise<void>
+  onMailSdtc: () => void | Promise<void>
+  preparingMail: boolean
 }) {
   if (!bareme) {
     return (
@@ -892,8 +1001,28 @@ function ResumeSTCTab({
         ))}
       </div>
 
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onDownloadXls}
+          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border"
+          style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
+        >
+          <FileSpreadsheet className="w-4 h-4" /> Télécharger XLS
+        </button>
+        <button
+          type="button"
+          onClick={onMailSdtc}
+          disabled={preparingMail}
+          className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded text-white disabled:opacity-40"
+          style={{ backgroundColor: COLOR_PRIMARY }}
+        >
+          {preparingMail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          Mail SDTC
+        </button>
+      </div>
       <p className="mt-3 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
-        « Génération du tableau », « PDFs+XLS+Mail » et « Mail SDTC » seront branchés dans des commits dédiés.
+        Le PDF EtatSTC_RecapPROD sera branché une fois le template fourni.
       </p>
     </div>
   )

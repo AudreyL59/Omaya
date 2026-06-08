@@ -10,6 +10,7 @@ Auth : utilisateur connecte (Bearer token, n'importe quel intranet).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
@@ -17,12 +18,18 @@ from app.core.auth.schemas import UserToken
 from app.shared.sdtc import service as svc
 from app.shared.sdtc.bareme import compute_bareme
 from app.shared.sdtc.contrats import load_contrats
+from app.shared.sdtc.xls import build_workbook
 
 router = APIRouter(prefix="/api/shared/sdtc", tags=["shared-sdtc"])
 
 
 class ComputeBaremePayload(BaseModel):
     contrat_ids: list[str]
+
+
+class ExportXlsPayload(BaseModel):
+    contrat_ids_traites: list[str] = []
+    contrat_ids_sdtc: list[str] = []
 
 
 def _parse_id(id_salarie: str) -> int:
@@ -92,3 +99,34 @@ def sdtc_compute_bareme(
         "selection_ids": sorted(selection_ids),
         **result.to_dict(),
     }
+
+
+@router.post("/{id_salarie}/xls")
+def sdtc_export_xls(
+    id_salarie: str,
+    payload: ExportXlsPayload,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Genere le XLS 'Contrats' (TableContratTOT) : traites coches + selection SDTC."""
+    sid = _parse_id(id_salarie)
+    base = svc.load(sid)
+    if not base.get("found"):
+        raise HTTPException(status_code=404, detail="Salarie introuvable.")
+
+    data = load_contrats(sid)
+    ids_traites = {x.strip() for x in payload.contrat_ids_traites if x and x.strip()}
+    ids_sdtc = {x.strip() for x in payload.contrat_ids_sdtc if x and x.strip()}
+    traites = [c for c in (data.get("traites") or []) if str(c.get("id_contrat")) in ids_traites]
+    sdtc = [c for c in (data.get("a_traiter") or []) if str(c.get("id_contrat")) in ids_sdtc]
+
+    if not traites and not sdtc:
+        raise HTTPException(status_code=400, detail="Aucun contrat selectionne.")
+
+    lib = (base.get("salarie") or {}).get("lib_nom") or ""
+    content = build_workbook(traites, sdtc, lib_salarie=lib)
+    filename = f"SDTC_{lib.replace(' ', '_') or sid}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

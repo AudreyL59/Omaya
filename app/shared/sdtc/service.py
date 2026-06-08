@@ -82,6 +82,7 @@ def load(id_salarie: int) -> dict:
         """SELECT ss.date_sortie_reelle, ss.courrier_date_envoi,
                   ss.courrier_num_suivi, ss.courrier_delai_prev,
                   ss.courrier_date_recep,
+                  ss.mail_objet, ss.mail_contenu,
                   tss.lib_sortie
            FROM rh.pgt_salarie_sortie ss
            LEFT JOIN rh.pgt_type_sortie_salarie tss ON tss.id_type_sortie = ss.id_type_sortie
@@ -94,6 +95,8 @@ def load(id_salarie: int) -> dict:
         "titre_sortie": "",
         "kind": "",
         "courrier_info": "",
+        "mail_objet": "",
+        "mail_contenu": "",
     }
     if sortie_row:
         date_sortie = _iso(sortie_row.get("date_sortie_reelle"))
@@ -119,6 +122,8 @@ def load(id_salarie: int) -> dict:
             "titre_sortie": titre,
             "kind": kind,
             "courrier_info": courrier_info,
+            "mail_objet": _str(sortie_row.get("mail_objet")),
+            "mail_contenu": _str(sortie_row.get("mail_contenu")),
         }
 
     # --- Mutuelle ---------------------------------------------------------

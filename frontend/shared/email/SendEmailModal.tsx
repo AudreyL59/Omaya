@@ -52,6 +52,8 @@ interface SendEmailModalProps {
   cci?: string[]
   subject?: string
   html?: string
+  /** Pieces jointes pre-chargees (ex. PDF/XLS genere cote backend). */
+  initialAttachments?: AttachmentItem[]
   /** Expediteur. 'fpe@exosphere.fr' -> SMTP OVH FPE, sinon Gmail RH (defaut). */
   expediteur?: string
   /** Appele en cas d'envoi reussi (apres fermeture de la modal). */
@@ -67,6 +69,7 @@ export default function SendEmailModal({
   cci = [],
   subject = '',
   html = '',
+  initialAttachments,
   expediteur,
   onSent,
 }: SendEmailModalProps) {
@@ -86,7 +89,7 @@ export default function SendEmailModal({
     setCcStr(cc.join(', '))
     setCciStr(cci.join(', '))
     setSujet(subject)
-    setPjList([])
+    setPjList(initialAttachments ? [...initialAttachments] : [])
     if (editorRef.current) editorRef.current.innerHTML = html || ''
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
