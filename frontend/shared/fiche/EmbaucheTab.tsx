@@ -818,7 +818,7 @@ function LabeledField({
         type={type}
         value={value || ''}
         onChange={(e) => onChange(e.target.value)}
-        className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        className="min-w-0 w-full px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
         style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
       />
     </div>
@@ -844,7 +844,7 @@ function LabeledSelectNum({
       <select
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
-        className="px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
+        className="min-w-0 w-full px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
         style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
       >
         <option value={0}>—</option>

@@ -36,6 +36,12 @@ export interface FIProps {
   idTicket: string
   /** Ferme la popup « Détail du ticket » (cf. WinDev Ferme()). */
   onClose?: () => void
+  /**
+   * Si fourni, ouvre la fiche salarie complete (modal) depuis le ticket.
+   * Cote ADM : ouvre <FicheSalarieModal/>. Cote Vendeur : non branche
+   * (lien fallback vers /adm/salaries/registre utilise alors).
+   */
+  onOpenFicheSalarie?: (idSalarie: string, nom: string, prenom: string) => void
 }
 
 export const FI_COMPONENTS: Record<string, ComponentType<FIProps>> = {

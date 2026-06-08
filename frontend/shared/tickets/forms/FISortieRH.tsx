@@ -50,7 +50,7 @@ function formatShortDate(iso: string): string {
 //     Origine DPAE / Formation IAG / S'Cool + blocs sortie (Information /
 //     Courrier FPE / SDTC). L'enregistrement de ces champs se fait via le
 //     bouton "Enregistrer" interne au composant shared.
-export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIProps) {
+export default function FISortieRH({ apiBase, getToken, idTicket, onClose, onOpenFicheSalarie }: FIProps) {
   const [data, setData] = useState<SortieRHData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -329,19 +329,33 @@ export default function FISortieRH({ apiBase, getToken, idTicket, onClose }: FIP
         />
       </div>
 
-      {/* Lien fiche complete (raccourci optionnel) */}
+      {/* Lien fiche complete : bouton si l'hote (ADM) branche la callback,
+          sinon lien fallback (Vendeur etc.) vers le registre RH. */}
       <div className="text-center pt-2">
-        <a
-          href={`/adm/salaries/registre`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-xs hover:underline"
-          style={{ color: COLOR_PRIMARY }}
-          title="Ouvrir la fiche salarié complète dans un nouvel onglet (autres tabs : Coordonnées, Identité, etc.)"
-        >
-          <ExternalLink className="w-3 h-3" />
-          Voir la fiche salarié complète
-        </a>
+        {onOpenFicheSalarie ? (
+          <button
+            type="button"
+            onClick={() => onOpenFicheSalarie(data.id_salarie, data.nom, data.prenom)}
+            className="inline-flex items-center gap-1 text-xs hover:underline"
+            style={{ color: COLOR_PRIMARY }}
+            title="Ouvrir la fiche salarié complète en popup"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Voir la fiche salarié complète
+          </button>
+        ) : (
+          <a
+            href={`/adm/salaries/registre`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs hover:underline"
+            style={{ color: COLOR_PRIMARY }}
+            title="Ouvrir la fiche salarié complète dans un nouvel onglet"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Voir la fiche salarié complète
+          </a>
+        )}
       </div>
     </div>
   )

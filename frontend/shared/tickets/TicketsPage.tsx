@@ -94,6 +94,9 @@ function TicketTypeIcon({ idType }: { idType: string }) {
 interface TicketsPageProps {
   apiBase: string                 // ex: '/api/vendeur' ou '/api/adm'
   getToken: () => string | null
+  /** Optionnel : si fourni, les FI* peuvent ouvrir la fiche salarie complete
+   *  dans une modal. Cote ADM, branche sur <FicheSalarieModal/>. */
+  onOpenFicheSalarie?: (idSalarie: string, nom: string, prenom: string) => void
 }
 
 function shortDateTime(raw: string | undefined | null): string {
@@ -115,7 +118,7 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
 }
 
-export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
+export default function TicketsPage({ apiBase, getToken, onOpenFicheSalarie }: TicketsPageProps) {
   const [sidebar, setSidebar] = useState<TicketSidebarItem[]>([])
   const [loadingSidebar, setLoadingSidebar] = useState(true)
   const [selectedType, setSelectedType] = useState<TicketTypeDemande | null>(null)
@@ -717,6 +720,7 @@ export default function TicketsPage({ apiBase, getToken }: TicketsPageProps) {
             statuts={allStatuts}
             onSave={saveInfos}
             onClose={() => setDetail(null)}
+            onOpenFicheSalarie={onOpenFicheSalarie}
           />
         )}
       </main>
@@ -822,7 +826,7 @@ function SalariePicker({
 }
 
 function TicketContenuModal({
-  apiBase, getToken, detail, loading, statuts, onSave, onClose,
+  apiBase, getToken, detail, loading, statuts, onSave, onClose, onOpenFicheSalarie,
 }: {
   apiBase: string
   getToken: () => string | null
@@ -838,6 +842,7 @@ function TicketContenuModal({
     prendre_en_charge?: boolean
   }) => void
   onClose: () => void
+  onOpenFicheSalarie?: (idSalarie: string, nom: string, prenom: string) => void
 }) {
   const [statutId, setStatutId] = useState<number>(0)
   const [cloturee, setCloturee] = useState(false)
@@ -1018,6 +1023,7 @@ function TicketContenuModal({
                       getToken={getToken}
                       idTicket={detail.id_ticket}
                       onClose={onClose}
+                      onOpenFicheSalarie={onOpenFicheSalarie}
                     />
                   </div>
                 ) : (

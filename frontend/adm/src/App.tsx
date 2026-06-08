@@ -12,10 +12,9 @@ import OrganigrammePage from '@/pages/OrganigrammePage'
 import RegistreRHPage from '@/pages/RegistreRHPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
-import TicketsPage from '@shared/tickets/TicketsPage'
+import AdmTicketsPage from '@/pages/AdmTicketsPage'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import { getToken } from '@/api'
 import { DialogHost } from '@shared/ui/dialog'
 
 const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '')
@@ -51,7 +50,7 @@ function App() {
           <Route path="salaries/registre" element={<RegistreRHPage />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
-          <Route path="tickets" element={<TicketsPage apiBase={ADM_API} getToken={getToken} />} />
+          <Route path="tickets" element={<AdmTicketsPage />} />
           {/* Fallback : toute route inconnue dans le shell auth → Placeholder */}
           <Route path="*" element={<PlaceholderPage />} />
         </Route>
