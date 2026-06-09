@@ -463,6 +463,7 @@ def save_vente_infos(id_tk_liste: int, payload: dict) -> dict:
 
 
 def save_offre(id_panier: int, payload: dict) -> dict:
+    print(f"[save-offre panier={id_panier}] payload_keys={list(payload.keys())} statut_prod={payload.get('statut_prod')!r}", file=sys.stderr)
     """UPDATE TK_Call_Panier avec les modifs d'une ligne d'offre.
 
     Met a jour les champs communs (StatutProd, NumBS) + les options
