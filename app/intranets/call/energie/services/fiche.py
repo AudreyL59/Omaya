@@ -463,7 +463,7 @@ def save_vente_infos(id_tk_liste: int, payload: dict) -> dict:
 
 
 def save_offre(id_panier: int, payload: dict) -> dict:
-    print(f"[save-offre panier={id_panier}] payload_keys={list(payload.keys())} statut_prod={payload.get('statut_prod')!r}", file=sys.stderr)
+    print(f"[save-offre panier={id_panier}] payload_keys={list(payload.keys())} statut_prod={payload.get('statut_prod')!r}", flush=True)
     """UPDATE TK_Call_Panier avec les modifs d'une ligne d'offre.
 
     Met a jour les champs communs (StatutProd, NumBS) + les options
@@ -562,13 +562,13 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
     Source : OEN_produit (base adv) joint sur IDproduit.
     """
     tag = f"[clarif-oen panier={id_panier}]"
-    print(f"{tag} debut statut={statut_prod}", file=sys.stderr)
+    print(f"{tag} debut statut={statut_prod}", flush=True)
     if statut_prod not in (1, 3):
-        print(f"{tag} skip : statut pas dans (1,3)", file=sys.stderr)
+        print(f"{tag} skip : statut pas dans (1,3)", flush=True)
         return
 
     src = DOCS_BASE_PATH / f"{id_panier}_Clarification.pdf"
-    print(f"{tag} src={src} exists={src.exists()}", file=sys.stderr)
+    print(f"{tag} src={src} exists={src.exists()}", flush=True)
     if not src.exists():
         return
 
@@ -579,16 +579,16 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
         (id_panier,),
     )
     if not rows:
-        print(f"{tag} skip : ligne panier introuvable", file=sys.stderr)
+        print(f"{tag} skip : ligne panier introuvable", flush=True)
         return
     r = rows[0]
     partenaire = (r.get("Partenaire") or "").upper()
-    print(f"{tag} partenaire={partenaire!r}", file=sys.stderr)
+    print(f"{tag} partenaire={partenaire!r}", flush=True)
     if partenaire != "OEN":
         return
 
     ref_client = (r.get("Observations") or "").strip()
-    print(f"{tag} ref_client={ref_client!r}", file=sys.stderr)
+    print(f"{tag} ref_client={ref_client!r}", flush=True)
     if not ref_client:
         return  # Pas de ref client -> pas de nom de fichier coherent
     id_produit = _to_int(r.get("IDproduit"))
@@ -605,7 +605,7 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
         if prod_rows:
             lib_produit = (prod_rows[0].get("Lib_produit") or "").strip()
             sous_fam = (prod_rows[0].get("SousFAM") or "").strip()
-    print(f"{tag} id_produit={id_produit} lib_produit={lib_produit!r} sous_fam={sous_fam!r}", file=sys.stderr)
+    print(f"{tag} id_produit={id_produit} lib_produit={lib_produit!r} sous_fam={sous_fam!r}", flush=True)
 
     if "DUAL" in lib_produit.upper():
         new_nom = f"{ref_client} (DUAL)"
@@ -614,9 +614,9 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
 
     REP_OHM.mkdir(parents=True, exist_ok=True)
     dst = REP_OHM / f"{_sanitize_filename(new_nom)}.pdf"
-    print(f"{tag} copy {src} -> {dst}", file=sys.stderr)
+    print(f"{tag} copy {src} -> {dst}", flush=True)
     shutil.copy2(src, dst)
-    print(f"{tag} OK", file=sys.stderr)
+    print(f"{tag} OK", flush=True)
 
 
 # --- Phase 3 : verrou ope + actions panier --------------------------------
