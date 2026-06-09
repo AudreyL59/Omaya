@@ -22,7 +22,10 @@ from __future__ import annotations
 import base64
 from html import escape
 
-from weasyprint import HTML
+# Note : weasyprint est importe lazy dans build_pdf() pour ne pas planter
+# au demarrage les serveurs qui n'ont pas WeasyPrint + GTK installes
+# (typiquement OVH ou seul SDTC est inutile, vs serveur interne ou il
+# est requis pour Fen_SDTC).
 
 from app.core.database.pg import get_pg_connection
 
@@ -413,5 +416,10 @@ def build_pdf(
 {recap_nb_html}
 {recap_pts_html}
 </body></html>"""
+
+    # Import lazy : WeasyPrint n'est requis que pour generer le PDF
+    # (pas pour importer le module). Permet aux serveurs sans GTK + WeasyPrint
+    # de demarrer sans planter.
+    from weasyprint import HTML  # noqa: PLC0415
 
     return HTML(string=html).write_pdf()
