@@ -560,10 +560,14 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
               + " (MONO <SousFAM>)" sinon
     Source : OEN_produit (base adv) joint sur IDproduit.
     """
+    tag = f"[clarif-oen panier={id_panier}]"
+    print(f"{tag} debut statut={statut_prod}", file=sys.stderr)
     if statut_prod not in (1, 3):
+        print(f"{tag} skip : statut pas dans (1,3)", file=sys.stderr)
         return
 
     src = DOCS_BASE_PATH / f"{id_panier}_Clarification.pdf"
+    print(f"{tag} src={src} exists={src.exists()}", file=sys.stderr)
     if not src.exists():
         return
 
@@ -574,12 +578,16 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
         (id_panier,),
     )
     if not rows:
+        print(f"{tag} skip : ligne panier introuvable", file=sys.stderr)
         return
     r = rows[0]
-    if (r.get("Partenaire") or "").upper() != "OEN":
+    partenaire = (r.get("Partenaire") or "").upper()
+    print(f"{tag} partenaire={partenaire!r}", file=sys.stderr)
+    if partenaire != "OEN":
         return
 
     ref_client = (r.get("Observations") or "").strip()
+    print(f"{tag} ref_client={ref_client!r}", file=sys.stderr)
     if not ref_client:
         return  # Pas de ref client -> pas de nom de fichier coherent
     id_produit = _to_int(r.get("IDproduit"))
@@ -596,6 +604,7 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
         if prod_rows:
             lib_produit = (prod_rows[0].get("Lib_produit") or "").strip()
             sous_fam = (prod_rows[0].get("SousFAM") or "").strip()
+    print(f"{tag} id_produit={id_produit} lib_produit={lib_produit!r} sous_fam={sous_fam!r}", file=sys.stderr)
 
     if "DUAL" in lib_produit.upper():
         new_nom = f"{ref_client} (DUAL)"
@@ -604,7 +613,9 @@ def _copy_clarif_to_ohm_if_oen(id_panier: int, statut_prod: int) -> None:
 
     REP_OHM.mkdir(parents=True, exist_ok=True)
     dst = REP_OHM / f"{_sanitize_filename(new_nom)}.pdf"
+    print(f"{tag} copy {src} -> {dst}", file=sys.stderr)
     shutil.copy2(src, dst)
+    print(f"{tag} OK", file=sys.stderr)
 
 
 # --- Phase 3 : verrou ope + actions panier --------------------------------
