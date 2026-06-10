@@ -527,17 +527,18 @@ def generate_cttw(
     pdf_bytes = _docx_to_pdf(docx_bytes)
     print(f"{tag} PDF genere ({len(pdf_bytes)} bytes)", flush=True)
 
-    # 13. Upload FTP TempCttw/
+    # 13. Upload FTP TempCttw/ (servi par IIS interne sous interne.omaya.fr/TempCttw/)
     pdf_name = f"{id_ticket}-cttW.pdf"
+    ftp_path = os.getenv("FTP_TEMPCTTW_PATH", "/OMAYA/TempCttw")
     try:
-        ftp_upload("/TempCttw", pdf_name, pdf_bytes)
+        ftp_upload(ftp_path, pdf_name, pdf_bytes)
+        print(f"{tag} FTP upload OK -> {ftp_path}/{pdf_name}", flush=True)
     except Exception as e:
         # On ne fait pas echouer la generation pour un soucis FTP : le
-        # PDF est deja en base via pgt_tk_demande_ctt_w.contenu (a confirmer
-        # avec l'utilisateur la strategie de fallback).
+        # PDF est deja en base via pgt_tk_demande_ctt_w.contenu.
         import sys, traceback
         traceback.print_exc(file=sys.stderr)
-        print(f"[generate-cttw] FTP echec : {e}", flush=True)
+        print(f"{tag} FTP echec : {type(e).__name__}: {e} (path={ftp_path})", flush=True)
 
     return {
         "ok": True,
