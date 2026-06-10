@@ -22,7 +22,7 @@ from datetime import datetime
 from urllib.parse import quote
 
 from app.core.config import DOCS_URL, FTP_HOST, FTP_PASSWORD, FTP_USER
-from app.core.database.pg import get_pg_connection
+from app.core.database import get_connection
 
 
 # Mapping ssRep WinDev -> chemin relatif (sans slash initial ni final)
@@ -246,18 +246,31 @@ def _new_id() -> int:
     return int(n.strftime("%Y%m%d%H%M%S") + f"{n.microsecond // 1000:03d}")
 
 
+def _now_wd() -> str:
+    """Datetime HFSQL : 'YYYYMMDDHHMMSS'."""
+    return datetime.now().strftime("%Y%m%d%H%M%S")
+
+
+def _esc_sql(s: str) -> str:
+    """Echappe les apostrophes pour SQL inline (bridge HFSQL ne supporte
+    pas le parameter binding sur les INSERT)."""
+    return (s or "").replace("'", "''")
+
+
 def create_tk_mutuelle(
     id_salarie: int, sous_rep_key: str, filenames: list[str], op_id: int
 ) -> dict:
     """Cree un ticket Mutuelle (type 27, service JU) avec les fichiers
     selectionnes en pieces jointes.
 
-    Transposition WinDev Btn 'Tk Mutuelle avec la selection' :
-      - INSERT pgt_tk_demande_mutuelle (id_tk_demande_mutuelle = idTk,
-        id_tk_liste = idTk, id_salarie, demande_affiliation=FALSE)
-      - INSERT pgt_tk_demande_mutuelle_fic (1 ligne par fichier)
-      - INSERT pgt_tk_liste (type 27, statut 1, service 'JU',
-        op_dest = id_salarie)
+    Transposition WinDev Btn 'Tk Mutuelle avec la selection'. Insert en
+    HFSQL via le bridge (source de verite tant qu'on n'a pas cutover
+    en PG) :
+      - INSERT TK_DemandeMutuelle (IDTK_DemandeMutuelle = idTk,
+        IDTK_Liste = idTk, IDSalarie, DemandeAffiliation=0)
+      - INSERT TK_DemandeMutuelle_FIC (1 ligne par fichier)
+      - INSERT TK_Liste (type 27, statut 1, service 'JU',
+        OPDEST = id_salarie)
     """
     if not filenames:
         return {"ok": False, "error": "Aucun fichier selectionne"}
@@ -266,41 +279,52 @@ def create_tk_mutuelle(
     rel_path = f"/{sous_rep}/" if sous_rep else "/"
 
     id_tk = _new_id()
-    db_trh = get_pg_connection("ticket_rh")
+    now_wd = _now_wd()
+    db_trh = get_connection("ticket_rh")
 
     db_trh.query(
-        """INSERT INTO ticket_rh.pgt_tk_demande_mutuelle
-              (id_tk_demande_mutuelle, id_tk_liste, id_salarie,
-               demande_affiliation, info_cplt,
-               modif_date, modif_op, modif_elem)
-           VALUES (?, ?, ?, FALSE, '', NOW(), ?, 'new')""",
-        (id_tk, id_tk, int(id_salarie), int(op_id)),
+        f"""INSERT INTO TK_DemandeMutuelle (
+            IDTK_DemandeMutuelle, IDTK_Liste, IDSalarie,
+            DemandeAffiliation, InfoCplt,
+            ModifDate, ModifOp, ModifElem
+        ) VALUES (
+            {id_tk}, {id_tk}, {int(id_salarie)},
+            0, '',
+            '{now_wd}', {int(op_id)}, 'new'
+        )"""
     )
 
     for nom in filenames:
         nom = (nom or "").strip()
         if not nom:
             continue
+        chemin = f"{rel_path}{nom}"
         db_trh.query(
-            """INSERT INTO ticket_rh.pgt_tk_demande_mutuelle_fic
-                  (id_tk_demande_mutuelle_fic, id_tk_demande_mutuelle,
-                   id_tk_liste, chemin_fic, nom_fichier,
-                   modif_date, modif_op, modif_elem)
-               VALUES (?, ?, ?, ?, ?, NOW(), ?, 'new')""",
-            (_new_id(), id_tk, id_tk, f"{rel_path}{nom}", nom, int(op_id)),
+            f"""INSERT INTO TK_DemandeMutuelle_FIC (
+                IDTK_DemandeMutuelle_FIC, IDTK_DemandeMutuelle,
+                IDTK_Liste, CheminFic, NomFichier,
+                ModifDate, ModifOp, ModifElem
+            ) VALUES (
+                {_new_id()}, {id_tk},
+                {id_tk}, '{_esc_sql(chemin)}', '{_esc_sql(nom)}',
+                '{now_wd}', {int(op_id)}, 'new'
+            )"""
         )
 
     # TK_Liste : ticket type 27, service JU, OPDEST = id_salarie (WinDev)
-    db_t = get_pg_connection("ticket")
+    db_t = get_connection("ticket")
     db_t.query(
-        """INSERT INTO ticket.pgt_tk_liste
-              (id_tk_liste, date_crea, op_crea, op_dest, service,
-               id_tk_type_demande, id_tk_statut, cloturee,
-               modif_date, modif_op, modif_elem,
-               op_traitement_staff, ordre_traitement_staff)
-           VALUES (?, NOW(), ?, ?, 'JU', 27, 1, FALSE, NOW(), ?, 'new',
-                   0, 0)""",
-        (id_tk, int(op_id), int(id_salarie), int(op_id)),
+        f"""INSERT INTO TK_Liste (
+            IDTK_Liste, DATECREA, OPCREA, OPDEST, Service,
+            IDTK_TypeDemande, IDTK_Statut, DateReport, Cloturée, DateCloture,
+            ModifDate, ModifOP, ModifELEM,
+            OpTraitementStaff, OrdreTraitementStaff
+        ) VALUES (
+            {id_tk}, '{now_wd}', {int(op_id)}, {int(id_salarie)}, 'JU',
+            27, 1, '', 0, '',
+            '{now_wd}', {int(op_id)}, 'new',
+            0, 0
+        )"""
     )
 
     return {"ok": True, "id_tk_liste": str(id_tk), "nb_fichiers": len(filenames)}
