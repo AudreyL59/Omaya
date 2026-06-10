@@ -25,7 +25,7 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.shared.notifications.mail import envoi_mail
 
-router = APIRouter(prefix="/api/shared/email", tags=["shared-email"])
+router = APIRouter(prefix="/shared/email", tags=["shared-email"])
 
 
 class AttachmentPayload(BaseModel):

@@ -21,7 +21,7 @@ from app.shared.sdtc.contrats import load_contrats
 from app.shared.sdtc.pdf import build_pdf
 from app.shared.sdtc.xls import build_workbook
 
-router = APIRouter(prefix="/api/shared/sdtc", tags=["shared-sdtc"])
+router = APIRouter(prefix="/shared/sdtc", tags=["shared-sdtc"])
 
 
 class ComputeBaremePayload(BaseModel):
