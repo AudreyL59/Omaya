@@ -40,13 +40,13 @@ interface Props {
   onCreated: () => void
 }
 
-export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) {
+export default function NewDocRHModal({ idSalarie, onClose, onCreated: _onCreated }: Props) {
   const [typesProduit, setTypesProduit] = useState<TypeProduit[]>([])
   const [idTypeProduit, setIdTypeProduit] = useState<string>('')
   const [docs, setDocs] = useState<DocDispo[]>([])
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const busy = false
 
   // Charge la liste des types produit + le default du salarie
   useEffect(() => {
