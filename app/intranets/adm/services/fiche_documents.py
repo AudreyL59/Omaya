@@ -18,9 +18,11 @@ from __future__ import annotations
 import ftplib
 import io
 import re
+from datetime import datetime
 from urllib.parse import quote
 
 from app.core.config import DOCS_URL, FTP_HOST, FTP_PASSWORD, FTP_USER
+from app.core.database.pg import get_pg_connection
 
 
 # Mapping ssRep WinDev -> chemin relatif (sans slash initial ni final)
@@ -223,6 +225,71 @@ def upload_file(id_salarie: int, sous_rep_key: str, filename: str, content: byte
             ftp.quit()
         except Exception:
             pass
+
+
+def _new_id() -> int:
+    n = datetime.now()
+    return int(n.strftime("%Y%m%d%H%M%S") + f"{n.microsecond // 1000:03d}")
+
+
+def create_tk_mutuelle(
+    id_salarie: int, sous_rep_key: str, filenames: list[str], op_id: int
+) -> dict:
+    """Cree un ticket Mutuelle (type 27, service JU) avec les fichiers
+    selectionnes en pieces jointes.
+
+    Transposition WinDev Btn 'Tk Mutuelle avec la selection' :
+      - INSERT pgt_tk_demande_mutuelle (id_tk_demande_mutuelle = idTk,
+        id_tk_liste = idTk, id_salarie, demande_affiliation=FALSE)
+      - INSERT pgt_tk_demande_mutuelle_fic (1 ligne par fichier)
+      - INSERT pgt_tk_liste (type 27, statut 1, service 'JU',
+        op_dest = id_salarie)
+    """
+    if not filenames:
+        return {"ok": False, "error": "Aucun fichier selectionne"}
+
+    sous_rep = SOUS_REPS.get(sous_rep_key, "")
+    rel_path = f"/{sous_rep}/" if sous_rep else "/"
+
+    id_tk = _new_id()
+    db_trh = get_pg_connection("ticket_rh")
+
+    db_trh.query(
+        """INSERT INTO ticket_rh.pgt_tk_demande_mutuelle
+              (id_tk_demande_mutuelle, id_tk_liste, id_salarie,
+               demande_affiliation, info_cplt,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, FALSE, '', NOW(), ?, 'new')""",
+        (id_tk, id_tk, int(id_salarie), int(op_id)),
+    )
+
+    for nom in filenames:
+        nom = (nom or "").strip()
+        if not nom:
+            continue
+        db_trh.query(
+            """INSERT INTO ticket_rh.pgt_tk_demande_mutuelle_fic
+                  (id_tk_demande_mutuelle_fic, id_tk_demande_mutuelle,
+                   id_tk_liste, chemin_fic, nom_fichier,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+            (_new_id(), id_tk, id_tk, f"{rel_path}{nom}", nom, int(op_id)),
+        )
+
+    # TK_Liste : ticket type 27, service JU, OPDEST = id_salarie (WinDev)
+    db_t = get_pg_connection("ticket")
+    db_t.query(
+        """INSERT INTO ticket.pgt_tk_liste
+              (id_tk_liste, date_crea, op_crea, op_dest, service,
+               id_tk_type_demande, id_tk_statut, cloturee,
+               modif_date, modif_op, modif_elem,
+               op_traitement_staff, ordre_traitement_staff)
+           VALUES (?, NOW(), ?, ?, 'JU', 27, 1, FALSE, NOW(), ?, 'new',
+                   0, 0)""",
+        (id_tk, int(op_id), int(id_salarie), int(op_id)),
+    )
+
+    return {"ok": True, "id_tk_liste": str(id_tk), "nb_fichiers": len(filenames)}
 
 
 def delete_file(id_salarie: int, sous_rep_key: str, filename: str) -> dict:

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
+import SendEmailModal from '@shared/email/SendEmailModal'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
 
@@ -74,6 +75,15 @@ function fmtHeure(iso: string): string {
   return iso.slice(11, 16)
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export default function DocumentsTab({ idSalarie }: Props) {
   const [current, setCurrent] = useState<SousRep>('internes')
   const [data, setData] = useState<DocListResp | null>(null)
@@ -81,6 +91,9 @@ export default function DocumentsTab({ idSalarie }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [uploading, setUploading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [mailOpen, setMailOpen] = useState(false)
+  const [mailHtml, setMailHtml] = useState('')
+  const [tkMutBusy, setTkMutBusy] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const reload = useCallback(
@@ -240,8 +253,68 @@ export default function DocumentsTab({ idSalarie }: Props) {
     }
   }
 
-  const placeholder = (label: string) => () =>
-    showToast(`${label} : à brancher dans un prochain commit`, 'info')
+  const handleEnvoyerMail = () => {
+    if (!someSelected) {
+      showToast('Sélectionner au moins un fichier.', 'info')
+      return
+    }
+    // Construit le HTML facon WinDev : liste des liens 'Telecharger ici'
+    const liens = Array.from(selected)
+      .map((nom) => {
+        const f = files.find((x) => x.nom === nom)
+        if (!f) return ''
+        return `<li>${escapeHtml(nom)} (<a href="${f.url}">Télécharger ici</a>)</li>`
+      })
+      .filter(Boolean)
+      .join('')
+    const html =
+      `<p>Bonjour,</p>` +
+      `<p>Voici les fichiers provenant du dossier salarié :</p>` +
+      `<ul>${liens}</ul>` +
+      `<p>Cdt</p>`
+    setMailHtml(html)
+    setMailOpen(true)
+  }
+
+  const handleTkMutuelle = async () => {
+    if (!someSelected) {
+      showToast('Sélectionner au moins un fichier.', 'info')
+      return
+    }
+    const ok = await showConfirm({
+      title: 'Ticket Mutuelle',
+      message: `Créer un ticket Mutuelle (service JU) avec les ${selected.size} fichier(s) sélectionné(s) ?`,
+      confirmLabel: 'Créer le ticket',
+    })
+    if (!ok) return
+    setTkMutBusy(true)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${idSalarie}/documents/tk-mutuelle`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            sous_rep: current,
+            filenames: Array.from(selected),
+          }),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const j = (await r.json()) as { id_tk_liste: string }
+      showToast(`Ticket Mutuelle créé (id ${j.id_tk_liste}).`, 'success')
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setTkMutBusy(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -312,14 +385,15 @@ export default function DocumentsTab({ idSalarie }: Props) {
         <ToolBtn
           icon={Mail}
           label="Envoyer par mail"
-          onClick={placeholder('Envoyer par mail')}
+          onClick={handleEnvoyerMail}
           disabled={!someSelected}
         />
         <ToolBtn
-          icon={Ticket}
+          icon={tkMutBusy ? Loader2 : Ticket}
+          spin={tkMutBusy}
           label="Tk Mutuelle"
-          onClick={placeholder('Tk Mutuelle')}
-          disabled={!someSelected}
+          onClick={handleTkMutuelle}
+          disabled={!someSelected || tkMutBusy}
         />
         <ToolBtn
           icon={Eye}
@@ -406,6 +480,14 @@ export default function DocumentsTab({ idSalarie }: Props) {
         <span>Srv : {data?.srv || ''}</span>
         <span>État : {data?.etat || ''}</span>
       </div>
+
+      <SendEmailModal
+        open={mailOpen}
+        onClose={() => setMailOpen(false)}
+        getToken={getToken}
+        subject="Documents salarié"
+        html={mailHtml}
+      />
     </div>
   )
 }

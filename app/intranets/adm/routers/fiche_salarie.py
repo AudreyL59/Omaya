@@ -688,3 +688,30 @@ def delete_document(
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+class TkMutuellePayload(BaseModel):
+    sous_rep: str = "internes"
+    filenames: list[str]
+
+
+@router.post("/{id_salarie}/documents/tk-mutuelle")
+def post_documents_tk_mutuelle(
+    payload: TkMutuellePayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Cree un ticket Mutuelle (type 27, service JU) avec les fichiers
+    selectionnes en pieces jointes (transposition WinDev Btn 'Tk Mutuelle')."""
+    try:
+        res = documents_svc.create_tk_mutuelle(
+            id_salarie, payload.sous_rep, payload.filenames, user.id_salarie
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Echec"))
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
