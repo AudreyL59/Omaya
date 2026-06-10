@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
+from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_organigramme as orga_svc
 from app.intranets.adm.services import fiche_suivi_adm as suivi_adm_svc
 from app.intranets.adm.schemas.fiche_salarie import (
@@ -471,6 +472,60 @@ def post_suivi_adm(
         return res
     except HTTPException:
         raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 'Contrat de travail' (Docs RH) -------------------------------
+
+
+@router.get("/{id_salarie}/doc-rh")
+def get_doc_rh(
+    id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)
+):
+    """Liste des documents RH du salarie pour l'onglet 'Contrat de travail'."""
+    try:
+        return {"items": doc_rh_svc.load_doc_rh(id_salarie)}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/doc-rh/{id_salarie_doc_rh}/cttw-recu")
+def post_doc_rh_cttw_recu(
+    id_salarie_doc_rh: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Bouton 'Cttw RECU' : marque le doc comme recu (recu=true, recu_date=now)."""
+    try:
+        return doc_rh_svc.mark_cttw_recu(id_salarie_doc_rh, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/doc-rh/{id_salarie_doc_rh}/ctt-edite-url")
+def get_doc_rh_ctt_edite_url(
+    id_salarie_doc_rh: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Bouton 'Voir le Ctt edite' : retourne l'URL du PDF (ou erreur)."""
+    try:
+        return doc_rh_svc.find_ctt_edite_url(id_salarie_doc_rh)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/doc-rh/{id_salarie_doc_rh}")
+def delete_doc_rh(
+    id_salarie_doc_rh: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Soft delete (modif_elem='suppr')."""
+    try:
+        return doc_rh_svc.soft_delete_doc_rh(id_salarie_doc_rh, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
