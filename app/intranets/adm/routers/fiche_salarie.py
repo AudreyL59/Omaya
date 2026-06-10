@@ -13,6 +13,7 @@ from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
+from app.intranets.adm.services import fiche_documents as documents_svc
 from app.intranets.adm.services import fiche_organigramme as orga_svc
 from app.intranets.adm.services import fiche_suivi_adm as suivi_adm_svc
 from app.intranets.adm.schemas.fiche_salarie import (
@@ -621,6 +622,26 @@ def get_doc_rh_docs_disponibles(
             "id_type_produit": str(effective_tp),
             "items": docs,
         }
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 'Documents' (FTP listing) ------------------------------------
+
+
+@router.get("/{id_salarie}/documents")
+def get_documents(
+    id_salarie: int = Path(...),
+    sous_rep: str = Query(
+        "internes",
+        description="internes | espace_salarie | adf | bilan_evo | factures",
+    ),
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste les fichiers du salarie sur le FTP (/OMAYA/gestionRH/{id}/<sous>)."""
+    try:
+        return documents_svc.list_files(id_salarie, sous_rep)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
