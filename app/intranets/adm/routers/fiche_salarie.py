@@ -547,6 +547,38 @@ class GenerateCttwPayload(BaseModel):
     date_avenant: str = ""  # ISO YYYY-MM-DD, requis si modele = AVENANT
 
 
+@router.post("/{id_salarie}/doc-rh/preview-pdf")
+def post_doc_rh_preview_pdf(
+    payload: GenerateCttwPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Bouton 'Export PDF' : genere le PDF (publipostage + images) sans
+    rien ecrire en base. Retourne le PDF en download."""
+    try:
+        res = doc_rh_gen_svc.preview_cttw_pdf(
+            id_salarie=id_salarie,
+            id_doc_rh=int(payload.id_doc_rh or 0),
+            date_avenant=payload.date_avenant,
+        )
+        from urllib.parse import quote
+        fname = res["filename"]
+        return Response(
+            content=res["pdf_bytes"],
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{quote(fname)}"'
+                ),
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 @router.post("/{id_salarie}/doc-rh/generate-cttw")
 def post_doc_rh_generate_cttw(
     payload: GenerateCttwPayload,

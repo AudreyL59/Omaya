@@ -318,19 +318,18 @@ def _bytes_or_none(v: Any) -> bytes | None:
     return None
 
 
-# --- Generation complete -------------------------------------------------
+# --- Generation : publipostage DOCX (etapes 1-8) -------------------------
 
-def generate_cttw(
+def _build_publiposted_docx(
     *,
     id_salarie: int,
     id_doc_rh: int,
-    op_id: int,
     date_avenant: str = "",
 ) -> dict:
-    """Genere le contrat de travail (DOCX + PDF) + cree les 3 records.
+    """Charge le modele DOCX et fait le publipostage (texte + images).
 
-    Retourne {ok, id_ticket, id_tk_demande_ctt_w, id_salarie_doc_rh,
-              pdf_url, id_da, type_doc_lib}.
+    Retourne {docx_bytes, model_info, salarie_data, id_da, titre_doc, id_type_doc}.
+    Pas d'ecriture DB ni de conversion PDF.
     """
     from docx import Document  # noqa: PLC0415 -- lazy
 
@@ -369,7 +368,6 @@ def generate_cttw(
     civilite = _int(sal.get("civilite"))
     nom = _str(sal.get("nom"))
     prenom = _str(sal.get("prenom"))
-    nom_complet = f"{nom} {_capitalize_first(prenom)}".strip()
     is_avenant = "AVENANT" in titre_doc.upper()
     txt_map = {
         "S_TITRE": "Mr." if civilite == 1 else "Mme",
@@ -455,6 +453,40 @@ def generate_cttw(
     doc.save(docx_out)
     docx_bytes = docx_out.getvalue()
 
+    return {
+        "docx_bytes": docx_bytes,
+        "titre_doc": titre_doc,
+        "id_type_doc": id_type_doc,
+        "id_da": id_da,
+        "idorganigramme": _int(orga.get("idorganigramme")),
+        "nom_salarie": f"{nom} {_capitalize_first(prenom)}".strip(),
+    }
+
+
+# --- Generation complete -------------------------------------------------
+
+def generate_cttw(
+    *,
+    id_salarie: int,
+    id_doc_rh: int,
+    op_id: int,
+    date_avenant: str = "",
+) -> dict:
+    """Genere le contrat de travail (DOCX + PDF) + cree les 3 records.
+
+    Retourne {ok, id_ticket, id_tk_demande_ctt_w, id_salarie_doc_rh,
+              pdf_url, id_da, type_doc_lib}.
+    """
+    built = _build_publiposted_docx(
+        id_salarie=id_salarie, id_doc_rh=id_doc_rh, date_avenant=date_avenant
+    )
+    docx_bytes = built["docx_bytes"]
+    titre_doc = built["titre_doc"]
+    id_type_doc = built["id_type_doc"]
+    id_da = built["id_da"]
+    idorganigramme = built["idorganigramme"]
+    db_rh = get_pg_connection("rh")
+
     # 9. Creer pgt_salarie_doc_rh (suivi d'edition)
     id_salarie_doc_rh = _new_id()
     db_rh.query(
@@ -488,7 +520,7 @@ def generate_cttw(
         (
             id_demande,
             id_salarie_doc_rh,
-            _int(orga.get("idorganigramme")),
+            idorganigramme,
             int(id_salarie),
             id_da,
             str(id_type_doc),
@@ -535,6 +567,30 @@ def generate_cttw(
         "type_doc_lib": titre_doc,
         "pdf_url": f"https://interne.omaya.fr/TempCttw/{pdf_name}",
     }
+
+
+def preview_cttw_pdf(
+    *,
+    id_salarie: int,
+    id_doc_rh: int,
+    date_avenant: str = "",
+) -> dict:
+    """Genere le PDF pour aperçu/export, SANS rien ecrire en base.
+
+    Bouton 'Export PDF' de la popup WinDev. Reutilise tout le publipostage
+    de generate_cttw (variables + images) et convertit en PDF via
+    soffice headless.
+
+    Retourne {pdf_bytes, filename}.
+    """
+    built = _build_publiposted_docx(
+        id_salarie=id_salarie, id_doc_rh=id_doc_rh, date_avenant=date_avenant
+    )
+    pdf_bytes = _docx_to_pdf(built["docx_bytes"])
+    safe_nom = built["nom_salarie"].replace(" ", "_") or str(id_salarie)
+    safe_titre = built["titre_doc"].replace("/", "-").replace("\\", "-")[:80]
+    filename = f"{safe_nom}_{safe_titre}.pdf" if safe_titre else f"{safe_nom}.pdf"
+    return {"pdf_bytes": pdf_bytes, "filename": filename}
 
 
 def _find_id_da(id_salarie: int, id_organigramme: int) -> int:

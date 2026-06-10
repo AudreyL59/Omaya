@@ -166,12 +166,67 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
     }
   }
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!selectedDoc) {
       showToast('Sélectionner un document.', 'info')
       return
     }
-    showToast('Export PDF à brancher.', 'info')
+    // Cas AVENANT : prompt date comme pour Ticket Omaya
+    let dateAvenant = ''
+    if (/AVENANT/i.test(selectedDoc.titre)) {
+      const raw = window.prompt(
+        "Merci de saisir la date de l'avenant (JJ/MM/AAAA) :",
+        '',
+      )
+      if (!raw) return
+      const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+      if (m) {
+        dateAvenant = `${m[3]}-${m[2]}-${m[1]}`
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        dateAvenant = raw
+      } else {
+        showToast('Format de date invalide (attendu JJ/MM/AAAA).', 'error')
+        return
+      }
+    }
+    setBusy(true)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${idSalarie}/doc-rh/preview-pdf`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            id_doc_rh: selectedDoc.id_doc_rh,
+            date_avenant: dateAvenant,
+          }),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      // Recupere le filename depuis Content-Disposition
+      const cd = r.headers.get('Content-Disposition') || ''
+      const m = cd.match(/filename="?([^";]+)"?/)
+      const filename = m ? decodeURIComponent(m[1]) : 'export.pdf'
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      // Telecharge ET ouvre en aperçu
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 5000)
+      showToast('PDF généré.', 'success')
+    } catch (e) {
+      showToast(`Échec génération PDF : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
