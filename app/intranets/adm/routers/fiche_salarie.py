@@ -555,23 +555,17 @@ def post_doc_rh_generate_cttw(
 ):
     """Genere le contrat de travail (DOCX -> PDF) + cree 3 records :
     salarie_doc_rh, tk_demande_ctt_w, tk_liste (ticket type 4 RH)."""
-    print(f"[generate-cttw] route entree salarie={id_salarie} doc={payload.id_doc_rh!r} op={user.id_salarie}", flush=True)
     try:
-        res = doc_rh_gen_svc.generate_cttw(
+        return doc_rh_gen_svc.generate_cttw(
             id_salarie=id_salarie,
             id_doc_rh=int(payload.id_doc_rh or 0),
             op_id=user.id_salarie,
             date_avenant=payload.date_avenant,
         )
-        print(f"[generate-cttw] route sortie OK : {res}", flush=True)
-        return res
     except ValueError as e:
-        print(f"[generate-cttw] ValueError : {e}", flush=True)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"[generate-cttw] EXCEPTION : {type(e).__name__}: {e}", flush=True)
         traceback.print_exc(file=sys.stderr)
-        traceback.print_exc()  # stdout aussi
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 

@@ -332,8 +332,6 @@ def generate_cttw(
     Retourne {ok, id_ticket, id_tk_demande_ctt_w, id_salarie_doc_rh,
               pdf_url, id_da, type_doc_lib}.
     """
-    tag = f"[gen-cttw salarie={id_salarie} doc={id_doc_rh}]"
-    print(f"{tag} START", flush=True)
     from docx import Document  # noqa: PLC0415 -- lazy
 
     # 1. Charger le modele
@@ -351,7 +349,6 @@ def generate_cttw(
         raise ValueError("Le modele de doc RH n'a pas de contenu DOCX.")
     titre_doc = _str(model.get("titre"))
     id_type_doc = _int(model.get("id_type_doc"))
-    print(f"{tag} modele charge titre={titre_doc!r} docx={len(docx_raw)} bytes", flush=True)
 
     # 2. Donnees salarie + societe
     data = _load_salarie(int(id_salarie))
@@ -458,8 +455,6 @@ def generate_cttw(
     doc.save(docx_out)
     docx_bytes = docx_out.getvalue()
 
-    print(f"{tag} DOCX construit ({len(docx_bytes)} bytes)", flush=True)
-
     # 9. Creer pgt_salarie_doc_rh (suivi d'edition)
     id_salarie_doc_rh = _new_id()
     db_rh.query(
@@ -476,8 +471,6 @@ def generate_cttw(
             int(op_id),
         ),
     )
-
-    print(f"{tag} salarie_doc_rh insere (id={id_salarie_doc_rh})", flush=True)
 
     # 10. Creer pgt_tk_demande_ctt_w (contenu = DOCX bytes)
     id_demande = _new_id()
@@ -506,8 +499,6 @@ def generate_cttw(
         ),
     )
 
-    print(f"{tag} tk_demande_ctt_w insere (id_demande={id_demande}, id_ticket={id_ticket})", flush=True)
-
     # 11. Creer pgt_tk_liste (ticket type 4 = demande contrat W, service RH)
     db_t = get_pg_connection("ticket")
     db_t.query(
@@ -521,24 +512,19 @@ def generate_cttw(
         (id_ticket, int(op_id), id_da, int(op_id)),
     )
 
-    print(f"{tag} tk_liste insere", flush=True)
-
     # 12. Conversion DOCX -> PDF
     pdf_bytes = _docx_to_pdf(docx_bytes)
-    print(f"{tag} PDF genere ({len(pdf_bytes)} bytes)", flush=True)
 
     # 13. Upload FTP TempCttw/ (servi par IIS interne sous interne.omaya.fr/TempCttw/)
     pdf_name = f"{id_ticket}-cttW.pdf"
     ftp_path = os.getenv("FTP_TEMPCTTW_PATH", "/OMAYA/TempCttw")
     try:
         ftp_upload(ftp_path, pdf_name, pdf_bytes)
-        print(f"{tag} FTP upload OK -> {ftp_path}/{pdf_name}", flush=True)
-    except Exception as e:
+    except Exception:
         # On ne fait pas echouer la generation pour un soucis FTP : le
         # PDF est deja en base via pgt_tk_demande_ctt_w.contenu.
         import sys, traceback
         traceback.print_exc(file=sys.stderr)
-        print(f"{tag} FTP echec : {type(e).__name__}: {e} (path={ftp_path})", flush=True)
 
     return {
         "ok": True,
