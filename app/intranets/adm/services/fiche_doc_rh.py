@@ -132,6 +132,102 @@ def soft_delete_doc_rh(id_salarie_doc_rh: int, op_id: int) -> dict:
     return {"ok": True}
 
 
+def list_types_produit_fdv() -> list[dict]:
+    """Combo 'Type Produit' de la popup nouveau doc RH.
+
+    Filtre WinDev : TypeProduit.Type LIKE '%FDV%' (force de vente).
+    """
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_type_produit, lib
+           FROM rh.pgt_type_produit
+           WHERE type LIKE '%FDV%'
+             AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+           ORDER BY lib ASC NULLS LAST"""
+    )
+    return [
+        {
+            "id_type_produit": str(r.get("id_type_produit") or ""),
+            "lib": _str(r.get("lib")),
+        }
+        for r in rows
+    ]
+
+
+def get_type_produit_salarie(id_salarie: int) -> str:
+    """Recupere le type produit par defaut du salarie via son organigramme
+    courant (cf. WinDev ReqOrgaCourantetParentByVendeur)."""
+    db = get_pg_connection("rh")
+    row = db.query_one(
+        """SELECT o.id_type_produit
+           FROM rh.pgt_salarie_organigramme so
+           LEFT JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+           WHERE so.id_salarie = ?
+             AND so.modif_elem NOT LIKE '%suppr%'
+             AND COALESCE(so.aff_actif, FALSE) = TRUE
+           ORDER BY so.date_debut DESC NULLS LAST
+           LIMIT 1""",
+        (int(id_salarie),),
+    )
+    return str(row.get("id_type_produit") or "") if row else ""
+
+
+def list_docs_disponibles(id_salarie: int, id_type_produit: int) -> list[dict]:
+    """Liste des modeles de docs RH disponibles pour ce salarie + type produit.
+
+    Transposition WinDev Table_ReqListeDocRH_ByProdBySte :
+      societe.IdSte = docRH.IdSte
+      AND docRH.IdSte IN (salarie.IdSte, 0)   # 0 = tous
+      AND docRH.IDTypeProduit = ?
+      AND docRH.IDTypeDoc <> 12               # exclu type 12
+      AND docRH.DocActif = TRUE
+      AND docRH.ModifElem <> 'suppr'
+      ORDER BY IdSte DESC
+    """
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT
+              dr.id_doc_rh, dr.id_ste, dr.titre, dr.info_cpl,
+              dr.id_type_produit, dr.prioritaire,
+              dr.id_type_doc,
+              drt.lib_type,
+              soc.rs_interne
+           FROM rh.pgt_doc_rh dr
+           LEFT JOIN rh.pgt_societe soc ON soc.id_ste = dr.id_ste
+           LEFT JOIN rh.pgt_doc_rhtype drt ON drt.id_type_doc = dr.id_type_doc
+           WHERE dr.modif_elem NOT LIKE '%suppr%'
+             AND COALESCE(dr.doc_actif, FALSE) = TRUE
+             AND (dr.id_ste = ? OR dr.id_ste = 0)
+             AND dr.id_type_produit = ?
+             AND dr.id_type_doc <> 12
+           ORDER BY dr.id_ste DESC, dr.titre ASC""",
+        (_get_id_ste_salarie(id_salarie), int(id_type_produit)),
+    )
+    return [
+        {
+            "id_doc_rh": str(r.get("id_doc_rh") or ""),
+            "id_ste": str(r.get("id_ste") or ""),
+            "rs_interne": _str(r.get("rs_interne")) or ("Tous" if not r.get("id_ste") else ""),
+            "id_type_doc": str(r.get("id_type_doc") or ""),
+            "type_doc_lib": _str(r.get("lib_type")),
+            "titre": _str(r.get("titre")),
+            "info_cpl": _str(r.get("info_cpl")),
+            "prioritaire": bool(r.get("prioritaire")),
+        }
+        for r in rows
+    ]
+
+
+def _get_id_ste_salarie(id_salarie: int) -> int:
+    """Recupere id_ste du salarie via son embauche."""
+    db = get_pg_connection("rh")
+    row = db.query_one(
+        "SELECT id_ste FROM rh.pgt_salarie_embauche WHERE id_salarie = ?",
+        (int(id_salarie),),
+    )
+    return _int(row.get("id_ste")) if row else 0
+
+
 def find_ctt_edite_url(id_salarie_doc_rh: int) -> dict:
     """Bouton 'Voir le Ctt edite' : retourne l'URL du PDF si un ticket
     TK_DemandeCttW est associe a ce doc.

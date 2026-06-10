@@ -529,3 +529,38 @@ def delete_doc_rh(
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/doc-rh/types-produit")
+def get_doc_rh_types_produit(user: UserToken = Depends(get_current_user)):
+    """Liste des types produits FDV pour la combo de la popup nouveau doc."""
+    try:
+        return {"items": doc_rh_svc.list_types_produit_fdv()}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/doc-rh/docs-disponibles")
+def get_doc_rh_docs_disponibles(
+    id_salarie: int = Path(...),
+    id_type_produit: int = Query(0, description="0 = type produit par defaut du salarie"),
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste des modeles de docs RH dispos pour ce salarie + type produit.
+
+    Si id_type_produit=0, deduit le type produit de l'organigramme actif du salarie.
+    Retourne aussi le default_id_type_produit pour pre-selection cote front.
+    """
+    try:
+        default_tp = doc_rh_svc.get_type_produit_salarie(id_salarie)
+        effective_tp = int(id_type_produit) if id_type_produit else int(default_tp or 0)
+        docs = doc_rh_svc.list_docs_disponibles(id_salarie, effective_tp) if effective_tp else []
+        return {
+            "default_id_type_produit": default_tp,
+            "id_type_produit": str(effective_tp),
+            "items": docs,
+        }
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

@@ -17,6 +17,7 @@ import { CheckSquare, ExternalLink, Loader2, Plus, Trash2 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import NewDocRHModal from './NewDocRHModal'
 
 interface DocRHItem {
   id_salarie_doc_rh: string
@@ -45,6 +46,7 @@ export default function DocRHTab({ idSalarie }: Props) {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [newOpen, setNewOpen] = useState(false)
 
   const reload = useCallback(async () => {
     if (!idSalarie) return
@@ -77,7 +79,7 @@ export default function DocRHTab({ idSalarie }: Props) {
   )
 
   const handleNouveau = () => {
-    showToast('Fenêtre "Nouveau document" à brancher (code WinDev en attente).', 'info')
+    setNewOpen(true)
   }
 
   const handleSupprimer = async () => {
@@ -244,6 +246,17 @@ export default function DocRHTab({ idSalarie }: Props) {
           })}
         </div>
       </div>
+
+      {newOpen && (
+        <NewDocRHModal
+          idSalarie={idSalarie}
+          onClose={() => setNewOpen(false)}
+          onCreated={() => {
+            setNewOpen(false)
+            void reload()
+          }}
+        />
+      )}
     </div>
   )
 }
