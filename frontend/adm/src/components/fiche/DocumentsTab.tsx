@@ -14,7 +14,7 @@
  * l'URL HTTP dans un nouvel onglet).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Briefcase,
   ChartLine,

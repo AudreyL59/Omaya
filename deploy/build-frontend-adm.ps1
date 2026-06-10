@@ -18,7 +18,16 @@ try {
     npm ci
 
     Write-Host "Build production..." -ForegroundColor Cyan
+    # Wipe l'ancien dist pour eviter de deployer un build precedent si
+    # npm run build echoue silencieusement (PS5 ne propage pas l'exit
+    # code de npm par defaut).
+    if (Test-Path "$FrontendDir\dist") {
+        Remove-Item -Recurse -Force "$FrontendDir\dist"
+    }
     npm run build
+    if ($LASTEXITCODE -ne 0) {
+        throw "Build echoue : npm run build exit code $LASTEXITCODE"
+    }
     if (-not (Test-Path "$FrontendDir\dist\index.html")) {
         throw "Build echoue : dist\index.html introuvable"
     }
