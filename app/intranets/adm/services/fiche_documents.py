@@ -106,13 +106,26 @@ def list_files(id_salarie: int, sous_rep_key: str = "internes") -> dict:
 
         entries: list[tuple] = []
         try:
-            # MLSD donne directement taille + date
+            # MLSD donne directement taille + date + type
             entries = list(ftp.mlsd())
         except Exception:
-            # Fallback NLST + SIZE
+            # Fallback LIST : parse format Unix 'drwxr-xr-x ... nom'
+            # ou 'MM-DD-YY HH:MMAM <DIR> nom' (IIS Windows). Garde
+            # uniquement les fichiers (pas les <DIR>).
             try:
-                noms = ftp.nlst()
-                for nom in noms:
+                lines: list[str] = []
+                ftp.retrlines("LIST", lines.append)
+                for line in lines:
+                    parts = line.split(maxsplit=8)
+                    if not parts:
+                        continue
+                    # Unix : drwx... ou -rw...
+                    if parts[0].startswith("d"):
+                        continue  # dossier
+                    # Windows IIS : 'MM-DD-YY HH:MMAM <DIR> name'
+                    if "<DIR>" in line:
+                        continue
+                    nom = parts[-1] if parts else ""
                     if nom in (".", ".."):
                         continue
                     size = 0
@@ -126,7 +139,8 @@ def list_files(id_salarie: int, sous_rep_key: str = "internes") -> dict:
 
         for entry in entries:
             name, facts = entry
-            if name in (".", "..") or facts.get("type") == "dir":
+            # MLSD : on garde STRICTEMENT type='file' (rejette dir/cdir/pdir).
+            if name in (".", "..") or facts.get("type", "file") != "file":
                 continue
             info = _parse_mlsd_entry(entry)
             nom = info["nom"]
