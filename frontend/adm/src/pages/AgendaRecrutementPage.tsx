@@ -172,9 +172,10 @@ export default function AgendaRecrutementPage() {
       { headers: { Authorization: `Bearer ${getToken()}` } }
     )
       .then((r) => r.json())
-      .then((data: AgendaRDV[]) => {
-        setRdvs(data || [])
-        if (data && data.length > 0 && expanded === null) setExpanded(data[0].id_evenement)
+      .then((data) => {
+        const list = Array.isArray(data) ? (data as AgendaRDV[]) : []
+        setRdvs(list)
+        if (list.length > 0 && expanded === null) setExpanded(list[0].id_evenement)
       })
       .catch(() => setRdvs([]))
       .finally(() => setLoading(false))

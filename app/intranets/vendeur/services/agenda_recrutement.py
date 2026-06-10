@@ -9,6 +9,7 @@ Jointures sur CvSuivi + cvtheque + cvposte pour les infos candidat.
 import base64
 import struct
 from datetime import datetime
+from typing import Any
 from urllib.parse import quote
 
 from app.core.config import DOCS_URL
@@ -425,6 +426,19 @@ def convoquer_jo(
     }
 
 
+def _dt_iso(v: Any) -> str:
+    """Datetime / date / str -> 'YYYY-MM-DD HH:MM:SS' (ou 'YYYY-MM-DD')."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%Y-%m-%d %H:%M:%S")
+    s = str(v)
+    # ISO complete deja
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return s[:19]
+    return s
+
+
 def _build_rdv_list(rows: list, communes_map: dict) -> list[dict]:
     result = []
     for r in rows:
@@ -436,8 +450,8 @@ def _build_rdv_list(rows: list, communes_map: dict) -> list[dict]:
         statut_modif = id_cv_statut <= 6
         result.append({
             "id_evenement": str(_to_int(r.get("id_agenda_evenement"))),
-            "date_debut": r.get("date_debut") or "",
-            "date_fin": r.get("date_fin") or "",
+            "date_debut": _dt_iso(r.get("date_debut")),
+            "date_fin": _dt_iso(r.get("date_fin")),
             "titre": r.get("titre") or "",
             "contenu": r.get("contenu") or "",
             "id_categorie": _to_int(r.get("id_categorie")),
