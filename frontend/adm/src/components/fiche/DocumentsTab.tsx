@@ -14,7 +14,7 @@
  * l'URL HTTP dans un nouvel onglet).
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Briefcase,
   ChartLine,
@@ -32,7 +32,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
 
 type SousRep = 'internes' | 'espace_salarie' | 'adf' | 'bilan_evo' | 'factures'
@@ -79,6 +79,9 @@ export default function DocumentsTab({ idSalarie }: Props) {
   const [data, setData] = useState<DocListResp | null>(null)
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const reload = useCallback(
     async (sr: SousRep) => {
@@ -133,6 +136,116 @@ export default function DocumentsTab({ idSalarie }: Props) {
     window.open(f.url, '_blank', 'noopener,noreferrer')
   }
 
+  const handleAjouter = () => fileInputRef.current?.click()
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files
+    if (!fileList || fileList.length === 0) return
+    setUploading(true)
+    let okCount = 0
+    let lastErr = ''
+    try {
+      for (const file of Array.from(fileList)) {
+        const fd = new FormData()
+        fd.append('file', file)
+        const r = await fetch(
+          `/api/adm/fiche-salarie/${idSalarie}/documents/upload?sous_rep=${current}`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}` },
+            body: fd,
+          },
+        )
+        if (r.ok) {
+          okCount++
+        } else {
+          const j = await r.json().catch(() => ({}))
+          lastErr = (j as { detail?: string }).detail || String(r.status)
+        }
+      }
+      if (okCount > 0) {
+        showToast(`${okCount} fichier(s) envoyé(s).`, 'success')
+        await reload(current)
+      }
+      if (lastErr) {
+        showToast(`Échec : ${lastErr}`, 'error')
+      }
+    } finally {
+      setUploading(false)
+      e.target.value = '' // reset pour permettre re-upload du meme fichier
+    }
+  }
+
+  const handleTelechargement = () => {
+    if (!someSelected) {
+      showToast('Sélectionner au moins un fichier.', 'info')
+      return
+    }
+    // Pour chaque fichier selectionne, declenche un download navigateur
+    let count = 0
+    for (const nom of selected) {
+      const f = files.find((x) => x.nom === nom)
+      if (!f) continue
+      const a = document.createElement('a')
+      a.href = f.url
+      a.download = f.nom
+      a.rel = 'noopener noreferrer'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      count++
+    }
+    if (count > 0) showToast(`Téléchargement de ${count} fichier(s).`, 'success')
+  }
+
+  const handleSuppression = async () => {
+    if (!someSelected) {
+      showToast('Sélectionner au moins un fichier.', 'info')
+      return
+    }
+    const list = Array.from(selected)
+    const message =
+      list.length === 1
+        ? `Voulez-vous supprimer le fichier "${list[0]}" ?`
+        : `Voulez-vous supprimer les ${list.length} fichiers sélectionnés ?`
+    const ok = await showConfirm({
+      title: 'Suppression',
+      message,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setDeleting(true)
+    let okCount = 0
+    let lastErr = ''
+    try {
+      for (const nom of list) {
+        const r = await fetch(
+          `/api/adm/fiche-salarie/${idSalarie}/documents?sous_rep=${current}&filename=${encodeURIComponent(nom)}`,
+          {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${getToken()}` },
+          },
+        )
+        if (r.ok) {
+          okCount++
+        } else {
+          const j = await r.json().catch(() => ({}))
+          lastErr = (j as { detail?: string }).detail || String(r.status)
+        }
+      }
+      if (okCount > 0) {
+        showToast(`${okCount} fichier(s) supprimé(s).`, 'success')
+        await reload(current)
+      }
+      if (lastErr) {
+        showToast(`Échec : ${lastErr}`, 'error')
+      }
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const placeholder = (label: string) => () =>
     showToast(`${label} : à brancher dans un prochain commit`, 'info')
 
@@ -168,20 +281,37 @@ export default function DocumentsTab({ idSalarie }: Props) {
         })}
       </div>
 
+      {/* Input file invisible pour Btn 'Ajouter' */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
-        <ToolBtn icon={Plus} label="Ajouter" onClick={placeholder('Ajouter')} primary />
+        <ToolBtn
+          icon={uploading ? Loader2 : Plus}
+          spin={uploading}
+          label="Ajouter"
+          onClick={handleAjouter}
+          disabled={uploading}
+          primary
+        />
         <ToolBtn
           icon={Upload}
           label="Téléchargement"
-          onClick={placeholder('Téléchargement')}
+          onClick={handleTelechargement}
           disabled={!someSelected}
         />
         <ToolBtn
-          icon={Trash2}
+          icon={deleting ? Loader2 : Trash2}
+          spin={deleting}
           label="Suppression"
-          onClick={placeholder('Suppression')}
-          disabled={!someSelected}
+          onClick={handleSuppression}
+          disabled={!someSelected || deleting}
           danger
         />
         <div className="flex-1" />
@@ -293,6 +423,7 @@ function ToolBtn({
   disabled,
   primary,
   danger,
+  spin,
 }: {
   icon: typeof Briefcase
   label: string
@@ -300,6 +431,7 @@ function ToolBtn({
   disabled?: boolean
   primary?: boolean
   danger?: boolean
+  spin?: boolean
 }) {
   const color = primary ? 'white' : danger ? '#B91C1C' : COLOR_PRIMARY
   const bg = primary ? COLOR_PRIMARY : 'white'
@@ -312,7 +444,7 @@ function ToolBtn({
       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border disabled:opacity-40"
       style={{ backgroundColor: bg, color, borderColor: border }}
     >
-      <Icon className="w-4 h-4" />
+      <Icon className={`w-4 h-4 ${spin ? 'animate-spin' : ''}`} />
       {label}
     </button>
   )

@@ -16,6 +16,8 @@ Les autres actions (upload/delete/mail/tk) viendront dans des commits dedies.
 from __future__ import annotations
 
 import ftplib
+import io
+import re
 from urllib.parse import quote
 
 from app.core.config import DOCS_URL, FTP_HOST, FTP_PASSWORD, FTP_USER
@@ -148,3 +150,104 @@ def list_files(id_salarie: int, sous_rep_key: str = "internes") -> dict:
             pass
 
     return out_base
+
+
+# --- Sanitize + write actions --------------------------------------------
+
+_INVALID_NAME_RE = re.compile(r"[<>:\"/\\|?*\x00-\x1f]")
+
+
+def _sanitize_filename(name: str) -> str:
+    """Nettoie un nom de fichier (transposition WinDev
+    ccSansPonctuationNiEspace+ccSansAccent+ccSansEspace de Btn '+').
+
+    On retire seulement les caracteres interdits pour le FTP/IIS,
+    sans tout ecraser (l'operateur garde un nom lisible)."""
+    base = (name or "").replace("/", "_").replace("\\", "_").strip()
+    base = _INVALID_NAME_RE.sub("_", base)
+    return base[:200] or "sans_nom"
+
+
+def _resolve_rep_ftp(id_salarie: int, sous_rep_key: str) -> tuple[str, str]:
+    """Retourne (rep_ftp_absolu, sous_rep_lib).
+
+    rep_ftp_absolu : '/OMAYA/gestionRH/<id>[/<sous>]'
+    sous_rep_lib : '' | 'Fiches_Salaires' | ...
+    """
+    sous_rep = SOUS_REPS.get(sous_rep_key, "")
+    base_rel = f"gestionRH/{int(id_salarie)}"
+    if sous_rep:
+        return (f"/OMAYA/{base_rel}/{sous_rep}", sous_rep)
+    return (f"/OMAYA/{base_rel}", "")
+
+
+def _ftp_makedirs(ftp: ftplib.FTP, abs_path: str) -> None:
+    """Crée l'arbo si necessaire (best effort)."""
+    parts = [p for p in abs_path.split("/") if p]
+    cur = "/"
+    for p in parts:
+        cur = (cur.rstrip("/") + "/" + p)
+        try:
+            ftp.mkd(cur)
+        except ftplib.error_perm:
+            pass  # existe deja
+
+
+def upload_file(id_salarie: int, sous_rep_key: str, filename: str, content: bytes) -> dict:
+    """STOR le fichier sur le FTP (transposition Btn '+').
+
+    Retourne {ok, filename (final, sanitize), path}.
+    """
+    if not content:
+        return {"ok": False, "error": "Contenu vide"}
+
+    safe_name = _sanitize_filename(filename)
+    rep_ftp, _sous = _resolve_rep_ftp(id_salarie, sous_rep_key)
+
+    ftp = _ftp_connect()
+    if not ftp:
+        return {"ok": False, "error": "Connexion FTP impossible"}
+
+    try:
+        try:
+            ftp.cwd(rep_ftp)
+        except ftplib.error_perm:
+            _ftp_makedirs(ftp, rep_ftp)
+            ftp.cwd(rep_ftp)
+        ftp.storbinary(f"STOR {safe_name}", io.BytesIO(content))
+        return {"ok": True, "filename": safe_name, "path": f"{rep_ftp}/{safe_name}"}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass
+
+
+def delete_file(id_salarie: int, sous_rep_key: str, filename: str) -> dict:
+    """DELE le fichier sur le FTP (transposition Btn 'Suppression')."""
+    safe_name = _sanitize_filename(filename)
+    rep_ftp, _ = _resolve_rep_ftp(id_salarie, sous_rep_key)
+
+    ftp = _ftp_connect()
+    if not ftp:
+        return {"ok": False, "error": "Connexion FTP impossible"}
+
+    try:
+        try:
+            ftp.cwd(rep_ftp)
+        except ftplib.error_perm:
+            return {"ok": False, "error": "Dossier inexistant"}
+        try:
+            ftp.delete(safe_name)
+        except ftplib.error_perm as e:
+            return {"ok": False, "error": f"Suppression refusee : {e}"}
+        return {"ok": True, "filename": safe_name}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass

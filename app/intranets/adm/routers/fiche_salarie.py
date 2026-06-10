@@ -4,7 +4,7 @@ import sys
 import traceback
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -642,6 +642,49 @@ def get_documents(
     """Liste les fichiers du salarie sur le FTP (/OMAYA/gestionRH/{id}/<sous>)."""
     try:
         return documents_svc.list_files(id_salarie, sous_rep)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/documents/upload")
+async def post_documents_upload(
+    id_salarie: int = Path(...),
+    sous_rep: str = Query("internes"),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Upload un fichier sur le FTP (transposition WinDev Btn '+')."""
+    try:
+        content = await file.read()
+        res = documents_svc.upload_file(
+            id_salarie, sous_rep, file.filename or "fichier", content
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Echec upload"))
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/{id_salarie}/documents")
+def delete_document(
+    id_salarie: int = Path(...),
+    sous_rep: str = Query("internes"),
+    filename: str = Query(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Supprime un fichier sur le FTP (transposition WinDev Btn 'Suppression')."""
+    try:
+        res = documents_svc.delete_file(id_salarie, sous_rep, filename)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Echec suppression"))
+        return res
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
