@@ -12,6 +12,7 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.services import fiche_organigramme as orga_svc
+from app.intranets.adm.services import fiche_suivi_adm as suivi_adm_svc
 from app.intranets.adm.schemas.fiche_salarie import (
     FicheCoordonnees,
     FicheEmbauche,
@@ -430,6 +431,46 @@ def delete_rattachement(
     """Soft delete (modif_elem='suppr')."""
     try:
         return orga_svc.soft_delete_rattachement(id_salarie_organigramme, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet Suivi ADM ----------------------------------------------------
+
+
+class AddSuiviAdmPayload(BaseModel):
+    description: str
+
+
+@router.get("/{id_salarie}/suivi-adm")
+def get_suivi_adm(
+    id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)
+):
+    """Liste des memos deposes sur le salarie, triee par date desc."""
+    try:
+        return {"items": suivi_adm_svc.load_suivi_adm(id_salarie)}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/suivi-adm")
+def post_suivi_adm(
+    payload: AddSuiviAdmPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Ajoute un nouveau memo."""
+    try:
+        res = suivi_adm_svc.add_suivi_adm(
+            id_salarie, payload.description, user.id_salarie
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Erreur"))
+        return res
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
