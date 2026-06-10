@@ -40,13 +40,13 @@ interface Props {
   onCreated: () => void
 }
 
-export default function NewDocRHModal({ idSalarie, onClose, onCreated: _onCreated }: Props) {
+export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) {
   const [typesProduit, setTypesProduit] = useState<TypeProduit[]>([])
   const [idTypeProduit, setIdTypeProduit] = useState<string>('')
   const [docs, setDocs] = useState<DocDispo[]>([])
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-  const busy = false
+  const [busy, setBusy] = useState(false)
 
   // Charge la liste des types produit + le default du salarie
   useEffect(() => {
@@ -108,16 +108,62 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated: _onCreate
     [docs, selected],
   )
 
-  const handleTicketOmaya = () => {
+  const handleTicketOmaya = async () => {
     if (!selectedDoc) {
       showToast('Sélectionner un document.', 'info')
       return
     }
-    // TODO : POST /api/adm/fiche-salarie/{id}/doc-rh/generate-cttw
-    showToast(
-      `Génération "Ticket Omaya" à brancher (commit suivant). Doc sélectionné : ${selectedDoc.titre}`,
-      'info',
-    )
+    // Cas AVENANT : demande la date d'avenant a l'operateur
+    let dateAvenant = ''
+    if (/AVENANT/i.test(selectedDoc.titre)) {
+      const raw = window.prompt(
+        "Merci de saisir la date de l'avenant (JJ/MM/AAAA) :",
+        '',
+      )
+      if (!raw) return // annule
+      // accepte JJ/MM/AAAA ou ISO
+      const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+      if (m) {
+        dateAvenant = `${m[3]}-${m[2]}-${m[1]}`
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        dateAvenant = raw
+      } else {
+        showToast('Format de date invalide (attendu JJ/MM/AAAA).', 'error')
+        return
+      }
+    }
+    setBusy(true)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${idSalarie}/doc-rh/generate-cttw`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            id_doc_rh: selectedDoc.id_doc_rh,
+            date_avenant: dateAvenant,
+          }),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const j = (await r.json()) as { id_ticket: string; pdf_url: string }
+      showToast(`Contrat généré (ticket ${j.id_ticket}).`, 'success')
+      // ouvre le PDF dans un nouvel onglet pour controle
+      if (j.pdf_url) {
+        window.open(j.pdf_url, '_blank', 'noopener,noreferrer')
+      }
+      onCreated()
+    } catch (e) {
+      showToast(`Échec génération : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handleExportPDF = () => {

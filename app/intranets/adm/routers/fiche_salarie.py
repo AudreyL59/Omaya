@@ -12,6 +12,7 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
+from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_organigramme as orga_svc
 from app.intranets.adm.services import fiche_suivi_adm as suivi_adm_svc
 from app.intranets.adm.schemas.fiche_salarie import (
@@ -536,6 +537,33 @@ def get_doc_rh_types_produit(user: UserToken = Depends(get_current_user)):
     """Liste des types produits FDV pour la combo de la popup nouveau doc."""
     try:
         return {"items": doc_rh_svc.list_types_produit_fdv()}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+class GenerateCttwPayload(BaseModel):
+    id_doc_rh: str
+    date_avenant: str = ""  # ISO YYYY-MM-DD, requis si modele = AVENANT
+
+
+@router.post("/{id_salarie}/doc-rh/generate-cttw")
+def post_doc_rh_generate_cttw(
+    payload: GenerateCttwPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Genere le contrat de travail (DOCX -> PDF) + cree 3 records :
+    salarie_doc_rh, tk_demande_ctt_w, tk_liste (ticket type 4 RH)."""
+    try:
+        return doc_rh_gen_svc.generate_cttw(
+            id_salarie=id_salarie,
+            id_doc_rh=int(payload.id_doc_rh or 0),
+            op_id=user.id_salarie,
+            date_avenant=payload.date_avenant,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
