@@ -29,15 +29,12 @@ from app.core.config import (
     FTP_PASSWORD,
     FTP_USER,
 )
-from app.core.database import get_connection
 from app.core.database.pg import get_pg_connection
 
 from ..service import (
     _clean_id,
-    _now_windev,
     _to_int,
     date_only_to_iso,
-    iso_to_date_only,
     load_salaries_minimal,
 )
 
@@ -124,15 +121,14 @@ def _salarie_header(id_salarie: int) -> dict:
 
 
 def _info_cplt(id_ticket: int) -> str:
-    """Mémo texte InfoCplt (lecture isolée — HFSQL : helper partagé
-    avec save (add_obser concat read-modify-write))."""
+    """Mémo texte info_cplt (PG)."""
     try:
-        r = get_connection("ticket_rh").query_one(
-            "SELECT IDTK_Liste, InfoCplt FROM TK_DemandeMutuelle "
-            "WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_rh").query_one(
+            "SELECT id_tk_liste, info_cplt FROM pgt_tk_demande_mutuelle "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
-        return ((r.get("InfoCplt") if r else "") or "").strip()
+        return ((r.get("info_cplt") if r else "") or "").strip()
     except Exception:
         return ""
 
@@ -176,16 +172,16 @@ def _pieces(id_ticket: int) -> list[dict]:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        "SELECT IDTK_Liste, IDTK_DemandeMutuelle, IDSalarie, "
-        "DemandeAffiliation, DemandeAffiliationDate FROM TK_DemandeMutuelle "
-        "WHERE IDTK_Liste = ?",
+        "SELECT id_tk_liste, id_tk_demande_mutuelle, id_salarie, "
+        "demande_affiliation, demande_affiliation_date FROM pgt_tk_demande_mutuelle "
+        "WHERE id_tk_liste = ?",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
+    id_salarie = _clean_id(_to_int(r.get("id_salarie")))
     header = _salarie_header(id_salarie)
     return {
         "found": True,
@@ -195,9 +191,9 @@ def load(id_ticket: int) -> dict:
         "prenom": header.get("prenom", ""),
         "en_activite": header.get("en_activite", False),
         "date_debut": header.get("date_debut", ""),
-        "demande_affiliation": bool(r.get("DemandeAffiliation")),
+        "demande_affiliation": bool(r.get("demande_affiliation")),
         "demande_affiliation_date": date_only_to_iso(
-            r.get("DemandeAffiliationDate")
+            r.get("demande_affiliation_date")
         ),
         "info_cplt": _info_cplt(id_ticket),
         "pieces": _pieces(id_ticket),
@@ -206,26 +202,25 @@ def load(id_ticket: int) -> dict:
 
 def save(id_ticket: int, payload: dict, user_id: int) -> dict:
     action = str(payload.get("action") or "")
-    now = _now_windev()
-    rh = get_connection("ticket_rh")
+    rh = get_pg_connection("ticket_rh")
 
     # --- Enregistrer : demande affiliation + date ---
     if action == "enregistrer":
-        affiliation = 1 if payload.get("demande_affiliation") else 0
-        d_aff = iso_to_date_only(payload.get("demande_affiliation_date"))
+        affiliation = bool(payload.get("demande_affiliation"))
+        d_aff = payload.get("demande_affiliation_date") or None
         try:
             rh.query(
-                """UPDATE TK_DemandeMutuelle SET DemandeAffiliation = ?,
-                    DemandeAffiliationDate = ?, ModifDate = ?, ModifOp = ?,
-                    ModifElem = 'new'
-                WHERE IDTK_Liste = ?""",
-                (affiliation, d_aff, now, int(user_id), int(id_ticket)),
+                """UPDATE pgt_tk_demande_mutuelle SET demande_affiliation = ?,
+                    demande_affiliation_date = ?, modif_date = NOW(),
+                    modif_op = ?, modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+                (affiliation, d_aff, int(user_id), int(id_ticket)),
             )
         except Exception as e:
             return {"ok": False, "error": f"enregistrer : {e}"}
         return {"ok": True}
 
-    # --- Ajouter une observation (journal InfoCplt horodaté) ---
+    # --- Ajouter une observation (journal info_cplt horodaté) ---
     if action == "add_obser":
         obser = str(payload.get("observation") or "").strip()
         if not obser:
@@ -240,10 +235,10 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         nouveau = (ancien + "\r\n" + ligne) if ancien else ligne
         try:
             rh.query(
-                """UPDATE TK_DemandeMutuelle SET InfoCplt = ?,
-                    ModifDate = ?, ModifOp = ?, ModifElem = 'new'
-                WHERE IDTK_Liste = ?""",
-                (nouveau, now, int(user_id), int(id_ticket)),
+                """UPDATE pgt_tk_demande_mutuelle SET info_cplt = ?,
+                    modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+                (nouveau, int(user_id), int(id_ticket)),
             )
         except Exception as e:
             return {"ok": False, "error": f"add_obser : {e}"}

@@ -24,7 +24,6 @@ from app.core.config import (
     FTP_PASSWORD,
     FTP_USER,
 )
-from app.core.database import get_connection
 from app.core.database.pg import get_pg_connection
 
 from ..service import _clean_id, _to_int
@@ -48,13 +47,13 @@ def _casier_judiciaire(id_salarie: int) -> bool:
 
 
 def _documents(id_ticket: int) -> list[dict]:
-    """ReqListeDocàFournir : tk_demandecttw_doc (base ticket_rh)."""
+    """Liste des documents a fournir (pgt_tk_demandecttw_doc, base ticket_rh PG)."""
     try:
-        db = get_connection("ticket_rh")
+        db = get_pg_connection("ticket_rh")
         rows = db.query(
-            """SELECT IDTk_DemandeCttW_Doc, DocPresent, TypeDoc, NomFichier
-            FROM Tk_DemandeCttW_Doc
-            WHERE ModifElem NOT LIKE '%suppr%' AND IDTK_Liste = ?""",
+            """SELECT id_tk_demande_ctt_w_doc, doc_present, type_doc, nom_fichier
+            FROM pgt_tk_demandecttw_doc
+            WHERE modif_elem NOT LIKE '%suppr%' AND id_tk_liste = ?""",
             (int(id_ticket),),
         )
     except Exception:
@@ -62,32 +61,32 @@ def _documents(id_ticket: int) -> list[dict]:
     out = []
     for r in rows or []:
         out.append({
-            "id": str(_clean_id(_to_int(r.get("IDTk_DemandeCttW_Doc")))),
-            "present": bool(r.get("DocPresent")),
-            "type_doc": (r.get("TypeDoc") or "").strip(),
-            "nom_fichier": (r.get("NomFichier") or "").strip(),
+            "id": str(_clean_id(_to_int(r.get("id_tk_demande_ctt_w_doc")))),
+            "present": bool(r.get("doc_present")),
+            "type_doc": (r.get("type_doc") or "").strip(),
+            "nom_fichier": (r.get("nom_fichier") or "").strip(),
         })
     return out
 
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        "SELECT IDTK_Liste, IDSalarie, TitreContrat, TypeCttW "
-        "FROM TK_DemandeCttW WHERE IDTK_Liste = ?",
+        "SELECT id_tk_liste, id_salarie, titre_contrat, type_ctt_w "
+        "FROM pgt_tk_demande_ctt_w WHERE id_tk_liste = ?",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
 
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
+    id_salarie = _clean_id(_to_int(r.get("id_salarie")))
     base = {
         "found": True,
         "id_salarie": str(id_salarie) if id_salarie else "",
-        "type_contrat": (r.get("TitreContrat") or "").strip(),
+        "type_contrat": (r.get("titre_contrat") or "").strip(),
         "casier_judiciaire": _casier_judiciaire(id_salarie),
         "documents": _documents(int(id_ticket)),
-        # Fen_SalariéDocRH non fournie (dépend du module Ajout salarié)
+        # Fen_SalariéDocRH branchee depuis fiche-salarie ADM
         "generer_disabled": True,
     }
     base.update(cttw._load_mutuelle(id_salarie))
@@ -127,13 +126,13 @@ def get_file(id_ticket: int, name: str) -> tuple[bytes, str]:
     Fen_AperçuFichier, TypeDoc, lienDoc+gestionRH/IDSalarie/NomFichier))."""
     if not name:
         raise FileNotFoundError("Nom de fichier manquant")
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        "SELECT IDTK_Liste, IDSalarie FROM TK_DemandeCttW "
-        "WHERE IDTK_Liste = ?",
+        "SELECT id_tk_liste, id_salarie FROM pgt_tk_demande_ctt_w "
+        "WHERE id_tk_liste = ?",
         (int(id_ticket),),
     )
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie"))) if r else 0
+    id_salarie = _clean_id(_to_int(r.get("id_salarie"))) if r else 0
     if not id_salarie:
         raise FileNotFoundError("Salarié introuvable")
     try:
