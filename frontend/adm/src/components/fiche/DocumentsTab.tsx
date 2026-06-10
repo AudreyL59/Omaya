@@ -181,21 +181,15 @@ export default function DocumentsTab({ idSalarie }: Props) {
       showToast('Sélectionner au moins un fichier.', 'info')
       return
     }
-    // Pour chaque fichier selectionne, declenche un download navigateur
+    // Ouvre chaque fichier dans un nouvel onglet (cohérent avec 'Voir le doc')
     let count = 0
     for (const nom of selected) {
       const f = files.find((x) => x.nom === nom)
       if (!f) continue
-      const a = document.createElement('a')
-      a.href = f.url
-      a.download = f.nom
-      a.rel = 'noopener noreferrer'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      window.open(f.url, '_blank', 'noopener,noreferrer')
       count++
     }
-    if (count > 0) showToast(`Téléchargement de ${count} fichier(s).`, 'success')
+    if (count > 0) showToast(`${count} fichier(s) ouvert(s).`, 'success')
   }
 
   const handleSuppression = async () => {
