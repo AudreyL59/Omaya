@@ -71,8 +71,9 @@ def send_email(
             )
         attachments.append((att.name, data))
 
-    # Expediteur par defaut = email du user connecte (cf. WinDev usersLogin)
-    expe = (payload.expediteur or user.email or "").strip()
+    # Expediteur par defaut = login du user connecte (cf. WinDev usersLogin,
+    # qui est l'email Omaya en pratique).
+    expe = (payload.expediteur or user.login or "").strip()
 
     try:
         ok = envoi_mail(
