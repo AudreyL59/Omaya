@@ -46,7 +46,8 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
   const [docs, setDocs] = useState<DocDispo[]>([])
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busyTicket, setBusyTicket] = useState(false)
+  const [busyExport, setBusyExport] = useState(false)
 
   // Charge la liste des types produit + le default du salarie
   useEffect(() => {
@@ -132,7 +133,7 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
         return
       }
     }
-    setBusy(true)
+    setBusyTicket(true)
     try {
       const r = await fetch(
         `/api/adm/fiche-salarie/${idSalarie}/doc-rh/generate-cttw`,
@@ -162,7 +163,7 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
     } catch (e) {
       showToast(`Échec génération : ${(e as Error).message}`, 'error')
     } finally {
-      setBusy(false)
+      setBusyTicket(false)
     }
   }
 
@@ -189,7 +190,7 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
         return
       }
     }
-    setBusy(true)
+    setBusyExport(true)
     try {
       const r = await fetch(
         `/api/adm/fiche-salarie/${idSalarie}/doc-rh/preview-pdf`,
@@ -225,7 +226,7 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
     } catch (e) {
       showToast(`Échec génération PDF : ${(e as Error).message}`, 'error')
     } finally {
-      setBusy(false)
+      setBusyExport(false)
     }
   }
 
@@ -291,21 +292,22 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
             <button
               type="button"
               onClick={handleTicketOmaya}
-              disabled={!selectedDoc || busy}
+              disabled={!selectedDoc || busyTicket || busyExport}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded text-white disabled:opacity-40"
               style={{ backgroundColor: COLOR_PRIMARY }}
             >
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ticket className="w-4 h-4" />}
+              {busyTicket ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ticket className="w-4 h-4" />}
               Ticket Omaya
             </button>
             <button
               type="button"
               onClick={handleExportPDF}
-              disabled={!selectedDoc || busy}
+              disabled={!selectedDoc || busyTicket || busyExport}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border disabled:opacity-40"
               style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
             >
-              <Send className="w-4 h-4" /> Export PDF
+              {busyExport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Export PDF
             </button>
           </div>
 
