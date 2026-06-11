@@ -1,11 +1,12 @@
 /**
- * Coche standard ADM : ✓ en vert foncé (#15803D) si active, vide sinon.
+ * Coche standard ADM : ✓ en couleur primaire (#17494E, teal foncé des
+ * boutons) si active, vide sinon.
  *
  * Utilise dans les tableaux des onglets de la fiche salarie ADM pour
  * uniformiser l'affichage des valeurs booleennes.
  */
 
-export const ADM_CHECK_COLOR = '#15803D'
+export const ADM_CHECK_COLOR = '#17494E'
 
 interface Props {
   active: boolean
