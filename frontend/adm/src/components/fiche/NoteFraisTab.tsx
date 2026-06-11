@@ -79,6 +79,7 @@ export default function NoteFraisTab({ idSalarie }: Props) {
   const [ajoutOpen, setAjoutOpen] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoUrl, setPhotoUrl] = useState<string>('')
+  const [photoVersion, setPhotoVersion] = useState(0)
   const photoInputRef = useRef<HTMLInputElement | null>(null)
 
   // Combo Types
@@ -120,6 +121,7 @@ export default function NoteFraisTab({ idSalarie }: Props) {
   }, [idSalarie, mois, annee])
 
   // Charge la photo en blob (impossible de mettre Authorization sur <img>).
+  // photoVersion force le refetch apres un upload sur la meme note.
   useEffect(() => {
     if (!edit || !edit.has_photo) {
       setPhotoUrl('')
@@ -141,7 +143,7 @@ export default function NoteFraisTab({ idSalarie }: Props) {
       cancelled = true
       if (objUrl) URL.revokeObjectURL(objUrl)
     }
-  }, [edit?.id_note_frais, edit?.has_photo])
+  }, [edit?.id_note_frais, edit?.has_photo, photoVersion])
 
   // Selection -> charge le detail
   const handleSelect = async (id: string) => {
@@ -270,11 +272,9 @@ export default function NoteFraisTab({ idSalarie }: Props) {
         throw new Error((j as { detail?: string })?.detail || String(r.status))
       }
       showToast('Photo enregistrée.', 'success')
-      // Force le useEffect a refetch (toggle has_photo)
-      setEdit((p) => (p ? { ...p, has_photo: false } : p))
-      window.setTimeout(() => {
-        setEdit((p) => (p ? { ...p, has_photo: true } : p))
-      }, 0)
+      setEdit((p) => (p ? { ...p, has_photo: true } : p))
+      // Force le useEffect a refetch meme si has_photo etait deja true.
+      setPhotoVersion((v) => v + 1)
       await reload()
     } catch (err) {
       showToast(`Échec upload : ${(err as Error).message}`, 'error')
