@@ -22,11 +22,78 @@ Etape 3 :
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from datetime import datetime
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+
+
+# --- Decodage RTF -> texte brut -------------------------------------------
+
+_RTF_HEAD = re.compile(r"^\s*\{?\\rtf", re.IGNORECASE)
+
+
+def _rtf_to_text(s: str) -> str:
+    """Convertit une description stockee en RTF -> texte brut.
+
+    Prefere striprtf si la lib est installee, sinon fallback regex
+    qui couvre la majorite des cas (\\par, \\'XX hex cp1252,
+    \\uNNN? unicode signe, suppression des commandes \\cmd, groupes
+    header fonttbl/colortbl/...)."""
+    if not s:
+        return ""
+    if not _RTF_HEAD.match(s):
+        return s.strip()
+    try:
+        from striprtf.striprtf import rtf_to_text  # type: ignore
+        return rtf_to_text(s).strip()
+    except Exception:
+        pass
+    # Fallback regex
+    out = s
+    # Groupes header a supprimer entierement (un seul niveau d'imbrication)
+    for tag in ("fonttbl", "colortbl", "stylesheet", "info", "generator",
+                "pict", "datastore", "themedata"):
+        out = re.sub(
+            r"\{\s*\\" + tag + r"[^{}]*(\{[^{}]*\})*\s*\}",
+            "",
+            out,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    # \'XX (hex en cp1252)
+    def _hex(m: re.Match) -> str:
+        try:
+            return bytes([int(m.group(1), 16)]).decode("cp1252", errors="replace")
+        except Exception:
+            return ""
+    out = re.sub(r"\\'([0-9a-fA-F]{2})", _hex, out)
+    # \uNNN? (codepoint signe 16 bits) - on consomme le caractere de
+    # fallback (souvent '?' ou un espace).
+    def _u(m: re.Match) -> str:
+        try:
+            code = int(m.group(1))
+            if code < 0:
+                code += 65536
+            return chr(code)
+        except Exception:
+            return ""
+    out = re.sub(r"\\u(-?\d+)\s?\??", _u, out)
+    # Sauts de ligne
+    out = re.sub(r"\\par[d]?\b", "\n", out)
+    out = re.sub(r"\\line\b", "\n", out)
+    out = re.sub(r"\\tab\b", "\t", out)
+    # Autres commandes : \mot ou \mot-NN
+    out = re.sub(r"\\\*?[a-zA-Z]+-?\d*\s?", "", out)
+    # Caracteres echappes \\, \{, \}
+    out = out.replace("\\\\", "\\").replace("\\{", "{").replace("\\}", "}")
+    # Reste des accolades
+    out = re.sub(r"[{}]", "", out)
+    # Compactage espaces
+    out = re.sub(r"[ \t]+", " ", out)
+    out = re.sub(r"\n[ \t]+", "\n", out)
+    return out.strip()
 
 
 def _str(v: Any) -> str:
@@ -76,7 +143,7 @@ def load_droits(id_salarie: int) -> list[dict]:
             "id_type_droit_acces": _int(r.get("id_type_droit_acces")),
             "lib_droit": _str(r.get("lib_droit")),
             "code_interne": _str(r.get("code_interne")),
-            "description": _str(r.get("description")),
+            "description": _rtf_to_text(_str(r.get("description"))),
             "adm": bool(r.get("adm")),
             "fdv": bool(r.get("fdv")),
             "categorie": _str(r.get("categorie")),
@@ -192,7 +259,7 @@ def list_droits_disponibles(
             "id_type_droit_acces": _int(r.get("id_type_droit_acces")),
             "lib_droit": _str(r.get("lib_droit")),
             "code_interne": _str(r.get("code_interne")),
-            "description": _str(r.get("description")),
+            "description": _rtf_to_text(_str(r.get("description"))),
             "categorie": _str(r.get("categorie")),
             "deja_attribue": _int(r.get("id_type_droit_acces")) in etat_map,
             "droit_actif": etat_map.get(_int(r.get("id_type_droit_acces")), False),
