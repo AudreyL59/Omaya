@@ -15,6 +15,7 @@ from app.intranets.adm.services import fiche_absences as absences_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_documents as documents_svc
+from app.intranets.adm.services import fiche_mutuelle as mutuelle_svc
 from app.intranets.adm.services import fiche_organigramme as orga_svc
 from app.intranets.adm.services import fiche_suivi_adm as suivi_adm_svc
 from app.intranets.adm.schemas.fiche_salarie import (
@@ -835,6 +836,50 @@ def put_absence(
             date_fin=payload.date_fin,
             op_id=user.id_salarie,
         )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 'Mutuelle' ---------------------------------------------------
+
+
+class SaveMutuellePayload(BaseModel):
+    adhesion: bool = False
+    adhesion_date: str = ""
+    id_mutuelle: int = 0
+    mutuelle_dossier: bool = False
+    mutuelle_att_ss: bool = False
+    mutuelle_rib: bool = False
+    mutuelle_doc_envoyes: bool = False
+    mutuelle_recep_certif: bool = False
+    mutuelle_pas_adhesion: bool = False
+    mutuelle_pas_adhesion_jusquau: str = ""
+    mutuelle_resilie: bool = False
+    mutuelle_resilie_date: str = ""
+
+
+@router.get("/{id_salarie}/mutuelle")
+def get_mutuelle(
+    id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)
+):
+    """Charge le formulaire mutuelle + combo + historique tickets."""
+    try:
+        return mutuelle_svc.load(id_salarie, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/mutuelle")
+def post_mutuelle(
+    payload: SaveMutuellePayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Enregistrer' : UPDATE pgt_salarie_mutuelle."""
+    try:
+        return mutuelle_svc.save(id_salarie, payload.model_dump(), user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

@@ -28,6 +28,7 @@ import EmbaucheTab, {
 import AbsencesTab from './fiche/AbsencesTab'
 import DocRHTab from './fiche/DocRHTab'
 import DocumentsTab from './fiche/DocumentsTab'
+import MutuelleTab from './fiche/MutuelleTab'
 import OrgaSuiviTab from './fiche/OrgaSuiviTab'
 import SuiviADMTab from './fiche/SuiviADMTab'
 
@@ -143,7 +144,7 @@ const MENU: MenuItem[] = [
   { key: 'contrat_travail', label: 'Contrat de travail',coded: true },
   { key: 'documents',       label: 'Documents',         coded: true },
   { key: 'absences',        label: 'Absences',          coded: true },
-  { key: 'mutuelle',        label: 'Mutuelle',          coded: false },
+  { key: 'mutuelle',        label: 'Mutuelle',          coded: true },
   { key: 'note_frais',      label: 'Note de frais',     coded: false },
   { key: 'droit_acces',     label: 'Accès Omaya',       coded: false },
   { key: 'declaratif',      label: 'Déclaratif',        coded: false },
@@ -299,6 +300,11 @@ export default function FicheSalarieModal({
                 <AbsencesTab idSalarie={idSalarie} />
               </div>
             )}
+            {activeTab === 'mutuelle' && (
+              <div className="p-5 h-full">
+                <MutuelleTab idSalarie={idSalarie} />
+              </div>
+            )}
             {activeTab !== 'identite' &&
               activeTab !== 'coordonnees' &&
               activeTab !== 'infos_embauche' &&
@@ -306,7 +312,8 @@ export default function FicheSalarieModal({
               activeTab !== 'suivi_adm' &&
               activeTab !== 'contrat_travail' &&
               activeTab !== 'documents' &&
-              activeTab !== 'absences' && (
+              activeTab !== 'absences' &&
+              activeTab !== 'mutuelle' && (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400 italic">
                   <div className="text-lg mb-2">
                     {MENU.find((m) => m.key === activeTab)?.label}
