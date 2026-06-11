@@ -199,6 +199,79 @@ def soft_delete_note(id_note_frais: int, op_id: int) -> dict:
     return {"ok": True}
 
 
+def _new_id() -> int:
+    """ID 8 octets timestamp (cf. WinDev idEntierDateHeureSys)."""
+    n = datetime.now()
+    return int(n.strftime("%Y%m%d%H%M%S") + f"{n.microsecond // 1000:03d}")
+
+
+def create_note(
+    *,
+    id_salarie: int,
+    id_note_frais_type: int,
+    date_iso: str,
+    description: str,
+    montant_ht: float,
+    montant_tva: float,
+    montant_ttc: float,
+    verifiee: bool,
+    photo_bytes: bytes | None,
+    op_id: int,
+) -> dict:
+    """INSERT d'une nouvelle note (cf. WinDev Fen_NoteFraisAjout).
+
+    periode_note = date(annee, mois, 1) deduite de date_iso (1er du mois
+    de la depense, pour que le filtre du tableau matche).
+    """
+    if not date_iso:
+        return {"ok": False, "error": "Date requise"}
+    try:
+        d = datetime.fromisoformat(date_iso).date()
+    except ValueError:
+        return {"ok": False, "error": "Date invalide"}
+    periode = date(d.year, d.month, 1)
+
+    new_id = _new_id()
+    db = get_pg_connection("rh")
+    db.query(
+        """INSERT INTO rh.pgt_note_frais
+              (id_note_frais, id_salarie, id_note_frais_type,
+               periode_note, date, description,
+               montant_ht, montant_tva, montant_ttc,
+               verifiee, photo_ticket,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id,
+            int(id_salarie),
+            int(id_note_frais_type),
+            periode,
+            d,
+            description or "",
+            float(montant_ht),
+            float(montant_tva),
+            float(montant_ttc),
+            bool(verifiee),
+            photo_bytes,
+            int(op_id),
+        ),
+    )
+    return {"ok": True, "id_note_frais": str(new_id)}
+
+
+def update_photo(id_note_frais: int, photo_bytes: bytes, op_id: int) -> dict:
+    """Btn 'Charger une photo' : UPDATE photo_ticket."""
+    db = get_pg_connection("rh")
+    db.query(
+        """UPDATE rh.pgt_note_frais SET
+              photo_ticket = ?,
+              modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_note_frais = ?""",
+        (photo_bytes, int(op_id), int(id_note_frais)),
+    )
+    return {"ok": True}
+
+
 def get_photo(id_note_frais: int) -> tuple[bytes, str] | None:
     """Bytea + mime de la photo ticket. None si pas de photo."""
     db = get_pg_connection("rh")

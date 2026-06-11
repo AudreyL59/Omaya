@@ -1000,3 +1000,65 @@ def get_note_frais_photo(
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/note-frais")
+async def post_note_frais_create(
+    id_salarie: int = Path(...),
+    id_note_frais_type: int = Query(...),
+    date_iso: str = Query(..., alias="date"),
+    description: str = Query(""),
+    montant_ht: float = Query(0),
+    montant_tva: float = Query(0),
+    montant_ttc: float = Query(0),
+    verifiee: bool = Query(False),
+    photo: UploadFile | None = File(None),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn '+' : cree une note (transposition Fen_NoteFraisAjout).
+
+    Multipart : champs en query params + photo optionnelle (file).
+    """
+    try:
+        photo_bytes = await photo.read() if photo else None
+        if photo_bytes == b"":
+            photo_bytes = None
+        res = note_frais_svc.create_note(
+            id_salarie=id_salarie,
+            id_note_frais_type=id_note_frais_type,
+            date_iso=date_iso,
+            description=description,
+            montant_ht=montant_ht,
+            montant_tva=montant_tva,
+            montant_ttc=montant_ttc,
+            verifiee=verifiee,
+            photo_bytes=photo_bytes,
+            op_id=user.id_salarie,
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Echec"))
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/note-frais/{id_note_frais}/photo")
+async def post_note_frais_photo(
+    id_note_frais: int = Path(...),
+    photo: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Charger une photo' : UPDATE photo_ticket."""
+    try:
+        data = await photo.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="Photo vide")
+        return note_frais_svc.update_photo(id_note_frais, data, user.id_salarie)
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

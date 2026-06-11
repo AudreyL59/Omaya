@@ -10,7 +10,7 @@
  *   - Bouton impression (PDF complet : EtatNoteFrais + EtatPhotoTicket)
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Image as ImageIcon, Loader2, Plus, Printer, Save, Trash2 } from 'lucide-react'
 
 import { getToken } from '@/api'
@@ -21,6 +21,7 @@ import {
   COLOR_BRUN,
   COLOR_PRIMARY,
 } from '@shared/fiche/EmbaucheTab'
+import NoteFraisAjoutModal from './NoteFraisAjoutModal'
 
 interface TypeRef {
   id_note_frais_type: number
@@ -75,6 +76,10 @@ export default function NoteFraisTab({ idSalarie }: Props) {
   const [edit, setEdit] = useState<NoteRow | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [ajoutOpen, setAjoutOpen] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoVersion, setPhotoVersion] = useState(0)
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
 
   // Combo Types
   useEffect(() => {
@@ -216,6 +221,42 @@ export default function NoteFraisTab({ idSalarie }: Props) {
     }
   }
 
+  const handleChargerPhoto = () => {
+    if (!edit) return
+    photoInputRef.current?.click()
+  }
+
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !edit) return
+    setUploadingPhoto(true)
+    try {
+      const fd = new FormData()
+      fd.append('photo', file)
+      const r = await fetch(
+        `/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: fd,
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      showToast('Photo enregistrée.', 'success')
+      setEdit((p) => (p ? { ...p, has_photo: true } : p))
+      setPhotoVersion((v) => v + 1)
+      await reload()
+    } catch (err) {
+      showToast(`Échec upload : ${(err as Error).message}`, 'error')
+    } finally {
+      setUploadingPhoto(false)
+      e.target.value = ''
+    }
+  }
+
   const placeholder = (label: string) => () =>
     showToast(`${label} : à brancher dans un prochain commit.`, 'info')
 
@@ -260,7 +301,7 @@ export default function NoteFraisTab({ idSalarie }: Props) {
           ))}
         </select>
         <div className="flex-1" />
-        <ToolBtn icon={Plus} label="Nouveau" onClick={placeholder('Nouveau')} primary />
+        <ToolBtn icon={Plus} label="Nouveau" onClick={() => setAjoutOpen(true)} primary />
         <ToolBtn icon={Printer} label="Imprimer" onClick={placeholder('Imprimer')} />
         <ToolBtn
           icon={Trash2}
@@ -471,13 +512,13 @@ export default function NoteFraisTab({ idSalarie }: Props) {
         <div className="w-48 flex flex-col items-center justify-center gap-2">
           {edit?.has_photo ? (
             <a
-              href={`/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo`}
+              href={`/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo?v=${photoVersion}`}
               target="_blank"
               rel="noopener noreferrer"
               className="block"
             >
               <img
-                src={`/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo`}
+                src={`/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo?v=${photoVersion}`}
                 alt="Ticket"
                 className="w-40 h-40 object-cover border rounded cursor-zoom-in"
                 style={{ borderColor: COLOR_BG_SOFT }}
@@ -491,17 +532,36 @@ export default function NoteFraisTab({ idSalarie }: Props) {
               <ImageIcon className="w-12 h-12" />
             </div>
           )}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
           <button
             type="button"
-            onClick={placeholder('Charger une photo')}
-            disabled={!edit}
-            className="text-xs underline disabled:opacity-40"
+            onClick={handleChargerPhoto}
+            disabled={!edit || uploadingPhoto}
+            className="inline-flex items-center gap-1 text-xs underline disabled:opacity-40"
             style={{ color: COLOR_PRIMARY }}
           >
+            {uploadingPhoto && <Loader2 className="w-3 h-3 animate-spin" />}
             Charger une photo
           </button>
         </div>
       </div>
+
+      {ajoutOpen && (
+        <NoteFraisAjoutModal
+          idSalarie={idSalarie}
+          onClose={() => setAjoutOpen(false)}
+          onSaved={() => {
+            setAjoutOpen(false)
+            void reload()
+          }}
+        />
+      )}
     </div>
   )
 }
