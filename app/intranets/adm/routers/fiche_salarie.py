@@ -762,3 +762,79 @@ def delete_absence(
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/absences/types")
+def get_absences_types(user: UserToken = Depends(get_current_user)):
+    """Combo Type d'absence."""
+    try:
+        return {"items": absences_svc.list_types_absence()}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/absences/{id_absence}")
+def get_absence_detail(
+    id_absence: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Detail d'une absence (pour pre-remplir la popup d'edition)."""
+    try:
+        row = absences_svc.get_absence(id_absence)
+        if not row:
+            raise HTTPException(status_code=404, detail="Absence introuvable")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+class SaveAbsencePayload(BaseModel):
+    id_type_absence: int
+    date_debut: str
+    date_fin: str = ""
+
+
+@router.post("/{id_salarie}/absences")
+def post_absence(
+    payload: SaveAbsencePayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Cree une absence + calcul auto Periode/NBJ/NBJ_OUVRES/nbSamedi."""
+    try:
+        return absences_svc.save_absence(
+            id_absence=0,
+            id_salarie=id_salarie,
+            id_type_absence=payload.id_type_absence,
+            date_debut=payload.date_debut,
+            date_fin=payload.date_fin,
+            op_id=user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.put("/absences/{id_absence}")
+def put_absence(
+    payload: SaveAbsencePayload,
+    id_absence: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Modifie une absence existante."""
+    try:
+        return absences_svc.save_absence(
+            id_absence=id_absence,
+            id_salarie=0,
+            id_type_absence=payload.id_type_absence,
+            date_debut=payload.date_debut,
+            date_fin=payload.date_fin,
+            op_id=user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

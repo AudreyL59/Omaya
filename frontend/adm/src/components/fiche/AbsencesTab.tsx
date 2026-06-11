@@ -16,6 +16,7 @@ import { Copy, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import SalarieAbsenceModal from './SalarieAbsenceModal'
 
 interface AbsenceItem {
   id_absence: string
@@ -50,6 +51,8 @@ export default function AbsencesTab({ idSalarie }: Props) {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string>('')
 
   const reload = useCallback(async () => {
     if (!idSalarie) return
@@ -118,7 +121,8 @@ export default function AbsencesTab({ idSalarie }: Props) {
   )
 
   const handleNouveau = () => {
-    showToast('Nouveau : popup à brancher dans un prochain commit.', 'info')
+    setEditingId('')
+    setEditOpen(true)
   }
 
   const handleModifier = () => {
@@ -126,7 +130,8 @@ export default function AbsencesTab({ idSalarie }: Props) {
       showToast('Sélectionner une absence à modifier.', 'info')
       return
     }
-    showToast('Modifier : popup à brancher dans un prochain commit.', 'info')
+    setEditingId(selectedItem.id_absence)
+    setEditOpen(true)
   }
 
   const handleDupliquer = async () => {
@@ -342,6 +347,18 @@ export default function AbsencesTab({ idSalarie }: Props) {
           ))}
         </div>
       </div>
+
+      {editOpen && (
+        <SalarieAbsenceModal
+          idSalarie={idSalarie}
+          idAbsence={editingId}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            setEditOpen(false)
+            void reload()
+          }}
+        />
+      )}
     </div>
   )
 }
