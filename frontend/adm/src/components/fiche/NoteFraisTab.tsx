@@ -78,7 +78,7 @@ export default function NoteFraisTab({ idSalarie }: Props) {
   const [deleting, setDeleting] = useState(false)
   const [ajoutOpen, setAjoutOpen] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [photoVersion, setPhotoVersion] = useState(0)
+  const [photoUrl, setPhotoUrl] = useState<string>('')
   const photoInputRef = useRef<HTMLInputElement | null>(null)
 
   // Combo Types
@@ -118,6 +118,30 @@ export default function NoteFraisTab({ idSalarie }: Props) {
     void reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idSalarie, mois, annee])
+
+  // Charge la photo en blob (impossible de mettre Authorization sur <img>).
+  useEffect(() => {
+    if (!edit || !edit.has_photo) {
+      setPhotoUrl('')
+      return
+    }
+    let cancelled = false
+    let objUrl = ''
+    fetch(`/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(String(r.status))))
+      .then((blob) => {
+        if (cancelled) return
+        objUrl = URL.createObjectURL(blob)
+        setPhotoUrl(objUrl)
+      })
+      .catch(() => !cancelled && setPhotoUrl(''))
+    return () => {
+      cancelled = true
+      if (objUrl) URL.revokeObjectURL(objUrl)
+    }
+  }, [edit?.id_note_frais, edit?.has_photo])
 
   // Selection -> charge le detail
   const handleSelect = async (id: string) => {
@@ -246,8 +270,11 @@ export default function NoteFraisTab({ idSalarie }: Props) {
         throw new Error((j as { detail?: string })?.detail || String(r.status))
       }
       showToast('Photo enregistrée.', 'success')
-      setEdit((p) => (p ? { ...p, has_photo: true } : p))
-      setPhotoVersion((v) => v + 1)
+      // Force le useEffect a refetch (toggle has_photo)
+      setEdit((p) => (p ? { ...p, has_photo: false } : p))
+      window.setTimeout(() => {
+        setEdit((p) => (p ? { ...p, has_photo: true } : p))
+      }, 0)
       await reload()
     } catch (err) {
       showToast(`Échec upload : ${(err as Error).message}`, 'error')
@@ -510,15 +537,15 @@ export default function NoteFraisTab({ idSalarie }: Props) {
 
         {/* Photo */}
         <div className="w-48 flex flex-col items-center justify-center gap-2">
-          {edit?.has_photo ? (
+          {edit?.has_photo && photoUrl ? (
             <a
-              href={`/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo?v=${photoVersion}`}
+              href={photoUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="block"
             >
               <img
-                src={`/api/adm/fiche-salarie/note-frais/${edit.id_note_frais}/photo?v=${photoVersion}`}
+                src={photoUrl}
                 alt="Ticket"
                 className="w-40 h-40 object-cover border rounded cursor-zoom-in"
                 style={{ borderColor: COLOR_BG_SOFT }}
