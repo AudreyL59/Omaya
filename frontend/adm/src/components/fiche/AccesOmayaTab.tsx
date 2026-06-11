@@ -24,6 +24,7 @@ import { Loader2, Plus, Power, Send, Trash2 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import CheckMark from '../CheckMark'
 import DroitAccesAjoutModal from './DroitAccesAjoutModal'
 
 interface DroitRow {
@@ -327,14 +328,14 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
                       title={it.description.replace(/<[^>]+>/g, '')}
                       dangerouslySetInnerHTML={{ __html: it.description }}
                     />
-                    <div className="text-center font-bold" style={{ color: '#15803D' }}>
-                      {it.droit_actif ? '✓' : ''}
+                    <div className="text-center">
+                      <CheckMark active={it.droit_actif} />
                     </div>
-                    <div className="text-center font-bold" style={{ color: '#15803D' }}>
-                      {it.adm ? '✓' : ''}
+                    <div className="text-center">
+                      <CheckMark active={it.adm} />
                     </div>
-                    <div className="text-center font-bold" style={{ color: '#15803D' }}>
-                      {it.fdv ? '✓' : ''}
+                    <div className="text-center">
+                      <CheckMark active={it.fdv} />
                     </div>
                   </div>
                 )

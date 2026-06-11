@@ -15,6 +15,7 @@ import { Copy, Pencil, Plus, Trash2, Loader2 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import CheckMark from '../CheckMark'
 import SalarieOrgaModal from './SalarieOrgaModal'
 
 interface OrgaItem {
@@ -246,7 +247,7 @@ export default function OrgaSuiviTab({ idSalarie }: Props) {
                 </div>
                 <div>{fmtDate(o.date_debut)}</div>
                 <div>{fmtDate(o.date_fin)}</div>
-                <div className="text-center">{o.aff_actif ? '✓' : ''}</div>
+                <div className="text-center"><CheckMark active={o.aff_actif} /></div>
               </div>
             )
           })}

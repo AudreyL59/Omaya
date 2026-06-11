@@ -17,6 +17,7 @@ import { CheckSquare, ExternalLink, Loader2, Plus, Trash2 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import CheckMark from '../CheckMark'
 import NewDocRHModal from './NewDocRHModal'
 
 interface DocRHItem {
@@ -238,9 +239,9 @@ export default function DocRHTab({ idSalarie }: Props) {
                   {it.responsable_nom}
                 </div>
                 <div>{fmtDate(it.date_edition)}</div>
-                <div className="text-center">{it.recu ? '✓' : ''}</div>
+                <div className="text-center"><CheckMark active={it.recu} /></div>
                 <div>{fmtDate(it.recu_date)}</div>
-                <div className="text-center">{it.signe_demat ? '✓' : ''}</div>
+                <div className="text-center"><CheckMark active={it.signe_demat} /></div>
               </div>
             )
           })}

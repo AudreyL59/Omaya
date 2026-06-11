@@ -14,6 +14,7 @@ import { Info, Loader2, Save } from 'lucide-react'
 
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
+import CheckMark from '../CheckMark'
 import {
   AdmCheckbox,
   COLOR_BG_SOFT,
@@ -344,8 +345,8 @@ export default function MutuelleTab({ idSalarie }: Props) {
                 <div className="truncate" title={t.op_lib}>
                   {t.op_lib}
                 </div>
-                <div className="text-center">{t.cloturee ? '✓' : ''}</div>
-                <div className="text-center">{t.demande_affiliation ? '✓' : ''}</div>
+                <div className="text-center"><CheckMark active={t.cloturee} /></div>
+                <div className="text-center"><CheckMark active={t.demande_affiliation} /></div>
                 <div>{fmtDate(t.demande_affiliation_date)}</div>
                 <div className="truncate whitespace-pre-wrap" title={t.info_cplt}>
                   {t.info_cplt}

@@ -17,6 +17,7 @@ import { FileText, Loader2, Send, Ticket, X } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import CheckMark from '../CheckMark'
 
 interface TypeProduit {
   id_type_produit: string
@@ -366,7 +367,7 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
                       <div className="truncate" title={d.info_cpl}>
                         {d.info_cpl}
                       </div>
-                      <div className="text-center">{d.prioritaire ? '✓' : ''}</div>
+                      <div className="text-center"><CheckMark active={d.prioritaire} /></div>
                     </div>
                   )
                 })}

@@ -584,23 +584,32 @@ def _aes_decrypt(cipher_bytes: bytes) -> str:
     return plain.decode("utf-8", errors="replace")
 
 
-def _mdp_from_stored(stored: str) -> str | None:
-    """Decrypte mdp_crypte (stocke en base64 ou hex selon historique).
-
-    Si le format n'est pas reconnu, retourne None (l'appelant regenerera
-    un nouveau MDP)."""
-    if not stored:
+def _mdp_from_stored(stored: Any) -> str | None:
+    """Decrypte mdp_crypte. Le stockage peut etre :
+      - bytes / memoryview (cas WinDev CrypteStandard -> ecriture brute)
+      - str base64
+      - str hex
+    Retourne None si le format n'est pas reconnu."""
+    if stored is None or stored == "":
         return None
     import base64
-    s = stored.strip()
-    try:
-        raw = base64.b64decode(s, validate=True)
-    except Exception:
-        try:
-            raw = bytes.fromhex(s)
-        except Exception:
+    # Cas binaire direct (bytea PG ou bytes)
+    if isinstance(stored, memoryview):
+        stored = stored.tobytes()
+    if isinstance(stored, (bytes, bytearray)):
+        raw = bytes(stored)
+    else:
+        s = str(stored).strip()
+        if not s:
             return None
-    if len(raw) % 16 != 0:
+        try:
+            raw = base64.b64decode(s, validate=True)
+        except Exception:
+            try:
+                raw = bytes.fromhex(s)
+            except Exception:
+                return None
+    if not raw or len(raw) % 16 != 0:
         return None
     try:
         return _aes_decrypt(raw)
@@ -673,7 +682,7 @@ def send_codes_omaya(id_salarie: int, op_user_id: int, op_user_login: str) -> di
         )
 
     # 2) MDP : recupere ou genere
-    mdp_stored = (sal.get("mdp_crypte") or "").strip()
+    mdp_stored = sal.get("mdp_crypte")
     mdp_clair = _mdp_from_stored(mdp_stored) if mdp_stored else None
     if not mdp_clair:
         mdp_clair = _generate_mdp(12)

@@ -21,6 +21,7 @@ import {
   COLOR_BRUN,
   COLOR_PRIMARY,
 } from '@shared/fiche/EmbaucheTab'
+import CheckMark from '../CheckMark'
 import NoteFraisAjoutModal from './NoteFraisAjoutModal'
 
 interface TypeRef {
@@ -435,7 +436,7 @@ export default function NoteFraisTab({ idSalarie }: Props) {
                     <div className="text-right">{fmtEur(it.montant_ht)}</div>
                     <div className="text-right">{fmtEur(it.montant_tva)}</div>
                     <div className="text-right">{fmtEur(it.montant_ttc)}</div>
-                    <div className="text-center">{it.verifiee ? '✓' : ''}</div>
+                    <div className="text-center"><CheckMark active={it.verifiee} /></div>
                     <div className="text-center">{it.has_photo ? '📷' : ''}</div>
                   </div>
                 )
