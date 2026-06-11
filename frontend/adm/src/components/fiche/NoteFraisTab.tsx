@@ -80,6 +80,7 @@ export default function NoteFraisTab({ idSalarie }: Props) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoUrl, setPhotoUrl] = useState<string>('')
   const [photoVersion, setPhotoVersion] = useState(0)
+  const [printing, setPrinting] = useState(false)
   const photoInputRef = useRef<HTMLInputElement | null>(null)
 
   // Combo Types
@@ -284,8 +285,31 @@ export default function NoteFraisTab({ idSalarie }: Props) {
     }
   }
 
-  const placeholder = (label: string) => () =>
-    showToast(`${label} : à brancher dans un prochain commit.`, 'info')
+  const handleImprimer = async () => {
+    if (rows.length === 0) {
+      showToast("Pas d'information à imprimer.", 'info')
+      return
+    }
+    setPrinting(true)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${idSalarie}/note-frais/print?mois=${mois}&annee=${annee}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener,noreferrer')
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000)
+    } catch (e) {
+      showToast(`Échec impression : ${(e as Error).message}`, 'error')
+    } finally {
+      setPrinting(false)
+    }
+  }
 
   const template = '110px 90px 130px 1fr 80px 80px 80px 70px 30px'
 
@@ -329,7 +353,13 @@ export default function NoteFraisTab({ idSalarie }: Props) {
         </select>
         <div className="flex-1" />
         <ToolBtn icon={Plus} label="Nouveau" onClick={() => setAjoutOpen(true)} primary />
-        <ToolBtn icon={Printer} label="Imprimer" onClick={placeholder('Imprimer')} />
+        <ToolBtn
+          icon={printing ? Loader2 : Printer}
+          spin={printing}
+          label="Imprimer"
+          onClick={handleImprimer}
+          disabled={printing || rows.length === 0}
+        />
         <ToolBtn
           icon={Trash2}
           label="Supprimer"
@@ -631,6 +661,7 @@ function ToolBtn({
   disabled,
   primary,
   danger,
+  spin,
 }: {
   icon: typeof Plus
   label: string
@@ -638,6 +669,7 @@ function ToolBtn({
   disabled?: boolean
   primary?: boolean
   danger?: boolean
+  spin?: boolean
 }) {
   const color = primary ? 'white' : danger ? '#B91C1C' : COLOR_PRIMARY
   const bg = primary ? COLOR_PRIMARY : 'white'
@@ -650,7 +682,7 @@ function ToolBtn({
       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border disabled:opacity-40"
       style={{ backgroundColor: bg, color, borderColor: border }}
     >
-      <Icon className="w-4 h-4" />
+      <Icon className={`w-4 h-4 ${spin ? 'animate-spin' : ''}`} />
       {label}
     </button>
   )

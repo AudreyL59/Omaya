@@ -17,6 +17,7 @@ from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_documents as documents_svc
 from app.intranets.adm.services import fiche_mutuelle as mutuelle_svc
 from app.intranets.adm.services import fiche_note_frais as note_frais_svc
+from app.intranets.adm.services import fiche_note_frais_pdf as note_frais_pdf_svc
 from app.intranets.adm.services import fiche_organigramme as orga_svc
 from app.intranets.adm.services import fiche_suivi_adm as suivi_adm_svc
 from app.intranets.adm.schemas.fiche_salarie import (
@@ -1059,6 +1060,32 @@ async def post_note_frais_photo(
         return note_frais_svc.update_photo(id_note_frais, data, user.id_salarie)
     except HTTPException:
         raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/note-frais/print")
+def get_note_frais_print(
+    id_salarie: int = Path(...),
+    mois: int = Query(..., ge=1, le=12),
+    annee: int = Query(..., ge=2000, le=2100),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Imprimer' : genere le PDF (EtatNoteFrais + justifs photos)."""
+    try:
+        pdf_bytes = note_frais_pdf_svc.build_print_pdf(id_salarie, mois, annee)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'inline; filename="NoteFrais_{id_salarie}_{annee}-{mois:02d}.pdf"'
+                ),
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
