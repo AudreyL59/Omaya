@@ -171,7 +171,11 @@ export default function NoteFraisAjoutModal({ idSalarie, onClose, onSaved }: Pro
                   type="number"
                   step="0.01"
                   value={ht}
-                  onChange={(e) => setHt(Number(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) || 0
+                    setHt(v)
+                    setTtc(v + tva)
+                  }}
                   className="w-full px-2 py-1 border rounded text-sm text-right"
                   style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
                 />
@@ -190,7 +194,11 @@ export default function NoteFraisAjoutModal({ idSalarie, onClose, onSaved }: Pro
                   type="number"
                   step="0.01"
                   value={tva}
-                  onChange={(e) => setTva(Number(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value) || 0
+                    setTva(v)
+                    setTtc(ht + v)
+                  }}
                   className="w-full px-2 py-1 border rounded text-sm text-right"
                   style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
                 />

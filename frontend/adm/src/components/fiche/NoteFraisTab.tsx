@@ -482,7 +482,13 @@ export default function NoteFraisTab({ idSalarie }: Props) {
               type="number"
               step="0.01"
               value={edit?.montant_ht ?? 0}
-              onChange={(e) => setEdit((p) => (p ? { ...p, montant_ht: Number(e.target.value) || 0 } : p))}
+              onChange={(e) =>
+                setEdit((p) => {
+                  if (!p) return p
+                  const ht = Number(e.target.value) || 0
+                  return { ...p, montant_ht: ht, montant_ttc: ht + (p.montant_tva || 0) }
+                })
+              }
               disabled={!edit}
               className="w-full px-2 py-1 border rounded text-sm bg-white text-right disabled:opacity-50"
               style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
@@ -503,7 +509,13 @@ export default function NoteFraisTab({ idSalarie }: Props) {
               type="number"
               step="0.01"
               value={edit?.montant_tva ?? 0}
-              onChange={(e) => setEdit((p) => (p ? { ...p, montant_tva: Number(e.target.value) || 0 } : p))}
+              onChange={(e) =>
+                setEdit((p) => {
+                  if (!p) return p
+                  const tva = Number(e.target.value) || 0
+                  return { ...p, montant_tva: tva, montant_ttc: (p.montant_ht || 0) + tva }
+                })
+              }
               disabled={!edit}
               className="w-full px-2 py-1 border rounded text-sm bg-white text-right disabled:opacity-50"
               style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
