@@ -21,6 +21,8 @@ Etape 3 :
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 from datetime import datetime
 from typing import Any
 
@@ -318,3 +320,229 @@ def soft_delete_droits(id_salarie: int, id_types: list[int], op_id: int) -> dict
         )
         nb_deleted += 1
     return {"ok": True, "nb_deleted": nb_deleted}
+
+
+# --- Btn 'Envoyer code Omaya' --------------------------------------------
+
+# Jeu de caracteres WinDev MonJeu (avec les caracteres speciaux repetes
+# pour augmenter leur probabilite de tirage par GenereMotDePasse).
+_MONJEU = (
+    "0123456789abcdefghijklmnopqrstuvwxyz0123456789"
+    ".!@$*.!@$*"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    ".!@$*"
+)
+
+
+def _generate_mdp(length: int = 12) -> str:
+    """Equivalent de GenereMotDePasse(12, MonJeu) WinDev."""
+    return "".join(secrets.choice(_MONJEU) for _ in range(length))
+
+
+def _aes_key() -> bytes:
+    """Cle AES128 : MD5(UTF8(HASH_SECRET_KEY)). Transposition exacte de
+    `bufCle = HashChaine(HA_MD5_128, ChaineVersUTF8(HASH_SECRET_KEY))`."""
+    from app.core.config import HASH_SECRET_KEY
+    if not HASH_SECRET_KEY:
+        raise RuntimeError("HASH_SECRET_KEY non defini en config")
+    return hashlib.md5(HASH_SECRET_KEY.encode("utf-8")).digest()
+
+
+def _aes_encrypt(plain: str) -> bytes:
+    """AES-128 CBC avec IV nul (defaut WinDev crypteAES128) + padding PKCS7."""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives import padding
+    key = _aes_key()
+    iv = b"\x00" * 16
+    padder = padding.PKCS7(128).padder()
+    padded = padder.update(plain.encode("utf-8")) + padder.finalize()
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    enc = cipher.encryptor()
+    return enc.update(padded) + enc.finalize()
+
+
+def _aes_decrypt(cipher_bytes: bytes) -> str:
+    """AES-128 CBC IV nul + depadding PKCS7."""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives import padding
+    key = _aes_key()
+    iv = b"\x00" * 16
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    dec = cipher.decryptor()
+    padded = dec.update(cipher_bytes) + dec.finalize()
+    unpadder = padding.PKCS7(128).unpadder()
+    plain = unpadder.update(padded) + unpadder.finalize()
+    return plain.decode("utf-8", errors="replace")
+
+
+def _mdp_from_stored(stored: str) -> str | None:
+    """Decrypte mdp_crypte (stocke en base64 ou hex selon historique).
+
+    Si le format n'est pas reconnu, retourne None (l'appelant regenerera
+    un nouveau MDP)."""
+    if not stored:
+        return None
+    import base64
+    s = stored.strip()
+    try:
+        raw = base64.b64decode(s, validate=True)
+    except Exception:
+        try:
+            raw = bytes.fromhex(s)
+        except Exception:
+            return None
+    if len(raw) % 16 != 0:
+        return None
+    try:
+        return _aes_decrypt(raw)
+    except Exception:
+        return None
+
+
+def _store_mdp(mdp_clair: str) -> str:
+    """Chiffre et retourne la representation a stocker (base64)."""
+    import base64
+    raw = _aes_encrypt(mdp_clair)
+    return base64.b64encode(raw).decode("ascii")
+
+
+def send_codes_omaya(id_salarie: int, op_user_id: int, op_user_login: str) -> dict:
+    """Btn 'Envoyer code Omaya' :
+      - Verifie/repare le login (si vide ou != mail -> recalcule via mail,
+        avec suffixe random en cas de collision).
+      - Recupere ou genere le MDP (decrypt si dispo, sinon nouveau +
+        sauvegarde chiffre).
+      - Envoi mail (intranet@omaya.fr -> mail salarie + Cci intranet
+        + Cci op_user_login si pas un super-user 6/4/224).
+      - Envoi SMS si tel mobile present.
+
+    Retourne {ok, mail_envoye, sms_envoye, sms_result, login}.
+    """
+    db = get_pg_connection("rh")
+    sal = db.query_one(
+        """SELECT id_salarie, nom, prenom, login, mdp_crypte, modif_elem
+           FROM rh.pgt_salarie WHERE id_salarie = ?""",
+        (int(id_salarie),),
+    )
+    if not sal:
+        return {"ok": False, "error": "Salarie introuvable"}
+    if "supp" in (sal.get("modif_elem") or "").lower():
+        return {
+            "ok": False,
+            "error": "Vous n'etes pas autorise a renouveler ce mot de passe",
+        }
+
+    coord = db.query_one(
+        """SELECT mail, tel_mob FROM rh.pgt_salarie_coordonnees
+           WHERE id_salarie = ?""",
+        (int(id_salarie),),
+    ) or {}
+    mail = (coord.get("mail") or "").strip().lower()
+    if not mail:
+        return {"ok": False, "error": "Aucun mail enregistre pour ce salarie"}
+
+    # 1) Login : si vide ou different du mail -> recalcule
+    login_actuel = (sal.get("login") or "").strip()
+    if not login_actuel or login_actuel.lower() != mail:
+        candidat = mail
+        # Verification collision (autre salarie avec ce login)
+        for _ in range(10):
+            existe = db.query_one(
+                """SELECT id_salarie FROM rh.pgt_salarie
+                   WHERE LOWER(login) = ? AND id_salarie <> ?""",
+                (candidat.lower(), int(id_salarie)),
+            )
+            if not existe:
+                break
+            candidat = f"{_str(sal.get('nom'))}{secrets.randbelow(1000)}"
+        login_actuel = candidat
+        db.query(
+            """UPDATE rh.pgt_salarie SET
+                  login = ?, modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+               WHERE id_salarie = ?""",
+            (login_actuel, int(id_salarie), int(id_salarie)),
+        )
+
+    # 2) MDP : recupere ou genere
+    mdp_stored = (sal.get("mdp_crypte") or "").strip()
+    mdp_clair = _mdp_from_stored(mdp_stored) if mdp_stored else None
+    if not mdp_clair:
+        mdp_clair = _generate_mdp(12)
+        try:
+            stored = _store_mdp(mdp_clair)
+        except Exception as e:
+            return {"ok": False, "error": f"Chiffrement MDP : {e}"}
+        db.query(
+            """UPDATE rh.pgt_salarie SET
+                  mdp_crypte = ?, modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+               WHERE id_salarie = ?""",
+            (stored, int(id_salarie), int(id_salarie)),
+        )
+
+    # 3) Envoi mail
+    sujet = "Code accès Intranet OMAYA"
+    html = (
+        "<font face='arial' style='font-size:10pt;'>"
+        "<p>Bonjour,</p>"
+        "<p>https://groupe-exo.omaya.fr</p>"
+        f"<p>Votre accès à l'intranet a été validé pour cet identifiant : {login_actuel}</p>"
+        f"<p>Votre mot de passe : {mdp_clair}</p>"
+        "<p>Cdt<br/>Service INTRANET</p>"
+        "</font>"
+    )
+    cc_list: list[str] = []
+    cci_list = ["intranet@omaya.fr"]
+    # Super-users : pas de Cci a l'operateur
+    if id_salarie not in (6, 4, 224) and op_user_login:
+        cci_list.append(op_user_login)
+
+    mail_envoye = False
+    try:
+        from app.shared.notifications.mail import envoi_mail
+        envoi_mail(
+            destinataires=[mail],
+            cc=cc_list,
+            cci=cci_list,
+            sujet=sujet,
+            html=html,
+            expediteur="intranet@omaya.fr",
+        )
+        mail_envoye = True
+    except Exception:
+        import sys, traceback
+        traceback.print_exc(file=sys.stderr)
+
+    # 4) Envoi SMS si tel mobile
+    sms_envoye = False
+    sms_result = ""
+    gsm = "".join(c for c in (coord.get("tel_mob") or "") if c.isdigit())
+    if gsm:
+        nom_prenom = (
+            f"{_capitalize(_str(sal.get('prenom')))} {_str(sal.get('nom'))}"
+        ).strip()
+        texte = (
+            "Vos codes intranet\n"
+            "https://groupe-exo.omaya.fr\n"
+            f"Votre identifiant : {login_actuel}\n"
+            f"Votre mot de passe : {mdp_clair}"
+        )
+        try:
+            from app.shared.notifications.sms import envoi_sms
+            sms_result = envoi_sms(texte, gsm, "", "OMAYA-Info") or ""
+            sms_envoye = "ok" in sms_result.lower() or "envoy" in sms_result.lower()
+        except Exception as e:
+            sms_result = f"Erreur SMS : {e}"
+
+    return {
+        "ok": True,
+        "mail_envoye": mail_envoye,
+        "sms_envoye": sms_envoye,
+        "sms_result": sms_result,
+        "login": login_actuel,
+    }
+
+
+def _capitalize(s: str) -> str:
+    if not s:
+        return ""
+    return s[0].upper() + s[1:].lower()

@@ -1228,3 +1228,19 @@ def post_droit_acces_profil(
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/droit-acces/send-codes")
+def post_droit_acces_send_codes(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Envoyer code Omaya' : verifie/repare le login, recupere
+    ou genere le MDP (AES128 + MD5(HASH_SECRET_KEY)), envoi mail + SMS."""
+    try:
+        return droit_acces_svc.send_codes_omaya(
+            id_salarie, user.id_salarie, user.login or ""
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

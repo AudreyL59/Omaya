@@ -48,6 +48,7 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
   const [ajoutVariant, setAjoutVariant] = useState<'intranet' | 'software' | null>(null)
+  const [sendingCodes, setSendingCodes] = useState(false)
 
   const reload = useCallback(async () => {
     if (!idSalarie) return
@@ -165,6 +166,52 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
     }
   }
 
+  const handleEnvoyerCodes = async () => {
+    const ok = await showConfirm({
+      title: 'Envoyer les codes ?',
+      message: "Envoyer le login et le mot de passe Omaya par mail (et SMS si numéro mobile présent) au salarié ?",
+      confirmLabel: 'Envoyer',
+    })
+    if (!ok) return
+    setSendingCodes(true)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${idSalarie}/droit-acces/send-codes`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const j = (await r.json()) as {
+        ok: boolean
+        mail_envoye: boolean
+        sms_envoye: boolean
+        sms_result: string
+        error?: string
+      }
+      if (!j.ok) {
+        showToast(j.error || 'Échec', 'error')
+        return
+      }
+      const parts: string[] = []
+      if (j.mail_envoye) parts.push('mail envoyé')
+      if (j.sms_envoye) parts.push('SMS envoyé')
+      if (parts.length === 0) {
+        showToast(`Aucun envoi (${j.sms_result || 'pas de mail ni GSM'})`, 'info')
+      } else {
+        showToast(`Codes : ${parts.join(' + ')}`, 'success')
+      }
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSendingCodes(false)
+    }
+  }
+
   const placeholder = (label: string) => () =>
     showToast(`${label} : à brancher dans un prochain commit.`, 'info')
 
@@ -193,9 +240,11 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
           disabled={selected.size === 0 || busy}
         />
         <ToolBtn
-          icon={Send}
+          icon={sendingCodes ? Loader2 : Send}
+          spin={sendingCodes}
           label="Envoyer code Omaya"
-          onClick={placeholder('Envoyer code Omaya')}
+          onClick={handleEnvoyerCodes}
+          disabled={sendingCodes}
         />
         <ToolBtn
           icon={Trash2}
@@ -315,6 +364,7 @@ function ToolBtn({
   disabled,
   primary,
   danger,
+  spin,
 }: {
   icon: typeof Plus
   label: string
@@ -322,6 +372,7 @@ function ToolBtn({
   disabled?: boolean
   primary?: boolean
   danger?: boolean
+  spin?: boolean
 }) {
   const color = primary ? 'white' : danger ? '#B91C1C' : COLOR_PRIMARY
   const bg = primary ? COLOR_PRIMARY : 'white'
@@ -334,7 +385,7 @@ function ToolBtn({
       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border disabled:opacity-40"
       style={{ backgroundColor: bg, color, borderColor: border }}
     >
-      <Icon className="w-4 h-4" />
+      <Icon className={`w-4 h-4 ${spin ? 'animate-spin' : ''}`} />
       {label}
     </button>
   )
