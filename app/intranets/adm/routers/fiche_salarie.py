@@ -16,6 +16,7 @@ from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_documents as documents_svc
 from app.intranets.adm.services import fiche_mutuelle as mutuelle_svc
+from app.intranets.adm.services import fiche_note_frais as note_frais_svc
 from app.intranets.adm.services import fiche_organigramme as orga_svc
 from app.intranets.adm.services import fiche_suivi_adm as suivi_adm_svc
 from app.intranets.adm.schemas.fiche_salarie import (
@@ -880,6 +881,122 @@ def post_mutuelle(
     """Btn 'Enregistrer' : UPDATE pgt_salarie_mutuelle."""
     try:
         return mutuelle_svc.save(id_salarie, payload.model_dump(), user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 'Note de frais' ----------------------------------------------
+
+
+class SaveNoteFraisPayload(BaseModel):
+    id_note_frais_type: int
+    date: str
+    description: str = ""
+    montant_ht: float = 0
+    montant_tva: float = 0
+    montant_ttc: float = 0
+    verifiee: bool = False
+
+
+@router.get("/note-frais/types")
+def get_note_frais_types(user: UserToken = Depends(get_current_user)):
+    """Combo Type de note de frais."""
+    try:
+        return {"items": note_frais_svc.list_types()}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/note-frais")
+def get_note_frais_list(
+    id_salarie: int = Path(...),
+    mois: int = Query(..., description="1-12"),
+    annee: int = Query(..., description="ex. 2026"),
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste les notes de la periode (mois + annee)."""
+    try:
+        return {"items": note_frais_svc.list_notes(id_salarie, mois, annee)}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/note-frais/{id_note_frais}")
+def get_note_frais_detail(
+    id_note_frais: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Pre-remplit le formulaire d'edition."""
+    try:
+        row = note_frais_svc.get_note(id_note_frais)
+        if not row:
+            raise HTTPException(status_code=404, detail="Note de frais introuvable")
+        return row
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.put("/note-frais/{id_note_frais}")
+def put_note_frais(
+    payload: SaveNoteFraisPayload,
+    id_note_frais: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer : UPDATE de la ligne."""
+    try:
+        return note_frais_svc.save_note(
+            id_note_frais=id_note_frais,
+            id_note_frais_type=payload.id_note_frais_type,
+            date_iso=payload.date,
+            description=payload.description,
+            montant_ht=payload.montant_ht,
+            montant_tva=payload.montant_tva,
+            montant_ttc=payload.montant_ttc,
+            verifiee=payload.verifiee,
+            op_id=user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/note-frais/{id_note_frais}")
+def delete_note_frais(
+    id_note_frais: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn poubelle : soft delete (modif_elem='suppr')."""
+    try:
+        return note_frais_svc.soft_delete_note(id_note_frais, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/note-frais/{id_note_frais}/photo")
+def get_note_frais_photo(
+    id_note_frais: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Photo ticket (bytea) -> binaire avec mime detecte."""
+    try:
+        res = note_frais_svc.get_photo(id_note_frais)
+        if not res:
+            raise HTTPException(status_code=404, detail="Pas de photo")
+        data, mime = res
+        return Response(
+            content=data,
+            media_type=mime,
+            headers={"Cache-Control": "private, max-age=60"},
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
