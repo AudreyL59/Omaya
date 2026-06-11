@@ -5,6 +5,12 @@
    text-c-*) y soient détectées. */
 @source "../../shared/**/*.{ts,tsx}";
 
+/* Checkboxes natives ADM : vert foncé (#15803D = green-700) au lieu du
+   bleu par défaut du navigateur. Couleur cohérente avec <CheckMark>. */
+input[type="checkbox"] {
+  accent-color: #15803D;
+}
+
 /* Police Nunito Sans (variable font) */
 @font-face {
   font-family: 'Nunito Sans';
