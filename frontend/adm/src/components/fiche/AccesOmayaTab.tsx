@@ -327,11 +327,15 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
                       title={it.description.replace(/<[^>]+>/g, '')}
                       dangerouslySetInnerHTML={{ __html: it.description }}
                     />
-                    <div className="text-center">
+                    <div className="text-center font-bold" style={{ color: '#15803D' }}>
                       {it.droit_actif ? '✓' : ''}
                     </div>
-                    <div className="text-center">{it.adm ? '✓' : ''}</div>
-                    <div className="text-center">{it.fdv ? '✓' : ''}</div>
+                    <div className="text-center font-bold" style={{ color: '#15803D' }}>
+                      {it.adm ? '✓' : ''}
+                    </div>
+                    <div className="text-center font-bold" style={{ color: '#15803D' }}>
+                      {it.fdv ? '✓' : ''}
+                    </div>
                   </div>
                 )
               })}
