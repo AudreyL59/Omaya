@@ -13,6 +13,7 @@ from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.services import fiche_absences as absences_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
+from app.intranets.adm.services import fiche_droit_acces as droit_acces_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_documents as documents_svc
 from app.intranets.adm.services import fiche_mutuelle as mutuelle_svc
@@ -1086,6 +1087,57 @@ def get_note_frais_print(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 'Acces Omaya' (Droit d'acces) -------------------------------
+
+
+class DroitAccesIdsPayload(BaseModel):
+    id_types: list[int]
+
+
+@router.get("/{id_salarie}/droit-acces")
+def get_droit_acces(
+    id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)
+):
+    """Liste des droits attribues (JOIN catalogue, rupture par categorie)."""
+    try:
+        return {"items": droit_acces_svc.load_droits(id_salarie)}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/droit-acces/toggle")
+def post_droit_acces_toggle(
+    payload: DroitAccesIdsPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Activer/desactiver la selection' : toggle droit_actif."""
+    try:
+        return droit_acces_svc.toggle_droits(
+            id_salarie, payload.id_types, user.id_salarie
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/droit-acces/delete")
+def post_droit_acces_delete(
+    payload: DroitAccesIdsPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Supprimer' : soft delete pour chaque ligne cochee."""
+    try:
+        return droit_acces_svc.soft_delete_droits(
+            id_salarie, payload.id_types, user.id_salarie
+        )
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
