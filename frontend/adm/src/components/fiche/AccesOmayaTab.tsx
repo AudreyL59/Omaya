@@ -212,9 +212,6 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
     }
   }
 
-  const placeholder = (label: string) => () =>
-    showToast(`${label} : à brancher dans un prochain commit.`, 'info')
-
   const template = '36px 70px 220px 1fr 70px 90px 90px'
 
   return (
