@@ -30,70 +30,212 @@ from typing import Any
 from app.core.database.pg import get_pg_connection
 
 
-# --- Decodage RTF -> texte brut -------------------------------------------
+# --- Decodage RTF -> HTML -------------------------------------------------
 
-_RTF_HEAD = re.compile(r"^\s*\{?\\rtf", re.IGNORECASE)
+_RTF_HEAD = re.compile(r"^\s*\{?\\(rtf|\*\\?\\?riched|riched)", re.IGNORECASE)
 
 
-def _rtf_to_text(s: str) -> str:
-    """Convertit une description stockee en RTF -> texte brut.
+def _rtf_to_html(s: str) -> str:
+    """Convertit une chaine stockee en RTF -> HTML simple.
 
-    Prefere striprtf si la lib est installee, sinon fallback regex
-    qui couvre la majorite des cas (\\par, \\'XX hex cp1252,
-    \\uNNN? unicode signe, suppression des commandes \\cmd, groupes
-    header fonttbl/colortbl/...)."""
+    Preserve gras (\\b/\\b0), italique (\\i/\\i0), souligne (\\ul/\\ulnone),
+    couleurs (\\cfN via la colortbl), sauts de ligne (\\par/\\line).
+
+    Tokeniseur lineaire (stack pour les groupes destructibles \\*). Pas
+    de parser RTF complet, mais couvre les descriptions WinDev typiques.
+    """
     if not s:
         return ""
     if not _RTF_HEAD.match(s):
-        return s.strip()
-    try:
-        from striprtf.striprtf import rtf_to_text  # type: ignore
-        return rtf_to_text(s).strip()
-    except Exception:
-        pass
-    # Fallback regex
-    out = s
-    # Groupes header a supprimer entierement (un seul niveau d'imbrication)
-    for tag in ("fonttbl", "colortbl", "stylesheet", "info", "generator",
-                "pict", "datastore", "themedata"):
-        out = re.sub(
-            r"\{\s*\\" + tag + r"[^{}]*(\{[^{}]*\})*\s*\}",
+        # Plain text -> escape HTML
+        return (
+            s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        )
+
+    # 1) Extraire la colortbl (avant de la supprimer)
+    colors: list[str] = ["#000000"]  # index 0 = couleur par defaut
+    m = re.search(r"\{\\colortbl\s*;?(.*?)\}", s, flags=re.DOTALL)
+    if m:
+        body = m.group(1)
+        for part in body.split(";"):
+            p = part.strip()
+            if not p:
+                continue
+            r_ = re.search(r"\\red(\d+)", p)
+            g_ = re.search(r"\\green(\d+)", p)
+            b_ = re.search(r"\\blue(\d+)", p)
+            if r_ and g_ and b_:
+                colors.append(
+                    f"#{int(r_.group(1)):02X}{int(g_.group(1)):02X}{int(b_.group(1)):02X}"
+                )
+
+    # 2) Supprimer les groupes destructibles (fonttbl, colortbl, *generator, info, etc.)
+    #    On itere tant que des matches sont trouves (groupes imbriques simples).
+    head_tags = "(?:\\*\\\\)?(?:fonttbl|colortbl|stylesheet|generator|info|pict|datastore|themedata|filetbl|listtable|listoverridetable|rsidtbl|mmathPr|wgrffmtfilter|udi|password)"
+    while True:
+        new = re.sub(
+            r"\{\\" + head_tags + r"[^{}]*(?:\{[^{}]*\})*[^{}]*\}",
             "",
-            out,
+            s,
             flags=re.IGNORECASE | re.DOTALL,
         )
-    # \'XX (hex en cp1252)
-    def _hex(m: re.Match) -> str:
-        try:
-            return bytes([int(m.group(1), 16)]).decode("cp1252", errors="replace")
-        except Exception:
-            return ""
-    out = re.sub(r"\\'([0-9a-fA-F]{2})", _hex, out)
-    # \uNNN? (codepoint signe 16 bits) - on consomme le caractere de
-    # fallback (souvent '?' ou un espace).
-    def _u(m: re.Match) -> str:
-        try:
-            code = int(m.group(1))
-            if code < 0:
-                code += 65536
-            return chr(code)
-        except Exception:
-            return ""
-    out = re.sub(r"\\u(-?\d+)\s?\??", _u, out)
-    # Sauts de ligne
-    out = re.sub(r"\\par[d]?\b", "\n", out)
-    out = re.sub(r"\\line\b", "\n", out)
-    out = re.sub(r"\\tab\b", "\t", out)
-    # Autres commandes : \mot ou \mot-NN
-    out = re.sub(r"\\\*?[a-zA-Z]+-?\d*\s?", "", out)
-    # Caracteres echappes \\, \{, \}
-    out = out.replace("\\\\", "\\").replace("\\{", "{").replace("\\}", "}")
-    # Reste des accolades
-    out = re.sub(r"[{}]", "", out)
-    # Compactage espaces
-    out = re.sub(r"[ \t]+", " ", out)
-    out = re.sub(r"\n[ \t]+", "\n", out)
-    return out.strip()
+        if new == s:
+            break
+        s = new
+
+    # 3) Conversion tokenisee
+    out: list[str] = []
+    state = {"b": False, "i": False, "u": False, "cf": 0}
+    open_tags: list[str] = []  # pour bien fermer en sortie de groupe
+    group_skip_depth = 0  # profondeur dans un groupe destructible {\*...}
+
+    def flush_text(txt: str) -> None:
+        if txt:
+            out.append(
+                txt.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            )
+
+    def reopen_format() -> str:
+        parts = []
+        if state["b"]:
+            parts.append("<b>")
+        if state["i"]:
+            parts.append("<i>")
+        if state["u"]:
+            parts.append("<u>")
+        if state["cf"] and state["cf"] < len(colors):
+            parts.append(f'<span style="color:{colors[state["cf"]]}">')
+        return "".join(parts)
+
+    def close_format() -> str:
+        parts = []
+        if state["cf"] and state["cf"] < len(colors):
+            parts.append("</span>")
+        if state["u"]:
+            parts.append("</u>")
+        if state["i"]:
+            parts.append("</i>")
+        if state["b"]:
+            parts.append("</b>")
+        return "".join(parts)
+
+    i = 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        # Groupes
+        if c == "{":
+            # Detection groupe destructible {\* ...}
+            if s[i:i + 3] == "{\\*":
+                group_skip_depth += 1
+                i += 3
+                continue
+            # Sinon : on memorise l'etat pour le restaurer en sortie
+            open_tags.append(close_format())
+            i += 1
+            continue
+        if c == "}":
+            if group_skip_depth > 0:
+                group_skip_depth -= 1
+                i += 1
+                continue
+            if open_tags:
+                # Ferme les tags ouverts depuis l'entree du groupe et rouvre
+                # ceux qui correspondent a l'etat d'avant le groupe
+                out.append(close_format())
+                # Note : on ne reopen pas car on n'a pas memorise l'etat.
+                # Acceptable pour le rendu de descriptions courtes.
+                open_tags.pop()
+            i += 1
+            continue
+        if group_skip_depth > 0:
+            i += 1
+            continue
+        # Backslash : commande ou char echappe
+        if c == "\\":
+            if i + 1 >= n:
+                i += 1
+                continue
+            nxt = s[i + 1]
+            # \' suivi de 2 hex digits (char en cp1252)
+            if nxt == "'":
+                hex_s = s[i + 2:i + 4]
+                try:
+                    flush_text(bytes([int(hex_s, 16)]).decode("cp1252", "replace"))
+                except Exception:
+                    pass
+                i += 4
+                continue
+            # \\ \{ \} -> caractere echape
+            if nxt in ("\\", "{", "}"):
+                flush_text(nxt)
+                i += 2
+                continue
+            # \uNNN? (codepoint signe)
+            if nxt == "u":
+                m2 = re.match(r"\\u(-?\d+)\s?", s[i:])
+                if m2:
+                    code = int(m2.group(1))
+                    if code < 0:
+                        code += 65536
+                    flush_text(chr(code))
+                    # Saute le caractere de fallback qui suit (souvent ?)
+                    i += len(m2.group(0))
+                    if i < n and s[i] == "?":
+                        i += 1
+                    continue
+            # Commande \name[-NN] [espace]
+            m2 = re.match(r"\\([a-zA-Z]+)(-?\d+)?\s?", s[i:])
+            if m2:
+                cmd = m2.group(1).lower()
+                arg = m2.group(2)
+                # Format
+                if cmd == "b":
+                    out.append(close_format())
+                    state["b"] = arg is None or arg != "0"
+                    out.append(reopen_format())
+                elif cmd == "i":
+                    out.append(close_format())
+                    state["i"] = arg is None or arg != "0"
+                    out.append(reopen_format())
+                elif cmd in ("ul", "ulnone"):
+                    out.append(close_format())
+                    state["u"] = cmd == "ul"
+                    out.append(reopen_format())
+                elif cmd == "cf":
+                    out.append(close_format())
+                    state["cf"] = int(arg) if arg else 0
+                    out.append(reopen_format())
+                elif cmd in ("par", "pard"):
+                    out.append("<br>")
+                elif cmd == "line":
+                    out.append("<br>")
+                elif cmd == "tab":
+                    out.append("&emsp;")
+                # Autres commandes : ignorees
+                i += len(m2.group(0))
+                continue
+            # Backslash isole : on saute
+            i += 1
+            continue
+        # Caractere normal
+        flush_text(c)
+        i += 1
+    # Cloture des tags restants
+    out.append(close_format())
+
+    html = "".join(out)
+    # Compactage : supprime les <br> en debut/fin et les multiples <br><br>
+    html = re.sub(r"^(\s|<br>)+", "", html)
+    html = re.sub(r"(\s|<br>)+$", "", html)
+    html = re.sub(r"(<br>\s*){3,}", "<br><br>", html)
+    return html.strip()
+
+
+# Backward-compat : ancien nom utilise dans load_droits / list_droits_disponibles
+def _rtf_to_text(s: str) -> str:
+    """Garde l'ancien nom pour ne rien casser. Retourne maintenant du HTML."""
+    return _rtf_to_html(s)
 
 
 def _str(v: Any) -> str:

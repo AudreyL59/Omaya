@@ -365,9 +365,11 @@ export default function DroitAccesAjoutModal({
                             </span>
                           )}
                         </div>
-                        <div className="truncate" title={it.description}>
-                          {it.description}
-                        </div>
+                        <div
+                          className="truncate"
+                          title={it.description.replace(/<[^>]+>/g, '')}
+                          dangerouslySetInnerHTML={{ __html: it.description }}
+                        />
                         <div className="text-center font-mono">{it.code_interne}</div>
                       </div>
                     )

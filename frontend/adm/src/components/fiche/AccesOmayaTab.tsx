@@ -322,9 +322,11 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
                     <div className="truncate" title={it.lib_droit}>
                       {it.lib_droit}
                     </div>
-                    <div className="truncate" title={it.description}>
-                      {it.description}
-                    </div>
+                    <div
+                      className="truncate"
+                      title={it.description.replace(/<[^>]+>/g, '')}
+                      dangerouslySetInnerHTML={{ __html: it.description }}
+                    />
                     <div className="text-center">
                       {it.droit_actif ? '✓' : ''}
                     </div>
