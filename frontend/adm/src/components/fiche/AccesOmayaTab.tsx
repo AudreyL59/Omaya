@@ -24,6 +24,7 @@ import { Loader2, Plus, Power, Send, Trash2 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import DroitAccesAjoutModal from './DroitAccesAjoutModal'
 
 interface DroitRow {
   id_salarie_droit_acces: string
@@ -46,6 +47,7 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [ajoutVariant, setAjoutVariant] = useState<'intranet' | 'software' | null>(null)
 
   const reload = useCallback(async () => {
     if (!idSalarie) return
@@ -175,13 +177,13 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
         <ToolBtn
           icon={Plus}
           label="Droit Intranet/Appli"
-          onClick={placeholder('Droit Intranet/Appli')}
+          onClick={() => setAjoutVariant('intranet')}
           primary
         />
         <ToolBtn
           icon={Plus}
           label="Droit Omaya Software"
-          onClick={placeholder('Droit Omaya Software')}
+          onClick={() => setAjoutVariant('software')}
           primary
         />
         <ToolBtn
@@ -289,6 +291,19 @@ export default function AccesOmayaTab({ idSalarie }: Props) {
           ))}
         </div>
       </div>
+
+      {ajoutVariant && (
+        <DroitAccesAjoutModal
+          idSalarie={idSalarie}
+          variant={ajoutVariant}
+          onClose={() => setAjoutVariant(null)}
+          onSaved={() => {
+            setAjoutVariant(null)
+            setSelected(new Set())
+            void reload()
+          }}
+        />
+      )}
     </div>
   )
 }

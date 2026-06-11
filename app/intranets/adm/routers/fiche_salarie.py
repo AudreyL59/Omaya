@@ -1141,3 +1141,90 @@ def post_droit_acces_delete(
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/droit-acces/disponibles")
+def get_droit_acces_disponibles(
+    id_salarie: int = Path(...),
+    type: str = Query("intranet", description="intranet | software"),
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste des droits a attribuer.
+
+    type=intranet : ADM=0, FDV=1 (transposition Fen_SalarieDroitAjout).
+    type=software : ADM=1, FDV=0 et restreint aux droits du user connecte
+                    (Fen_ChoixDroitPerso, IDSalarie=usersCial).
+    """
+    try:
+        if type == "software":
+            adm, fdv = True, False
+        else:
+            adm, fdv = False, True
+        return {
+            "items": droit_acces_svc.list_droits_disponibles(
+                id_salarie, adm, fdv, user.id_salarie
+            ),
+        }
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+class AttribuerDroitsPayload(BaseModel):
+    id_types: list[int]
+    droit_actif: bool = True
+
+
+@router.post("/{id_salarie}/droit-acces/attribuer")
+def post_droit_acces_attribuer(
+    payload: AttribuerDroitsPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Valider ce(s) droit(s)' : INSERT si nouveau, sinon UPDATE."""
+    try:
+        return droit_acces_svc.attribuer_droits(
+            id_salarie,
+            payload.id_types,
+            payload.droit_actif,
+            user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/droit-acces/profils")
+def get_droit_acces_profils(user: UserToken = Depends(get_current_user)):
+    """Combo Profil (DISTINCT pgt_type_poste.categorie)."""
+    try:
+        return {"items": droit_acces_svc.list_profils()}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+class ApplyProfilPayload(BaseModel):
+    categorie: str
+
+
+@router.post("/{id_salarie}/droit-acces/profil")
+def post_droit_acces_profil(
+    payload: ApplyProfilPayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Choisir ce profil' : applique tous les droits associes a
+    une categorie via pgt_profil_droit_acces."""
+    try:
+        res = droit_acces_svc.apply_profil(
+            id_salarie, payload.categorie, user.id_salarie
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Echec"))
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
