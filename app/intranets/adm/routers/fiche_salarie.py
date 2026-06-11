@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
+from app.intranets.adm.services import fiche_absences as absences_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_documents as documents_svc
@@ -712,6 +713,52 @@ def post_documents_tk_mutuelle(
         return res
     except HTTPException:
         raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Onglet 'Absences' ---------------------------------------------------
+
+
+@router.get("/{id_salarie}/absences")
+def get_absences(
+    id_salarie: int = Path(...), user: UserToken = Depends(get_current_user)
+):
+    """Liste des absences du salarie (tri periode desc / type / date debut)."""
+    try:
+        return {"items": absences_svc.load_absences(id_salarie)}
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/absences/{id_absence}/duplicate")
+def post_absence_duplicate(
+    id_absence: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Dupliquer' : copie l'absence (nouvel id, modif_elem='new')."""
+    try:
+        res = absences_svc.duplicate_absence(id_absence, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("error", "Echec"))
+        return res
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/absences/{id_absence}")
+def delete_absence(
+    id_absence: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Supprimer' : soft delete (modif_elem='suppr')."""
+    try:
+        return absences_svc.soft_delete_absence(id_absence, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
