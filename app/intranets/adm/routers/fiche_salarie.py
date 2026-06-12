@@ -12,6 +12,7 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.services import fiche_absences as absences_svc
+from app.intranets.adm.services import fiche_declaratif as declaratif_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_droit_acces as droit_acces_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
@@ -1241,6 +1242,29 @@ def post_droit_acces_send_codes(
         return droit_acces_svc.send_codes_omaya(
             id_salarie, user.id_salarie, user.login or ""
         )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Onglet 'Declaratif'
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{id_salarie}/declaratif")
+def get_declaratif(
+    id_salarie: int = Path(...),
+    date_du: str = Query(""),
+    date_au: str = Query(""),
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste des declarations de presence entre 2 dates.
+
+    Retourne une liste de {date, presence, motif_absence}.
+    """
+    try:
+        return declaratif_svc.load_declaratif(id_salarie, date_du, date_au)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
