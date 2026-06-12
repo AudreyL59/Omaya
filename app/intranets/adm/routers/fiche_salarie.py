@@ -15,6 +15,7 @@ from app.intranets.adm.services import fiche_absences as absences_svc
 from app.intranets.adm.services import fiche_declaratif as declaratif_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_exo_cash as exo_cash_svc
+from app.intranets.adm.services import fiche_ulease as ulease_svc
 from app.intranets.adm.services import fiche_droit_acces as droit_acces_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_documents as documents_svc
@@ -1300,6 +1301,199 @@ def delete_exo_cash(
     """Soft delete d'une ligne de livret."""
     try:
         return exo_cash_svc.soft_delete_livret(id_salarie_livret, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Onglet 'Ulease' (4 sous-onglets)
+# ---------------------------------------------------------------------------
+
+
+class PermisUpdate(BaseModel):
+    num_permis: str = ""
+    type_permis: str = ""
+    date_obtention: str = ""
+
+
+@router.get("/{id_salarie}/ulease/conducteur")
+def get_ulease_conducteur(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Infos conducteur ({exists, id_conducteur, permis})."""
+    try:
+        return ulease_svc.load_conducteur_info(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/ulease/conducteur")
+def post_ulease_create_conducteur(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Creer une fiche conducteur' : copie des infos salarie."""
+    try:
+        return ulease_svc.create_conducteur(id_salarie, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.put("/ulease/conducteur/{id_conducteur}/permis")
+def put_ulease_permis(
+    id_conducteur: int = Path(...),
+    body: PermisUpdate = ...,
+    user: UserToken = Depends(get_current_user),
+):
+    """MAJ des 3 champs Permis."""
+    try:
+        return ulease_svc.update_conducteur_permis(
+            id_conducteur,
+            body.num_permis,
+            body.type_permis,
+            body.date_obtention,
+            user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Sous-onglet 1 : Fichier Conducteur ---
+
+@router.get("/ulease/{id_conducteur}/files")
+def get_ulease_files(
+    id_conducteur: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return ulease_svc.list_files_ulease(id_conducteur)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/ulease/{id_conducteur}/files")
+async def post_ulease_upload(
+    id_conducteur: int = Path(...),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        content = await file.read()
+        return ulease_svc.upload_file_ulease(
+            id_conducteur, file.filename or "sans_nom", content
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/ulease/{id_conducteur}/files/download")
+def get_ulease_download(
+    id_conducteur: int = Path(...),
+    filename: str = Query(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        content = ulease_svc.download_file_ulease(id_conducteur, filename)
+        if content is None:
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+        return Response(
+            content=content,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{quote(filename)}"'
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/ulease/{id_conducteur}/files")
+def delete_ulease_file(
+    id_conducteur: int = Path(...),
+    filename: str = Query(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return ulease_svc.delete_file_ulease(id_conducteur, filename)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Sous-onglet 2 : Historique Attribution ---
+
+@router.get("/ulease/{id_conducteur}/histo-attribution")
+def get_ulease_histo(
+    id_conducteur: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return ulease_svc.load_histo_attribution(id_conducteur)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Sous-onglet 3 : Edition documents ---
+
+@router.get("/{id_salarie}/ulease/doc-edition")
+def get_ulease_doc_edition(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return ulease_svc.load_doc_edition(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/ulease/doc-edition/{id_doc}/recu")
+def post_ulease_doc_recu(
+    id_doc: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Doc recu signe' : UPDATE RECU=1 + RECUDATE."""
+    try:
+        return ulease_svc.mark_doc_recu(id_doc, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Sous-onglet 4 : Attribution Carte Carburant ---
+
+@router.get("/ulease/{id_conducteur}/attribution-carte")
+def get_ulease_attribution_carte(
+    id_conducteur: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return ulease_svc.load_attribution_carte(id_conducteur)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/ulease/attribution-carte/{id_carte_attribution}")
+def delete_ulease_attribution_carte(
+    id_carte_attribution: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    try:
+        return ulease_svc.soft_delete_attribution_carte(
+            id_carte_attribution, user.id_salarie
+        )
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

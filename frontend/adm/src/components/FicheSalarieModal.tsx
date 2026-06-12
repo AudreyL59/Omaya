@@ -35,6 +35,7 @@ import MutuelleTab from './fiche/MutuelleTab'
 import NoteFraisTab from './fiche/NoteFraisTab'
 import OrgaSuiviTab from './fiche/OrgaSuiviTab'
 import SuiviADMTab from './fiche/SuiviADMTab'
+import UleaseTab from './fiche/UleaseTab'
 
 // --- Types ---------------------------------------------------------------
 
@@ -153,7 +154,7 @@ const MENU: MenuItem[] = [
   { key: 'droit_acces',     label: 'Accès Omaya',       coded: true },
   { key: 'declaratif',      label: 'Déclaratif',        coded: true },
   { key: 'exo_cash',        label: 'Exo Cash',          coded: true },
-  { key: 'ulease',          label: 'Ulease',            coded: false },
+  { key: 'ulease',          label: 'Ulease',            coded: true },
 ]
 
 // --- Helpers -------------------------------------------------------------
@@ -329,6 +330,11 @@ export default function FicheSalarieModal({
                 <ExoCashTab idSalarie={idSalarie} />
               </div>
             )}
+            {activeTab === 'ulease' && (
+              <div className="p-5 h-full">
+                <UleaseTab idSalarie={idSalarie} />
+              </div>
+            )}
             {activeTab !== 'identite' &&
               activeTab !== 'coordonnees' &&
               activeTab !== 'infos_embauche' &&
@@ -341,7 +347,8 @@ export default function FicheSalarieModal({
               activeTab !== 'note_frais' &&
               activeTab !== 'droit_acces' &&
               activeTab !== 'declaratif' &&
-              activeTab !== 'exo_cash' && (
+              activeTab !== 'exo_cash' &&
+              activeTab !== 'ulease' && (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400 italic">
                   <div className="text-lg mb-2">
                     {MENU.find((m) => m.key === activeTab)?.label}
