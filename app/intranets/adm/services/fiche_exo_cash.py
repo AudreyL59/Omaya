@@ -98,12 +98,16 @@ def load_livret(id_salarie: int) -> list[dict]:
 def calc_soldes(id_salarie: int) -> dict:
     """Calcule les 3 soldes affichees en bas de la fenetre.
 
-    NB: implementation provisoire (somme simple). A remplacer par la
-    transposition exacte de DonneSoldeExoCash + DonneCdeEC_nonDebitee
-    fournie par l'utilisateur.
+    - solde_actuel  = SUM(credit) - SUM(debit) sur livret (non suppr)
+                      = transposition de DonneSoldeExoCash
+    - cde_en_cours  = SUM(montant_lot * qte) sur commandes ExoCash dont
+                      le ticket est non cloture (statut != 28) ET dont
+                      le IDTK_Liste n'a pas encore ete debite dans le
+                      livret (transposition de DonneCdeEC_nonDebitee)
+    - solde_apres_cde = solde_actuel - cde_en_cours
     """
-    db = get_pg_connection("rh")
-    rows = db.query(
+    db_rh = get_pg_connection("rh")
+    rows = db_rh.query(
         """SELECT COALESCE(SUM(montant_credit),0) AS tot_credit,
                   COALESCE(SUM(montant_debit),0) AS tot_debit
            FROM rh.pgt_salarie_livret
@@ -114,7 +118,33 @@ def calc_soldes(id_salarie: int) -> dict:
     tot_credit = _num(rows[0].get("tot_credit")) if rows else 0.0
     tot_debit = _num(rows[0].get("tot_debit")) if rows else 0.0
     solde_actuel = tot_credit - tot_debit
-    cde_en_cours = 0.0  # TODO: DonneCdeEC_nonDebitee
+
+    # DonneCdeEC_nonDebitee : cross-schema (ticket_rh + divers + ticket + rh)
+    db_trh = get_pg_connection("ticket_rh")
+    cde_rows = db_trh.query(
+        """SELECT COALESCE(SUM(ecl.montant * tkcl.qte), 0) AS total
+             FROM ticket_rh.pgt_tk_cde_exo_cash tkc
+             INNER JOIN ticket_rh.pgt_tk_cde_exo_cash_lot tkcl
+               ON tkcl.id_tk_cde_exo_cash = tkc.id_tk_cde_exo_cash
+             INNER JOIN divers.pgt_exo_cash_lot ecl
+               ON ecl.id_exo_cash_lot = tkcl.id_exo_cash_lot
+             INNER JOIN ticket.pgt_tk_liste tkl
+               ON tkl.id_tk_liste = tkcl.id_tk_liste
+            WHERE (ecl.modif_elem IS NULL OR ecl.modif_elem <> 'suppr')
+              AND (tkcl.modif_elem IS NULL OR tkcl.modif_elem NOT LIKE '%suppr%')
+              AND tkc.id_salarie = ?
+              AND tkl.cloturee = FALSE
+              AND tkl.id_tk_statut <> 28
+              AND tkc.id_tk_liste NOT IN (
+                    SELECT sl.id_tk_liste
+                      FROM rh.pgt_salarie_livret sl
+                     WHERE sl.id_salarie = ?
+                       AND sl.id_tk_liste IS NOT NULL
+              )""",
+        (int(id_salarie), int(id_salarie)),
+    )
+    cde_en_cours = _num(cde_rows[0].get("total")) if cde_rows else 0.0
+
     return {
         "solde_actuel": solde_actuel,
         "cde_en_cours": cde_en_cours,
