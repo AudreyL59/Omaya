@@ -14,6 +14,7 @@ import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
 import CheckMark from '../../CheckMark'
+import SalarieDocUleaseModal from './SalarieDocUleaseModal'
 
 interface HistoItem {
   id_vehicule_pc: string
@@ -43,6 +44,7 @@ export default function UleaseHistoTab({ idConducteur }: Props) {
   const [items, setItems] = useState<HistoItem[]>([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const [docOpen, setDocOpen] = useState(false)
 
   const reload = useCallback(async () => {
     if (!idConducteur) return
@@ -87,12 +89,13 @@ export default function UleaseHistoTab({ idConducteur }: Props) {
         <ToolBtn
           icon={FileText}
           label="Générer la mise à dispo"
-          onClick={() =>
-            showToast(
-              'Mise à dispo : à implémenter (Fen_SalariéDocUlease).',
-              'info',
-            )
-          }
+          onClick={() => {
+            if (!selectedItem) {
+              showToast('Sélectionner une attribution.', 'info')
+              return
+            }
+            setDocOpen(true)
+          }}
           disabled={!selectedItem}
         />
         {loading && (
@@ -155,6 +158,14 @@ export default function UleaseHistoTab({ idConducteur }: Props) {
           })}
         </div>
       </div>
+
+      {docOpen && selectedItem && (
+        <SalarieDocUleaseModal
+          idSalarie={idConducteur}
+          idVehiculePC={selectedItem.id_vehicule_pc}
+          onClose={() => setDocOpen(false)}
+        />
+      )}
     </div>
   )
 }

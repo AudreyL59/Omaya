@@ -14,6 +14,7 @@ import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
 import CheckMark from '../../CheckMark'
+import SalarieDocUleaseModal from './SalarieDocUleaseModal'
 
 interface DocItem {
   id_salarie_doc_ulease: string
@@ -37,6 +38,7 @@ export default function UleaseDocEditionTab({ idSalarie }: Props) {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const [docOpen, setDocOpen] = useState(false)
 
   const reload = useCallback(async () => {
     if (!idSalarie) return
@@ -101,12 +103,7 @@ export default function UleaseDocEditionTab({ idSalarie }: Props) {
         <ToolBtn
           icon={FilePlus}
           label="Générer un document ULEASE"
-          onClick={() =>
-            showToast(
-              'Génération document ULEASE : à implémenter (Fen_SalariéDocUlease).',
-              'info',
-            )
-          }
+          onClick={() => setDocOpen(true)}
         />
         {(loading || busy) && (
           <Loader2 className="w-4 h-4 animate-spin ml-2" style={{ color: COLOR_PRIMARY }} />
@@ -164,6 +161,14 @@ export default function UleaseDocEditionTab({ idSalarie }: Props) {
           })}
         </div>
       </div>
+
+      {docOpen && (
+        <SalarieDocUleaseModal
+          idSalarie={idSalarie}
+          onClose={() => setDocOpen(false)}
+          onGenerated={() => void reload()}
+        />
+      )}
     </div>
   )
 }

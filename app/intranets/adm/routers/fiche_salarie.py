@@ -14,6 +14,7 @@ from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.services import fiche_absences as absences_svc
 from app.intranets.adm.services import fiche_declaratif as declaratif_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
+from app.intranets.adm.services import fiche_doc_ulease as doc_ulease_svc
 from app.intranets.adm.services import fiche_exo_cash as exo_cash_svc
 from app.intranets.adm.services import fiche_ulease as ulease_svc
 from app.intranets.adm.services import fiche_droit_acces as droit_acces_svc
@@ -1573,6 +1574,85 @@ def delete_ulease_attribution_carte(
     try:
         return ulease_svc.soft_delete_attribution_carte(
             id_carte_attribution, user.id_salarie
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Fen_SalarieDocUlease : list modeles + generate + export PDF ---
+
+
+class DocUleaseGenerate(BaseModel):
+    id_doc_ulease: str
+    id_vehicule_pc: str = ""  # IdPC (attribution vehicule)
+    create_suivi: bool = True
+
+
+@router.get("/{id_salarie}/ulease/doc-models")
+def get_doc_ulease_models(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste des modeles Ulease disponibles pour ce salarie."""
+    try:
+        return doc_ulease_svc.list_models(id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/ulease/doc-generate")
+def post_doc_ulease_generate(
+    id_salarie: int = Path(...),
+    body: DocUleaseGenerate = ...,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Ticket Omaya' : genere le document + 3 INSERTs + upload FTP."""
+    try:
+        id_pc = 0
+        if body.id_vehicule_pc:
+            try:
+                id_pc = int(body.id_vehicule_pc)
+            except ValueError:
+                id_pc = 0
+        return doc_ulease_svc.generate_doc_ulease(
+            id_salarie=id_salarie,
+            id_doc_ulease=int(body.id_doc_ulease),
+            id_vehicule_pc=id_pc,
+            op_id=user.id_salarie,
+            create_suivi=body.create_suivi,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/ulease/doc-preview-pdf")
+def post_doc_ulease_preview_pdf(
+    id_salarie: int = Path(...),
+    body: DocUleaseGenerate = ...,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Export PDF' : genere le PDF sans rien ecrire en base."""
+    try:
+        id_pc = 0
+        if body.id_vehicule_pc:
+            try:
+                id_pc = int(body.id_vehicule_pc)
+            except ValueError:
+                id_pc = 0
+        res = doc_ulease_svc.preview_pdf(
+            id_salarie=id_salarie,
+            id_doc_ulease=int(body.id_doc_ulease),
+            id_vehicule_pc=id_pc,
+        )
+        return Response(
+            content=res["pdf_bytes"],
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{quote(res["filename"])}"'
+            },
         )
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
