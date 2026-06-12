@@ -1306,6 +1306,86 @@ def delete_exo_cash(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
+# --- Fen_SalarieLivretFiche : combos + load + upsert ---
+
+
+class LivretUpsert(BaseModel):
+    id_salarie_livret: str = ""  # vide ou "0" => insert
+    id_type_operation_livret: int = 0
+    id_challenge: str = ""
+    montant_credit: float = 0.0
+    montant_debit: float = 0.0
+    date_operation: str = ""
+
+
+@router.get("/exo-cash/types-operation")
+def get_types_operation(user: UserToken = Depends(get_current_user)):
+    """Combo Type Operation."""
+    try:
+        return exo_cash_svc.list_types_operation()
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/exo-cash/challenges")
+def get_challenges(user: UserToken = Depends(get_current_user)):
+    """Liste des challenges (selecteur BtnChallenge)."""
+    try:
+        return exo_cash_svc.list_challenges()
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/exo-cash/{id_salarie_livret}")
+def get_livret_item(
+    id_salarie_livret: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Recupere une ligne de livret pour pre-remplir le formulaire."""
+    try:
+        return exo_cash_svc.load_livret_item(id_salarie_livret)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/exo-cash")
+def post_upsert_livret(
+    id_salarie: int = Path(...),
+    body: LivretUpsert = ...,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Enregistrer' du formulaire Fen_SalarieLivretFiche."""
+    try:
+        id_l = None
+        if body.id_salarie_livret and body.id_salarie_livret not in ("0", ""):
+            try:
+                id_l = int(body.id_salarie_livret)
+            except ValueError:
+                id_l = None
+        id_chall = 0
+        if body.id_challenge:
+            try:
+                id_chall = int(body.id_challenge)
+            except ValueError:
+                id_chall = 0
+        return exo_cash_svc.upsert_livret(
+            id_salarie=id_salarie,
+            id_salarie_livret=id_l,
+            id_type_operation_livret=body.id_type_operation_livret,
+            id_challenge=id_chall,
+            montant_credit=body.montant_credit,
+            montant_debit=body.montant_debit,
+            date_operation=body.date_operation,
+            operateur_id=user.id_salarie,
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 # ---------------------------------------------------------------------------
 # Onglet 'Ulease' (4 sous-onglets)
 # ---------------------------------------------------------------------------

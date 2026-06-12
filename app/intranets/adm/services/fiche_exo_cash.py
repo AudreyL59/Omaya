@@ -136,3 +136,153 @@ def soft_delete_livret(id_salarie_livret: int, operateur_id: int) -> dict:
         (int(operateur_id), int(id_salarie_livret)),
     )
     return {"ok": True}
+
+
+# ===========================================================================
+# Form Fen_SalarieLivretFiche (add/edit)
+# ===========================================================================
+
+
+def _new_id() -> int:
+    n = datetime.now()
+    return int(n.strftime("%Y%m%d%H%M%S") + f"{n.microsecond // 1000:03d}")
+
+
+def list_types_operation() -> list[dict]:
+    """Liste des types d'operation (combo Type Operation)."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_type_operation_livret, lib_opeation
+             FROM rh.pgt_type_operation_livret
+            WHERE modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%'
+            ORDER BY lib_opeation""",
+    )
+    return [
+        {
+            "id_type_operation_livret": int(r.get("id_type_operation_livret") or 0),
+            "lib_opeation": _str(r.get("lib_opeation")),
+        }
+        for r in rows or []
+    ]
+
+
+def list_challenges() -> list[dict]:
+    """Liste des challenges (selecteur 'Choisir un challenge')."""
+    db = get_pg_connection("divers")
+    rows = db.query(
+        """SELECT id_challenge_evenement, libelle, date_debut, date_fin
+             FROM divers.pgt_challenge_evenement
+            WHERE modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%'
+            ORDER BY date_debut DESC NULLS LAST""",
+    )
+    out = []
+    for r in rows or []:
+        out.append({
+            "id_challenge_evenement": _str(r.get("id_challenge_evenement")),
+            "libelle": _str(r.get("libelle")),
+            "date_debut": _iso(r.get("date_debut")),
+            "date_fin": _iso(r.get("date_fin")),
+        })
+    return out
+
+
+def load_livret_item(id_salarie_livret: int) -> dict:
+    """Recupere une ligne de livret pour pre-remplir le formulaire."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_salarie_livret, id_salarie,
+                  id_type_operation_livret, id_challenge, id_tk_liste,
+                  montant_credit, montant_debit, date_operation
+             FROM rh.pgt_salarie_livret
+            WHERE id_salarie_livret = ?
+            LIMIT 1""",
+        (int(id_salarie_livret),),
+    )
+    if not rows:
+        return {}
+    r = rows[0]
+    # Lib challenge (si renseigne)
+    lib_challenge = ""
+    id_chall = r.get("id_challenge") or 0
+    if id_chall:
+        db_d = get_pg_connection("divers")
+        c_rows = db_d.query(
+            """SELECT libelle, date_debut, date_fin
+                 FROM divers.pgt_challenge_evenement
+                WHERE id_challenge_evenement = ?
+                LIMIT 1""",
+            (int(id_chall),),
+        )
+        if c_rows:
+            cr = c_rows[0]
+            lib_challenge = (
+                f"{_str(cr.get('libelle'))}, du {_iso(cr.get('date_debut'))}"
+                f" au {_iso(cr.get('date_fin'))}"
+            )
+    return {
+        "id_salarie_livret": _str(r.get("id_salarie_livret")),
+        "id_salarie": _str(r.get("id_salarie")),
+        "id_type_operation_livret": int(r.get("id_type_operation_livret") or 0),
+        "id_challenge": _str(r.get("id_challenge")),
+        "lib_challenge": lib_challenge,
+        "id_tk_liste": _str(r.get("id_tk_liste")),
+        "montant_credit": _num(r.get("montant_credit")),
+        "montant_debit": _num(r.get("montant_debit")),
+        "date_operation": _iso(r.get("date_operation")),
+    }
+
+
+def upsert_livret(
+    id_salarie: int,
+    id_salarie_livret: int | None,
+    id_type_operation_livret: int,
+    id_challenge: int,
+    montant_credit: float,
+    montant_debit: float,
+    date_operation: str,
+    operateur_id: int,
+) -> dict:
+    """Insert (id_salarie_livret None/0) ou Update d'une ligne de livret."""
+    db = get_pg_connection("rh")
+    if not id_salarie_livret:
+        new_id = _new_id()
+        db.execute(
+            """INSERT INTO rh.pgt_salarie_livret
+                  (id_salarie_livret, id_salarie, operateur,
+                   id_type_operation_livret, id_challenge,
+                   montant_credit, montant_debit, date_operation,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?,
+                       ?, ?,
+                       ?, ?, ?::timestamp,
+                       NOW(), ?, 'new')""",
+            (
+                new_id, int(id_salarie), int(operateur_id),
+                int(id_type_operation_livret), int(id_challenge or 0),
+                float(montant_credit or 0), float(montant_debit or 0),
+                date_operation or None,
+                int(operateur_id),
+            ),
+        )
+        return {"ok": True, "id_salarie_livret": str(new_id)}
+
+    db.execute(
+        """UPDATE rh.pgt_salarie_livret
+              SET id_type_operation_livret = ?,
+                  id_challenge = ?,
+                  montant_credit = ?,
+                  montant_debit = ?,
+                  date_operation = ?::timestamp,
+                  modif_date = NOW(),
+                  modif_op = ?,
+                  modif_elem = 'modif'
+            WHERE id_salarie_livret = ?""",
+        (
+            int(id_type_operation_livret), int(id_challenge or 0),
+            float(montant_credit or 0), float(montant_debit or 0),
+            date_operation or None,
+            int(operateur_id),
+            int(id_salarie_livret),
+        ),
+    )
+    return {"ok": True, "id_salarie_livret": str(id_salarie_livret)}

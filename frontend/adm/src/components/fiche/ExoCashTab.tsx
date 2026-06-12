@@ -18,6 +18,7 @@ import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import SalarieLivretModal from './SalarieLivretModal'
 
 interface LivretItem {
   id_salarie_livret: string
@@ -76,6 +77,8 @@ export default function ExoCashTab({ idSalarie }: Props) {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string>('')
 
   const reload = useCallback(async () => {
     if (!idSalarie) return
@@ -114,10 +117,8 @@ export default function ExoCashTab({ idSalarie }: Props) {
   const selectedItem = items.find((i) => i.id_salarie_livret === selected) || null
 
   const handleNouveau = () => {
-    showToast(
-      'Ajout d’une opération de livret : à implémenter (Fen_SalariéLivretFiche).',
-      'info',
-    )
+    setEditingId('')
+    setEditOpen(true)
   }
 
   const handleModifier = () => {
@@ -125,10 +126,8 @@ export default function ExoCashTab({ idSalarie }: Props) {
       showToast('Sélectionner une opération à modifier.', 'info')
       return
     }
-    showToast(
-      'Modification d’une opération de livret : à implémenter (Fen_SalariéLivretFiche).',
-      'info',
-    )
+    setEditingId(selectedItem.id_salarie_livret)
+    setEditOpen(true)
   }
 
   const handleSupprimer = async () => {
@@ -301,6 +300,18 @@ export default function ExoCashTab({ idSalarie }: Props) {
           </div>
         </div>
       </div>
+
+      {editOpen && (
+        <SalarieLivretModal
+          idSalarie={idSalarie}
+          idLivret={editingId}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            setEditOpen(false)
+            void reload()
+          }}
+        />
+      )}
     </div>
   )
 }
