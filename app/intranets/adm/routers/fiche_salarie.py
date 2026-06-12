@@ -14,6 +14,7 @@ from app.intranets.adm.services import courrier_fpe as courrier_fpe_svc
 from app.intranets.adm.services import fiche_absences as absences_svc
 from app.intranets.adm.services import fiche_declaratif as declaratif_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
+from app.intranets.adm.services import fiche_exo_cash as exo_cash_svc
 from app.intranets.adm.services import fiche_droit_acces as droit_acces_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
 from app.intranets.adm.services import fiche_documents as documents_svc
@@ -1265,6 +1266,40 @@ def get_declaratif(
     """
     try:
         return declaratif_svc.load_declaratif(id_salarie, date_du, date_au)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Onglet 'Exo Cash' (livret)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{id_salarie}/exo-cash")
+def get_exo_cash(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Operations du livret + soldes (solde actuel / cde en cours / apres)."""
+    try:
+        return {
+            "items": exo_cash_svc.load_livret(id_salarie),
+            "soldes": exo_cash_svc.calc_soldes(id_salarie),
+        }
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.delete("/exo-cash/{id_salarie_livret}")
+def delete_exo_cash(
+    id_salarie_livret: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Soft delete d'une ligne de livret."""
+    try:
+        return exo_cash_svc.soft_delete_livret(id_salarie_livret, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

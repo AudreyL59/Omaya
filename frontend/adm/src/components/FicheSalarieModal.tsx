@@ -30,6 +30,7 @@ import AccesOmayaTab from './fiche/AccesOmayaTab'
 import DeclaratifTab from './fiche/DeclaratifTab'
 import DocRHTab from './fiche/DocRHTab'
 import DocumentsTab from './fiche/DocumentsTab'
+import ExoCashTab from './fiche/ExoCashTab'
 import MutuelleTab from './fiche/MutuelleTab'
 import NoteFraisTab from './fiche/NoteFraisTab'
 import OrgaSuiviTab from './fiche/OrgaSuiviTab'
@@ -151,7 +152,7 @@ const MENU: MenuItem[] = [
   { key: 'note_frais',      label: 'Note de frais',     coded: true },
   { key: 'droit_acces',     label: 'Accès Omaya',       coded: true },
   { key: 'declaratif',      label: 'Déclaratif',        coded: true },
-  { key: 'exo_cash',        label: 'Exo Cash',          coded: false },
+  { key: 'exo_cash',        label: 'Exo Cash',          coded: true },
   { key: 'ulease',          label: 'Ulease',            coded: false },
 ]
 
@@ -323,6 +324,11 @@ export default function FicheSalarieModal({
                 <DeclaratifTab idSalarie={idSalarie} />
               </div>
             )}
+            {activeTab === 'exo_cash' && (
+              <div className="p-5 h-full">
+                <ExoCashTab idSalarie={idSalarie} />
+              </div>
+            )}
             {activeTab !== 'identite' &&
               activeTab !== 'coordonnees' &&
               activeTab !== 'infos_embauche' &&
@@ -334,7 +340,8 @@ export default function FicheSalarieModal({
               activeTab !== 'mutuelle' &&
               activeTab !== 'note_frais' &&
               activeTab !== 'droit_acces' &&
-              activeTab !== 'declaratif' && (
+              activeTab !== 'declaratif' &&
+              activeTab !== 'exo_cash' && (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400 italic">
                   <div className="text-lg mb-2">
                     {MENU.find((m) => m.key === activeTab)?.label}
