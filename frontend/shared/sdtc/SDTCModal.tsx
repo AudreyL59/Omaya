@@ -199,11 +199,6 @@ interface Props {
   idSalarie: string
 }
 
-function fmtDate(iso: string): string {
-  if (!iso || iso.length < 10) return ''
-  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
-}
-
 export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props) {
   const [data, setData] = useState<SDTCData | null>(null)
   const [contrats, setContrats] = useState<ContratsData | null>(null)
