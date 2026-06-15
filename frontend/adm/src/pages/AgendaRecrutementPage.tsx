@@ -286,7 +286,9 @@ export default function AgendaRecrutementPage() {
         // erreur reseau -> on retentera au tick suivant
       }
     }
-    const interval = setInterval(tick, 30_000)
+    // 5s : peu d'utilisateurs sur cet agenda (3-4 max), donc faible charge
+    // serveur. Cf. memoire project_iis_no_sse : long polling.
+    const interval = setInterval(tick, 5_000)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recruteurId, mode, day, dateFrom, dateTo])
