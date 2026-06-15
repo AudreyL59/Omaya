@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { getToken, getStoredUser } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
+import AgendaDetailModal from '@/components/agenda/AgendaDetailModal'
 
 interface AgendaRDV {
   id_evenement: string
@@ -207,6 +208,8 @@ export default function AgendaRecrutementPage() {
   const [showRecruteurPicker, setShowRecruteurPicker] = useState(false)
   const [searchCandidat, setSearchCandidat] = useState('')
   const [statutRdv, setStatutRdv] = useState<AgendaRDV | null>(null)
+  /** RDV ouvert en detail complet (Fen_AgendaDetail). */
+  const [detailRdvId, setDetailRdvId] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Calcule le lundi et le vendredi de la semaine contenant `day`.
@@ -528,8 +531,9 @@ export default function AgendaRecrutementPage() {
               rdvs={filteredRdvs}
               monday={weekRange.from}
               onClickRdv={(r) => {
+                // Clic = ouvre le detail complet (Fen_AgendaDetail).
                 setExpanded(r.id_evenement)
-                setStatutRdv(r)
+                setDetailRdvId(r.id_evenement)
               }}
             />
           )
@@ -605,6 +609,13 @@ export default function AgendaRecrutementPage() {
               setStatutRdv(null)
               setRefreshKey((k) => k + 1)
             }}
+          />
+        )}
+        {detailRdvId && (
+          <AgendaDetailModal
+            idRdv={detailRdvId}
+            onClose={() => setDetailRdvId(null)}
+            onSaved={() => setRefreshKey((k) => k + 1)}
           />
         )}
       </AnimatePresence>
