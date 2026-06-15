@@ -58,12 +58,13 @@ def load(id_salarie: int) -> dict:
 
     sal = db_rh.query_one(
         """SELECT s.id_salarie, s.nom, s.prenom, s.num_ss, s.date_naiss,
-                  s.lieu_naiss, s.dep_naiss, s.adresse1, s.adresse2,
-                  s.cp, s.ville,
+                  s.lieu_naiss, s.dep_naiss,
+                  c.adresse1, c.adresse2, c.cp, c.ville,
                   se.date_debut AS date_embauche, se.date_anciennete,
                   se.id_ste,
                   soc.rs_interne, soc.raison_sociale
            FROM rh.pgt_salarie s
+           LEFT JOIN rh.pgt_salarie_coordonnees c ON c.id_salarie = s.id_salarie
            LEFT JOIN rh.pgt_salarie_embauche se ON se.id_salarie = s.id_salarie
            LEFT JOIN rh.pgt_societe soc ON soc.id_ste = se.id_ste
            WHERE s.id_salarie = ?""",
