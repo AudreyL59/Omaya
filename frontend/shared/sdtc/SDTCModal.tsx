@@ -570,7 +570,12 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               setSelected={setSelectedSdtc}
               computing={computing}
               onValidate={async () => {
-                if (selectedSdtc.size === 0) return
+                // Pas de blocage sur selection vide : passer a l'etape
+                // suivante reste possible (le calcul retournera 0 partout).
+                if (selectedSdtc.size === 0) {
+                  setTab('resume_stc')
+                  return
+                }
                 setComputing(true)
                 try {
                   const r = await fetch(
@@ -1107,7 +1112,7 @@ function ContratsSDTCTab({ contrats, loading, selected, setSelected, onValidate,
         <button
           type="button"
           onClick={onValidate}
-          disabled={selected.size === 0 || computing}
+          disabled={computing}
           className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded text-white disabled:opacity-40"
           style={{ backgroundColor: COLOR_PRIMARY }}
         >
