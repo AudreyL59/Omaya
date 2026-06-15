@@ -161,6 +161,9 @@ export default function OrganigrammePage() {
   const [roots, setRoots] = useState<OrgaNode[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  // Compteur incremente a la fermeture de FicheSalarieModal pour declencher
+  // un rechargement de l'organigramme (icones a jour : en pause, agenda, etc.).
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     fetch('/api/adm/organigramme', {
@@ -170,21 +173,26 @@ export default function OrganigrammePage() {
       .then((data) => {
         const list = Array.isArray(data) ? data : []
         setRoots(list)
-        if (list.length > 0) setSelectedRootId(list[0].id)
-
-        // Par défaut : ne déplie que les 2 premiers niveaux
-        // → on collapse tous les nœuds à depth >= 1 (leurs enfants depth >= 2 sont cachés)
-        const collapseSet = new Set<string>()
-        const walk = (n: OrgaNode, depth: number) => {
-          if (depth >= 1 && n.children.length > 0) collapseSet.add(n.id)
-          n.children.forEach((c) => walk(c, depth + 1))
+        if (list.length > 0 && !selectedRootId) {
+          setSelectedRootId(list[0].id)
         }
-        list.forEach((r) => walk(r, 0))
-        setCollapsed(collapseSet)
+
+        // Au premier chargement uniquement : collapse les noeuds depth >= 1
+        // (les recharges suivantes preservent l'etat d'ouverture utilisateur).
+        if (reloadKey === 0) {
+          const collapseSet = new Set<string>()
+          const walk = (n: OrgaNode, depth: number) => {
+            if (depth >= 1 && n.children.length > 0) collapseSet.add(n.id)
+            n.children.forEach((c) => walk(c, depth + 1))
+          }
+          list.forEach((r) => walk(r, 0))
+          setCollapsed(collapseSet)
+        }
       })
       .catch(() => setRoots([]))
       .finally(() => setLoading(false))
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey])
 
   const selectedRoot = useMemo(
     () => roots.find((r) => r.id === selectedRootId) || null,
@@ -470,6 +478,7 @@ export default function OrganigrammePage() {
             salarie={selectedSalarie}
             droits={droits}
             onClose={() => setSelectedSalarie(null)}
+            onFicheClosed={() => setReloadKey((k) => k + 1)}
           />
         )}
       </AnimatePresence>
@@ -876,10 +885,15 @@ function SalariePopup({
   salarie,
   droits,
   onClose,
+  onFicheClosed,
 }: {
   salarie: Salarie
   droits: string[]
   onClose: () => void
+  /** Appele quand la FicheSalarieModal se ferme - permet au parent
+   *  (OrganigrammePage) de recharger l'organigramme pour mettre a jour
+   *  les icones (en_pause, en_activite, agenda_actif, etc.). */
+  onFicheClosed?: () => void
 }) {
   const has = (d: string) => droits.includes(d)
   const [showFiche, setShowFiche] = useState(false)
@@ -1008,7 +1022,10 @@ function SalariePopup({
             idSalarie={salarie.id_salarie}
             nom={salarie.nom}
             prenom={salarie.prenom}
-            onClose={() => setShowFiche(false)}
+            onClose={() => {
+              setShowFiche(false)
+              onFicheClosed?.()
+            }}
           />
         )}
       </AnimatePresence>
