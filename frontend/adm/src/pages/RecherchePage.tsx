@@ -17,7 +17,7 @@
  * Btn 'Rech. avancee' : placeholder (Fen_RechercheAvancee a coder plus tard).
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Eraser,
   FileText,
@@ -502,23 +502,19 @@ function RowIcon({ row }: { row: SearchRow }) {
         </div>
       )
     case 'SALARIE':
-      if (row.has_photo) {
-        return (
-          <img
-            src={`/api/adm/fiche-salarie/${row.id}/photo`}
-            alt=""
-            className="rounded-full object-cover shrink-0"
-            style={{ width: 40, height: 40 }}
-            onError={(e) => {
-              ;(e.target as HTMLImageElement).style.visibility = 'hidden'
-            }}
-          />
-        )
-      }
+      // L'endpoint photo est protege par Bearer token : on ne peut pas
+      // mettre l'URL dans <img src=...> tel quel (le navigateur n'envoie
+      // pas le header et le serveur repond 401 avec WWW-Authenticate ->
+      // popup d'auth basique). On fetch en JS via AuthPhoto.
       return (
-        <div className={wrapperClass} style={wrapperStyle}>
-          <UserIcon className={iconClass} style={iconStyle} />
-        </div>
+        <AuthPhoto
+          src={`/api/adm/fiche-salarie/${row.id}/photo`}
+          fallback={
+            <div className={wrapperClass} style={wrapperStyle}>
+              <UserIcon className={iconClass} style={iconStyle} />
+            </div>
+          }
+        />
       )
     case 'CONTRAT':
       // TODO : afficher logo partenaire (att7) via /api/adm/partenaire/{prefix}/logo
@@ -528,4 +524,59 @@ function RowIcon({ row }: { row: SearchRow }) {
         </div>
       )
   }
+}
+
+/**
+ * Photo servie par un endpoint protégé Bearer. On la fetch en JS pour
+ * pouvoir passer l'Authorization header, puis on l'affiche via objectURL.
+ * Si le fetch échoue (404 ou autre), on rend le fallback.
+ */
+function AuthPhoto({
+  src,
+  fallback,
+}: {
+  src: string
+  fallback: React.ReactNode
+}) {
+  const [blobUrl, setBlobUrl] = useState<string>('')
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!src) return
+    let cancelled = false
+    let createdUrl = ''
+    ;(async () => {
+      try {
+        const r = await fetch(src, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+        if (!r.ok) {
+          if (!cancelled) setFailed(true)
+          return
+        }
+        const blob = await r.blob()
+        if (cancelled) return
+        createdUrl = URL.createObjectURL(blob)
+        setBlobUrl(createdUrl)
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (createdUrl) URL.revokeObjectURL(createdUrl)
+    }
+  }, [src])
+
+  if (failed || !blobUrl) {
+    return <>{fallback}</>
+  }
+  return (
+    <img
+      src={blobUrl}
+      alt=""
+      className="rounded-full object-cover shrink-0"
+      style={{ width: 40, height: 40 }}
+    />
+  )
 }
