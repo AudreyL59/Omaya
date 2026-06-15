@@ -59,6 +59,12 @@ class ValiderSelectionPayload(BaseModel):
     mois_p_sdtc: str = ""   # YYYY-MM (cf. WinDev MoisP_SDTC pour auto-validation SFR)
 
 
+class ComputeBaremePayload(BaseModel):
+    """Compat ancien front : partition auto entre traites / a_traiter."""
+    contrat_ids: list[str] = []
+    mois_p_sdtc: str = ""
+
+
 class GenererTableauPayload(BaseModel):
     contrat_ids_traites: list[str] = []
     contrat_ids_a_traiter: list[str] = []
@@ -114,6 +120,51 @@ def sdtc_contrats(id_salarie: str, _user: UserToken = Depends(get_current_user))
     sid = _parse_id(id_salarie)
     try:
         return load_contrats(sid)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(
+            status_code=500, detail=f"{type(e).__name__}: {e}"
+        )
+
+
+@router.post("/{id_salarie}/compute-bareme")
+def sdtc_compute_bareme(
+    id_salarie: str,
+    payload: ComputeBaremePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Compatibilite ancien front : partitionne automatiquement les ids
+    selectionnes entre traites / a_traiter avant d'appeler valider_selection.
+    Le nouveau front doit utiliser /valider-selection directement."""
+    sid = _parse_id(id_salarie)
+    try:
+        data = load_contrats(sid)
+        selection_ids = {cid.strip() for cid in payload.contrat_ids if cid and cid.strip()}
+        if not selection_ids:
+            raise HTTPException(status_code=400, detail="Aucun contrat selectionne.")
+        ids_traites = {
+            str(c.get("id_contrat"))
+            for c in (data.get("traites") or [])
+            if str(c.get("id_contrat")) in selection_ids
+        }
+        ids_a_traiter = {
+            str(c.get("id_contrat"))
+            for c in (data.get("a_traiter") or [])
+            if str(c.get("id_contrat")) in selection_ids
+        }
+        result = valider_selection(
+            contrats_traites=data.get("traites") or [],
+            contrats_a_traiter=data.get("a_traiter") or [],
+            selected_ids_traites=ids_traites,
+            selected_ids_a_traiter=ids_a_traiter,
+            mois_p_sdtc=payload.mois_p_sdtc,
+            op_id=user.id_salarie,
+        )
+        result["nb_selectionnes"] = len(selection_ids)
+        result["selection_ids"] = sorted(selection_ids)
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(

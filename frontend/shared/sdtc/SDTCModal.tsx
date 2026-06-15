@@ -33,6 +33,7 @@ const COLOR_BRUN = '#4E1D17'
 const COLOR_BG_SOFT = '#EFE9E7'
 
 interface SalarieInfo {
+  civilite?: number
   nom: string
   prenom: string
   lib_nom: string
@@ -44,14 +45,19 @@ interface SalarieInfo {
   adresse2: string
   cp: string
   ville: string
+  mail?: string
+  tel_mob?: string
+  tel_fixe?: string
   date_embauche: string
   date_anciennete: string
+  date_anciennete_yyyymmdd?: string
   id_ste: string
   lib_societe: string
 }
 
 interface SortieInfo {
   date_sortie_reelle: string
+  date_sortie_demandee?: string
   lib_sortie_raw: string
   titre_sortie: string
   kind: string
@@ -67,6 +73,9 @@ interface SDTCData {
   sortie: SortieInfo
   info_mutuelle: string
   date_dernier_ctt: string
+  /** Bloc HTML mesInfos genere cote backend avec placeholders
+   *  MONTANT_COMM/CP/DECO/AVANCE/NB_TR/DATEABS - cf. WinDev `mesInfos`. */
+  info_salarie_html?: string
 }
 
 interface ContratItem {
@@ -75,11 +84,14 @@ interface ContratItem {
   num_bs: string
   info_interne: string
   lib_produit: string
+  famille?: string
+  sous_fam?: string
   type_prod: string
   date_signature: string
   mois_paiement: string
   id_etat_contrat: number
   etat_contrat_lib: string
+  etat_contrat_lib_op?: string
   id_type_etat: number
   type_etat_lib: string
   couleur_fond: string
@@ -90,6 +102,37 @@ interface ContratItem {
   client_ville: string
   client_mail: string
   client_gsm: string
+  /** Colonnes specifiques SFR (cf. afficherContrat WinDev) */
+  sfr?: {
+    box8: boolean
+    box8_verif: boolean
+    id_sfr_cluster: string
+    date_portabilite: string
+    date_racc_activ: string
+    date_rdv_tech: string
+    date_resil: string
+    date_validation: string
+    id_etat_sfr: number
+    internet_garanti: boolean
+    type_vente: number
+    remise: boolean
+    self_install: boolean
+    technologie: number
+  }
+  /** Colonnes specifiques ENI */
+  eni?: {
+    gaz_car_declaree: number
+    gaz_car_relevee: number
+    elec_puissance: number
+    gaz_actif: boolean
+    elec_actif: boolean
+  }
+  /** Colonnes specifiques OEN */
+  oen?: {
+    gaz_car_relevee: number
+    elec_puissance: number
+    id_etat_oen: number
+  }
 }
 
 interface ContratsData {
@@ -466,6 +509,7 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               setCommentaires={setCommentaires}
               nbTr={nbTr}
               setNbTr={setNbTr}
+              infoSalarieHtml={data?.info_salarie_html}
             />
           )}
           {!loading && data && tab === 'a_editer' && (
@@ -961,6 +1005,7 @@ function ResumeSTCTab({
   setCommentaires,
   nbTr,
   setNbTr,
+  infoSalarieHtml,
 }: {
   bareme: BaremeResult | null
   onGoToSelection: () => void
@@ -972,6 +1017,8 @@ function ResumeSTCTab({
   setCommentaires: (v: string) => void
   nbTr: number
   setNbTr: (v: number) => void
+  /** HTML mesInfos genere cote backend (avec placeholders) */
+  infoSalarieHtml?: string
 }) {
   if (!bareme) {
     return (
@@ -1039,6 +1086,17 @@ function ResumeSTCTab({
           </div>
         ))}
       </div>
+
+      {/* Bloc HTML mesInfos (cf. WinDev InfoSalarie) — affiche tel quel.
+          Les placeholders MONTANT_COMM/CP/DECO/AVANCE/NB_TR/DATEABS sont
+          remplaces uniquement a la generation PDF/Mail cote backend. */}
+      {infoSalarieHtml && (
+        <div
+          className="mt-4 p-3 border rounded text-xs"
+          style={{ borderColor: COLOR_BG_SOFT, backgroundColor: '#FBF6F4', color: COLOR_BRUN }}
+          dangerouslySetInnerHTML={{ __html: infoSalarieHtml }}
+        />
+      )}
 
       <div className="mt-3 grid grid-cols-[120px_1fr] gap-3 items-start">
         <label className="text-sm pt-1" style={{ color: COLOR_BRUN }}>
