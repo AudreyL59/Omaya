@@ -1290,7 +1290,10 @@ function WeekCalendarView({
                 .map((rdv) => {
                   const pos = positionRdv(rdv)
                   if (!pos) return null
-                  const soft = hexToSoftStyle(rdv.couleur_hex)
+                  const hex = rdv.couleur_hex || '#A68D8A'
+                  // Fond a ~40% d'opacite + texte en brun foncé OMAYA :
+                  // bien plus contraste que la version 'soft' (15%) pour
+                  // les categories pales (rose, jaune, bleu clair).
                   return (
                     <button
                       key={rdv.id_evenement}
@@ -1300,15 +1303,15 @@ function WeekCalendarView({
                       style={{
                         top: pos.top,
                         height: pos.height,
-                        backgroundColor: soft.backgroundColor,
-                        color: soft.color,
-                        borderLeft: `3px solid ${rdv.couleur_hex || '#A68D8A'}`,
+                        backgroundColor: hex + '66', // 40% opacity = bien visible
+                        color: '#4E1D17',            // brun foncé OMAYA pour le texte
+                        borderLeft: `3px solid ${hex}`,
                       }}
                       title={`${rdv.titre} (${formatTime(rdv.date_debut)} - ${formatTime(rdv.date_fin)})`}
                     >
                       <div className="font-semibold truncate">{rdv.titre}</div>
                       {pos.height > 26 && (
-                        <div className="opacity-75 truncate text-[10px]">
+                        <div className="opacity-80 truncate text-[10px]">
                           {formatTime(rdv.date_debut)} – {formatTime(rdv.date_fin)}
                         </div>
                       )}
