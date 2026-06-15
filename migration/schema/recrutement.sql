@@ -413,3 +413,61 @@ CREATE TABLE recrutement.pgt_type_salon_visio (
     CONSTRAINT uq_pgt_type_salon_visio_auto UNIQUE (id_type_salon_visio_auto)
 );
 CREATE INDEX ix_pgt_type_salon_visio_modif_date ON recrutement.pgt_type_salon_visio (modif_date);
+
+CREATE TABLE recrutement.pgt_cv_suivi (
+    id_cv_suivi_auto                                     bigint,  -- IDCvSuiviAuto
+    id_cv_suivi                                          bigint NOT NULL,  -- IDCvSuivi
+    id_cvtheque                                          bigint,  -- IDcvtheque
+    datecrea                                             timestamp,  -- Datecrea
+    op_crea                                              bigint,  -- OPCREA
+    id_cv_statut                                         bigint,  -- IdCvStatut
+    type_elem                                            varchar(10),  -- TypeElem
+    id_elem                                              bigint,  -- IdElem
+    observation                                          text,  -- Observation
+    modif_date                                           timestamp,  -- ModifDate
+    modif_op                                             bigint,  -- ModifOp
+    modif_elem                                           varchar(5),  -- ModifElem
+    id_cvtheque_datecrea_id_cv_statut_type_elem_id_elem  varchar(42),  -- IDcvthequeDatecreaIdCvStatutTypeElemIdElem
+    CONSTRAINT pk_pgt_cv_suivi PRIMARY KEY (id_cv_suivi),
+    CONSTRAINT uq_pgt_cv_suivi_auto UNIQUE (id_cv_suivi_auto)
+);
+CREATE INDEX ix_pgt_cv_suivi_id_cvtheque ON recrutement.pgt_cv_suivi (id_cvtheque);
+CREATE INDEX ix_pgt_cv_suivi_id_cv_statut ON recrutement.pgt_cv_suivi (id_cv_statut);
+CREATE INDEX ix_pgt_cv_suivi_modif_date ON recrutement.pgt_cv_suivi (modif_date);
+
+CREATE TABLE recrutement.pgt_prev_recrut (
+    id_prevision_recrut_auto  bigint,  -- IDprevisionRecrutAuto
+    id_prevision_recrut       bigint NOT NULL,  -- IDprevisionRecrut
+    id_cv_lieu_rdv            bigint,  -- IDcvLieuRdv
+    id_prev_recrut_etat       bigint,  -- IDprevRecrutEtat
+    idorganigramme            bigint,  -- idorganigramme
+    id_recruteur              bigint,  -- IdRecruteur
+    date_debut                date,  -- DateDébut
+    date_fin                  date,  -- DateFin
+    date_session              date,  -- dateSession
+    date_butoire              date,  -- DateButoire
+    potentiel_accueil         integer,  -- PotentielAccueil
+    nb_prod                   integer,  -- NBProd
+    coopt_s_moins_1           integer,  -- cooptSmoins1
+    coopt_j_moins_2           integer,  -- cooptJmoins2
+    sourcing_s_moins_1        integer,  -- SourcingSmoins1
+    sourcing_j_moins_2        integer,  -- SourcingJmoins2
+    taille_session            integer,  -- tailleSession
+    obj_coopt                 integer,  -- objCoopt
+    obj_sourcing              integer,  -- objSourcing
+    nb_coopt_mini             integer,  -- NbCooptMini
+    nb_sourcing_mini          integer,  -- NbSourcingMini
+    id_communes_france        bigint,  -- IDCommunesFrance
+    commentaire               text,  -- commentaire
+    modif_date                timestamp,  -- ModifDate
+    modif_op                  bigint,  -- ModifOp
+    modif_elem                varchar(5),  -- ModifElem
+    CONSTRAINT pk_pgt_prev_recrut PRIMARY KEY (id_prevision_recrut),
+    CONSTRAINT uq_pgt_prev_recrut_auto UNIQUE (id_prevision_recrut_auto)
+);
+CREATE INDEX ix_pgt_prev_recrut_id_cv_lieu_rdv ON recrutement.pgt_prev_recrut (id_cv_lieu_rdv);
+CREATE INDEX ix_pgt_prev_recrut_id_prev_recrut_etat ON recrutement.pgt_prev_recrut (id_prev_recrut_etat);
+CREATE INDEX ix_pgt_prev_recrut_idorganigramme ON recrutement.pgt_prev_recrut (idorganigramme);
+CREATE INDEX ix_pgt_prev_recrut_id_recruteur ON recrutement.pgt_prev_recrut (id_recruteur);
+CREATE INDEX ix_pgt_prev_recrut_date_session ON recrutement.pgt_prev_recrut (date_session);
+CREATE INDEX ix_pgt_prev_recrut_modif_date ON recrutement.pgt_prev_recrut (modif_date);
