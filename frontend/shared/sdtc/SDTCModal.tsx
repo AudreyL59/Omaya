@@ -557,7 +557,7 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
             </div>
           )}
           {!loading && data && tab === 'resume' && (
-            <ResumeTab data={data} contrats={contrats} />
+            <ResumeTab contrats={contrats} />
           )}
           {!loading && data && tab === 'deja_traites' && (
             <DejaTraitesTab
@@ -712,10 +712,8 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
 // --- Onglet "Resume" ----------------------------------------------------
 
 function ResumeTab({
-  data,
   contrats,
 }: {
-  data: SDTCData
   contrats: ContratsData | null
 }) {
   // Cf. WinDev onglet 'Résumé' : 2 tableaux côte à côte
@@ -830,98 +828,6 @@ function ResumeTab({
     </div>
   )
 }
-
-// Ancien ResumeTab (HTML mesInfos) - conserve pour reference mais plus
-// monte. Le HTML est desormais dans ResumeSTCTab (onglet 4) cf. WinDev.
-function _ResumeTabOld({ data }: { data: SDTCData }) {
-  const { salarie, sortie, info_mutuelle, date_dernier_ctt } = data
-  return (
-    <div className="max-w-3xl mx-auto">
-      <div
-        className="border rounded-lg p-5"
-        style={{ borderColor: COLOR_BG_SOFT, backgroundColor: 'white' }}
-      >
-        <h3
-          className="text-lg font-semibold text-center pb-2 border-b"
-          style={{ color: COLOR_BRUN, borderColor: COLOR_BG_SOFT }}
-        >
-          SOLDE DE TOUT COMPTE
-        </h3>
-        <p className="text-center font-medium mt-3" style={{ color: COLOR_BRUN }}>
-          {salarie.lib_nom}
-          {salarie.lib_societe && <span> chez {salarie.lib_societe}</span>}
-        </p>
-
-        <p className="text-xs text-center mt-3" style={{ color: COLOR_BRUN }}>
-          Entré(e) le {fmtDate(salarie.date_embauche) || '—'}
-        </p>
-        <p className="text-xs text-center" style={{ color: COLOR_BRUN }}>
-          Sorti(e) le {fmtDate(sortie.date_sortie_reelle) || ':'} {sortie.courrier_info}
-        </p>
-
-        {sortie.titre_sortie && (
-          <p className="text-sm font-semibold text-center mt-3" style={{ color: COLOR_BRUN }}>
-            {sortie.titre_sortie}
-          </p>
-        )}
-
-        <div className="mt-4 space-y-1 text-sm" style={{ color: COLOR_BRUN }}>
-          {salarie.adresse1 && <div>{salarie.adresse1}</div>}
-          {salarie.adresse2 && <div>{salarie.adresse2}</div>}
-          <div>
-            {salarie.cp} {salarie.ville}
-          </div>
-          <div>
-            N° SS : {salarie.num_ss || '—'}
-          </div>
-          <div>
-            Né(e) le : {fmtDate(salarie.date_naiss) || '—'} à {salarie.lieu_naiss}
-            {salarie.dep_naiss && ` (${salarie.dep_naiss})`}
-          </div>
-        </div>
-
-        <div className="mt-5 space-y-1 text-sm" style={{ color: COLOR_BRUN }}>
-          <Placeholder label="COMM" value="MONTANT_COMM" />
-          <Placeholder label="CP" value="MONTANT_CP" />
-          <Placeholder label="DECO" value="MONTANT_DECO" />
-          <Placeholder label="AVANCE" value="MONTANT_AVANCE" />
-          <Placeholder label="Nombre de TR" value="NB_TR" />
-          <div>
-            Mutuelle Entreprise : <strong>{info_mutuelle}</strong>
-          </div>
-          <Placeholder label="Absence" value="DATEABS" />
-        </div>
-
-        {date_dernier_ctt && (
-          <p className="mt-4 text-xs text-emerald-700">
-            Dernier contrat signé le {fmtDate(date_dernier_ctt)}
-          </p>
-        )}
-
-        <p className="mt-4 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
-          Cordialement.
-        </p>
-      </div>
-
-      <p className="mt-4 text-xs text-center" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
-        Les montants COMM/CP/DECO/AVANCE/TR et les contrats seront calculés à partir
-        des onglets suivants (à venir).
-      </p>
-    </div>
-  )
-}
-
-function Placeholder({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      {label} :{' '}
-      <span className="font-mono text-xs italic" style={{ opacity: 0.6 }}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
 
 // --- Helpers communs aux grilles contrats -------------------------------
 
