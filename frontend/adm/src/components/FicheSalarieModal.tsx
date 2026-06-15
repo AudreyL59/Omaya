@@ -507,7 +507,8 @@ function ActionBar({
         Supprimer la fiche salarié
       </button>
 
-      {/* Toggle Actif / En pause */}
+      {/* Toggle Actif / En pause : visuellement exclusif (en_pause prime
+          sur en_activite quand les 2 cohabitent cote backend). */}
       <div
         className="flex items-center rounded overflow-hidden ml-2"
         style={{ border: `1px solid ${COLOR_PRIMARY}` }}
@@ -517,8 +518,12 @@ function ActionBar({
           disabled={!header}
           className="px-4 py-1 text-xs font-medium transition"
           style={{
-            backgroundColor: header?.en_activite ? COLOR_PRIMARY : 'transparent',
-            color: header?.en_activite ? 'white' : COLOR_PRIMARY,
+            backgroundColor:
+              header?.en_activite && !header?.en_pause
+                ? COLOR_PRIMARY
+                : 'transparent',
+            color:
+              header?.en_activite && !header?.en_pause ? 'white' : COLOR_PRIMARY,
           }}
         >
           Actif
