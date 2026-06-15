@@ -39,6 +39,7 @@ import UleaseTab from './fiche/UleaseTab'
 import SalarieAbsenceModal from './fiche/SalarieAbsenceModal'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import SDTCModal from '@shared/sdtc/SDTCModal'
+import { ChevronDown } from 'lucide-react'
 
 // --- Types ---------------------------------------------------------------
 
@@ -562,16 +563,7 @@ function ActionBar({
         onClick={() => setSdtcOpen(true)}
         disabled={!header}
       />
-      <HeaderAction
-        icon={<Printer className="w-4 h-4" />}
-        label="Imprimer"
-        onClick={() =>
-          showToast(
-            'Impression : à implémenter (Etat_PochetteSalarié + EtatAbsencesSalarié).',
-            'info',
-          )
-        }
-      />
+      <PrintMenu idSalarie={idSalarie} />
       <HeaderAction
         icon={<Copy className="w-4 h-4" />}
         label="Dupliquer"
@@ -627,6 +619,110 @@ function HeaderAction({
       <span style={{ color: COLOR_PRIMARY }}>{icon}</span>
       {label}
     </button>
+  )
+}
+
+// --- Print menu (clic principal = Pochette / dropdown = autres formats) ---
+
+function PrintMenu({ idSalarie }: { idSalarie: string }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const download = async (path: string, suffix: string) => {
+    setBusy(true)
+    setOpen(false)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${idSalarie}/print/${path}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Pochette_${idSalarie}${suffix}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      showToast(`Échec impression : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => void download('pochette', '')}
+        disabled={busy}
+        className="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-[#ECF1F2] rounded disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ color: COLOR_BRUN }}
+        title="Imprimer la pochette salarié"
+      >
+        <span style={{ color: COLOR_PRIMARY }}>
+          {busy ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Printer className="w-4 h-4" />
+          )}
+        </span>
+        Imprimer
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={busy}
+        className="flex items-center px-1 py-1 text-xs hover:bg-[#ECF1F2] rounded disabled:opacity-50"
+        style={{ color: COLOR_PRIMARY }}
+        title="Autres formats d'impression"
+      >
+        <ChevronDown className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <>
+          <div
+            className="fixed inset-0 z-[55]"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="absolute right-0 top-full mt-1 bg-white border rounded shadow-lg py-1 z-[56]"
+            style={{ borderColor: COLOR_BG_SOFT, minWidth: '220px' }}
+          >
+            <button
+              type="button"
+              onClick={() => void download('pochette', '')}
+              className="block w-full text-left px-3 py-1.5 text-xs hover:bg-[#ECF1F2]"
+              style={{ color: COLOR_BRUN }}
+            >
+              Pochette seule
+            </button>
+            <button
+              type="button"
+              onClick={() => void download('absences', '_absences')}
+              className="block w-full text-left px-3 py-1.5 text-xs hover:bg-[#ECF1F2]"
+              style={{ color: COLOR_BRUN }}
+            >
+              Absences seules
+            </button>
+            <button
+              type="button"
+              onClick={() => void download('pochette-complete', '_complete')}
+              className="block w-full text-left px-3 py-1.5 text-xs hover:bg-[#ECF1F2] font-semibold"
+              style={{ color: COLOR_BRUN }}
+            >
+              Pochette + Absences (fusionnées)
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 

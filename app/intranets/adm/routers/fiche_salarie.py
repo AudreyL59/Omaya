@@ -16,6 +16,7 @@ from app.intranets.adm.services import fiche_declaratif as declaratif_svc
 from app.intranets.adm.services import fiche_doc_rh as doc_rh_svc
 from app.intranets.adm.services import fiche_doc_ulease as doc_ulease_svc
 from app.intranets.adm.services import fiche_exo_cash as exo_cash_svc
+from app.intranets.adm.services import fiche_pochette as pochette_svc
 from app.intranets.adm.services import fiche_ulease as ulease_svc
 from app.intranets.adm.services import fiche_droit_acces as droit_acces_svc
 from app.intranets.adm.services import fiche_doc_rh_generate as doc_rh_gen_svc
@@ -173,6 +174,77 @@ def post_duplicate_salarie(
     coordonnees + sortie + mutuelle). Retourne le nouvel id_salarie."""
     try:
         return svc.duplicate_salarie(id_salarie, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+# --- Btn 'Imprimer' : pochette / absences / pochette+absences fusionnees ---
+
+
+@router.get("/{id_salarie}/print/pochette")
+def get_print_pochette(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Etat_PochetteSalarie : PDF d'1 page avec photo + identite + emploi +
+    coordonnees + urgence."""
+    try:
+        pdf = pochette_svc.generate_pochette_pdf(id_salarie)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{quote(pochette_svc.filename_for(id_salarie))}"'
+                )
+            },
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/print/absences")
+def get_print_absences(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """EtatAbsencesSalarie : PDF liste des absences groupee par AnneeConge."""
+    try:
+        pdf = pochette_svc.generate_absences_pdf(id_salarie)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{quote(pochette_svc.filename_for(id_salarie, "_absences"))}"'
+                )
+            },
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.get("/{id_salarie}/print/pochette-complete")
+def get_print_pochette_complete(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Pochette + Absences fusionnees (cf. WinDev clic-fleche du bouton
+    Imprimer = PDFFusionne)."""
+    try:
+        pdf = pochette_svc.generate_pochette_complete_pdf(id_salarie)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{quote(pochette_svc.filename_for(id_salarie, "_complete"))}"'
+                )
+            },
+        )
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
