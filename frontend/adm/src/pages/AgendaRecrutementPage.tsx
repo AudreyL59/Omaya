@@ -337,7 +337,7 @@ export default function AgendaRecrutementPage() {
         <p className="text-[#A68D8A] mt-1">RDV d'entretiens</p>
       </motion.div>
 
-      <div className="max-w-5xl mt-6">
+      <div className="mt-6">
         {/* Toolbar */}
         <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-4 mb-4 flex items-center gap-3 flex-wrap">
           {/* Mode toggle */}
