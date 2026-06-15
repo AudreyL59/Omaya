@@ -12,6 +12,7 @@ from app.intranets.adm.routers.organigramme import router as organigramme_router
 from app.intranets.adm.routers.annonceurs import router as annonceurs_router
 from app.intranets.adm.routers.agenda_recrutement import router as agenda_recrutement_router
 from app.intranets.adm.routers.mon_compte import router as mon_compte_router
+from app.intranets.adm.routers.recherche import router as recherche_router
 from app.intranets.adm.routers.registre_rh import router as registre_rh_router
 from app.intranets.adm.routers.fiche_salarie import router as fiche_salarie_router
 from app.shared.production.router import router as production_router
@@ -34,6 +35,7 @@ router.include_router(organigramme_router)
 router.include_router(annonceurs_router)
 router.include_router(agenda_recrutement_router)
 router.include_router(mon_compte_router)
+router.include_router(recherche_router)
 router.include_router(registre_rh_router)
 router.include_router(fiche_salarie_router)
 router.include_router(production_router)
