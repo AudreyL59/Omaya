@@ -1112,6 +1112,8 @@ function ResumeSTCTab({
   nbTr,
   setNbTr,
   infoSalarieHtml,
+  onCalcNbTr,
+  calculatingNbTr,
 }: {
   bareme: BaremeResult | null
   onGoToSelection: () => void
@@ -1538,8 +1540,8 @@ function RecapBOTab({
             rejets: p?.rejets_bo || 0,
             resiliation: p?.resiliation || 0,
             valide_paye: p?.valide_paye || 0,
-            decommision: p?.decommision || 0,
-          } as Record<EtatKey, number>,
+            decommission: p?.decommision || 0,
+          },
         }
       })
       arr.sort((a, b) => a.lib_produit.localeCompare(b.lib_produit))
