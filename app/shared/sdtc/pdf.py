@@ -330,6 +330,7 @@ def build_pdf(
     contrats_consideres: list[dict],
     nb_tr: int = 0,
     commentaires: str = "",
+    info_salarie_html: str = "",
 ) -> bytes:
     """Genere le PDF EtatSTC_RecapPROD.
 
@@ -339,6 +340,8 @@ def build_pdf(
       contrats_consideres : liste des contrats deja traites coches + selection SDTC
       nb_tr    : nombre de TR (saisie operateur)
       commentaires : TEXTE3 (saisie operateur)
+      info_salarie_html : bloc HTML mesInfos avec placeholders deja substitues
+                          (insere apres le sous-etat 'Solde de tout compte').
     """
     societe = _load_societe(int(salarie.get("id_ste") or 0))
     lib_nom = _str(salarie.get("lib_nom"))
@@ -406,12 +409,22 @@ def build_pdf(
         f'"{footer_text}"' if footer_text else '""',
     )
 
+    # Bloc HTML mesInfos (avec placeholders deja substitues) - cf. WinDev
+    # InfoSalarie. Injecte tel quel (pas d'echappement HTML, c'est du HTML
+    # genere cote service.build_info_salarie_html).
+    info_salarie_block = (
+        f'<div class="info-salarie">{info_salarie_html}</div>'
+        if info_salarie_html
+        else ""
+    )
+
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>{css_with_footer}</style></head>
 <body>
 {header}
 {infos_html}
 {prod_stc_html}
+{info_salarie_block}
 {commentaires_html}
 {recap_nb_html}
 {recap_pts_html}
