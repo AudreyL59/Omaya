@@ -528,9 +528,8 @@ function ActionBar({
           disabled={!header}
           className="px-4 py-1 text-xs font-medium transition"
           style={{
-            backgroundColor: header?.en_pause ? '#D97706' : 'transparent',
+            backgroundColor: header?.en_pause ? COLOR_PRIMARY : 'transparent',
             color: header?.en_pause ? 'white' : COLOR_PRIMARY,
-            opacity: header?.en_pause ? 1 : 0.7,
           }}
         >
           En pause
