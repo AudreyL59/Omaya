@@ -135,10 +135,25 @@ interface ContratItem {
   }
 }
 
+interface TableEtatRow {
+  lib_type: string
+  qte: number
+}
+
+interface TableValideDecommRow {
+  mois_p: string
+  mois_aff: string
+  partenaire: string
+  valides: number
+  decomm: number
+}
+
 interface ContratsData {
   traites: ContratItem[]
   a_traiter: ContratItem[]
   type_etats: Record<string, { lib_type: string; couleur: string }>
+  table_etat?: TableEtatRow[]
+  table_valide_decomm?: TableValideDecommRow[]
 }
 
 interface ProduitSTC {
@@ -541,7 +556,9 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
             </div>
           )}
-          {!loading && data && tab === 'resume' && <ResumeTab data={data} />}
+          {!loading && data && tab === 'resume' && (
+            <ResumeTab data={data} contrats={contrats} />
+          )}
           {!loading && data && tab === 'deja_traites' && (
             <DejaTraitesTab
               contrats={contrats}
@@ -694,7 +711,129 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
 
 // --- Onglet "Resume" ----------------------------------------------------
 
-function ResumeTab({ data }: { data: SDTCData }) {
+function ResumeTab({
+  data,
+  contrats,
+}: {
+  data: SDTCData
+  contrats: ContratsData | null
+}) {
+  // Cf. WinDev onglet 'Résumé' : 2 tableaux côte à côte
+  //   1. TableEtat : Etat / QTE (compteur par type d'état)
+  //   2. TableValidéDécomm : Mois Paiement / Partenaire / Validés / Décomm
+  // (cf. agréges retournés par /contrats : table_etat + table_valide_decomm)
+  const tableEtat = contrats?.table_etat || []
+  const tableVD = contrats?.table_valide_decomm || []
+
+  // Couleurs RVB par type d'état (cf. pgt_type_etat_contrat)
+  const colorByEtat: Record<string, string> = {}
+  for (const [, meta] of Object.entries(contrats?.type_etats || {})) {
+    colorByEtat[meta.lib_type] = meta.couleur
+  }
+
+  if (!contrats) {
+    return (
+      <div className="flex items-center gap-2 text-sm p-4" style={{ color: COLOR_BRUN }}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Chargement des contrats…
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-[260px_1fr] gap-4 h-full">
+      {/* TableEtat : compteur par type d'état */}
+      <div
+        className="flex flex-col rounded-lg border overflow-hidden"
+        style={{ borderColor: COLOR_BG_SOFT, backgroundColor: 'white' }}
+      >
+        <div
+          className="grid items-center px-3 py-2 text-xs font-semibold border-b text-center"
+          style={{
+            gridTemplateColumns: '1fr 70px',
+            color: COLOR_BRUN,
+            backgroundColor: COLOR_BG_SOFT,
+            borderColor: COLOR_BG_SOFT,
+          }}
+        >
+          <div>Etat</div>
+          <div className="text-right">QTE</div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {tableEtat.length === 0 && (
+            <div className="p-3 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
+              Aucun contrat
+            </div>
+          )}
+          {tableEtat.map((r) => (
+            <div
+              key={r.lib_type}
+              className="grid items-center px-3 py-1.5 text-xs border-b"
+              style={{
+                gridTemplateColumns: '1fr 70px',
+                borderColor: COLOR_BG_SOFT,
+                color: COLOR_BRUN,
+                backgroundColor: colorByEtat[r.lib_type] || 'white',
+              }}
+            >
+              <div className="truncate font-medium" title={r.lib_type}>
+                {r.lib_type}
+              </div>
+              <div className="text-right font-semibold">{r.qte}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* TableValideDecomm : Mois Paiement x Partenaire avec compteur Validés/Décomm */}
+      <div
+        className="flex flex-col rounded-lg border overflow-hidden"
+        style={{ borderColor: COLOR_BG_SOFT, backgroundColor: 'white' }}
+      >
+        <div
+          className="grid items-center px-3 py-2 text-xs font-semibold border-b text-center"
+          style={{
+            gridTemplateColumns: '120px 100px 1fr 1fr',
+            color: COLOR_BRUN,
+            backgroundColor: COLOR_BG_SOFT,
+            borderColor: COLOR_BG_SOFT,
+          }}
+        >
+          <div>Mois de paiement</div>
+          <div>Partenaire</div>
+          <div className="text-right">Validés</div>
+          <div className="text-right">Décomm</div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {tableVD.length === 0 && (
+            <div className="p-3 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
+              Aucun contrat validé/décommissionné avec un mois de paiement.
+            </div>
+          )}
+          {tableVD.map((r, i) => (
+            <div
+              key={`${r.mois_p}-${r.partenaire}-${i}`}
+              className="grid items-center px-3 py-1.5 text-xs border-b"
+              style={{
+                gridTemplateColumns: '120px 100px 1fr 1fr',
+                borderColor: COLOR_BG_SOFT,
+                color: COLOR_BRUN,
+              }}
+            >
+              <div>{r.mois_aff}</div>
+              <div>{r.partenaire}</div>
+              <div className="text-right">{r.valides || ''}</div>
+              <div className="text-right">{r.decomm || ''}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Ancien ResumeTab (HTML mesInfos) - conserve pour reference mais plus
+// monte. Le HTML est desormais dans ResumeSTCTab (onglet 4) cf. WinDev.
+function _ResumeTabOld({ data }: { data: SDTCData }) {
   const { salarie, sortie, info_mutuelle, date_dernier_ctt } = data
   return (
     <div className="max-w-3xl mx-auto">
