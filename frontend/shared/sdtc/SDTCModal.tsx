@@ -570,12 +570,8 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               setSelected={setSelectedSdtc}
               computing={computing}
               onValidate={async () => {
-                // Pas de blocage sur selection vide : passer a l'etape
-                // suivante reste possible (le calcul retournera 0 partout).
-                if (selectedSdtc.size === 0) {
-                  setTab('resume_stc')
-                  return
-                }
+                // Toujours appeler /compute-bareme, meme avec selection
+                // vide (backend retournera un bareme a 0).
                 setComputing(true)
                 try {
                   const r = await fetch(

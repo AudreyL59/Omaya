@@ -143,13 +143,13 @@ def sdtc_compute_bareme(
 ):
     """Compatibilite ancien front : partitionne automatiquement les ids
     selectionnes entre traites / a_traiter avant d'appeler valider_selection.
-    Le nouveau front doit utiliser /valider-selection directement."""
+    Le nouveau front doit utiliser /valider-selection directement.
+
+    Selection vide autorisee : retourne un BaremeResult a zero."""
     sid = _parse_id(id_salarie)
     try:
         data = load_contrats(sid)
         selection_ids = {cid.strip() for cid in payload.contrat_ids if cid and cid.strip()}
-        if not selection_ids:
-            raise HTTPException(status_code=400, detail="Aucun contrat selectionne.")
         ids_traites = {
             str(c.get("id_contrat"))
             for c in (data.get("traites") or [])
