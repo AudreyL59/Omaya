@@ -259,8 +259,10 @@ def load_contrats(id_salarie: int) -> dict:
             in_finalises = id_type_etat in _TYPES_ETATS_FINALISES
             est_valide_paye = (id_type_etat == 5 and bool(mois_p_iso))
             if in_finalises or est_valide_paye:
-                # Pour Rejet/Anomalie/Tempo : masquer mois_paiement (WinDev)
-                if id_type_etat in (3, 4, 1):
+                # Cf. WinDev : masquer mois_paiement pour Tempo/Rejet/Anomalie/
+                # En Attente Op (cf. test "si MonCtt.IDTypeEtat = 3 ou 4 ou
+                # 1 ou 7 alors TableContrat.Mois_Paiement = ''").
+                if id_type_etat in (1, 3, 4, 7):
                     item["mois_paiement"] = ""
                 traites.append(item)
             else:
