@@ -75,16 +75,41 @@ def _esc(v: Any) -> str:
     )
 
 
-def _img_data_url(b: Any, mime: str = "image/png") -> str:
-    """Convertit un bytea PG en data URL (string vide si pas de donnee)."""
+def _detect_mime(b: bytes) -> str:
+    """Detecte le format reel d'une image par signature magique.
+
+    PG renvoie souvent du JPEG (photos salarie) ou du PNG (gimmick).
+    WinDev pouvait stocker du BMP brut. On detecte pour eviter le mime
+    type incorrect (refus de WeasyPrint)."""
+    if len(b) >= 8 and b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if len(b) >= 3 and b[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if len(b) >= 6 and (b[:6] == b"GIF87a" or b[:6] == b"GIF89a"):
+        return "image/gif"
+    if len(b) >= 2 and b[:2] == b"BM":
+        return "image/bmp"
+    if len(b) >= 4 and b[:4] == b"RIFF" and len(b) >= 12 and b[8:12] == b"WEBP":
+        return "image/webp"
+    # Fallback : laisse WeasyPrint detecter via l'entete (souvent OK
+    # avec octet-stream)
+    return "image/png"
+
+
+def _img_data_url(b: Any, mime: str | None = None) -> str:
+    """Convertit un bytea PG en data URL (string vide si pas de donnee).
+
+    Si mime est None, detecte le format reel via signature magique."""
     if b is None:
         return ""
     if isinstance(b, memoryview):
         b = bytes(b)
     if not isinstance(b, (bytes, bytearray)) or not b:
         return ""
+    raw = bytes(b)
+    actual_mime = mime or _detect_mime(raw)
     try:
-        return f"data:{mime};base64,{base64.b64encode(b).decode('ascii')}"
+        return f"data:{actual_mime};base64,{base64.b64encode(raw).decode('ascii')}"
     except Exception:
         return ""
 
@@ -344,8 +369,8 @@ def _render_pochette_html(d: dict) -> str:
         f"{_esc(sal.get('nom'))} "
         f"{_esc(_capitalize_first(_str(sal.get('prenom'))))}"
     )
-    photo_url = _img_data_url(sal.get("photo"), "image/jpeg")
-    gimmick_url = _img_data_url(soc.get("guimmick"), "image/png")
+    photo_url = _img_data_url(sal.get("photo"))
+    gimmick_url = _img_data_url(soc.get("guimmick"))
 
     return f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><style>{CSS_COMMON}</style></head>
