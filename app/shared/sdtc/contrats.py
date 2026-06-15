@@ -103,7 +103,14 @@ def load_contrats(id_salarie: int) -> dict:
                 ORDER BY c.date_signature DESC""",
                 (int(id_salarie),),
             )
-        except Exception:
+        except Exception as e:
+            import sys
+            import traceback
+            print(
+                f"[SDTC contrats] Echec partenaire {prefix}: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
+            traceback.print_exc(file=sys.stderr)
             return []
 
     rows_by_prefix: dict[str, list[dict]] = {}
@@ -179,30 +186,37 @@ def load_contrats(id_salarie: int) -> dict:
                 "id_etat_oen": _int(oen_data.get("id_etat_oen")),
             } if part == "OEN" else {}
 
-            # ----- Calcul nb_points fidèle WinDev -----
+            # ----- Calcul nb_points fidèle WinDev (defensif : fallback
+            # sur la valeur stockee si le recalcul plante) -----
             nb_points_actuels = _num(r.get("nb_points"))
             date_sign = _iso(r.get("date_signature"))
-            nb_points_calcules = _recalcul_nb_points(
-                part=part,
-                fam=famille,
-                ss_fam=sous_fam,
-                date_sign=date_sign,
-                num_bs=_str(r.get("num_bs")),
-                lib_produit=_str(r.get("lib_produit")),
-                id_contrat=id_contrat,
-                sfr_extra=sfr_data,
-                eni_extra=eni_data,
-                oen_extra=oen_data,
-            )
-            # UPDATE défensif si écart (cf. WinDev)
-            if abs(nb_points_calcules - nb_points_actuels) > 0.001:
-                try:
-                    _update_nb_points(part, id_contrat, nb_points_calcules)
-                except Exception:
-                    # On garde le calcul même si l'UPDATE plante (lecture-seule
-                    # autorisée si le compte SQL n'a pas les droits write).
-                    pass
-            nb_points = nb_points_calcules
+            nb_points = nb_points_actuels
+            try:
+                nb_points_calcules = _recalcul_nb_points(
+                    part=part,
+                    fam=famille,
+                    ss_fam=sous_fam,
+                    date_sign=date_sign,
+                    num_bs=_str(r.get("num_bs")),
+                    lib_produit=_str(r.get("lib_produit")),
+                    id_contrat=id_contrat,
+                    sfr_extra=sfr_data,
+                    eni_extra=eni_data,
+                    oen_extra=oen_data,
+                )
+                if abs(nb_points_calcules - nb_points_actuels) > 0.001:
+                    try:
+                        _update_nb_points(part, id_contrat, nb_points_calcules)
+                    except Exception:
+                        pass  # lecture-seule autorisee
+                nb_points = nb_points_calcules
+            except Exception as e:
+                import sys
+                print(
+                    f"[SDTC] Recalcul nb_points KO ({part} {id_contrat}): "
+                    f"{type(e).__name__}: {e}",
+                    file=sys.stderr,
+                )
 
             item = {
                 "id_contrat": str(id_contrat),
@@ -248,10 +262,57 @@ def load_contrats(id_salarie: int) -> dict:
             else:
                 a_traiter.append(item)
 
+    # Agregats pour l'onglet Resume (cf. WinDev TableEtat + TableValideDecomm)
+    table_etat: dict[str, int] = {}
+    table_vd: dict[tuple[str, str], dict] = {}
+    for item in traites + a_traiter:
+        lib_type = item.get("type_etat_lib") or ""
+        table_etat[lib_type] = table_etat.get(lib_type, 0) + 1
+        # TableValideDecomm : uniquement pour Valide-Paye (5) et Decomm (6) avec mois_p
+        id_te = item.get("id_type_etat") or 0
+        if id_te not in (5, 6):
+            continue
+        mois_p = item.get("mois_paiement") or ""
+        if not mois_p:
+            continue
+        # Format MM-AAAA cf. WinDev
+        try:
+            mois_aff = f"{mois_p[5:7]}-{mois_p[0:4]}" if len(mois_p) >= 7 else mois_p
+        except Exception:
+            mois_aff = mois_p
+        partenaire = item.get("partenaire") or ""
+        key = (mois_p, partenaire)
+        cell = table_vd.get(key)
+        if cell is None:
+            cell = {
+                "mois_p": mois_p,
+                "mois_aff": mois_aff,
+                "partenaire": partenaire,
+                "valides": 0,
+                "decomm": 0,
+            }
+            table_vd[key] = cell
+        if id_te == 5:
+            cell["valides"] += 1
+        elif id_te == 6:
+            cell["decomm"] += 1
+
+    table_etat_rows = sorted(
+        [{"lib_type": k, "qte": v} for k, v in table_etat.items() if k],
+        key=lambda r: -r["qte"],
+    )
+    table_vd_rows = sorted(
+        table_vd.values(),
+        key=lambda r: (r["mois_p"], r["partenaire"]),
+        reverse=True,
+    )
+
     return {
         "traites": traites,
         "a_traiter": a_traiter,
         "type_etats": type_etat_map,
+        "table_etat": table_etat_rows,
+        "table_valide_decomm": table_vd_rows,
     }
 
 
