@@ -203,6 +203,13 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
   const [mailPj, setMailPj] = useState<
     { name: string; size: number; contentB64: string }[]
   >([])
+  const [mailPayload, setMailPayload] = useState<{
+    objet: string
+    html: string
+    a: string[]
+    cc: string[]
+    expediteur: string
+  } | null>(null)
   const [preparingMail, setPreparingMail] = useState(false)
   const [commentaires, setCommentaires] = useState('')
   const [nbTr, setNbTr] = useState(0)
@@ -344,6 +351,41 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
     if (!data) return
     setPreparingMail(true)
     try {
+      // 1) Prepare-mail (substitue placeholders + sauvegarde + payload)
+      const idsTraites = Array.from(selectedTraites)
+      const idsSdtc = Array.from(selectedSdtc)
+      const prep = await fetch(
+        `/api/shared/sdtc/${idSalarie}/prepare-mail`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            contrat_ids_traites: idsTraites,
+            contrat_ids_a_traiter: idsSdtc,
+            nb_tr: nbTr,
+            deco: 0,
+            avance: 0,
+          }),
+        },
+      )
+      if (!prep.ok) {
+        const j = await prep.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(prep.status))
+      }
+      const mailPayload = await prep.json() as {
+        objet: string
+        html: string
+        a: string[]
+        cc: string[]
+        expediteur: string
+      }
+      // Stocke pour pre-remplir la modal email
+      setMailPayload(mailPayload)
+
+      // 2) PJ XLS + PDF
       const [xlsPj, pdfPj] = await Promise.all([
         fetchAsAttachment('xls'),
         fetchAsAttachment('pdf'),
@@ -365,8 +407,15 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
   if (!open) return null
 
   const sortieInfo = data?.sortie
-  const defaultMailSubject = sortieInfo?.mail_objet || `Solde de tout compte — ${data?.salarie.lib_nom || ''}`
-  const defaultMailHtml = sortieInfo?.mail_contenu || ''
+  // Priorite : payload fraichement prepare (substitue + sauvegarde) > sortieInfo deja stocke > defaut
+  const defaultMailSubject = (
+    mailPayload?.objet
+    || sortieInfo?.mail_objet
+    || `Solde de tout compte — ${data?.salarie.lib_nom || ''}`
+  )
+  const defaultMailHtml = mailPayload?.html || sortieInfo?.mail_contenu || ''
+  const defaultMailTo = mailPayload?.a || []
+  const defaultMailCc = mailPayload?.cc || []
 
   return (
     <>
@@ -575,9 +624,9 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
       open={mailOpen}
       onClose={() => setMailOpen(false)}
       getToken={getToken}
-      expediteur="fpe@exosphere.fr"
-      to={['service_paie@cneidf.cerfrance.fr']}
-      cc={['a.dubois@exosphere.fr', 'm.doineau@exosphere.fr', 'fpe@exosphere.fr']}
+      expediteur={mailPayload?.expediteur || 'fpe@exosphere.fr'}
+      to={defaultMailTo.length > 0 ? defaultMailTo : ['service_paie@cneidf.cerfrance.fr']}
+      cc={defaultMailCc.length > 0 ? defaultMailCc : ['a.dubois@exosphere.fr', 'm.doineau@exosphere.fr', 'fpe@exosphere.fr']}
       subject={defaultMailSubject}
       html={defaultMailHtml}
       initialAttachments={mailPj}

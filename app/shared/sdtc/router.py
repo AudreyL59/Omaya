@@ -76,6 +76,14 @@ class SaveMailPayload(BaseModel):
     contenu_html: str
 
 
+class PrepareMailPayload(BaseModel):
+    contrat_ids_traites: list[str] = []
+    contrat_ids_a_traiter: list[str] = []
+    nb_tr: int = 0
+    deco: float = 0.0
+    avance: float = 0.0
+
+
 class ExportXlsPayload(BaseModel):
     contrat_ids_traites: list[str] = []
     contrat_ids_a_traiter: list[str] = []
@@ -262,6 +270,64 @@ def sdtc_mail_payload(
     sid = _parse_id(id_salarie)
     try:
         return mail_svc.get_mail_payload(sid)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(
+            status_code=500, detail=f"{type(e).__name__}: {e}"
+        )
+
+
+@router.post("/{id_salarie}/prepare-mail")
+def sdtc_prepare_mail(
+    id_salarie: str,
+    payload: PrepareMailPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """One-shot pour le btn 'Mail SDTC' :
+    1) Calcule le bareme sur la selection (a_traiter)
+    2) Substitue les placeholders dans le HTML mesInfos
+    3) Sauvegarde objet + HTML dans pgt_salarie_sortie
+    4) Retourne le payload mail (destinataires + objet + HTML)
+    """
+    sid = _parse_id(id_salarie)
+    try:
+        base = svc.load(sid)
+        if not base.get("found"):
+            raise HTTPException(status_code=404, detail="Salarie introuvable.")
+        data = load_contrats(sid)
+        ids_traites = set(payload.contrat_ids_traites)
+        ids_a_traiter = set(payload.contrat_ids_a_traiter)
+        sdtc_selected = [
+            c for c in (data.get("a_traiter") or [])
+            if str(c.get("id_contrat")) in ids_a_traiter
+        ]
+
+        bareme_obj = compute_bareme(sdtc_selected).to_dict()
+        sal = base.get("salarie") or {}
+        nom_salarie = sal.get("lib_nom") or ""
+        nom_societe = sal.get("lib_societe") or ""
+
+        info_html_filled = substitute_placeholders(
+            base.get("info_salarie_html") or "",
+            comm_tot_stc=bareme_obj.get("comm_tot_stc", 0.0),
+            date_anciennete_yyyymmdd=sal.get("date_anciennete_yyyymmdd", ""),
+            deco=payload.deco,
+            avance=payload.avance,
+            nb_tr=payload.nb_tr,
+            date_dernier_ctt=base.get("date_dernier_ctt", ""),
+        )
+        objet = mail_svc.build_mail_objet(nom_salarie, nom_societe)
+        mail_svc.save_mail_content(
+            id_salarie=sid,
+            objet=objet,
+            contenu_html=info_html_filled,
+            op_id=user.id_salarie,
+        )
+        payload_out = mail_svc.get_mail_payload(sid)
+        payload_out["comm_tot_stc"] = bareme_obj.get("comm_tot_stc", 0.0)
+        return payload_out
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(
