@@ -81,12 +81,16 @@ def load_contrats(id_salarie: int) -> dict:
     def fetch(prefix: str) -> list[dict]:
         lp = prefix.lower()
         db = get_pg_connection("adv")
+        # Cf. WinDev (MaFenetre Fen_SDTC) : pour SFR, le mois de paiement
+        # de reference est mois_p_ra (Raccordement). Pour les autres
+        # partenaires, c'est mois_p.
+        mois_p_col = "c.mois_p_ra" if lp == "sfr" else "c.mois_p"
         try:
             return db.query(
                 f"""SELECT
                     c.id_contrat, c.id_salarie, c.num_bs, c.info_interne,
                     c.id_produit, c.id_etat_contrat, c.date_signature,
-                    c.nb_points, c.mois_p AS mois_p,
+                    c.nb_points, {mois_p_col} AS mois_p,
                     cl.nom AS client_nom, cl.prenom AS client_prenom,
                     cl.adresse1 AS client_adresse, cl.cp AS client_cp,
                     cl.ville AS client_ville, cl.mail AS client_mail,
