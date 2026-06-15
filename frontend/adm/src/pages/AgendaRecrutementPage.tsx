@@ -116,6 +116,17 @@ function durationMin(start: string, end: string): number {
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000))
 }
 
+function isoWeekNumber(d: Date): number {
+  // ISO 8601 : la semaine contient le jeudi de la semaine en cours.
+  const target = new Date(d)
+  target.setHours(0, 0, 0, 0)
+  // Jeudi de la semaine = lundi + 3
+  target.setDate(target.getDate() + 3 - ((target.getDay() + 6) % 7))
+  const firstThursday = new Date(target.getFullYear(), 0, 4)
+  const diff = (target.getTime() - firstThursday.getTime()) / 86400000
+  return 1 + Math.round((diff - 3 + ((firstThursday.getDay() + 6) % 7)) / 7)
+}
+
 function toYMD(d: Date): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
 }
@@ -142,7 +153,7 @@ function hexToSoftStyle(hex: string): React.CSSProperties {
 export default function AgendaRecrutementPage() {
   const stored = getStoredUser()
   const today = new Date()
-  const [mode, setMode] = useState<'day' | 'range'>('day')
+  const [mode, setMode] = useState<'day' | 'week' | 'range'>('week')
   const [day, setDay] = useState<Date>(today)
   const [dateFrom, setDateFrom] = useState(toISODate(today))
   const [dateTo, setDateTo] = useState(toISODate(today))
@@ -161,10 +172,32 @@ export default function AgendaRecrutementPage() {
   const [statutRdv, setStatutRdv] = useState<AgendaRDV | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
+  // Calcule le lundi et le vendredi de la semaine contenant `day`.
+  const weekRange = (() => {
+    const d = new Date(day)
+    const dow = d.getDay() // 0=dim, 1=lun, ...
+    const offsetToMon = dow === 0 ? -6 : 1 - dow
+    const mon = new Date(d)
+    mon.setDate(d.getDate() + offsetToMon)
+    const fri = new Date(mon)
+    fri.setDate(mon.getDate() + 4)
+    return { from: mon, to: fri }
+  })()
+
   useEffect(() => {
     if (!recruteurId) return
-    const from = mode === 'day' ? toYMD(day) : dateFrom.replace(/-/g, '')
-    const to = mode === 'day' ? toYMD(day) : dateTo.replace(/-/g, '')
+    let from: string
+    let to: string
+    if (mode === 'day') {
+      from = toYMD(day)
+      to = toYMD(day)
+    } else if (mode === 'week') {
+      from = toYMD(weekRange.from)
+      to = toYMD(weekRange.to)
+    } else {
+      from = dateFrom.replace(/-/g, '')
+      to = dateTo.replace(/-/g, '')
+    }
 
     setLoading(true)
     fetch(
@@ -242,6 +275,14 @@ export default function AgendaRecrutementPage() {
               Jour
             </button>
             <button
+              onClick={() => setMode('week')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                mode === 'week' ? 'bg-white text-[#17494E] shadow-sm' : 'text-[#A68D8A]'
+              }`}
+            >
+              Semaine
+            </button>
+            <button
               onClick={() => setMode('range')}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                 mode === 'range' ? 'bg-white text-[#17494E] shadow-sm' : 'text-[#A68D8A]'
@@ -251,7 +292,43 @@ export default function AgendaRecrutementPage() {
             </button>
           </div>
 
-          {mode === 'day' ? (
+          {mode === 'week' ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => shiftDay(-7)}
+                className="p-1.5 rounded-lg hover:bg-[#EFE9E7]"
+                title="Semaine précédente"
+              >
+                <ChevronLeft className="w-4 h-4 text-[#4E1D17]/80" />
+              </button>
+              <div className="flex flex-col items-center px-3 py-1 border border-[#E5DDDC] rounded-lg text-sm">
+                <span className="font-medium text-[#4E1D17]">
+                  {capitalize(
+                    weekRange.from.toLocaleDateString('fr-FR', {
+                      month: 'long',
+                      year: 'numeric',
+                    }),
+                  )}
+                </span>
+                <span className="text-[10px] text-[#A68D8A]">
+                  Semaine {isoWeekNumber(weekRange.from)}
+                </span>
+              </div>
+              <button
+                onClick={() => shiftDay(7)}
+                className="p-1.5 rounded-lg hover:bg-[#EFE9E7]"
+                title="Semaine suivante"
+              >
+                <ChevronRight className="w-4 h-4 text-[#4E1D17]/80" />
+              </button>
+              <button
+                onClick={() => setDay(new Date())}
+                className="px-2 py-1 text-xs rounded-lg border border-[#E5DDDC] hover:bg-[#EFE9E7] text-[#4E1D17]"
+              >
+                Aujourd'hui
+              </button>
+            </div>
+          ) : mode === 'day' ? (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => shiftDay(-1)}
@@ -362,8 +439,26 @@ export default function AgendaRecrutementPage() {
           </div>
         )}
 
-        {/* Timeline */}
-        {loading ? (
+        {/* Vue Semaine : grille hebdomadaire lundi -> vendredi */}
+        {mode === 'week' && (
+          loading ? (
+            <div className="flex items-center justify-center py-20 bg-white rounded-[10px] border border-[#E5DDDC]">
+              <Loader2 className="w-6 h-6 text-[#E5DDDC] animate-spin" />
+            </div>
+          ) : (
+            <WeekCalendarView
+              rdvs={filteredRdvs}
+              monday={weekRange.from}
+              onClickRdv={(r) => {
+                setExpanded(r.id_evenement)
+                setStatutRdv(r)
+              }}
+            />
+          )
+        )}
+
+        {/* Timeline (modes Jour + Période) */}
+        {mode !== 'week' && (loading ? (
           <div className="flex items-center justify-center py-20 bg-white rounded-[10px] border border-[#E5DDDC]">
             <Loader2 className="w-6 h-6 text-[#E5DDDC] animate-spin" />
           </div>
@@ -410,7 +505,7 @@ export default function AgendaRecrutementPage() {
               )
             })}
           </div>
-        )}
+        ))}
       </div>
 
       <AnimatePresence>
@@ -1083,5 +1178,147 @@ function Checkbox({
       />
       {label}
     </label>
+  )
+}
+
+// --- Vue calendrier hebdomadaire (cf. WinDev agenda) --------------------
+
+const WEEK_HOUR_START = 8
+const WEEK_HOUR_END = 19
+const WEEK_PIXELS_PER_HOUR = 56
+
+function WeekCalendarView({
+  rdvs,
+  monday,
+  onClickRdv,
+}: {
+  rdvs: AgendaRDV[]
+  monday: Date
+  onClickRdv: (r: AgendaRDV) => void
+}) {
+  // 5 jours (Lundi → Vendredi)
+  const days = Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(monday)
+    d.setDate(monday.getDate() + i)
+    return d
+  })
+
+  // Plage horaire 8h → 19h (11 lignes)
+  const hours = Array.from(
+    { length: WEEK_HOUR_END - WEEK_HOUR_START },
+    (_, i) => WEEK_HOUR_START + i,
+  )
+
+  const todayYMD = toYMD(new Date())
+
+  // Position d'un RDV en pixels depuis le top de la grille
+  const positionRdv = (rdv: AgendaRDV) => {
+    const start = parseDbDate(rdv.date_debut)
+    const end = parseDbDate(rdv.date_fin)
+    if (!start || !end) return null
+    const startMin = start.getHours() * 60 + start.getMinutes()
+    const endMin = end.getHours() * 60 + end.getMinutes()
+    const baseMin = WEEK_HOUR_START * 60
+    const top = ((startMin - baseMin) / 60) * WEEK_PIXELS_PER_HOUR
+    const height = Math.max(
+      18,
+      ((endMin - startMin) / 60) * WEEK_PIXELS_PER_HOUR - 2,
+    )
+    return { top, height }
+  }
+
+  return (
+    <div className="bg-white rounded-[10px] border border-[#E5DDDC] overflow-hidden">
+      {/* Header : jours */}
+      <div
+        className="grid border-b border-[#E5DDDC] bg-[#FBF6F4]"
+        style={{ gridTemplateColumns: '60px repeat(5, 1fr)' }}
+      >
+        <div />
+        {days.map((d) => {
+          const isToday = toYMD(d) === todayYMD
+          return (
+            <div
+              key={d.toISOString()}
+              className="text-center py-2 border-l border-[#E5DDDC]"
+              style={{
+                color: isToday ? '#17494E' : '#4E1D17',
+                fontWeight: isToday ? 700 : 500,
+                backgroundColor: isToday ? '#EFE9E7' : 'transparent',
+              }}
+            >
+              <div className="text-xs uppercase opacity-70">
+                {d.toLocaleDateString('fr-FR', { weekday: 'long' }).slice(0, 3)}
+              </div>
+              <div className="text-base">{d.getDate()}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Corps : grille horaire avec RDV en overlay */}
+      <div className="relative">
+        {/* Grille en arrière-plan */}
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: '60px repeat(5, 1fr)' }}
+        >
+          {/* Colonne heures + 5 colonnes jours */}
+          <div>
+            {hours.map((h) => (
+              <div
+                key={h}
+                className="text-xs text-[#A68D8A] text-right pr-2 border-b border-[#E5DDDC]"
+                style={{ height: WEEK_PIXELS_PER_HOUR, lineHeight: '14px', paddingTop: 2 }}
+              >
+                {h.toString().padStart(2, '0')}:00
+              </div>
+            ))}
+          </div>
+          {days.map((d, di) => (
+            <div key={di} className="relative border-l border-[#E5DDDC]">
+              {hours.map((h) => (
+                <div
+                  key={h}
+                  className="border-b border-[#E5DDDC]"
+                  style={{ height: WEEK_PIXELS_PER_HOUR }}
+                />
+              ))}
+              {/* RDV de ce jour en overlay absolu */}
+              {rdvs
+                .filter((r) => dayKey(r.date_debut) === toYMD(d))
+                .map((rdv) => {
+                  const pos = positionRdv(rdv)
+                  if (!pos) return null
+                  const soft = hexToSoftStyle(rdv.couleur_hex)
+                  return (
+                    <button
+                      key={rdv.id_evenement}
+                      type="button"
+                      onClick={() => onClickRdv(rdv)}
+                      className="absolute left-0.5 right-0.5 text-left rounded px-1.5 py-0.5 text-[11px] leading-tight overflow-hidden hover:brightness-95 transition-all"
+                      style={{
+                        top: pos.top,
+                        height: pos.height,
+                        backgroundColor: soft.backgroundColor,
+                        color: soft.color,
+                        borderLeft: `3px solid ${rdv.couleur_hex || '#A68D8A'}`,
+                      }}
+                      title={`${rdv.titre} (${formatTime(rdv.date_debut)} - ${formatTime(rdv.date_fin)})`}
+                    >
+                      <div className="font-semibold truncate">{rdv.titre}</div>
+                      {pos.height > 26 && (
+                        <div className="opacity-75 truncate text-[10px]">
+                          {formatTime(rdv.date_debut)} – {formatTime(rdv.date_fin)}
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
