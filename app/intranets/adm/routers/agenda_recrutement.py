@@ -7,9 +7,11 @@ le scope d'authentification ADM (droit IntraADM).
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
+from app.intranets.adm.services import agenda_detail as detail_svc
 from app.intranets.vendeur.schemas.agenda_recrutement import (
     AgendaRDV,
     RecruteurItem,
@@ -121,3 +123,126 @@ def post_convoc_jo(
         "sms_result": info["sms_result"],
         "mail_sent": info["mail_sent"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Fen_AgendaDetail (detail complet d'un RDV)
+# ---------------------------------------------------------------------------
+
+
+class SaveRdvDetailPayload(BaseModel):
+    titre: str = ""
+    contenu: str = ""
+    id_recruteur: int = 0
+    id_categorie: int = 0
+    date_debut: str = ""
+    date_fin: str = ""
+    id_prevision_recrut: int = 0
+    type_entretien: str = "Physique"   # 'Physique' | 'Visio'
+    id_cv_lieux: int = 0
+    id_salon_visio: int = 0
+    motif_statut: str = ""
+    pb_presentation: bool = False
+    pb_elocution: bool = False
+    pb_motivation: bool = False
+    pb_horaires: bool = False
+
+
+class SetOpCreaPayload(BaseModel):
+    new_op: int
+
+
+@router.get("/rdv/{id_rdv}/detail")
+def get_rdv_detail(id_rdv: int, _user: UserToken = Depends(get_current_user)):
+    """Fen_AgendaDetail : tous les champs du RDV pour pre-remplir le modal."""
+    data = detail_svc.load_rdv_detail(id_rdv)
+    if not data:
+        raise HTTPException(status_code=404, detail="RDV introuvable")
+    return data
+
+
+@router.put("/rdv/{id_rdv}/detail")
+def put_rdv_detail(
+    id_rdv: int,
+    payload: SaveRdvDetailPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Sauvegarde complete du RDV depuis Fen_AgendaDetail."""
+    return detail_svc.save_rdv(
+        id_rdv=id_rdv,
+        titre=payload.titre,
+        contenu=payload.contenu,
+        id_recruteur=payload.id_recruteur,
+        id_categorie=payload.id_categorie,
+        date_debut=payload.date_debut,
+        date_fin=payload.date_fin,
+        id_prevision_recrut=payload.id_prevision_recrut,
+        type_entretien=payload.type_entretien,
+        id_cv_lieux=payload.id_cv_lieux,
+        id_salon_visio=payload.id_salon_visio,
+        motif_statut=payload.motif_statut,
+        pb_presentation=payload.pb_presentation,
+        pb_elocution=payload.pb_elocution,
+        pb_motivation=payload.pb_motivation,
+        pb_horaires=payload.pb_horaires,
+        op_id=user.id_salarie,
+    )
+
+
+@router.delete("/rdv/{id_rdv}")
+def delete_rdv(id_rdv: int, user: UserToken = Depends(get_current_user)):
+    """Btn 'Supprimer le RDV' : soft delete (modif_elem = 'suppr')."""
+    return detail_svc.soft_delete_rdv(id_rdv, user.id_salarie)
+
+
+@router.post("/rdv/{id_rdv}/op-crea")
+def post_op_crea(
+    id_rdv: int,
+    payload: SetOpCreaPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Choisir l'Operateur' : maj OPCrea sur AgendaEvenement +
+    CvSuivi lie. Retourne le libelle pour rafraichir le bouton."""
+    return detail_svc.set_op_crea(id_rdv, payload.new_op, user.id_salarie)
+
+
+@router.get("/sessions-en-cours")
+def get_sessions_en_cours(_user: UserToken = Depends(get_current_user)):
+    """ReqPrevRecEncours : sessions de recrutement actives."""
+    return detail_svc.list_sessions_en_cours()
+
+
+@router.get("/lieux")
+def get_lieux(_user: UserToken = Depends(get_current_user)):
+    """Referentiel des lieux de RDV."""
+    return detail_svc.list_lieux()
+
+
+@router.get("/lieux/{id_cv_lieu_rdv}")
+def get_lieu(id_cv_lieu_rdv: int, _user: UserToken = Depends(get_current_user)):
+    """Detail d'un lieu (adresse + commune)."""
+    data = detail_svc.get_lieu(id_cv_lieu_rdv)
+    if not data:
+        raise HTTPException(status_code=404, detail="Lieu introuvable")
+    return data
+
+
+@router.get("/salons-visio")
+def get_salons_visio(
+    id_recruteur: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Liste des salons visio d'un recruteur (combo)."""
+    return detail_svc.list_salons_visio_by_recruteur(id_recruteur)
+
+
+@router.get("/salons-visio/{id_salon_visio}")
+def get_salon_visio(
+    id_salon_visio: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Detail d'un salon visio : lien + id + mdp."""
+    data = detail_svc.get_salon_visio(id_salon_visio)
+    if not data:
+        raise HTTPException(status_code=404, detail="Salon introuvable")
+    return data
