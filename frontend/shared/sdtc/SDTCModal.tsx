@@ -213,6 +213,14 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
   const [preparingMail, setPreparingMail] = useState(false)
   const [commentaires, setCommentaires] = useState('')
   const [nbTr, setNbTr] = useState(0)
+  const [calculatingNbTr, setCalculatingNbTr] = useState(false)
+  /** Résultat de /generer-tableau (contrat_tot + recap_prod + recap_prod_pts + nb_tr) */
+  const [recapData, setRecapData] = useState<{
+    contrat_tot: unknown[]
+    recap_prod: { lib_produit: string; en_attente_contrat: number; envoye_chez_ope: number; rejets_bo: number; resiliation: number; valide_paye: number; decommision: number }[]
+    recap_prod_pts: { lib_produit: string; en_attente_contrat: number; envoye_chez_ope: number; rejets_bo: number; resiliation: number; valide_paye: number; decommision: number }[]
+    nb_tr: number
+  } | null>(null)
 
   useEffect(() => {
     if (!open || !idSalarie) return
@@ -344,6 +352,50 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
       triggerDownload(pj, 'application/pdf')
     } catch (e) {
       showToast(`Échec génération PDF : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const handleCalculNbTrAuto = async () => {
+    if (!data) return
+    setCalculatingNbTr(true)
+    try {
+      // Date de reference = date_dernier_ctt ou date_embauche par defaut
+      const dateRef = data.date_dernier_ctt || data.salarie.date_embauche || ''
+      const r = await fetch(
+        `/api/shared/sdtc/${idSalarie}/generer-tableau`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            contrat_ids_traites: Array.from(selectedTraites),
+            contrat_ids_a_traiter: Array.from(selectedSdtc),
+            date_ref: dateRef,
+          }),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const j = (await r.json()) as {
+        contrat_tot: unknown[]
+        recap_prod: typeof recapData extends { recap_prod: infer R } ? R : never[]
+        recap_prod_pts: typeof recapData extends { recap_prod_pts: infer R } ? R : never[]
+        nb_tr: number
+      }
+      setRecapData(j as typeof recapData)
+      setNbTr(j.nb_tr || 0)
+      showToast(
+        `NB_TR calculé : ${j.nb_tr} jour(s) travaillé(s) depuis ${dateRef.slice(0, 10) || '?'}`,
+        'success',
+      )
+    } catch (e) {
+      showToast(`Échec calcul NB_TR : ${(e as Error).message}`, 'error')
+    } finally {
+      setCalculatingNbTr(false)
     }
   }
 
@@ -559,6 +611,8 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               nbTr={nbTr}
               setNbTr={setNbTr}
               infoSalarieHtml={data?.info_salarie_html}
+              onCalcNbTr={handleCalculNbTrAuto}
+              calculatingNbTr={calculatingNbTr}
             />
           )}
           {!loading && data && tab === 'a_editer' && (
@@ -615,6 +669,9 @@ export default function SDTCModal({ open, onClose, getToken, idSalarie }: Props)
               contrats={contrats}
               selectedTraites={selectedTraites}
               selectedSdtc={selectedSdtc}
+              backendRecap={recapData}
+              onCalcRecap={handleCalculNbTrAuto}
+              calculating={calculatingNbTr}
             />
           )}
         </div>
@@ -1068,6 +1125,9 @@ function ResumeSTCTab({
   setNbTr: (v: number) => void
   /** HTML mesInfos genere cote backend (avec placeholders) */
   infoSalarieHtml?: string
+  /** Calcule NB_TR via /generer-tableau */
+  onCalcNbTr?: () => void | Promise<void>
+  calculatingNbTr?: boolean
 }) {
   if (!bareme) {
     return (
@@ -1159,6 +1219,22 @@ function ResumeSTCTab({
           className="w-32 px-2 py-1 border rounded text-sm"
           style={{ borderColor: COLOR_BG_SOFT, color: COLOR_BRUN }}
         />
+        <div />
+        {onCalcNbTr && (
+          <button
+            type="button"
+            onClick={() => void onCalcNbTr()}
+            disabled={calculatingNbTr}
+            className="inline-flex items-center gap-1 px-3 py-1 text-xs rounded border w-fit disabled:opacity-40"
+            style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
+            title="Calcule NB_TR via /generer-tableau (>=3 ctts/jour ENI/IAG/OEN, >=1 SFR)"
+          >
+            {calculatingNbTr ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : null}
+            Calculer auto depuis la sélection
+          </button>
+        )}
         <label className="text-sm pt-1" style={{ color: COLOR_BRUN }}>
           Commentaires :
         </label>
@@ -1387,13 +1463,40 @@ function matchEtat(type_etat_lib: string): EtatKey | null {
   return null
 }
 
+interface RecapBOBackendRow {
+  lib_produit: string
+  en_attente_contrat: number
+  envoye_chez_ope: number
+  rejets_bo: number
+  resiliation: number
+  valide_paye: number
+  decommision: number
+}
+
 interface RecapBOProps {
   contrats: ContratsData | null
   selectedTraites: Set<string>
   selectedSdtc: Set<string>
+  /** Si fourni, prefere les valeurs backend (cf. /generer-tableau) au lieu
+   *  du calcul cote frontend. */
+  backendRecap?: {
+    recap_prod: RecapBOBackendRow[]
+    recap_prod_pts: RecapBOBackendRow[]
+    nb_tr: number
+  } | null
+  /** Callback pour declencher /generer-tableau et remplir backendRecap. */
+  onCalcRecap?: () => void | Promise<void>
+  calculating?: boolean
 }
 
-function RecapBOTab({ contrats, selectedTraites, selectedSdtc }: RecapBOProps) {
+function RecapBOTab({
+  contrats,
+  selectedTraites,
+  selectedSdtc,
+  backendRecap,
+  onCalcRecap,
+  calculating,
+}: RecapBOProps) {
   const { rows, totals } = useMemo(() => {
     const empty = () => ({
       temporaire: 0,
@@ -1403,6 +1506,52 @@ function RecapBOTab({ contrats, selectedTraites, selectedSdtc }: RecapBOProps) {
       valide_paye: 0,
       decommission: 0,
     }) as Record<EtatKey, number>
+
+    // Si on a backendRecap, on prefere ces valeurs (cf. /generer-tableau
+    // qui inclut TOUS les contrats, pas seulement la selection - fidele
+    // WinDev TableRecapProd).
+    if (backendRecap && backendRecap.recap_prod.length > 0) {
+      const noms = Array.from(
+        new Set([
+          ...backendRecap.recap_prod.map((r) => r.lib_produit),
+          ...backendRecap.recap_prod_pts.map((r) => r.lib_produit),
+        ]),
+      )
+      const byNomCount = new Map(backendRecap.recap_prod.map((r) => [r.lib_produit, r]))
+      const byNomPts = new Map(backendRecap.recap_prod_pts.map((r) => [r.lib_produit, r]))
+      const arr: RecapRow[] = noms.map((nom) => {
+        const c = byNomCount.get(nom)
+        const p = byNomPts.get(nom)
+        return {
+          lib_produit: nom,
+          counts: {
+            temporaire: c?.en_attente_contrat || 0,
+            attente_ope: c?.envoye_chez_ope || 0,
+            rejets: c?.rejets_bo || 0,
+            resiliation: c?.resiliation || 0,
+            valide_paye: c?.valide_paye || 0,
+            decommission: c?.decommision || 0,
+          },
+          pts: {
+            temporaire: p?.en_attente_contrat || 0,
+            attente_ope: p?.envoye_chez_ope || 0,
+            rejets: p?.rejets_bo || 0,
+            resiliation: p?.resiliation || 0,
+            valide_paye: p?.valide_paye || 0,
+            decommision: p?.decommision || 0,
+          } as Record<EtatKey, number>,
+        }
+      })
+      arr.sort((a, b) => a.lib_produit.localeCompare(b.lib_produit))
+      const t = { counts: empty(), pts: empty() }
+      for (const r of arr) {
+        for (const c of COL_ETATS) {
+          t.counts[c.key] += r.counts[c.key]
+          t.pts[c.key] += r.pts[c.key]
+        }
+      }
+      return { rows: arr, totals: t }
+    }
 
     const map = new Map<string, RecapRow>()
     if (!contrats) return { rows: [], totals: { counts: empty(), pts: empty() } }
@@ -1442,7 +1591,7 @@ function RecapBOTab({ contrats, selectedTraites, selectedSdtc }: RecapBOProps) {
       }
     }
     return { rows: arr, totals }
-  }, [contrats, selectedTraites, selectedSdtc])
+  }, [contrats, selectedTraites, selectedSdtc, backendRecap])
 
   if (!contrats) {
     return (
@@ -1453,8 +1602,22 @@ function RecapBOTab({ contrats, selectedTraites, selectedSdtc }: RecapBOProps) {
   }
   if (rows.length === 0) {
     return (
-      <div className="text-sm italic" style={{ color: COLOR_BRUN, opacity: 0.7 }}>
-        Aucun contrat sélectionné. Cocher des lignes dans « Contrats déjà traités » ou « Contrats SDTC ».
+      <div className="flex flex-col items-start gap-3 text-sm" style={{ color: COLOR_BRUN }}>
+        <p className="italic" style={{ opacity: 0.7 }}>
+          Aucun contrat à afficher. Cocher des lignes dans « Contrats déjà traités » ou « Contrats SDTC », ou recalculer depuis la sélection.
+        </p>
+        {onCalcRecap && (
+          <button
+            type="button"
+            onClick={() => void onCalcRecap()}
+            disabled={calculating}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded border disabled:opacity-40"
+            style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
+          >
+            {calculating ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Recalculer depuis le backend
+          </button>
+        )}
       </div>
     )
   }
@@ -1463,6 +1626,21 @@ function RecapBOTab({ contrats, selectedTraites, selectedSdtc }: RecapBOProps) {
 
   return (
     <div className="flex flex-col h-full gap-3">
+      {onCalcRecap && (
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => void onCalcRecap()}
+            disabled={calculating}
+            className="inline-flex items-center gap-1 px-3 py-1 text-xs rounded border disabled:opacity-40"
+            style={{ borderColor: COLOR_PRIMARY, color: COLOR_PRIMARY }}
+            title="Calcule TableRecapProd + TableRecapProdPts cote backend"
+          >
+            {calculating ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+            Recalculer depuis le backend
+          </button>
+        </div>
+      )}
       <RecapTable
         title="Nombre de contrats"
         template={template}
