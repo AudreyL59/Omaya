@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronLeft,
@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { getToken, getStoredUser } from '@/api'
-import { showConfirm } from '@shared/ui/dialog'
+import { showConfirm, showToast } from '@shared/ui/dialog'
 
 interface AgendaRDV {
   id_evenement: string
@@ -116,6 +116,43 @@ function durationMin(start: string, end: string): number {
   return Math.max(0, Math.round((b.getTime() - a.getTime()) / 60000))
 }
 
+/** Signature stable d'une liste de RDV : detecte ajouts/suppressions/
+ *  modifications de statut/categorie/horaire en une comparaison string. */
+function _rdvSignature(rdvs: { id_evenement: string; id_categorie: number; id_cv_statut: number; date_debut: string; date_fin: string }[]): string {
+  return rdvs
+    .map(
+      (r) =>
+        `${r.id_evenement}|${r.id_categorie}|${r.id_cv_statut}|${r.date_debut}|${r.date_fin}`,
+    )
+    .sort()
+    .join(';')
+}
+
+/** Decrit le diff entre 2 listes de RDV : "2 nouveaux, 1 statut modifie". */
+function _describeRdvDiff(
+  oldRdvs: { id_evenement: string; id_categorie: number; id_cv_statut: number }[],
+  newRdvs: { id_evenement: string; id_categorie: number; id_cv_statut: number }[],
+): string {
+  const oldIds = new Set(oldRdvs.map((r) => r.id_evenement))
+  const newIds = new Set(newRdvs.map((r) => r.id_evenement))
+  const added = newRdvs.filter((r) => !oldIds.has(r.id_evenement)).length
+  const removed = oldRdvs.filter((r) => !newIds.has(r.id_evenement)).length
+  const oldByIdSig = new Map(
+    oldRdvs.map((r) => [r.id_evenement, `${r.id_categorie}|${r.id_cv_statut}`]),
+  )
+  const modified = newRdvs.filter(
+    (r) =>
+      oldByIdSig.has(r.id_evenement) &&
+      oldByIdSig.get(r.id_evenement) !== `${r.id_categorie}|${r.id_cv_statut}`,
+  ).length
+  const parts: string[] = []
+  if (added) parts.push(`${added} nouveau${added > 1 ? 'x RDV' : ' RDV'}`)
+  if (removed) parts.push(`${removed} RDV supprimé${removed > 1 ? 's' : ''}`)
+  if (modified)
+    parts.push(`${modified} statut${modified > 1 ? 's' : ''} modifié${modified > 1 ? 's' : ''}`)
+  return parts.join(', ') || 'changements détectés'
+}
+
 function isoWeekNumber(d: Date): number {
   // ISO 8601 : la semaine contient le jeudi de la semaine en cours.
   const target = new Date(d)
@@ -184,20 +221,21 @@ export default function AgendaRecrutementPage() {
     return { from: mon, to: fri }
   })()
 
+  // Calcule from/to selon le mode (utilise par le fetch initial + polling)
+  const computeRange = useCallback((): { from: string; to: string } => {
+    if (mode === 'day') {
+      return { from: toYMD(day), to: toYMD(day) }
+    }
+    if (mode === 'week') {
+      return { from: toYMD(weekRange.from), to: toYMD(weekRange.to) }
+    }
+    return { from: dateFrom.replace(/-/g, ''), to: dateTo.replace(/-/g, '') }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, day, dateFrom, dateTo])
+
   useEffect(() => {
     if (!recruteurId) return
-    let from: string
-    let to: string
-    if (mode === 'day') {
-      from = toYMD(day)
-      to = toYMD(day)
-    } else if (mode === 'week') {
-      from = toYMD(weekRange.from)
-      to = toYMD(weekRange.to)
-    } else {
-      from = dateFrom.replace(/-/g, '')
-      to = dateTo.replace(/-/g, '')
-    }
+    const { from, to } = computeRange()
 
     setLoading(true)
     fetch(
@@ -214,6 +252,44 @@ export default function AgendaRecrutementPage() {
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recruteurId, mode, day, dateFrom, dateTo, refreshKey])
+
+  // Polling silencieux toutes les 30s : detecte les nouveaux RDV / RDV
+  // supprimes / changements de statut (cf. memoire project_iis_no_sse -
+  // long polling au lieu de SSE qui ne marche pas via IIS/ARR).
+  const rdvsRef = useRef<AgendaRDV[]>([])
+  rdvsRef.current = rdvs
+  const statutOpenRef = useRef(false)
+  statutOpenRef.current = !!statutRdv
+
+  useEffect(() => {
+    if (!recruteurId) return
+    const tick = async () => {
+      const { from, to } = computeRange()
+      try {
+        const r = await fetch(
+          `/api/adm/agenda-recrutement?id_recruteur=${recruteurId}&date_from=${from}&date_to=${to}`,
+          { headers: { Authorization: `Bearer ${getToken()}` } },
+        )
+        if (!r.ok) return
+        const list = (await r.json()) as AgendaRDV[]
+        if (!Array.isArray(list)) return
+        const oldSig = _rdvSignature(rdvsRef.current)
+        const newSig = _rdvSignature(list)
+        if (oldSig === newSig) return  // pas de changement
+        const diff = _describeRdvDiff(rdvsRef.current, list)
+        setRdvs(list)
+        // Toast discret (sauf si l'utilisateur est en train de statuer)
+        if (!statutOpenRef.current) {
+          showToast(`Agenda mis à jour : ${diff}`, 'info')
+        }
+      } catch {
+        // erreur reseau -> on retentera au tick suivant
+      }
+    }
+    const interval = setInterval(tick, 30_000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recruteurId, mode, day, dateFrom, dateTo])
 
   const categories = Array.from(
     new Map(
