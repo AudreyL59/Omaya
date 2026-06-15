@@ -12,6 +12,8 @@ class FicheHeader(BaseModel):
     photo_url: str = ""
     en_activite: bool = False
     en_pause: bool = False
+    id_absence: str = ""
+    agenda_actif: bool = False
     id_ste: str = ""
     rs_societe: str = ""
     id_type_poste: int = 0
