@@ -84,7 +84,9 @@ function fmtDate(iso: string): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 }
 
-// Définition des colonnes par mode (cf. WinDev libellés et tri)
+// Définition des colonnes par mode (cf. WinDev libellés, tri, largeurs).
+// Colonne 1 = icône 60px (cf. screen WinDev avec photo ronde). Largeurs
+// textuelles ajustées pour montrer le contenu sans tronquer en standard.
 const COLS_BY_MODE: Record<
   Mode,
   {
@@ -98,26 +100,26 @@ const COLS_BY_MODE: Record<
   client: {
     headers: ['Nom', 'Prénom', 'CP Ville', 'Mobile', 'Fixe', 'Mail'],
     showAff: false,
-    template: '32px 1.2fr 1fr 1.4fr 0.9fr 0.9fr 1.4fr',
+    template: '60px minmax(140px,1.2fr) minmax(120px,1fr) minmax(160px,1.2fr) 120px 120px minmax(180px,1.4fr)',
   },
   contrat: {
     headers: ['Num BS', 'Vendeur', 'Date Signature', 'Produit', 'État', 'Partenaire'],
     showAff: false,
-    template: '32px 1fr 1.2fr 0.9fr 1.4fr 1.2fr 0.7fr',
+    template: '60px minmax(120px,1fr) minmax(160px,1.2fr) 120px minmax(160px,1.4fr) minmax(140px,1.2fr) 100px',
     fmt: [(v) => v, (v) => v, fmtDate, (v) => v, (v) => v, (v) => v],
   },
   salarie: {
     headers: ['Nom Prénom', 'Entité - Poste', 'Date Embauche', 'Sortie', 'Mobile', 'Mail'],
     showAff: true,
     affLabel: 'Affectation',
-    template: '32px 1.2fr 1.6fr 0.9fr 0.9fr 0.9fr 1.4fr 1fr',
+    template: '60px minmax(220px,1.6fr) minmax(220px,1.6fr) 110px minmax(180px,1.2fr) 130px minmax(180px,1.4fr) minmax(120px,1fr)',
     fmt: [(v) => v, (v) => v, fmtDate, (v) => v, (v) => v, (v) => v],
   },
   cv: {
     headers: ['Nom Prénom', 'CP Ville', 'Date Saisie', 'Source', 'Mobile', 'Mail'],
     showAff: true,
     affLabel: 'Statut CV',
-    template: '32px 1.2fr 1fr 0.9fr 0.9fr 0.9fr 1.4fr 1fr',
+    template: '60px minmax(200px,1.5fr) minmax(140px,1fr) 110px minmax(120px,1fr) 130px minmax(180px,1.4fr) minmax(120px,1fr)',
     fmt: [(v) => v, (v) => v, fmtDate, (v) => v, (v) => v, (v) => v],
   },
 }
@@ -352,7 +354,7 @@ export default function RecherchePage() {
         className="flex-1 flex flex-col rounded-lg border overflow-hidden"
         style={{ borderColor: COLOR_BG_SOFT, backgroundColor: 'white' }}
       >
-        {/* Header tableau */}
+        {/* Header tableau (centré comme WinDev) */}
         <div
           className="grid items-center gap-2 px-3 py-2 text-xs font-semibold border-b"
           style={{
@@ -362,11 +364,16 @@ export default function RecherchePage() {
             borderColor: COLOR_BG_SOFT,
           }}
         >
-          <div />
+          {/* Placeholder explicite pour la colonne icône */}
+          <div className="min-w-0" />
           {cfg.headers.map((h) => (
-            <div key={h}>{h}</div>
+            <div key={h} className="text-center min-w-0 truncate">
+              {h}
+            </div>
           ))}
-          {cfg.showAff && <div>{cfg.affLabel}</div>}
+          {cfg.showAff && (
+            <div className="text-center min-w-0 truncate">{cfg.affLabel}</div>
+          )}
         </div>
 
         {/* Lignes */}
@@ -404,14 +411,17 @@ export default function RecherchePage() {
                 }}
                 title="Cliquer pour ouvrir la fiche"
               >
-                <RowIcon row={r} />
+                {/* Wrapper stable pour l'icône (centré dans la cellule 60px) */}
+                <div className="flex items-center justify-center min-w-0">
+                  <RowIcon row={r} />
+                </div>
                 {formatted.map((v, i) => (
-                  <div key={i} className="truncate" title={v}>
+                  <div key={i} className="truncate min-w-0" title={v}>
                     {v || '—'}
                   </div>
                 ))}
                 {cfg.showAff && (
-                  <div className="truncate" title={r.att_aff}>
+                  <div className="truncate min-w-0" title={r.att_aff}>
                     {r.att_aff || '—'}
                   </div>
                 )}
@@ -467,17 +477,28 @@ function Field({
 }
 
 function RowIcon({ row }: { row: SearchRow }) {
+  // Tailles fixes : 40x40 cercle (cf. screen WinDev avec photo ronde)
+  const wrapperClass =
+    'flex items-center justify-center rounded-full shrink-0'
+  const wrapperStyle = {
+    backgroundColor: COLOR_BG_SOFT,
+    width: 40,
+    height: 40,
+  } as const
+  const iconClass = 'w-5 h-5'
+  const iconStyle = { color: COLOR_PRIMARY } as const
+
   switch (row.origine) {
     case 'CLIENT':
       return (
-        <div className="flex items-center justify-center w-7 h-7 rounded-full" style={{ backgroundColor: COLOR_BG_SOFT }}>
-          <UserIcon className="w-4 h-4" style={{ color: COLOR_PRIMARY }} />
+        <div className={wrapperClass} style={wrapperStyle}>
+          <UserIcon className={iconClass} style={iconStyle} />
         </div>
       )
     case 'CV':
       return (
-        <div className="flex items-center justify-center w-7 h-7 rounded-full" style={{ backgroundColor: COLOR_BG_SOFT }}>
-          <FileText className="w-4 h-4" style={{ color: COLOR_PRIMARY }} />
+        <div className={wrapperClass} style={wrapperStyle}>
+          <FileText className={iconClass} style={iconStyle} />
         </div>
       )
     case 'SALARIE':
@@ -486,23 +507,24 @@ function RowIcon({ row }: { row: SearchRow }) {
           <img
             src={`/api/adm/fiche-salarie/${row.id}/photo`}
             alt=""
-            className="w-7 h-7 rounded-full object-cover"
+            className="rounded-full object-cover shrink-0"
+            style={{ width: 40, height: 40 }}
             onError={(e) => {
-              ;(e.target as HTMLImageElement).style.display = 'none'
+              ;(e.target as HTMLImageElement).style.visibility = 'hidden'
             }}
           />
         )
       }
       return (
-        <div className="flex items-center justify-center w-7 h-7 rounded-full" style={{ backgroundColor: COLOR_BG_SOFT }}>
-          <UserIcon className="w-4 h-4" style={{ color: COLOR_PRIMARY }} />
+        <div className={wrapperClass} style={wrapperStyle}>
+          <UserIcon className={iconClass} style={iconStyle} />
         </div>
       )
     case 'CONTRAT':
       // TODO : afficher logo partenaire (att7) via /api/adm/partenaire/{prefix}/logo
       return (
-        <div className="flex items-center justify-center w-7 h-7 rounded-full" style={{ backgroundColor: COLOR_BG_SOFT }}>
-          <FileText className="w-4 h-4" style={{ color: COLOR_PRIMARY }} />
+        <div className={wrapperClass} style={wrapperStyle}>
+          <FileText className={iconClass} style={iconStyle} />
         </div>
       )
   }
