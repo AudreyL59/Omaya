@@ -17,6 +17,7 @@ import { Loader2, Save, Search, Ticket, Trash2, X } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
+import TicketContenuStandalone from '@shared/tickets/TicketContenuStandalone'
 
 const TYPE_CHALLENGE = 1
 const TYPE_CMD_EXOCASH = 3
@@ -80,6 +81,7 @@ export default function SalarieLivretModal({
   const [challengeOpen, setChallengeOpen] = useState(false)
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [loadingChall, setLoadingChall] = useState(false)
+  const [ticketOpen, setTicketOpen] = useState(false)
 
   // Charge la combo Types Operation
   useEffect(() => {
@@ -277,12 +279,7 @@ export default function SalarieLivretModal({
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    showToast(
-                      'Voir le ticket : à implémenter (Fen_TicketContenu).',
-                      'info',
-                    )
-                  }
+                  onClick={() => setTicketOpen(true)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border"
                   style={{
                     backgroundColor: 'white',
@@ -430,6 +427,15 @@ export default function SalarieLivretModal({
               </div>
             </div>
           </motion.div>
+        )}
+
+        {ticketOpen && idTkListe && (
+          <TicketContenuStandalone
+            apiBase="/api/adm"
+            getToken={getToken}
+            idTicket={idTkListe}
+            onClose={() => setTicketOpen(false)}
+          />
         )}
       </motion.div>
     </AnimatePresence>
