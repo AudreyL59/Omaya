@@ -124,14 +124,55 @@ def toggle_actif(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
+class EnPausePayload(BaseModel):
+    value: bool
+    id_absence: str = ""  # absence venant d'etre creee (activation) ou '' (desact)
+
+
 @router.post("/{id_salarie}/en-pause", response_model=SaveResponse)
 def toggle_en_pause(
+    payload: EnPausePayload,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Toggle En pause + id_absence. Cf. WinDev : ces 2 champs sont
+    mis a jour ensemble selon l'activation ou la desactivation."""
+    try:
+        id_abs = 0
+        if payload.id_absence:
+            try:
+                id_abs = int(payload.id_absence)
+            except ValueError:
+                id_abs = 0
+        return svc.set_en_pause(id_salarie, payload.value, id_abs)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/agenda", response_model=SaveResponse)
+def toggle_agenda(
     payload: ToggleStatusPayload,
     id_salarie: int = Path(...),
     user: UserToken = Depends(get_current_user),
 ):
+    """Btn 'Agenda' : toggle pgt_salarie.agenda_actif."""
     try:
-        return svc.set_en_pause(id_salarie, payload.value)
+        return svc.set_agenda_actif(id_salarie, payload.value, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+@router.post("/{id_salarie}/duplicate")
+def post_duplicate_salarie(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Dupliquer' : clone la fiche complete (salarie + embauche +
+    coordonnees + sortie + mutuelle). Retourne le nouvel id_salarie."""
+    try:
+        return svc.duplicate_salarie(id_salarie, user.id_salarie)
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")

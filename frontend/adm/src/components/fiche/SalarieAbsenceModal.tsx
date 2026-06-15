@@ -36,7 +36,9 @@ interface Props {
   idSalarie: string
   idAbsence: string // '' = creation
   onClose: () => void
-  onSaved: () => void
+  /** Le backend retourne id_absence (cree ou modifie). On le transmet
+   *  pour que le caller (ex: header EnPause) puisse l'utiliser. */
+  onSaved: (idAbsence: string) => void
 }
 
 export default function SalarieAbsenceModal({
@@ -117,7 +119,13 @@ export default function SalarieAbsenceModal({
         const j = await r.json().catch(() => ({}))
         throw new Error((j as { detail?: string })?.detail || String(r.status))
       }
-      const j = (await r.json()) as { nbj: number; nbj_ouvres: number; nb_samedi: number; periode: string }
+      const j = (await r.json()) as {
+        id_absence: string
+        nbj: number
+        nbj_ouvres: number
+        nb_samedi: number
+        periode: string
+      }
       setMeta({
         periode: j.periode,
         nbj: j.nbj,
@@ -128,7 +136,7 @@ export default function SalarieAbsenceModal({
         `Enregistré (${j.nbj} jour(s), ${j.nbj_ouvres} ouvré(s), ${j.nb_samedi} samedi(s)).`,
         'success',
       )
-      onSaved()
+      onSaved(j.id_absence || idAbsence)
     } catch (e) {
       showToast(`Échec : ${(e as Error).message}`, 'error')
     } finally {

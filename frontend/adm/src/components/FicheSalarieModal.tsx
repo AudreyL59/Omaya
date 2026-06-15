@@ -36,6 +36,9 @@ import NoteFraisTab from './fiche/NoteFraisTab'
 import OrgaSuiviTab from './fiche/OrgaSuiviTab'
 import SuiviADMTab from './fiche/SuiviADMTab'
 import UleaseTab from './fiche/UleaseTab'
+import SalarieAbsenceModal from './fiche/SalarieAbsenceModal'
+import { showConfirm, showToast } from '@shared/ui/dialog'
+import SDTCModal from '@shared/sdtc/SDTCModal'
 
 // --- Types ---------------------------------------------------------------
 
@@ -47,6 +50,8 @@ interface FicheHeader {
   photo_url: string
   en_activite: boolean
   en_pause: boolean
+  id_absence: string
+  agenda_actif: boolean
   id_ste: string
   rs_societe: string
   id_type_poste: number
@@ -374,6 +379,13 @@ function ActionBar({
   idSalarie: string
   onHeaderChange: (h: FicheHeader) => void
 }) {
+  const [absenceOpen, setAbsenceOpen] = useState(false)
+  // mode = 'activation' (nouvelle absence) | 'desactivation' (modif existante)
+  const [absenceMode, setAbsenceMode] = useState<'activation' | 'desactivation'>('activation')
+  const [sdtcOpen, setSdtcOpen] = useState(false)
+  const [busyAgenda, setBusyAgenda] = useState(false)
+  const [busyDup, setBusyDup] = useState(false)
+
   const setActif = async (v: boolean) => {
     if (!header) return
     const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/actif`, {
@@ -383,15 +395,105 @@ function ActionBar({
     })
     if (r.ok) onHeaderChange({ ...header, en_activite: v })
   }
-  const setPause = async (v: boolean) => {
+
+  // Cf. WinDev : a chaque clic sur 'En pause', on ouvre Fen_SalarieAbsence.
+  // Activation : creation d'une absence -> on l'enregistre + EnPause=true
+  // Desactivation : modif de l'absence existante -> EnPause=false + IdAbsence=0
+  const onClickPause = () => {
     if (!header) return
+    if (header.en_pause) {
+      setAbsenceMode('desactivation')
+    } else {
+      setAbsenceMode('activation')
+    }
+    setAbsenceOpen(true)
+  }
+
+  const onAbsenceSaved = async (idAbsence: string) => {
+    if (!header) {
+      setAbsenceOpen(false)
+      return
+    }
+    const value = absenceMode === 'activation'
+    const idAbs = value ? idAbsence : '0'
     const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/en-pause`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value: v }),
+      body: JSON.stringify({ value, id_absence: idAbs }),
     })
-    if (r.ok) onHeaderChange({ ...header, en_pause: v })
+    if (r.ok) {
+      onHeaderChange({
+        ...header,
+        en_pause: value,
+        id_absence: value ? idAbs : '',
+      })
+      showToast(value ? 'Salarié mis en pause.' : 'Pause désactivée.', 'success')
+    } else {
+      showToast('Échec mise à jour du statut.', 'error')
+    }
+    setAbsenceOpen(false)
   }
+
+  const onClickAgenda = async () => {
+    if (!header || busyAgenda) return
+    const nextVal = !header.agenda_actif
+    const ok = await showConfirm({
+      title: 'Agenda',
+      message: nextVal
+        ? 'Voulez-vous activer l’agenda de recrutement ?'
+        : 'Voulez-vous désactiver l’agenda de recrutement ?',
+      confirmLabel: 'Oui',
+      cancelLabel: 'Non',
+    })
+    if (!ok) return
+    setBusyAgenda(true)
+    try {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/agenda`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: nextVal }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      onHeaderChange({ ...header, agenda_actif: nextVal })
+      showToast('Agenda modifié.', 'success')
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusyAgenda(false)
+    }
+  }
+
+  const onClickDupliquer = async () => {
+    if (busyDup) return
+    const ok = await showConfirm({
+      title: 'Dupliquer cette fiche ?',
+      message:
+        'Vous êtes sur le point de dupliquer cette fiche. Voulez-vous continuer ?',
+      confirmLabel: 'Dupliquer',
+    })
+    if (!ok) return
+    setBusyDup(true)
+    try {
+      const r = await fetch(`/api/adm/fiche-salarie/${idSalarie}/duplicate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const j = (await r.json()) as { id_salarie: string }
+      showToast(
+        `Fiche dupliquée (nouvel id ${j.id_salarie}). Ouvre la fiche depuis le registre.`,
+        'success',
+      )
+    } catch (e) {
+      showToast(`Échec duplication : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusyDup(false)
+    }
+  }
+
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white">
       {/* Supprimer */}
@@ -421,7 +523,7 @@ function ActionBar({
           Actif
         </button>
         <button
-          onClick={() => setPause(true)}
+          onClick={onClickPause}
           disabled={!header}
           className="px-4 py-1 text-xs font-medium transition"
           style={{
@@ -437,21 +539,89 @@ function ActionBar({
       <div className="flex-1" />
 
       {/* Actions droite */}
-      <HeaderAction icon={<Calendar className="w-4 h-4" />} label="Agenda" />
-      <HeaderAction icon={<Video className="w-4 h-4" />} label="Liens Visio" />
-      <HeaderAction icon={<Wallet className="w-4 h-4" />} label="Solde de tout compte" />
-      <HeaderAction icon={<Printer className="w-4 h-4" />} label="Imprimer" />
-      <HeaderAction icon={<Copy className="w-4 h-4" />} label="Dupliquer" />
+      <HeaderAction
+        icon={<Calendar className="w-4 h-4" />}
+        label={header?.agenda_actif ? 'Agenda actif' : 'Agenda'}
+        onClick={onClickAgenda}
+        disabled={!header || busyAgenda}
+        active={!!header?.agenda_actif}
+      />
+      <HeaderAction
+        icon={<Video className="w-4 h-4" />}
+        label="Liens Visio"
+        onClick={() =>
+          showToast(
+            'Liens Visio : à implémenter (Fen_SalonSalarié – fenêtre partagée).',
+            'info',
+          )
+        }
+      />
+      <HeaderAction
+        icon={<Wallet className="w-4 h-4" />}
+        label="Solde de tout compte"
+        onClick={() => setSdtcOpen(true)}
+        disabled={!header}
+      />
+      <HeaderAction
+        icon={<Printer className="w-4 h-4" />}
+        label="Imprimer"
+        onClick={() =>
+          showToast(
+            'Impression : à implémenter (Etat_PochetteSalarié + EtatAbsencesSalarié).',
+            'info',
+          )
+        }
+      />
+      <HeaderAction
+        icon={<Copy className="w-4 h-4" />}
+        label="Dupliquer"
+        onClick={onClickDupliquer}
+        disabled={!header || busyDup}
+      />
+
+      {absenceOpen && (
+        <SalarieAbsenceModal
+          idSalarie={idSalarie}
+          idAbsence={absenceMode === 'desactivation' ? header?.id_absence || '' : ''}
+          onClose={() => setAbsenceOpen(false)}
+          onSaved={(idAbsence) => void onAbsenceSaved(idAbsence)}
+        />
+      )}
+
+      <SDTCModal
+        open={sdtcOpen}
+        onClose={() => setSdtcOpen(false)}
+        getToken={getToken}
+        idSalarie={idSalarie}
+      />
     </div>
   )
 }
 
-function HeaderAction({ icon, label }: { icon: React.ReactNode; label: string }) {
+function HeaderAction({
+  icon,
+  label,
+  onClick,
+  disabled,
+  active,
+}: {
+  icon: React.ReactNode
+  label: string
+  onClick?: () => void
+  disabled?: boolean
+  active?: boolean
+}) {
   return (
     <button
-      disabled
+      type="button"
+      onClick={onClick}
+      disabled={disabled || !onClick}
       className="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-[#ECF1F2] rounded disabled:opacity-50 disabled:cursor-not-allowed"
-      style={{ color: COLOR_BRUN }}
+      style={{
+        color: COLOR_BRUN,
+        backgroundColor: active ? COLOR_BG_SOFT : undefined,
+        fontWeight: active ? 700 : 500,
+      }}
       title="À implémenter"
     >
       <span style={{ color: COLOR_PRIMARY }}>{icon}</span>

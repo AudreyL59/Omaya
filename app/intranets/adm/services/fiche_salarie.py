@@ -103,8 +103,9 @@ def load_header(id_salarie: int) -> dict:
         """SELECT
             s.id_salarie, s.civilite, s.nom, s.prenom,
             s.datecrea, s.op_crea, s.modif_date, s.modif_op,
-            se.en_activite, se.en_pause, se.id_ste, se.id_type_poste,
-            se.date_debut,
+            s.agenda_actif,
+            se.en_activite, se.en_pause, se.id_absence,
+            se.id_ste, se.id_type_poste, se.date_debut,
             soc.rs_interne, soc.raison_sociale,
             tp.lib_poste,
             ss.date_sortie_demandee, ss.date_sortie_reelle, ss.id_type_sortie,
@@ -130,6 +131,8 @@ def load_header(id_salarie: int) -> dict:
         "photo_url": f"/api/adm/fiche-salarie/{id_salarie}/photo",
         "en_activite": bool(row.get("en_activite")),
         "en_pause": bool(row.get("en_pause")),
+        "id_absence": _str_id(row.get("id_absence")),
+        "agenda_actif": bool(row.get("agenda_actif")),
         "id_ste": _str_id(row.get("id_ste")),
         "rs_societe": _str(row.get("rs_interne")) or _str(row.get("raison_sociale")),
         "id_type_poste": _int(row.get("id_type_poste")),
@@ -259,16 +262,143 @@ def set_en_activite(id_salarie: int, value: bool) -> dict:
     return {"ok": True}
 
 
-def set_en_pause(id_salarie: int, value: bool) -> dict:
-    """Bascule le statut En pause (salarie_embauche.en_pause)."""
+def set_en_pause(id_salarie: int, value: bool, id_absence: int = 0) -> dict:
+    """Bascule le statut En pause (salarie_embauche.en_pause).
+
+    Cf. WinDev : EnPause et IdAbsence sont mis a jour ensemble.
+    Activation : value=True + id_absence = absence venant d'etre creee.
+    Desactivation : value=False + id_absence = 0.
+    """
     db = get_pg_connection("rh")
     db.query(
-        f"""UPDATE rh.pgt_salarie_embauche
-        SET en_pause = {'TRUE' if value else 'FALSE'},
-            modif_date = NOW()
-        WHERE id_salarie = {_int(id_salarie)}"""
+        """UPDATE rh.pgt_salarie_embauche
+              SET en_pause = ?,
+                  id_absence = ?,
+                  modif_date = NOW()
+            WHERE id_salarie = ?""",
+        (bool(value), int(id_absence or 0), int(id_salarie)),
     )
     return {"ok": True}
+
+
+def set_agenda_actif(id_salarie: int, value: bool, op_id: int) -> dict:
+    """Bascule pgt_salarie.agenda_actif (cf. Btn 'Agenda')."""
+    db = get_pg_connection("rh")
+    db.query(
+        """UPDATE rh.pgt_salarie
+              SET agenda_actif = ?,
+                  modif_date = NOW(),
+                  modif_op = ?,
+                  modif_elem = 'modif'
+            WHERE id_salarie = ?""",
+        (bool(value), int(op_id), int(id_salarie)),
+    )
+    return {"ok": True, "agenda_actif": bool(value)}
+
+
+def duplicate_salarie(id_salarie: int, op_id: int) -> dict:
+    """Btn 'Dupliquer' : clone la fiche complete (salarie + embauche +
+    coordonnees + sortie + mutuelle) avec un nouvel id.
+
+    Cf. WinDev :
+      - salarie : Nom = 'Z ' + Nom, LOGIN += '-old', ActiveLog = 0
+      - embauche : meme contenu (copie a l'identique des 30+ champs)
+      - coordonnees : meme contenu
+      - sortie : creation vide (pour respecter le PK)
+      - mutuelle : creation vide
+    """
+    db = get_pg_connection("rh")
+    id_new = _new_ticket_id()  # YYYYMMDDHHMMSSmmm comme dans WinDev
+
+    # 1. Cloner pgt_salarie
+    db.query(
+        """INSERT INTO rh.pgt_salarie
+              (id_salarie, civilite, nom, nom_marital, prenom, sexe,
+               nationalite, date_naiss, lieu_naiss, dep_naiss, num_ss,
+               cpam, num_cin, situation_fam, avec_enfant, nb_enfants,
+               travailleur_handi, matricule_tr, agenda_actif,
+               op_crea, datecrea, photo, login, mdp_crypte,
+               id_utilisateur, active_log,
+               modif_date, modif_op, modif_elem)
+           SELECT ?, civilite, ?, nom_marital, prenom, sexe,
+                  nationalite, date_naiss, lieu_naiss, dep_naiss, num_ss,
+                  cpam, num_cin, situation_fam, avec_enfant, nb_enfants,
+                  travailleur_handi, matricule_tr, agenda_actif,
+                  ?, NOW(), photo, COALESCE(login, '') || '-old', mdp_crypte,
+                  id_utilisateur, FALSE,
+                  NOW(), ?, 'new'
+             FROM rh.pgt_salarie
+            WHERE id_salarie = ?""",
+        (
+            int(id_new),
+            "Z " + (load_header(id_salarie).get("nom") or ""),
+            int(op_id),
+            int(op_id),
+            int(id_salarie),
+        ),
+    )
+
+    # 2. Cloner pgt_salarie_embauche (sans id_salarie_embauche, PK genere)
+    db.query(
+        """INSERT INTO rh.pgt_salarie_embauche
+              (id_salarie, date_debut, date_fin_per_essai, date_anciennete,
+               en_activite, dpae_date, dpae_num, dpae_ope,
+               id_type_poste, id_type_ctt, id_type_horaire,
+               id_ste, id_ste_dpae_energie, id_ste_dpae_fibre,
+               coopte, coopteur, j_odirecte, jo_coopteur,
+               resp_equipe, resp_adjoint, chauffeur, multi_prod,
+               en_pause, id_absence, id_cvtheque,
+               cin_envoyee, cj_envoye,
+               formation_iag, formation_iag_date,
+               modif_date, modif_op, modif_elem)
+           SELECT ?, date_debut, date_fin_per_essai, date_anciennete,
+                  en_activite, dpae_date, dpae_num, dpae_ope,
+                  id_type_poste, id_type_ctt, id_type_horaire,
+                  id_ste, id_ste_dpae_energie, id_ste_dpae_fibre,
+                  coopte, coopteur, j_odirecte, jo_coopteur,
+                  resp_equipe, resp_adjoint, chauffeur, multi_prod,
+                  en_pause, id_absence, id_cvtheque,
+                  cin_envoyee, cj_envoye,
+                  formation_iag, formation_iag_date,
+                  NOW(), ?, 'new'
+             FROM rh.pgt_salarie_embauche
+            WHERE id_salarie = ?""",
+        (int(id_new), int(op_id), int(id_salarie)),
+    )
+
+    # 3. Cloner pgt_salarie_coordonnees
+    db.query(
+        """INSERT INTO rh.pgt_salarie_coordonnees
+              (id_salarie, adresse1, adresse2, cp, ville,
+               tel_fixe, tel_mob, mail, mail2,
+               urg_nom, urg_lien, urg_tel, iban, bic,
+               modif_date, modif_op, modif_elem)
+           SELECT ?, adresse1, adresse2, cp, ville,
+                  tel_fixe, tel_mob, mail, mail2,
+                  urg_nom, urg_lien, urg_tel, iban, bic,
+                  NOW(), ?, 'new'
+             FROM rh.pgt_salarie_coordonnees
+            WHERE id_salarie = ?""",
+        (int(id_new), int(op_id), int(id_salarie)),
+    )
+
+    # 4. Creer pgt_salarie_sortie vide (PK = id_salarie)
+    db.query(
+        """INSERT INTO rh.pgt_salarie_sortie
+              (id_salarie, id_type_sortie, modif_date, modif_op, modif_elem)
+           VALUES (?, 0, NOW(), ?, 'new')""",
+        (int(id_new), int(op_id)),
+    )
+
+    # 5. Creer pgt_salarie_mutuelle vide (PK = id_salarie)
+    db.query(
+        """INSERT INTO rh.pgt_salarie_mutuelle
+              (id_salarie, modif_date, modif_op, modif_elem)
+           VALUES (?, NOW(), ?, 'new')""",
+        (int(id_new), int(op_id)),
+    )
+
+    return {"ok": True, "id_salarie": str(id_new)}
 
 
 # IDs et constantes WinDev partagees pour sortirSalarie
