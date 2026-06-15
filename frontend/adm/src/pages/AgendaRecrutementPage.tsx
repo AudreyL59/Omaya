@@ -1259,6 +1259,72 @@ function Checkbox({
   )
 }
 
+/** Assigne chaque RDV a une lane (colonne parallele) pour eviter les
+ *  chevauchements visuels. Algo simple : on parcourt les RDV tries par
+ *  date_debut, pour chacun on lui donne la 1ere lane libre (= aucune
+ *  lane n'a un RDV en cours qui chevauche). Tous les RDV d'un meme
+ *  groupe de chevauchement partagent le meme `totalLanes` pour que
+ *  leur largeur soit cohérente. */
+function assignLanes(
+  rdvs: AgendaRDV[],
+): Map<string, { lane: number; totalLanes: number }> {
+  const out = new Map<string, { lane: number; totalLanes: number }>()
+  if (rdvs.length === 0) return out
+
+  // 1) Trouver les groupes de chevauchement (clusters)
+  type Item = { rdv: AgendaRDV; start: number; end: number }
+  const items: Item[] = rdvs
+    .map((r) => {
+      const s = parseDbDate(r.date_debut)?.getTime() ?? 0
+      const e = parseDbDate(r.date_fin)?.getTime() ?? s + 30 * 60_000
+      return { rdv: r, start: s, end: Math.max(e, s + 5 * 60_000) }
+    })
+    .sort((a, b) => a.start - b.start)
+
+  let cluster: Item[] = []
+  let clusterEnd = 0
+  const flush = () => {
+    if (cluster.length === 0) return
+    // 2) Pour ce cluster, assigner les lanes
+    const lanes: number[] = [] // lanes[i] = end time du dernier RDV sur la lane i
+    const localAssign: { item: Item; lane: number }[] = []
+    for (const it of cluster) {
+      let assigned = -1
+      for (let i = 0; i < lanes.length; i++) {
+        if (lanes[i] <= it.start) {
+          assigned = i
+          lanes[i] = it.end
+          break
+        }
+      }
+      if (assigned === -1) {
+        assigned = lanes.length
+        lanes.push(it.end)
+      }
+      localAssign.push({ item: it, lane: assigned })
+    }
+    const total = lanes.length
+    for (const a of localAssign) {
+      out.set(a.item.rdv.id_evenement, { lane: a.lane, totalLanes: total })
+    }
+    cluster = []
+    clusterEnd = 0
+  }
+
+  for (const it of items) {
+    if (cluster.length === 0 || it.start < clusterEnd) {
+      cluster.push(it)
+      if (it.end > clusterEnd) clusterEnd = it.end
+    } else {
+      flush()
+      cluster.push(it)
+      clusterEnd = it.end
+    }
+  }
+  flush()
+  return out
+}
+
 // --- Vue calendrier hebdomadaire (cf. WinDev agenda) --------------------
 
 const WEEK_HOUR_START = 8
@@ -1353,36 +1419,46 @@ function WeekCalendarView({
               </div>
             ))}
           </div>
-          {days.map((d, di) => (
-            <div key={di} className="relative border-l border-[#E5DDDC]">
-              {hours.map((h) => (
-                <div
-                  key={h}
-                  className="border-b border-[#E5DDDC]"
-                  style={{ height: WEEK_PIXELS_PER_HOUR }}
-                />
-              ))}
-              {/* RDV de ce jour en overlay absolu */}
-              {rdvs
-                .filter((r) => dayKey(r.date_debut) === toYMD(d))
-                .map((rdv) => {
+          {days.map((d, di) => {
+            // RDV de ce jour assignes a des 'lanes' (colonnes paralleles)
+            // pour eviter le chevauchement visuel (cf. screen WinDev avec
+            // 2 RDV cote a cote sur 11h-12h).
+            const dayRdvs = rdvs
+              .filter((r) => dayKey(r.date_debut) === toYMD(d))
+              .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
+            const assignments = assignLanes(dayRdvs)
+            return (
+              <div key={di} className="relative border-l border-[#E5DDDC]">
+                {hours.map((h) => (
+                  <div
+                    key={h}
+                    className="border-b border-[#E5DDDC]"
+                    style={{ height: WEEK_PIXELS_PER_HOUR }}
+                  />
+                ))}
+                {/* RDV en overlay absolu, repartis sur N lanes */}
+                {dayRdvs.map((rdv) => {
                   const pos = positionRdv(rdv)
                   if (!pos) return null
+                  const a = assignments.get(rdv.id_evenement)
+                  if (!a) return null
                   const hex = rdv.couleur_hex || '#A68D8A'
-                  // Fond a ~40% d'opacite + texte en brun foncé OMAYA :
-                  // bien plus contraste que la version 'soft' (15%) pour
-                  // les categories pales (rose, jaune, bleu clair).
+                  // Largeur = 100% / nbLanes, position left = lane * largeur
+                  const widthPct = 100 / a.totalLanes
+                  const leftPct = a.lane * widthPct
                   return (
                     <button
                       key={rdv.id_evenement}
                       type="button"
                       onClick={() => onClickRdv(rdv)}
-                      className="absolute left-0.5 right-0.5 text-left rounded px-1.5 py-0.5 text-[11px] leading-tight overflow-hidden hover:brightness-95 transition-all"
+                      className="absolute text-left rounded px-1.5 py-0.5 text-[11px] leading-tight overflow-hidden hover:brightness-95 transition-all"
                       style={{
                         top: pos.top,
                         height: pos.height,
-                        backgroundColor: hex + '66', // 40% opacity = bien visible
-                        color: '#4E1D17',            // brun foncé OMAYA pour le texte
+                        left: `calc(${leftPct}% + 2px)`,
+                        width: `calc(${widthPct}% - 4px)`,
+                        backgroundColor: hex + '66', // 40% opacity
+                        color: '#4E1D17',
                         borderLeft: `3px solid ${hex}`,
                       }}
                       title={`${rdv.titre} (${formatTime(rdv.date_debut)} - ${formatTime(rdv.date_fin)})`}
@@ -1396,8 +1472,9 @@ function WeekCalendarView({
                     </button>
                   )
                 })}
-            </div>
-          ))}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>
