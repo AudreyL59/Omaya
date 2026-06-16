@@ -1013,24 +1013,33 @@ function RadioCiv({
   value: number
   onChange: (v: number) => void
 }) {
-  const btn = (v: number, lib: string) => (
-    <button
-      type="button"
-      onClick={() => onChange(v)}
-      className="flex-1 px-3 py-1.5 text-sm rounded-md"
-      style={{
-        backgroundColor: value === v ? COL_PRIMARY : COL_BG_SOFT,
-        color: value === v ? 'white' : COL_BRUN,
-        border: `1px solid ${COL_BORDER}`,
-      }}
-    >
-      {lib}
-    </button>
-  )
+  // Glissiere M./Mme (memes styles que CiviliteToggle de FicheSalarieModal)
   return (
-    <div className="flex gap-2 w-full">
-      {btn(1, 'M.')}
-      {btn(2, 'Mme')}
+    <div
+      className="flex items-center rounded overflow-hidden w-full"
+      style={{ border: `1px solid ${COL_BORDER}` }}
+    >
+      {[
+        { v: 1, l: 'M.' },
+        { v: 2, l: 'Mme' },
+      ].map((o) => {
+        const active = value === o.v
+        return (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => onChange(o.v)}
+            className="flex-1 px-4 py-1.5 text-sm transition"
+            style={{
+              backgroundColor: active ? COL_PRIMARY : 'white',
+              color: active ? 'white' : COL_BRUN,
+              fontWeight: active ? 600 : 400,
+            }}
+          >
+            {o.l}
+          </button>
+        )
+      })}
     </div>
   )
 }
