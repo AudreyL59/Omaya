@@ -138,3 +138,118 @@ def post_enregistrer(
         return svc_n.save_dpae(payload.model_dump(), user.id_salarie)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Plan 2 - Codes partenaires
+# ---------------------------------------------------------------------------
+
+
+@router.get("/partenaires-portail")
+def get_partenaires_portail(_user: UserToken = Depends(get_current_user)):
+    """Combo Partenaire du Plan 2."""
+    return svc_n.list_partenaires_portail()
+
+
+@router.get("/partenaire-portail/{id_partenaire}")
+def get_portail(
+    id_partenaire: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Credentials du portail pour ce partenaire."""
+    return svc_n.get_portail_credentials(id_partenaire)
+
+
+@router.get("/codes/{id_salarie}")
+def get_codes_salarie(
+    id_salarie: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """ZR_ElemsFaits : partenaires deja codes pour ce salarie."""
+    return svc_n.list_codes_salarie(id_salarie)
+
+
+class UrssafPayload(BaseModel):
+    dpae_num: str
+
+
+@router.post("/urssaf/{id_salarie}")
+def post_urssaf(
+    id_salarie: int,
+    payload: UrssafPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Valider les infos URSSAF'."""
+    return svc_n.update_dpae_urssaf(id_salarie, payload.dpae_num, user.id_salarie)
+
+
+class CodesPayload(BaseModel):
+    id_partenaire: int
+    code: str = ""
+    login: str = ""
+    mdp: str = ""
+
+
+@router.post("/codes/{id_salarie}")
+def post_codes(
+    id_salarie: int,
+    payload: CodesPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Valider les codes Partenaires'."""
+    return svc_n.save_codes_partenaire(
+        id_salarie, payload.id_partenaire,
+        payload.code, payload.login, payload.mdp,
+        user.id_salarie,
+    )
+
+
+class CharteEthiquePayload(BaseModel):
+    id_partenaire: int
+
+
+@router.post("/charte-ethique/{id_salarie}")
+def post_charte_ethique(
+    id_salarie: int,
+    payload: CharteEthiquePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Envoyer la charte Ethique' : cree TK_DemandeCodeVendeur + TK_Liste."""
+    return svc_n.envoyer_charte_ethique(id_salarie, payload.id_partenaire, user.id_salarie)
+
+
+class TerminerPayload(BaseModel):
+    id_ticket: int = 0
+
+
+@router.post("/terminer/{id_salarie}")
+def post_terminer(
+    id_salarie: int,
+    payload: TerminerPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Terminer ma DPAE' : (re)applique droits + cloture ticket."""
+    return svc_n.terminer_dpae(id_salarie, payload.id_ticket, user.id_salarie)
+
+
+class InfosPartenairePayload(BaseModel):
+    id_partenaire: int
+    lib_partenaire: str
+    code: str = ""
+    login: str = ""
+    mdp: str = ""
+    dpae_num: str = ""
+
+
+@router.post("/envoyer-infos/{id_salarie}")
+def post_envoyer_infos(
+    id_salarie: int,
+    payload: InfosPartenairePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """envoieInfoPartenaire WinDev : SMS recap au candidat."""
+    return svc_n.envoyer_infos_partenaire(
+        id_salarie, payload.id_partenaire, payload.lib_partenaire,
+        payload.code, payload.login, payload.mdp, payload.dpae_num,
+        op_id=user.id_salarie,
+    )

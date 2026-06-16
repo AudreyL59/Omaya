@@ -331,7 +331,7 @@ export default function DpaeNouvellePage() {
           saving={saving}
         />
       ) : (
-        <CodesPlan2 savedId={savedId} navigate={navigate} />
+        <CodesPlan2 savedId={savedId} idTicket={idTicket} navigate={navigate} />
       )}
 
       {orgaPickerOpen && (
@@ -932,46 +932,392 @@ function FormPlan1({
 // Plan 2 - Codes partenaires (placeholder V2)
 // ============================================================================
 
+interface PartenairePortail {
+  id_partenaire: string
+  lib_partenaire: string
+}
+
+interface CodeFait {
+  id_partenaire: string
+  lib_partenaire: string
+  code: string
+  login: string
+  mdp: string
+}
+
 function CodesPlan2({
   savedId,
+  idTicket,
   navigate,
 }: {
   savedId: string
+  idTicket: string
   navigate: (path: string) => void
 }) {
+  const [partenaires, setPartenaires] = useState<PartenairePortail[]>([])
+  const [selPartId, setSelPartId] = useState('')
+  const [portail, setPortail] = useState({
+    lien: '',
+    login: '',
+    mdp: '',
+  })
+  const [dpaeNum, setDpaeNum] = useState('')
+  const [code, setCode] = useState('')
+  const [login2, setLogin2] = useState('')
+  const [mdp2, setMdp2] = useState('')
+  const [elemsFaits, setElemsFaits] = useState<CodeFait[]>([])
+  const [busy, setBusy] = useState(false)
+
+  const selPart = partenaires.find((p) => p.id_partenaire === selPartId)
+  const libUpper = (selPart?.lib_partenaire || '').toUpperCase()
+  const isUrssaf = libUpper === 'URSSAF'
+  const isIag = libUpper === 'IAG'
+  const isOhm = libUpper.includes('OHM')
+
+  // Init : charge la combo + les codes deja saisis
+  useEffect(() => {
+    fetch('/api/adm/dpae/partenaires-portail', {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: PartenairePortail[]) => {
+        setPartenaires(d)
+        if (d.length > 0) setSelPartId(d[0].id_partenaire)
+      })
+    fetch(`/api/adm/dpae/codes/${savedId}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then(setElemsFaits)
+  }, [savedId])
+
+  // Quand on change de partenaire : charge le portail
+  useEffect(() => {
+    if (!selPartId) return
+    setCode('')
+    setLogin2('')
+    setMdp2('')
+    fetch(`/api/adm/dpae/partenaire-portail/${selPartId}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: { lien_portail?: string; login?: string; mdp?: string }) =>
+        setPortail({
+          lien: d.lien_portail || '',
+          login: d.login || '',
+          mdp: d.mdp || '',
+        }),
+      )
+  }, [selPartId])
+
+  const reloadFaits = () =>
+    fetch(`/api/adm/dpae/codes/${savedId}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then(setElemsFaits)
+
+  const envoyerSmsCandidat = async () => {
+    if (!selPart) return
+    await fetch(`/api/adm/dpae/envoyer-infos/${savedId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify({
+        id_partenaire: Number(selPartId),
+        lib_partenaire: selPart.lib_partenaire,
+        code,
+        login: login2,
+        mdp: mdp2,
+        dpae_num: dpaeNum,
+      }),
+    })
+  }
+
+  const validerUrssaf = async () => {
+    if (!dpaeNum.trim()) {
+      showToast('Saisis le N° DPAE.', 'info')
+      return
+    }
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/adm/dpae/urssaf/${savedId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ dpae_num: dpaeNum.trim() }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      await envoyerSmsCandidat()
+      await reloadFaits()
+      showToast('URSSAF validée + SMS envoyé.', 'success')
+    } catch (e) {
+      showToast(`Échec URSSAF : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const validerCodes = async () => {
+    if (!selPartId) return
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/adm/dpae/codes/${savedId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          id_partenaire: Number(selPartId),
+          code,
+          login: login2,
+          mdp: mdp2,
+        }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      await envoyerSmsCandidat()
+      await reloadFaits()
+      showToast('Codes validés + SMS envoyé.', 'success')
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const envoyerCharte = async () => {
+    if (!selPartId) return
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/adm/dpae/charte-ethique/${savedId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ id_partenaire: Number(selPartId) }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Demande de code envoyée (ticket BO créé).', 'success')
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const terminerDpae = async () => {
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/adm/dpae/terminer/${savedId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ id_ticket: idTicket ? Number(idTicket) : 0 }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('DPAE terminée. Ouverture de la fiche salarié...', 'success')
+      navigate(`/salaries/registre`)
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const ouvrirPortail = () => {
+    if (portail.lien) window.open(portail.lien, '_blank', 'noopener')
+  }
+
   return (
-    <div
-      className="bg-white rounded-lg shadow-sm p-6 border"
-      style={{ borderColor: COL_BORDER }}
-    >
-      <p className="text-sm mb-3" style={{ color: COL_BRUN }}>
-        Le salarié <strong>#{savedId}</strong> a été créé. Le Plan 2 (ajout
-        des codes partenaires URSSAF / IAG / SFR / ENI / etc., envoi mail/SMS
-        au candidat, charte éthique Ohm, Terminer ma DPAE) sera implémenté en
-        V2.
-      </p>
-      <p className="text-xs italic mb-4" style={{ color: COL_BRUN }}>
-        Tu peux dès à présent consulter la fiche salarié et compléter les
-        codes manuellement.
-      </p>
-      <div className="flex gap-2">
+    <div className="grid grid-cols-3 gap-4">
+      {/* Col 1 : credentials du portail */}
+      <Card title="Portail partenaire">
+        <Field label="Partenaire">
+          <select
+            value={selPartId}
+            onChange={(e) => setSelPartId(e.target.value)}
+            className={inputCls}
+          >
+            {partenaires.map((p) => (
+              <option key={p.id_partenaire} value={p.id_partenaire}>
+                {p.lib_partenaire}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Login (portail)">
+          <input
+            type="text"
+            value={portail.login}
+            readOnly
+            className={inputCls}
+          />
+        </Field>
+        <Field label="MDP (portail)">
+          <input
+            type="text"
+            value={portail.mdp}
+            readOnly
+            className={inputCls}
+          />
+        </Field>
         <button
           type="button"
-          onClick={() => navigate(`/salaries/registre`)}
-          className="px-4 py-2 rounded-md text-white text-sm"
+          onClick={ouvrirPortail}
+          disabled={!portail.lien}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
           style={{ backgroundColor: COL_PRIMARY }}
         >
-          Retour au Registre RH
+          <ExternalLink className="w-4 h-4" />
+          Ouvrir le portail
         </button>
-        <button
-          type="button"
-          onClick={() => navigate('/salaries/dpae')}
-          className="px-4 py-2 border rounded-md text-sm hover:bg-[#EFE9E7]"
-          style={{ borderColor: COL_BORDER, color: COL_BRUN }}
-        >
-          Nouvelle DPAE
-        </button>
-      </div>
+      </Card>
+
+      {/* Col 2 : Validation codes */}
+      <Card
+        title={
+          isUrssaf
+            ? 'Validation URSSAF'
+            : isOhm
+              ? 'Demande Ohm Énergie'
+              : 'Codes partenaire'
+        }
+      >
+        {isUrssaf ? (
+          <>
+            <Field label="N° DPAE">
+              <input
+                type="text"
+                value={dpaeNum}
+                onChange={(e) => setDpaeNum(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <button
+              type="button"
+              onClick={validerUrssaf}
+              disabled={busy}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+              Valider les infos URSSAF
+            </button>
+          </>
+        ) : isOhm ? (
+          <>
+            <p className="text-xs italic mb-2" style={{ color: COL_BRUN }}>
+              Crée une demande de code Ohm Énergie (ticket BO) à transmettre
+              au service partenaires.
+            </p>
+            <button
+              type="button"
+              onClick={envoyerCharte}
+              disabled={busy}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+              Envoyer la charte éthique
+            </button>
+          </>
+        ) : (
+          <>
+            <Field label="Code">
+              <input
+                type="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Login">
+              <input
+                type="text"
+                value={login2}
+                onChange={(e) => setLogin2(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="MDP">
+              <input
+                type="text"
+                value={mdp2}
+                onChange={(e) => setMdp2(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            {isIag && (
+              <p className="text-xs italic" style={{ color: COL_BRUN }}>
+                Si tu remplis le formulaire IAG côté portail, le code et le
+                login sont nécessaires ici pour l'enregistrement local.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={validerCodes}
+              disabled={busy}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+              Valider les codes Partenaires
+            </button>
+          </>
+        )}
+      </Card>
+
+      {/* Col 3 : ZR_ElemsFaits + Terminer */}
+      <Card title="Éléments faits">
+        {elemsFaits.length === 0 ? (
+          <p className="text-xs italic" style={{ color: COL_BRUN }}>
+            Aucun partenaire validé pour l'instant.
+          </p>
+        ) : (
+          <ul className="space-y-1.5 text-sm">
+            {elemsFaits.map((e, i) => (
+              <li
+                key={i}
+                className="flex items-start gap-2 p-2 rounded"
+                style={{ backgroundColor: COL_BG_SOFT, color: COL_BRUN }}
+              >
+                <span style={{ color: '#16a34a' }}>✓</span>
+                <div className="flex-1">
+                  <div className="font-semibold">{e.lib_partenaire}</div>
+                  {(e.code || e.login) && (
+                    <div className="text-xs opacity-75">
+                      {e.code && `Code ${e.code}`}
+                      {e.code && e.login && ' · '}
+                      {e.login && `Login ${e.login}`}
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-4 pt-3 border-t" style={{ borderColor: COL_BORDER }}>
+          <button
+            type="button"
+            onClick={terminerDpae}
+            disabled={busy}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-white text-sm font-medium disabled:opacity-50"
+            style={{ backgroundColor: COL_PRIMARY }}
+          >
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+            Terminer ma DPAE
+          </button>
+        </div>
+      </Card>
     </div>
   )
 }

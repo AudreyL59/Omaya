@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+from app.shared.notifications.sms import envoi_sms
 
 
 # ---------------------------------------------------------------------------
@@ -746,3 +747,328 @@ def save_dpae(payload: dict, op_id: int) -> dict:
         "id_salarie": str(id_salarie),
         "matricule_tr": matricule,
     }
+
+
+# ===========================================================================
+# Plan 2 - Codes partenaires (cf. WinDev Fen_DPAE_Nouvelle..Plan = 2)
+# ===========================================================================
+
+
+def list_partenaires_portail() -> list[dict]:
+    """Combo Partenaire du Plan 2 : SELECT DISTINCT pgt_portail_partenaire
+    JOIN pgt_partenaire WHERE IsActif = TRUE (cf. WinDev combo URSSAF)."""
+    db_rec = get_pg_connection("recrutement")
+    db_adv = get_pg_connection("adv")
+
+    # On lit d'abord les id_partenaire actifs sur le portail
+    rows = db_rec.query(
+        """SELECT DISTINCT id_partenaire
+             FROM recrutement.pgt_portail_partenaire
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+              AND COALESCE(is_actif, FALSE) = TRUE
+              AND id_partenaire IS NOT NULL""",
+    ) or []
+    ids = [_int(r.get("id_partenaire")) for r in rows if _int(r.get("id_partenaire"))]
+    if not ids:
+        return []
+
+    # Resout les libelles depuis adv.pgt_partenaire (cross-base, on charge tout)
+    parts = db_adv.query(
+        "SELECT id_partenaire, lib_partenaire FROM adv.pgt_partenaire",
+    ) or []
+    lib_by_id = {_int(p.get("id_partenaire")): _str(p.get("lib_partenaire")) for p in parts}
+
+    out = []
+    for id_part in ids:
+        lib = lib_by_id.get(id_part) or f"#{id_part}"
+        out.append({
+            "id_partenaire": str(id_part),
+            "lib_partenaire": lib,
+        })
+    out.sort(key=lambda x: x["lib_partenaire"])
+    return out
+
+
+def get_portail_credentials(id_partenaire: int) -> dict:
+    """Charge le lien portail + login + mdp + mail_contact du partenaire."""
+    db = get_pg_connection("recrutement")
+    row = db.query_one(
+        """SELECT lien_portail, login, mdp, mail_contact, id_entite
+             FROM recrutement.pgt_portail_partenaire
+            WHERE id_partenaire = ? AND COALESCE(is_actif, FALSE) = TRUE
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (int(id_partenaire),),
+    )
+    if not row:
+        return {}
+    return {
+        "lien_portail": _str(row.get("lien_portail")),
+        "login": _str(row.get("login")),
+        "mdp": _str(row.get("mdp")),
+        "mail_contact": _str(row.get("mail_contact")),
+        "id_entite": _str(row.get("id_entite")),
+    }
+
+
+def list_codes_salarie(id_salarie: int) -> list[dict]:
+    """Liste les partenaires deja codes pour le salarie (cf. ZR_ElemsFaits
+    WinDev qui s'enrichit a chaque validation)."""
+    db_rh = get_pg_connection("rh")
+    db_adv = get_pg_connection("adv")
+    rows = db_rh.query(
+        """SELECT id_partenaire, code, login, mdp, modif_date
+             FROM rh.pgt_salarie_partenaire
+            WHERE id_salarie = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+         ORDER BY modif_date DESC""",
+        (int(id_salarie),),
+    ) or []
+    if not rows:
+        return []
+    parts = db_adv.query(
+        "SELECT id_partenaire, lib_partenaire FROM adv.pgt_partenaire",
+    ) or []
+    lib_by_id = {_int(p.get("id_partenaire")): _str(p.get("lib_partenaire")) for p in parts}
+
+    out = []
+    for r in rows:
+        id_p = _int(r.get("id_partenaire"))
+        out.append({
+            "id_partenaire": str(id_p),
+            "lib_partenaire": lib_by_id.get(id_p) or f"#{id_p}",
+            "code": _str(r.get("code")),
+            "login": _str(r.get("login")),
+            "mdp": _str(r.get("mdp")),
+        })
+    return out
+
+
+def update_dpae_urssaf(id_salarie: int, dpae_num: str, op_id: int) -> dict:
+    """Btn 'Valider les infos URSSAF' du Plan 2 :
+    UPDATE pgt_salarie_embauche.DPAE_num/date/Ope."""
+    db = get_pg_connection("rh")
+    db.query(
+        """UPDATE rh.pgt_salarie_embauche
+              SET dpae_date = NOW()::date,
+                  dpae_num = ?,
+                  dpae_ope = ?,
+                  modif_date = NOW()
+            WHERE id_salarie = ?""",
+        (dpae_num.strip(), int(op_id), int(id_salarie)),
+    )
+    return {"ok": True}
+
+
+def save_codes_partenaire(
+    id_salarie: int,
+    id_partenaire: int,
+    code: str,
+    login: str,
+    mdp: str,
+    op_id: int,
+) -> dict:
+    """Btn 'Valider les codes Partenaires' : UPSERT pgt_salarie_partenaire."""
+    db = get_pg_connection("rh")
+    existing = db.query_one(
+        """SELECT id_salarie_partenaire FROM rh.pgt_salarie_partenaire
+            WHERE id_salarie = ? AND id_partenaire = ? LIMIT 1""",
+        (int(id_salarie), int(id_partenaire)),
+    )
+    if existing:
+        db.query(
+            """UPDATE rh.pgt_salarie_partenaire
+                  SET code = ?, login = ?, mdp = ?,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_salarie_partenaire = ?""",
+            (code, login, mdp, int(op_id),
+             _int(existing.get("id_salarie_partenaire"))),
+        )
+    else:
+        db.query(
+            """INSERT INTO rh.pgt_salarie_partenaire
+                  (id_salarie_partenaire, id_salarie, id_partenaire,
+                   code, login, mdp, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+            (_new_id(), int(id_salarie), int(id_partenaire),
+             code, login, mdp, int(op_id)),
+        )
+    return {"ok": True}
+
+
+def envoyer_charte_ethique(
+    id_salarie: int,
+    id_partenaire: int,
+    op_id: int,
+) -> dict:
+    """Btn 'Envoyer la charte Ethique' : cree TK_DemandeCodeVendeur +
+    TK_Liste + TK_DemandeCodeVendeur_Fichier (CNI + Charte).
+
+    Cf. WinDev : envoi mail RH + xlsx avec coordonnees. Pour V1, on
+    cree juste les enregistrements de demande - le mail/xlsx pourra
+    etre ajoute plus tard."""
+    db_tk = get_pg_connection("ticket_bo")
+    id_new = _new_id()
+
+    db_tk.query(
+        """INSERT INTO ticket_bo.pgt_tk_demande_code_vendeur
+              (id_tk_demande_code_vendeur, id_tk_liste, type_ori,
+               id_elem, id_partenaire, code, login, mdp,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, 'DPAE', ?, ?, '', '', '',
+                   NOW(), ?, 'new')""",
+        (id_new, id_new, int(id_salarie), int(id_partenaire), int(op_id)),
+    )
+
+    # TK_Liste (ticket de service BO, type 38 = demande code vendeur)
+    db_tk.query(
+        """INSERT INTO ticket_bo.pgt_tk_liste
+              (id_tk_liste_auto, id_tk_liste, datecrea, op_crea, op_dest,
+               op_traitement_staff, ordre_traitement_staff, service,
+               id_tk_type_demande, id_tk_statut, cloturee,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, NOW(), ?, ?, 0, 0, 'BO',
+                   38, 1, FALSE,
+                   NOW(), ?, 'new')""",
+        (id_new, id_new, int(op_id), int(op_id), int(op_id)),
+    )
+    return {"ok": True, "id_ticket": str(id_new)}
+
+
+def terminer_dpae(id_salarie: int, id_ticket: int, op_id: int) -> dict:
+    """Btn 'Terminer ma DPAE' : (re)applique les droits selon le poste
+    + cloture le ticket DPAE source si fourni."""
+    db_rh = get_pg_connection("rh")
+
+    # Recharge le poste du salarie
+    emb = db_rh.query_one(
+        "SELECT id_type_poste FROM rh.pgt_salarie_embauche WHERE id_salarie = ? LIMIT 1",
+        (int(id_salarie),),
+    )
+    if emb:
+        id_poste = _int(emb.get("id_type_poste"))
+        if id_poste:
+            poste = db_rh.query_one(
+                "SELECT categorie FROM rh.pgt_type_poste WHERE id_type_poste = ? LIMIT 1",
+                (id_poste,),
+            )
+            if poste:
+                cat = _str(poste.get("categorie"))
+                droits = db_rh.query(
+                    """SELECT id_type_droit_acces FROM rh.pgt_type_droit_acces
+                        WHERE categorie = ?
+                          AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+                    (cat,),
+                ) or []
+                for d in droits:
+                    id_d = _int(d.get("id_type_droit_acces"))
+                    # UPSERT manuel (existe deja apres save_dpae pour les nouvelles
+                    # DPAE - mais peut manquer pour les TypeDpae=3 reprises)
+                    ex = db_rh.query_one(
+                        """SELECT 1 FROM rh.pgt_salarie_droit_acces
+                            WHERE id_salarie = ? AND id_type_droit_acces = ?
+                            LIMIT 1""",
+                        (int(id_salarie), id_d),
+                    )
+                    if not ex:
+                        db_rh.query(
+                            """INSERT INTO rh.pgt_salarie_droit_acces
+                                  (id_salarie, id_type_droit_acces,
+                                   droit_actif, modif_date, modif_op, modif_elem)
+                               VALUES (?, ?, TRUE, NOW(), ?, 'new')""",
+                            (int(id_salarie), id_d, int(op_id)),
+                        )
+
+    # Cloture le ticket DPAE source (cf. WinDev UPDATE TK_Liste)
+    if id_ticket:
+        try:
+            db_tk = get_pg_connection("ticket_bo")
+            db_tk.query(
+                """UPDATE ticket_bo.pgt_tk_liste
+                      SET cloturee = TRUE,
+                          date_cloture = NOW(),
+                          modif_date = NOW(),
+                          modif_op = ?,
+                          modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                (int(op_id), int(id_ticket)),
+            )
+        except Exception:
+            # ticket pas dans ticket_bo ? essaye ticket_dpae
+            try:
+                db_tkdpae = get_pg_connection("ticket_dpae")
+                db_tkdpae.query(
+                    """UPDATE ticket_dpae.pgt_tk_liste
+                          SET cloturee = TRUE,
+                              date_cloture = NOW(),
+                              modif_date = NOW(),
+                              modif_op = ?,
+                              modif_elem = 'modif'
+                        WHERE id_tk_liste = ?""",
+                    (int(op_id), int(id_ticket)),
+                )
+            except Exception:
+                pass
+    return {"ok": True}
+
+
+def envoyer_infos_partenaire(
+    id_salarie: int,
+    id_partenaire: int,
+    lib_partenaire: str,
+    code: str,
+    login: str,
+    mdp: str,
+    dpae_num: str = "",
+    op_id: int = 0,
+) -> dict:
+    """envoieInfoPartenaire WinDev : envoie un SMS recap au candidat avec
+    les codes/lien selon le partenaire (URSSAF / IAG / SFR / ENI / autre).
+
+    Pour V1 : juste le SMS - le mail HTML pourra etre ajoute plus tard.
+    """
+    db_rh = get_pg_connection("rh")
+    cv = db_rh.query_one(
+        """SELECT tel_mob, mail FROM rh.pgt_salarie_coordonnees
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    ) or {}
+    gsm = _str(cv.get("tel_mob"))
+    if not gsm:
+        return {"ok": False, "error": "Pas de GSM sur la fiche"}
+
+    lib_upper = lib_partenaire.upper()
+    if lib_upper == "URSSAF":
+        texte = (
+            "Votre DPAE a ete faite aupres des URSSAF\n"
+            "Vous recevrez une copie par mail\n"
+            f"Num DPAE : {dpae_num}\n"
+            "---\nCdt"
+        )
+    elif lib_upper == "IAG":
+        texte = (
+            "Votre inscription IAG est faite.\n"
+            "A FAIRE OBLIGATOIREMENT DANS LES 72H :\n"
+            "Formation IAG : https://formation.gestioniag.fr\n"
+            f"Code IAG : {code}\n"
+            "Demande casier judiciaire : "
+            "https://casier-judiciaire.justice.gouv.fr\n"
+            "---\nCdt"
+        )
+    elif lib_upper == "ENI":
+        texte = (
+            "Votre inscription ENI est faite.\n"
+            "Vous devez valider IMPERATIVEMENT dans les 24h le lien envoye "
+            "sur votre mail.\n"
+            "Sinon vous devrez attendre 72h pour un nouveau lien.\n"
+            "---\nCdt"
+        )
+    else:
+        texte = (
+            f"Votre inscription {lib_partenaire} est faite.\n"
+            f"Code : {code}\nLogin : {login}\nMDP : {mdp}\n"
+            "---\nCdt"
+        )
+
+    res_sms = envoi_sms(texte, gsm)
+    return {"ok": True, "sms": res_sms, "gsm": gsm, "texte": texte}
