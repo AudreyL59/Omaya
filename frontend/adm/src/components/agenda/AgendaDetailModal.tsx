@@ -28,6 +28,7 @@ import {
 
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
+import RecruteurPicker from '@/components/agenda/RecruteurPicker'
 
 interface RdvDetail {
   id_agenda_evenement: string
@@ -113,6 +114,7 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
   const [lieuDetail, setLieuDetail] = useState<Lieu | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [opPickerOpen, setOpPickerOpen] = useState(false)
 
   // Charge le RDV + referentiels au montage
   useEffect(() => {
@@ -332,12 +334,7 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
                 <ToolbarBtn
                   icon={<UserCog className="w-4 h-4" />}
                   label={detail.op_crea_lib || "Choisir l'Opérateur"}
-                  onClick={() =>
-                    showToast(
-                      "Choix d'opérateur : à implémenter (Fen_RechercheNomSalarié).",
-                      'info',
-                    )
-                  }
+                  onClick={() => setOpPickerOpen(true)}
                 />
                 <ToolbarBtn
                   icon={<Trash2 className="w-4 h-4" />}
@@ -609,6 +606,44 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
             </>
           )}
         </motion.div>
+
+        {/* Picker pour le bouton 'Choisir l'Operateur' */}
+        {opPickerOpen && (
+          <RecruteurPicker
+            title="Choisir l'opérateur"
+            onClose={() => setOpPickerOpen(false)}
+            onSelect={async (r) => {
+              setOpPickerOpen(false)
+              try {
+                const resp = await fetch(
+                  `/api/adm/agenda-recrutement/rdv/${idRdv}/op-crea`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${getToken()}`,
+                    },
+                    body: JSON.stringify({ new_op: parseInt(r.id_salarie, 10) }),
+                  },
+                )
+                if (!resp.ok) {
+                  const j = await resp.json().catch(() => ({}))
+                  throw new Error(
+                    (j as { detail?: string })?.detail || String(resp.status),
+                  )
+                }
+                const j = (await resp.json()) as { op_crea_lib: string }
+                update({
+                  op_crea: r.id_salarie,
+                  op_crea_lib: j.op_crea_lib,
+                })
+                showToast('Opérateur modifié.', 'success')
+              } catch (e) {
+                showToast(`Échec : ${(e as Error).message}`, 'error')
+              }
+            }}
+          />
+        )}
       </motion.div>
     </AnimatePresence>
   )
