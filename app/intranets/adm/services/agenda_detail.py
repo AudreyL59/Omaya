@@ -276,6 +276,56 @@ def set_op_crea(id_rdv: int, new_op: int, op_id: int) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def list_recruteurs_agenda_actif() -> list[dict]:
+    """Combo Recruteur de Fen_AgendaDetail : tous les salaries avec
+    agenda_actif=TRUE (cf. requete WinDev `salarie.AgendaActif = 1`),
+    tries par 'Nom Prenom' ASC."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_salarie, nom, prenom
+             FROM rh.pgt_salarie
+            WHERE COALESCE(agenda_actif, FALSE) = TRUE
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY nom ASC, prenom ASC"""
+    )
+    out = []
+    for r in rows or []:
+        nom = _str(r.get("nom"))
+        prenom = _str(r.get("prenom"))
+        prenom_cap = (prenom[:1].upper() + prenom[1:].lower()) if prenom else ""
+        out.append({
+            "id_salarie": str(r.get("id_salarie") or ""),
+            "nom": nom,
+            "prenom": prenom,
+            "nom_prenom": f"{nom} {prenom_cap}".strip(),
+        })
+    return out
+
+
+def list_all_categories() -> list[dict]:
+    """Combo Statut de Fen_AgendaDetail : toute la table AgendaCategorie
+    (sans filtre id_cv_statut > 6 utilise par lister_statuts)."""
+    db = get_pg_connection("recrutement")
+    rows = db.query(
+        """SELECT id_agenda_categorie, lib_categorie, id_cv_statut,
+                  couleur_r, couleur_v, couleur_b
+             FROM recrutement.pgt_agenda_categorie
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY lib_categorie ASC"""
+    )
+    return [
+        {
+            "id_categorie": _int(r.get("id_agenda_categorie")),
+            "lib_categorie": _str(r.get("lib_categorie")),
+            "id_cv_statut": _int(r.get("id_cv_statut")),
+            "couleur_r": _int(r.get("couleur_r")),
+            "couleur_v": _int(r.get("couleur_v")),
+            "couleur_b": _int(r.get("couleur_b")),
+        }
+        for r in (rows or [])
+    ]
+
+
 def list_sessions_en_cours() -> list[dict]:
     """ReqPrevRecEncours : sessions de recrutement actuelles (date_session
     >= 2007-01-01 - cf. seuil WinDev). On joint le lieu pour afficher

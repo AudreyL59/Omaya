@@ -206,6 +206,21 @@ def post_op_crea(
     return detail_svc.set_op_crea(id_rdv, payload.new_op, user.id_salarie)
 
 
+@router.get("/recruteurs-agenda-actif")
+def get_recruteurs_agenda_actif(_user: UserToken = Depends(get_current_user)):
+    """Combo Recruteur Fen_AgendaDetail : tous les salaries avec
+    agenda_actif=TRUE. Different de /recruteurs qui filtre par droits
+    cooptation."""
+    return detail_svc.list_recruteurs_agenda_actif()
+
+
+@router.get("/categories")
+def get_all_categories(_user: UserToken = Depends(get_current_user)):
+    """Combo Statut Fen_AgendaDetail : toutes les categories (sans filtre
+    id_cv_statut>6 utilise par /statuts pour la statuation rapide)."""
+    return detail_svc.list_all_categories()
+
+
 @router.get("/sessions-en-cours")
 def get_sessions_en_cours(_user: UserToken = Depends(get_current_user)):
     """ReqPrevRecEncours : sessions de recrutement actives."""

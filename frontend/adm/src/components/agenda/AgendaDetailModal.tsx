@@ -62,6 +62,7 @@ interface RecruteurItem {
   id_salarie: string
   nom: string
   prenom: string
+  nom_prenom?: string
 }
 
 interface Session {
@@ -123,11 +124,13 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
     ;(async () => {
       setLoading(true)
       try {
+        // Cf. WinDev : combo Statut = TOUTE la table AgendaCategorie
+        // (endpoint /categories), pas /statuts qui filtre id_cv_statut>6.
         const [rdvR, statutsR, sessionsR, lieuxR] = await Promise.all([
           fetch(`/api/adm/agenda-recrutement/rdv/${idRdv}/detail`, {
             headers: { Authorization: `Bearer ${getToken()}` },
           }),
-          fetch('/api/adm/agenda-recrutement/statuts', {
+          fetch('/api/adm/agenda-recrutement/categories', {
             headers: { Authorization: `Bearer ${getToken()}` },
           }),
           fetch('/api/adm/agenda-recrutement/sessions-en-cours', {
@@ -155,9 +158,9 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
     }
   }, [idRdv])
 
-  // Charge les recruteurs (combo) une seule fois
+  // Charge la combo Recruteur (cf. WinDev : salaries avec agenda_actif=TRUE)
   useEffect(() => {
-    fetch('/api/adm/agenda-recrutement/recruteurs', {
+    fetch('/api/adm/agenda-recrutement/recruteurs-agenda-actif', {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.json())
@@ -391,7 +394,7 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
                       <option value="">—</option>
                       {recruteurs.map((r) => (
                         <option key={r.id_salarie} value={r.id_salarie}>
-                          {r.nom} {r.prenom}
+                          {r.nom_prenom || `${r.nom} ${r.prenom}`}
                         </option>
                       ))}
                     </select>
