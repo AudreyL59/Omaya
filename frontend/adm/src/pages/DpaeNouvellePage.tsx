@@ -206,13 +206,17 @@ export default function DpaeNouvellePage() {
         ])
         if (cancelled) return
         const lk = (await lkR.json()) as Lookups
-        const pr = (await prR.json()) as Partial<DpaePayload>
+        const pr = (await prR.json()) as Partial<DpaePayload> & {
+          orga_lib?: string
+          coopteur_lib?: string
+          jo_coopteur_lib?: string
+        }
         setLookups(lk)
-        // Auto-selection de la mutuelle active
+        // Auto-selection de la mutuelle active uniquement si rien deja choisi
         const activeMut = lk.mutuelles.find((m) => m.is_actif)
         const merged: DpaePayload = {
           ...EMPTY_PAYLOAD,
-          ...pr,
+          ...(pr as Partial<DpaePayload>),
           type_dpae: typeDpae,
           id_elem: idElem,
           id_cv_suivi: idCvSuivi,
@@ -222,6 +226,10 @@ export default function DpaeNouvellePage() {
             (activeMut ? activeMut.id_mutuelle : 0),
         }
         setData(merged)
+        // Libelles des boutons (renvoyes par /preremplir)
+        if (pr.orga_lib) setOrgaLib(pr.orga_lib)
+        if (pr.coopteur_lib) setCoopteurLib(pr.coopteur_lib)
+        if (pr.jo_coopteur_lib) setJoCoopteurLib(pr.jo_coopteur_lib)
       } catch (e) {
         showToast(`Échec chargement DPAE : ${(e as Error).message}`, 'error')
       } finally {

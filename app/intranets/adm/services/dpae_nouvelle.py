@@ -289,8 +289,10 @@ def load_preremplissage(
             else:
                 out["jodirecte"] = False
 
-    # 3) TypeDpae = 2 : Salarie sorti -> precharge depuis salarie + coord
-    if type_dpae == 2 and id_elem:
+    # 3) TypeDpae = 2 ou 3 : Registre RH -> precharge depuis salarie +
+    # coord + embauche + organigramme courant (cf. WinDev RecupInfoFicheSa
+    # + PoursuivreDPAE)
+    if type_dpae in (2, 3) and id_elem:
         sal = db_rh.query_one(
             """SELECT civilite, nom, nom_marital, prenom, sexe, nationalite,
                       date_naiss, lieu_naiss, dep_naiss, num_ss, cpam,
@@ -322,8 +324,89 @@ def load_preremplissage(
                 v = coord.get(k)
                 if v is not None:
                     out[k] = _str(v)
+        emb = db_rh.query_one(
+            """SELECT date_debut, id_type_poste, id_type_ctt, id_type_horaire,
+                      id_ste, coopte, coopteur, j_odirecte, jo_coopteur,
+                      id_cvtheque
+                 FROM rh.pgt_salarie_embauche
+                WHERE id_salarie = ? LIMIT 1""",
+            (int(id_elem),),
+        )
+        if emb:
+            out["date_debut"] = _iso_date(emb.get("date_debut"))
+            out["id_type_poste"] = _int(emb.get("id_type_poste"))
+            out["id_type_ctt"] = _int(emb.get("id_type_ctt")) or 1
+            out["id_type_horaire"] = _int(emb.get("id_type_horaire")) or 1
+            out["id_ste"] = str(_int(emb.get("id_ste")) or "")
+            out["coopte"] = bool(emb.get("coopte"))
+            out["coopteur"] = str(_int(emb.get("coopteur")) or "")
+            out["jodirecte"] = bool(emb.get("j_odirecte"))
+            out["jo_coopteur"] = str(_int(emb.get("jo_coopteur")) or "")
+            out["id_cvtheque"] = str(_int(emb.get("id_cvtheque")) or "")
+        # Organigramme courant (cf. ReqOrgaCourantetParentByVendeur)
+        org = db_rh.query_one(
+            """SELECT idorganigramme FROM rh.pgt_salarie_organigramme
+                WHERE id_salarie = ? AND COALESCE(aff_actif, FALSE) = TRUE
+             ORDER BY date_debut DESC LIMIT 1""",
+            (int(id_elem),),
+        )
+        if org:
+            out["idorganigramme"] = str(_int(org.get("idorganigramme")) or "")
+        # Mutuelle existante
+        mut = db_rh.query_one(
+            """SELECT id_mutuelle, adhesion, adhesion_date, mutuelle_dossier,
+                      mutuelle_att_ss, mutuelle_rib
+                 FROM rh.pgt_salarie_mutuelle WHERE id_salarie = ? LIMIT 1""",
+            (int(id_elem),),
+        )
+        if mut:
+            out["id_mutuelle"] = _int(mut.get("id_mutuelle"))
+            out["adhesion"] = bool(mut.get("adhesion"))
+            out["adhesion_date"] = _iso_date(mut.get("adhesion_date"))
+            out["mutuelle_dossier"] = bool(mut.get("mutuelle_dossier"))
+            out["mutuelle_att_ss"] = bool(mut.get("mutuelle_att_ss"))
+            out["mutuelle_rib"] = bool(mut.get("mutuelle_rib"))
+
+    # 4) Resolution des libelles (equipe + coopteur + JO coopteur) pour
+    # afficher correctement sur les boutons cote frontend
+    _enrich_libelles(out, db_rh)
 
     return out
+
+
+def _enrich_libelles(out: dict, db_rh: Any) -> None:
+    """Resout les libelles a afficher sur les boutons (sinon le frontend
+    affiche 'Choisir l'equipe' meme quand idorganigramme est rempli)."""
+    out["orga_lib"] = ""
+    out["coopteur_lib"] = ""
+    out["jo_coopteur_lib"] = ""
+
+    id_orga = _int(out.get("idorganigramme"))
+    if id_orga:
+        org = db_rh.query_one(
+            """SELECT lib_orga FROM rh.pgt_organigramme
+                WHERE idorganigramme = ? LIMIT 1""",
+            (id_orga,),
+        )
+        if org:
+            out["orga_lib"] = _str(org.get("lib_orga"))
+
+    for src_key, lib_key in (
+        ("coopteur", "coopteur_lib"),
+        ("jo_coopteur", "jo_coopteur_lib"),
+    ):
+        sid = _int(out.get(src_key))
+        if not sid:
+            continue
+        sal = db_rh.query_one(
+            "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1",
+            (sid,),
+        )
+        if sal:
+            nom = _str(sal.get("nom"))
+            prenom = _str(sal.get("prenom"))
+            prenom_cap = (prenom[:1].upper() + prenom[1:].lower()) if prenom else ""
+            out[lib_key] = f"{nom} {prenom_cap}".strip()
 
 
 def _empty_payload() -> dict[str, Any]:
