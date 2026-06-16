@@ -234,6 +234,15 @@ export default function DpaeNouvellePage() {
         if (pr.orga_lib) setOrgaLib(pr.orga_lib)
         if (pr.coopteur_lib) setCoopteurLib(pr.coopteur_lib)
         if (pr.jo_coopteur_lib) setJoCoopteurLib(pr.jo_coopteur_lib)
+        // TypeDpae=3 : salarie deja en activite -> on saute le form Plan 1
+        // et on bascule directement en Plan 2 (codes partenaires).
+        // Cf. WinDev cas TypeDpae=3 -> PoursuivreDPAE() qui fait
+        // MaFenêtre..Plan = 2.
+        if (typeDpae === 3 && idElem) {
+          setSavedId(idElem)
+          setSavedMatricule(`${merged.nom} ${merged.prenom}`.trim())
+          setPhase('codes')
+        }
       } catch (e) {
         showToast(`Échec chargement DPAE : ${(e as Error).message}`, 'error')
       } finally {
