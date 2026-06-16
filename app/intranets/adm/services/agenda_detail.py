@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+from app.shared.notifications.sms import envoi_sms
 
 
 # ---------------------------------------------------------------------------
@@ -466,3 +467,139 @@ def get_salon_visio(id_salon_visio: int) -> dict | None:
         "id_salon": _str(row.get("id_salon")),
         "mdp": _str(row.get("mpd_salon")),
     }
+
+
+# ---------------------------------------------------------------------------
+# Renvoi SMS (cf. WinDev btn 'Renvoyer le SMS')
+# ---------------------------------------------------------------------------
+
+
+def _fr_date(v: Any) -> str:
+    """ISO -> DD/MM/YYYY pour le SMS."""
+    if v is None or v == "":
+        return ""
+    s = str(v)
+    if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+        return f"{s[8:10]}/{s[5:7]}/{s[0:4]}"
+    return s
+
+
+def send_sms_rdv(id_rdv: int, op_id: int) -> dict:
+    """Btn 'Renvoyer le SMS' de Fen_AgendaDetail.
+
+    Construit le SMS avec le template WinDev (date + recruteur + lien
+    confirmation + lieu OU info visio), envoie via smsmode et insert
+    dans divers.pgt_histo_sms.
+
+    Retourne {ok, statut, gsm, message}.
+    """
+    detail = load_rdv_detail(id_rdv)
+    if not detail:
+        return {"ok": False, "error": "RDV introuvable"}
+
+    # Recupere le GSM du candidat via cv_suivi.id_cvtheque
+    id_cvtheque = _int(detail.get("id_cvtheque"))
+    if not id_cvtheque:
+        return {"ok": False, "error": "Aucun candidat lie a ce RDV"}
+
+    db_rec = get_pg_connection("recrutement")
+    cv = db_rec.query_one(
+        """SELECT gsm FROM recrutement.pgt_cvtheque
+            WHERE id_cvtheque = ? LIMIT 1""",
+        (id_cvtheque,),
+    )
+    gsm = _str((cv or {}).get("gsm")).strip()
+    if not gsm:
+        return {"ok": False, "error": "Pas de GSM sur la fiche candidat"}
+
+    # Recupere le nom du recruteur (pour %2)
+    nom_recruteur = ""
+    id_recruteur = _int(detail.get("id_recruteur"))
+    if id_recruteur:
+        db_rh = get_pg_connection("rh")
+        sal = db_rh.query_one(
+            "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1",
+            (id_recruteur,),
+        )
+        if sal:
+            nom = _str(sal.get("nom"))
+            prenom = _str(sal.get("prenom"))
+            prenom_cap = (prenom[:1].upper() + prenom[1:].lower()) if prenom else ""
+            nom_recruteur = f"{nom} {prenom_cap}".strip()
+
+    # Construit la partie 'lieu' selon Physique/Visio (cf. WinDev)
+    lieu_text = ""
+    if detail.get("type_entretien") == "Visio":
+        id_salon = _int(detail.get("id_salon_visio"))
+        if id_salon:
+            salon = db_rec.query_one(
+                """SELECT lien_salon, id_salon, mpd_salon,
+                          (SELECT lib_salon FROM recrutement.pgt_type_salon_visio
+                            WHERE id_type_salon_visio = sv.id_type_salon_visio
+                            LIMIT 1) AS lib_type
+                     FROM recrutement.pgt_salon_visio sv
+                    WHERE id_salon_visio = ? LIMIT 1""",
+                (id_salon,),
+            )
+            if salon:
+                lib_type = _str(salon.get("lib_type"))
+                lieu_text = (
+                    f"Le jour J, cliquez sur le lien suivant pour démarrer "
+                    f"votre entretien VISIO {lib_type} :\n"
+                    f"Lien : {_str(salon.get('lien_salon'))}\n"
+                )
+                if salon.get("id_salon"):
+                    lieu_text += f"ID Reunion : {_str(salon.get('id_salon'))}\n"
+                if salon.get("mpd_salon"):
+                    lieu_text += f"Code secret : {_str(salon.get('mpd_salon'))}\n"
+    else:
+        id_lieu = _int(detail.get("id_cv_lieux"))
+        if id_lieu and id_lieu != 1:
+            lieu_info = get_lieu(id_lieu)
+            if lieu_info:
+                lib_lieu = _str(lieu_info.get("lib_lieu"))
+                adresse1 = _str(lieu_info.get("adresse1"))
+                cp = _str(lieu_info.get("cp"))
+                ville = _str(lieu_info.get("ville"))
+                lat = lieu_info.get("latitude_deg", 0)
+                lon = lieu_info.get("longitude_deg", 0)
+                lieu_text = (
+                    f"Adresse : {lib_lieu}\n{adresse1}\n{cp} {ville}\n"
+                    f"Lien Maps : https://www.google.com/maps/?q={lat},{lon} ."
+                )
+
+    # Construit le SMS final (template WinDev)
+    date_rdv = _fr_date(detail.get("date_debut"))
+    texte_sms = (
+        "Bonjour,\n"
+        f"Votre entretien aura lieu le {date_rdv} avec {nom_recruteur}.\n"
+        "\n"
+        f"Pour confirmer : https://groupe-exo.omaya.fr/PAGESEXTERNES_WEB/FR/Page-ConfRDV.awp?P1={id_rdv}\n"
+        "\n"
+        f"{lieu_text}"
+    )
+
+    # Envoi via smsmode
+    res = envoi_sms(texte_sms, gsm)
+
+    # INSERT dans divers.pgt_histo_sms
+    try:
+        db_div = get_pg_connection("divers")
+        db_div.execute(
+            """INSERT INTO divers.pgt_histo_sms
+                  (id_histo_sms, destinataire, fichier, rubrique,
+                   id_elem, contenu_envoye, statut, ope_envoi,
+                   datecrea, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?,
+                       ?, ?, ?, ?,
+                       NOW(), NOW(), ?, 'new')""",
+            (
+                _new_id(), gsm, "AgendaEvenement", "IDAgendaEvenement",
+                int(id_rdv), texte_sms, res, int(op_id), int(op_id),
+            ),
+        )
+    except Exception:
+        # L'historique est best-effort - si l'INSERT plante, le SMS reste envoye
+        pass
+
+    return {"ok": True, "statut": res, "gsm": gsm, "message": texte_sms}

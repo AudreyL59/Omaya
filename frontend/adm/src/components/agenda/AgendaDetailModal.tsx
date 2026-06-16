@@ -116,6 +116,7 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [opPickerOpen, setOpPickerOpen] = useState(false)
+  const [sendingSms, setSendingSms] = useState(false)
 
   // Charge le RDV + referentiels au montage
   useEffect(() => {
@@ -263,6 +264,36 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
     }
   }
 
+  const handleSendSms = async () => {
+    if (!detail) return
+    const ok = await showConfirm({
+      title: 'Renvoyer le SMS au candidat ?',
+      message:
+        'Un SMS de confirmation va être envoyé au numéro renseigné dans la fiche CV.',
+      confirmLabel: 'Envoyer',
+    })
+    if (!ok) return
+    setSendingSms(true)
+    try {
+      const r = await fetch(
+        `/api/adm/agenda-recrutement/rdv/${idRdv}/sms`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      const j = await r.json()
+      if (!r.ok) {
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      showToast(`SMS au ${j.gsm} : ${j.statut}`, 'success')
+    } catch (e) {
+      showToast(`Échec envoi SMS : ${(e as Error).message}`, 'error')
+    } finally {
+      setSendingSms(false)
+    }
+  }
+
   const handleDelete = async () => {
     const ok = await showConfirm({
       title: 'Supprimer ce RDV ?',
@@ -356,10 +387,8 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
                 <ToolbarBtn
                   icon={<Send className="w-4 h-4" />}
                   label="Renvoyer le SMS"
-                  onClick={() =>
-                    showToast('Renvoi SMS : à implémenter.', 'info')
-                  }
-                  disabled={!detail.id_cv_suivi}
+                  onClick={() => void handleSendSms()}
+                  disabled={!detail.id_cv_suivi || sendingSms}
                 />
                 <ToolbarBtn
                   icon={saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

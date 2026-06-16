@@ -206,6 +206,20 @@ def post_op_crea(
     return detail_svc.set_op_crea(id_rdv, payload.new_op, user.id_salarie)
 
 
+@router.post("/rdv/{id_rdv}/sms")
+def post_send_sms(
+    id_rdv: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Renvoyer le SMS' de Fen_AgendaDetail : envoie le SMS de
+    confirmation au candidat (template WinDev) + insert dans
+    divers.pgt_histo_sms."""
+    res = detail_svc.send_sms_rdv(id_rdv, user.id_salarie)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Echec")
+    return res
+
+
 @router.get("/recruteurs-agenda-actif")
 def get_recruteurs_agenda_actif(_user: UserToken = Depends(get_current_user)):
     """Combo Recruteur Fen_AgendaDetail : tous les salaries avec
