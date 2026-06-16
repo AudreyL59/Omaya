@@ -2900,7 +2900,7 @@ ticket_bo,TK_Call_Panier,pgt_tk_call_panier,Num_DateSaisie,num_date_saisie,times
 ticket_bo,TK_Call_Panier,pgt_tk_call_panier,OPT_eCommunication,opt_e_communication,boolean,
 ticket_bo,TK_Call_Panier,pgt_tk_call_panier,OPT_eFacture,opt_e_facture,boolean,
 ticket_bo,TK_Call_Panier,pgt_tk_call_panier,OPT_optinCommercial,opt_optin_commercial,boolean,
-ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDtk_Call,id_tk_call,bigint,1
+ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDtk_CallSFR,id_tk_call_sfr,bigint,1
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDTK_Liste,id_tk_liste,bigint,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDSalarie,id_salarie,bigint,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,NomClient,nom_client,text,
@@ -2926,7 +2926,7 @@ ticket_bo,TK_CallSFR,pgt_tk_call_sfr,OpéAppel,ope_appel,bigint,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,RefAppel,ref_appel,text,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,DateDeb_PriseEnCharge,date_deb_prise_en_charge,timestamp,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,DateFin_PriseEnCharge,date_fin_prise_en_charge,timestamp,
-ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDtk_CallAuto,id_tk_call_auto,bigint,
+ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDtk_CallSFRAuto,id_tk_call_sfr_auto,bigint,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,InterventionVend,intervention_vend,boolean,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,InfoVente,info_vente,text,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDclient,id_client,bigint,

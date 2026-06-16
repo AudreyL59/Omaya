@@ -96,7 +96,7 @@ CREATE INDEX ix_pgt_tk_call_panier_num_bs ON ticket_bo.pgt_tk_call_panier (num_b
 CREATE INDEX ix_pgt_tk_call_panier_modif_date ON ticket_bo.pgt_tk_call_panier (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr (
-    id_tk_call                bigint NOT NULL,  -- IDtk_Call
+    id_tk_call_sfr            bigint NOT NULL,  -- IDtk_CallSFR
     id_tk_liste               bigint,  -- IDTK_Liste
     id_salarie                bigint,  -- IDSalarie
     nom_client                text,  -- NomClient
@@ -122,7 +122,7 @@ CREATE TABLE ticket_bo.pgt_tk_call_sfr (
     ref_appel                 text,  -- RefAppel
     date_deb_prise_en_charge  timestamp,  -- DateDeb_PriseEnCharge
     date_fin_prise_en_charge  timestamp,  -- DateFin_PriseEnCharge
-    id_tk_call_auto           bigint,  -- IDtk_CallAuto
+    id_tk_call_sfr_auto       bigint,  -- IDtk_CallSFRAuto
     intervention_vend         boolean,  -- InterventionVend
     info_vente                text,  -- InfoVente
     id_client                 bigint,  -- IDclient
@@ -132,8 +132,8 @@ CREATE TABLE ticket_bo.pgt_tk_call_sfr (
     client_pro                boolean,  -- ClientPro
     client_rs                 varchar(50),  -- ClientRS
     client_siret              varchar(50),  -- ClientSiret
-    CONSTRAINT pk_pgt_tk_call_sfr PRIMARY KEY (id_tk_call),
-    CONSTRAINT uq_pgt_tk_call_sfr_auto UNIQUE (id_tk_call_auto)
+    CONSTRAINT pk_pgt_tk_call_sfr PRIMARY KEY (id_tk_call_sfr),
+    CONSTRAINT uq_pgt_tk_call_sfr_auto UNIQUE (id_tk_call_sfr_auto)
 );
 CREATE INDEX ix_pgt_tk_call_sfr_id_tk_liste ON ticket_bo.pgt_tk_call_sfr (id_tk_liste);
 CREATE INDEX ix_pgt_tk_call_sfr_id_salarie ON ticket_bo.pgt_tk_call_sfr (id_salarie);
