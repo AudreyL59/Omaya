@@ -1,10 +1,10 @@
--- Patch idempotent pour ajouter pgt_cv_suivi + pgt_prev_recrut au schema
+-- Patch idempotent pour ajouter pgt_cvsuivi + pgt_prev_recrut au schema
 -- recrutement (necessaire pour le module Fen_AgendaDetail).
 --
 -- Application :
 --   psql -h <host> -U erp_user -d erp_db -f migration/patches/add_cv_suivi_prev_recrut.sql
 
-CREATE TABLE IF NOT EXISTS recrutement.pgt_cv_suivi (
+CREATE TABLE IF NOT EXISTS recrutement.pgt_cvsuivi (
     id_cv_suivi_auto                                     bigint,
     id_cv_suivi                                          bigint NOT NULL,
     id_cvtheque                                          bigint,
@@ -18,15 +18,15 @@ CREATE TABLE IF NOT EXISTS recrutement.pgt_cv_suivi (
     modif_op                                             bigint,
     modif_elem                                           varchar(5),
     id_cvtheque_datecrea_id_cv_statut_type_elem_id_elem  varchar(42),
-    CONSTRAINT pk_pgt_cv_suivi PRIMARY KEY (id_cv_suivi),
+    CONSTRAINT pk_pgt_cvsuivi PRIMARY KEY (id_cv_suivi),
     CONSTRAINT uq_pgt_cv_suivi_auto UNIQUE (id_cv_suivi_auto)
 );
 CREATE INDEX IF NOT EXISTS ix_pgt_cv_suivi_id_cvtheque
-    ON recrutement.pgt_cv_suivi (id_cvtheque);
+    ON recrutement.pgt_cvsuivi (id_cvtheque);
 CREATE INDEX IF NOT EXISTS ix_pgt_cv_suivi_id_cv_statut
-    ON recrutement.pgt_cv_suivi (id_cv_statut);
+    ON recrutement.pgt_cvsuivi (id_cv_statut);
 CREATE INDEX IF NOT EXISTS ix_pgt_cv_suivi_modif_date
-    ON recrutement.pgt_cv_suivi (modif_date);
+    ON recrutement.pgt_cvsuivi (modif_date);
 
 CREATE TABLE IF NOT EXISTS recrutement.pgt_prev_recrut (
     id_prevision_recrut_auto  bigint,

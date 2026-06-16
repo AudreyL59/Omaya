@@ -7,7 +7,7 @@ Endpoints associes : voir routers/agenda_detail.py.
 Tables impliquees :
   - recrutement.pgt_agenda_evenement : le RDV (titre, contenu, dates,
     categorie, recruteur, lieu/salon visio, OPCrea, Pb_*)
-  - recrutement.pgt_cv_suivi : suivi du candidat (lien cvtheque + IdCvStatut
+  - recrutement.pgt_cvsuivi : suivi du candidat (lien cvtheque + IdCvStatut
     + OPCREA)
   - recrutement.pgt_prev_recrut : sessions de recrutement (dateSession + lieu)
   - recrutement.pgt_cv_lieu_rdv : referentiel des lieux + adresses
@@ -104,7 +104,7 @@ def load_rdv_detail(id_rdv: int) -> dict | None:
     if id_cv_suivi:
         suivi = db.query_one(
             """SELECT id_cvtheque, op_crea
-                 FROM recrutement.pgt_cv_suivi
+                 FROM recrutement.pgt_cvsuivi
                 WHERE id_cv_suivi = ? LIMIT 1""",
             (id_cv_suivi,),
         )
@@ -251,7 +251,7 @@ def set_op_crea(id_rdv: int, new_op: int, op_id: int) -> dict:
     )
     if id_cv_suivi:
         db.execute(
-            """UPDATE recrutement.pgt_cv_suivi
+            """UPDATE recrutement.pgt_cvsuivi
                   SET op_crea = ?, modif_date = NOW(), modif_op = ?
                 WHERE id_cv_suivi = ?""",
             (int(new_op), int(op_id), id_cv_suivi),

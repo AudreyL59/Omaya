@@ -414,7 +414,7 @@ CREATE TABLE recrutement.pgt_type_salon_visio (
 );
 CREATE INDEX ix_pgt_type_salon_visio_modif_date ON recrutement.pgt_type_salon_visio (modif_date);
 
-CREATE TABLE recrutement.pgt_cv_suivi (
+CREATE TABLE recrutement.pgt_cvsuivi (
     id_cv_suivi_auto                                     bigint,  -- IDCvSuiviAuto
     id_cv_suivi                                          bigint NOT NULL,  -- IDCvSuivi
     id_cvtheque                                          bigint,  -- IDcvtheque
@@ -428,12 +428,12 @@ CREATE TABLE recrutement.pgt_cv_suivi (
     modif_op                                             bigint,  -- ModifOp
     modif_elem                                           varchar(5),  -- ModifElem
     id_cvtheque_datecrea_id_cv_statut_type_elem_id_elem  varchar(42),  -- IDcvthequeDatecreaIdCvStatutTypeElemIdElem
-    CONSTRAINT pk_pgt_cv_suivi PRIMARY KEY (id_cv_suivi),
+    CONSTRAINT pk_pgt_cvsuivi PRIMARY KEY (id_cv_suivi),
     CONSTRAINT uq_pgt_cv_suivi_auto UNIQUE (id_cv_suivi_auto)
 );
-CREATE INDEX ix_pgt_cv_suivi_id_cvtheque ON recrutement.pgt_cv_suivi (id_cvtheque);
-CREATE INDEX ix_pgt_cv_suivi_id_cv_statut ON recrutement.pgt_cv_suivi (id_cv_statut);
-CREATE INDEX ix_pgt_cv_suivi_modif_date ON recrutement.pgt_cv_suivi (modif_date);
+CREATE INDEX ix_pgt_cv_suivi_id_cvtheque ON recrutement.pgt_cvsuivi (id_cvtheque);
+CREATE INDEX ix_pgt_cv_suivi_id_cv_statut ON recrutement.pgt_cvsuivi (id_cv_statut);
+CREATE INDEX ix_pgt_cv_suivi_modif_date ON recrutement.pgt_cvsuivi (modif_date);
 
 CREATE TABLE recrutement.pgt_prev_recrut (
     id_prevision_recrut_auto  bigint,  -- IDprevisionRecrutAuto
