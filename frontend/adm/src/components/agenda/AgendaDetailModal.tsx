@@ -304,7 +304,7 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-lg shadow-xl w-full max-w-4xl flex flex-col max-h-[90vh]"
+          className="bg-white rounded-lg shadow-xl w-full max-w-4xl flex flex-col max-h-[90vh] font-normal"
         >
           {/* Header */}
           <div
