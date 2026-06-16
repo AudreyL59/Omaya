@@ -141,6 +141,18 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
     if (r) showToast('Informations enregistrées', 'success')
   }
 
+  // Cf. WinDev cas TypeDpae=4 : ouvre directement Fen_DPAE_Nouvelle
+  // (pas de recherche, la fiche distributeur est unique). Navigation
+  // absolue vers /adm car le module DPAE = ADM only.
+  const convertirEnSalarie = () => {
+    const url = new URL('/adm/salaries/dpae/nouvelle', window.location.origin)
+    url.searchParams.set('id_ticket', String(idTicket))
+    url.searchParams.set('type_dpae', '4')
+    url.searchParams.set('id_elem', '0')
+    url.searchParams.set('id_cv_suivi', '0')
+    window.location.href = url.toString()
+  }
+
   const docNonConforme = async (idDoc: string) => {
     if (
       !(await showConfirm({
@@ -315,9 +327,8 @@ export default function FIDPAEDistrib({ apiBase, getToken, idTicket }: FIProps) 
           Enregistrer le ticket
         </button>
         <button
-          disabled
-          title="À venir avec le module Fiche salarié"
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-c-line-strong text-sm text-c-ink-faint cursor-not-allowed"
+          onClick={convertirEnSalarie}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-c-brand-strong text-white text-sm font-semibold hover:brightness-110 transition-all"
         >
           <FileText className="w-4 h-4" />
           Convertir en fiche salarié

@@ -198,6 +198,42 @@ def load_preremplissage(
     db_rh = get_pg_connection("rh")
     db_div = get_pg_connection("divers")
 
+    # 1bis) TypeDpae=4 : ticket DPAE Distributeur (table separee)
+    # cf. WinDev RecupInfoTkDpaeDistrib
+    if type_dpae == 4 and id_ticket:
+        try:
+            db_tkbo = get_pg_connection("ticket_bo")
+            tkd = db_tkbo.query_one(
+                """SELECT * FROM ticket_bo.pgt_tk_demande_dpae_distrib
+                    WHERE id_tk_liste = ? LIMIT 1""",
+                (int(id_ticket),),
+            )
+        except Exception:
+            tkd = None
+        if tkd:
+            out["civilite"] = _int(tkd.get("civilite"))
+            out["sexe"] = "H" if out["civilite"] == 1 else "F"
+            out["nom"] = _str(tkd.get("nom"))
+            out["nom_marital"] = _str(tkd.get("nom_marital"))
+            out["prenom"] = _str(tkd.get("prenom"))
+            out["date_naiss"] = _iso_date(tkd.get("dnaiss"))
+            out["lieu_naiss"] = _str(tkd.get("lnaiss"))
+            out["dep_naiss"] = _int(tkd.get("dep_naiss"))
+            out["num_ss"] = _str(tkd.get("num_ss"))
+            out["num_cin"] = _str(tkd.get("num_cin"))
+            out["adresse1"] = _str(tkd.get("adresse1"))
+            out["cp"] = _str(tkd.get("cp"))
+            out["ville"] = _str(tkd.get("ville"))
+            out["tel_mob"] = _str(tkd.get("gsm"))
+            out["mail"] = _str(tkd.get("mail"))
+            out["date_debut"] = _iso_date(tkd.get("date_debut")) or \
+                datetime.now().strftime("%Y-%m-%d")
+            out["idorganigramme"] = str(_int(tkd.get("idorganigramme")) or "")
+            out["id_ste"] = str(_int(tkd.get("id_ste")) or "4")
+            # Defauts WinDev pour distributeur
+            out["id_type_poste"] = 1
+            out["nationalite"] = "Française"
+
     # 1) Preremplissage depuis TK_DemandeDPAE (s'il y a un ticket et que le
     # mode n'est pas distribteur=4)
     if id_ticket and type_dpae != 4:
