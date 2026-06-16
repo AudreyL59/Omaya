@@ -5,9 +5,10 @@
    text-c-*) y soient détectées. */
 @source "../../shared/**/*.{ts,tsx}";
 
-/* Checkboxes natives ADM : couleur primaire (#17494E = teal foncé des
-   boutons) au lieu du bleu par défaut du navigateur. */
-input[type="checkbox"] {
+/* Checkboxes et radios natifs ADM : couleur primaire (#17494E = teal
+   foncé des boutons) au lieu du bleu par défaut du navigateur. */
+input[type="checkbox"],
+input[type="radio"] {
   accent-color: #17494E;
 }
 
