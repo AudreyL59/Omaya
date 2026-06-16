@@ -121,6 +121,23 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
   const placeholderAction = (label: string) =>
     showToast(`${label} : bientôt disponible.`, 'info')
 
+  // Cf. WinDev btn 'Démarrer la DPAE' du ticket : ouvre Fen_DPAE_Recherche
+  // en passant idTicket + pre-remplit GSM (prio) ou NOM+PRENOM, puis trigger
+  // la recherche automatiquement (cote DpaeRecherchePage).
+  // Navigation absolue vers /adm car le module DPAE n'existe que sur ADM.
+  const demarrerDpae = () => {
+    const url = new URL('/adm/salaries/dpae', window.location.origin)
+    url.searchParams.set('id_ticket', String(idTicket))
+    const gsm = (form.gsm || '').trim()
+    if (gsm) {
+      url.searchParams.set('gsm', gsm)
+    } else {
+      if (form.nom) url.searchParams.set('nom', String(form.nom))
+      if (form.prenom) url.searchParams.set('prenom', String(form.prenom))
+    }
+    window.location.href = url.toString()
+  }
+
   return (
     <div className="space-y-4">
       {/* Top bar actions */}
@@ -134,7 +151,7 @@ export default function FIDPAE({ apiBase, getToken, idTicket }: FIProps) {
           Enregistrer le ticket
         </button>
         <button
-          onClick={() => placeholderAction('Démarrer la DPAE')}
+          onClick={demarrerDpae}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-c-brand-strong text-white text-sm font-semibold hover:brightness-110 transition-all"
         >
           <Play className="w-4 h-4" />

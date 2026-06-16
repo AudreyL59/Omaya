@@ -18,7 +18,7 @@
  *  - Vider le tableau : reset les resultats
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Eraser, Loader2, Play, Search, UserPlus } from 'lucide-react'
 
@@ -53,12 +53,16 @@ export default function DpaeRecherchePage() {
   const [searchParams] = useSearchParams()
   const idTicket = searchParams.get('id_ticket') || '0'
 
-  const [nom, setNom] = useState('')
-  const [prenom, setPrenom] = useState('')
-  const [gsm, setGsm] = useState('')
+  // Pre-remplissage depuis les query params (cas : btn 'Demarrer la DPAE'
+  // d'un ticket FI_DPAE - cf. WinDev qui injecte GSM ou NOM+PRENOM puis
+  // declenche la recherche).
+  const [nom, setNom] = useState(searchParams.get('nom') || '')
+  const [prenom, setPrenom] = useState(searchParams.get('prenom') || '')
+  const [gsm, setGsm] = useState(searchParams.get('gsm') || '')
   const [rows, setRows] = useState<DpaeRow[]>([])
   const [selected, setSelected] = useState<number>(-1)
   const [loading, setLoading] = useState(false)
+  const autoSearchedRef = useRef(false)
 
   const doSearch = async () => {
     if (!nom.trim() && !prenom.trim() && !gsm.trim()) {
@@ -85,6 +89,17 @@ export default function DpaeRecherchePage() {
       setLoading(false)
     }
   }
+
+  // Recherche automatique au mount si les query params contiennent deja
+  // des criteres (cas : btn 'Demarrer la DPAE' d'un ticket).
+  useEffect(() => {
+    if (autoSearchedRef.current) return
+    if (nom.trim() || prenom.trim() || gsm.trim()) {
+      autoSearchedRef.current = true
+      doSearch()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleStartDpae = (typeDpae: number, idElem: string, idCvSuiv: string) => {
     const q = new URLSearchParams({

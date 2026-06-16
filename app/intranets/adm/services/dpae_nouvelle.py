@@ -212,6 +212,9 @@ def load_preremplissage(
         except Exception:
             tk = None
         if tk:
+            # Noms exacts (cf. schema/ticket_dpae.sql) :
+            #   dnaiss, lnaiss, dep_naiss, num_ss, num_cin, adresse1,
+            #   urg_nom/lien/tel, mut_date, j_odirecte, idorganigramme
             out["civilite"] = _int(tk.get("civilite"))
             out["sexe"] = "H" if out["civilite"] == 1 else "F"
             out["nom"] = _str(tk.get("nom"))
@@ -219,10 +222,10 @@ def load_preremplissage(
             out["prenom"] = _str(tk.get("prenom"))
             out["date_naiss"] = _iso_date(tk.get("dnaiss"))
             out["lieu_naiss"] = _str(tk.get("lnaiss"))
-            out["dep_naiss"] = _int(tk.get("depnaiss"))
-            out["num_ss"] = _str(tk.get("numss"))
-            out["num_cin"] = _str(tk.get("numcin"))
-            out["adresse1"] = _str(tk.get("adresse"))
+            out["dep_naiss"] = _int(tk.get("dep_naiss"))
+            out["num_ss"] = _str(tk.get("num_ss"))
+            out["num_cin"] = _str(tk.get("num_cin"))
+            out["adresse1"] = _str(tk.get("adresse1"))
             out["cp"] = _str(tk.get("cp"))
             out["ville"] = _str(tk.get("ville"))
             out["cpam"] = _str(tk.get("cpam"))
@@ -231,18 +234,19 @@ def load_preremplissage(
             out["situation_fam"] = _int(tk.get("situation_fam"))
             out["avec_enfant"] = bool(tk.get("avec_enfant"))
             out["nb_enfants"] = _int(tk.get("nb_enfants"))
-            out["urg_nom"] = _str(tk.get("urgnom"))
-            out["urg_lien"] = _str(tk.get("urglien"))
-            out["urg_tel"] = _str(tk.get("urgtel"))
+            out["urg_nom"] = _str(tk.get("urg_nom"))
+            out["urg_lien"] = _str(tk.get("urg_lien"))
+            out["urg_tel"] = _str(tk.get("urg_tel"))
             out["date_debut"] = _iso_date(tk.get("date_debut"))
             out["adhesion"] = bool(tk.get("mutuelle"))
-            out["adhesion_date"] = _iso_date(tk.get("mutdate"))
+            out["adhesion_date"] = _iso_date(tk.get("mut_date"))
             out["travailleur_handi"] = bool(tk.get("travailleur_handi"))
-            out["idorganigramme"] = str(_int(tk.get("id_equipe")) or "")
+            out["idorganigramme"] = str(_int(tk.get("idorganigramme")) or "")
             out["coopte"] = bool(tk.get("coopte"))
             out["coopteur"] = str(_int(tk.get("coopteur")) or "")
-            out["jodirecte"] = bool(tk.get("jodirecte"))
+            out["jodirecte"] = bool(tk.get("j_odirecte"))
             out["jo_coopteur"] = str(_int(tk.get("jo_coopteur")) or "")
+            out["nationalite"] = _str(tk.get("nationalite")) or "Française"
 
     # 2) TypeDpae = 1 : CV -> precharge depuis cvtheque
     if type_dpae == 1 and id_elem:
