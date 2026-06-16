@@ -47,11 +47,17 @@ interface Lookups {
 }
 
 interface DpaePayload {
+  // IDs 8 octets (timestamp) : DOIVENT etre en string pour preserver
+  // la precision JS (Number max safe = 2^53-1 < 20260616110127323).
   type_dpae: number
-  id_elem: number
-  id_cv_suivi: number
-  id_ticket: number
-  id_cvtheque: number
+  id_elem: string
+  id_cv_suivi: string
+  id_ticket: string
+  id_cvtheque: string
+  idorganigramme: string
+  id_ste: string
+  coopteur: string
+  jo_coopteur: string
 
   civilite: number
   sexe: string
@@ -83,17 +89,14 @@ interface DpaePayload {
   iban: string
   bic: string
 
-  idorganigramme: number
-  id_ste: number
+  // Petits entiers (PK simples) : OK en number
   id_type_poste: number
   id_type_ctt: number
   id_type_horaire: number
   date_debut: string
 
   coopte: boolean
-  coopteur: number
   jodirecte: boolean
-  jo_coopteur: number
 
   id_mutuelle: number
   adhesion: boolean
@@ -105,10 +108,14 @@ interface DpaePayload {
 
 const EMPTY_PAYLOAD: DpaePayload = {
   type_dpae: 0,
-  id_elem: 0,
-  id_cv_suivi: 0,
-  id_ticket: 0,
-  id_cvtheque: 0,
+  id_elem: '',
+  id_cv_suivi: '',
+  id_ticket: '',
+  id_cvtheque: '',
+  idorganigramme: '',
+  id_ste: '',
+  coopteur: '',
+  jo_coopteur: '',
   civilite: 0,
   sexe: '',
   nom: '',
@@ -137,16 +144,12 @@ const EMPTY_PAYLOAD: DpaePayload = {
   urg_tel: '',
   iban: '',
   bic: '',
-  idorganigramme: 0,
-  id_ste: 0,
   id_type_poste: 0,
   id_type_ctt: 1,
   id_type_horaire: 1,
   date_debut: '',
   coopte: false,
-  coopteur: 0,
   jodirecte: false,
-  jo_coopteur: 0,
   id_mutuelle: 0,
   adhesion: false,
   adhesion_date: '',
@@ -159,10 +162,11 @@ export default function DpaeNouvellePage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
 
-  const idTicket = Number(params.get('id_ticket') || '0')
+  // IDs gardes en string : > 2^53 perd la precision sinon
+  const idTicket = params.get('id_ticket') || ''
   const typeDpae = Number(params.get('type_dpae') || '0')
-  const idElem = Number(params.get('id_elem') || '0')
-  const idCvSuivi = Number(params.get('id_cv_suivi') || '0')
+  const idElem = params.get('id_elem') || ''
+  const idCvSuivi = params.get('id_cv_suivi') || ''
 
   const [lookups, setLookups] = useState<Lookups | null>(null)
   const [data, setData] = useState<DpaePayload>({
@@ -334,7 +338,7 @@ export default function DpaeNouvellePage() {
           onClose={() => setOrgaPickerOpen(false)}
           onPick={(it: PickerItem) => {
             setOrgaPickerOpen(false)
-            update({ idorganigramme: Number(it.id) })
+            update({ idorganigramme: it.id })
             setOrgaLib(it.label)
           }}
         />
@@ -359,7 +363,7 @@ export default function DpaeNouvellePage() {
           onClose={() => setCoopteurPickerOpen(false)}
           onPick={(it: PickerItem) => {
             setCoopteurPickerOpen(false)
-            update({ coopteur: Number(it.id) })
+            update({ coopteur: it.id })
             setCoopteurLib(it.label)
           }}
         />
@@ -384,7 +388,7 @@ export default function DpaeNouvellePage() {
           onClose={() => setJoCoopteurPickerOpen(false)}
           onPick={(it: PickerItem) => {
             setJoCoopteurPickerOpen(false)
-            update({ jo_coopteur: Number(it.id) })
+            update({ jo_coopteur: it.id })
             setJoCoopteurLib(it.label)
           }}
         />
@@ -676,7 +680,7 @@ function FormPlan1({
           />
         </Field>
 
-        {data.id_cvtheque > 0 && (
+        {data.id_cvtheque && data.id_cvtheque !== '' && (
           <div className="mt-3">
             <button
               type="button"
@@ -720,7 +724,7 @@ function FormPlan1({
         <Field label="Société">
           <select
             value={data.id_ste || ''}
-            onChange={(e) => update({ id_ste: Number(e.target.value) })}
+            onChange={(e) => update({ id_ste: e.target.value })}
             className={inputCls}
           >
             <option value="">-</option>
@@ -825,7 +829,7 @@ function FormPlan1({
             {joCoopteurLib}
           </button>
         )}
-        {data.jodirecte && data.jo_coopteur === 0 && (
+        {data.jodirecte && !data.jo_coopteur && (
           <p className="text-xs italic mt-1" style={{ color: COL_BRUN }}>
             Attention, JO Directe car pas de RDV pris, merci de renseigner le
             coopteur.
