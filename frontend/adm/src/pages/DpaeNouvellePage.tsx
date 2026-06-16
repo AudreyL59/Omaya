@@ -26,14 +26,17 @@ import {
 
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
-import RecruteurPicker, {
-  type RecruteurItem,
-} from '@/components/agenda/RecruteurPicker'
+import SearchPicker, {
+  type PickerItem,
+} from '@shared/tickets/forms/SearchPicker'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
 const COL_BORDER = '#E5DDDC'
 const COL_BG_SOFT = '#F8F5F4'
+
+const cap = (s: string): string =>
+  s ? s[0].toUpperCase() + s.slice(1).toLowerCase() : ''
 
 interface Lookups {
   societes: { id_ste: string; lib: string }[]
@@ -311,38 +314,70 @@ export default function DpaeNouvellePage() {
       )}
 
       {orgaPickerOpen && (
-        <RecruteurPicker
-          title="Choisir l'équipe (responsable)"
+        <SearchPicker
+          apiBase="/api/adm"
+          getToken={getToken}
+          title="Choisir l'équipe"
+          path="/tickets/organigrammes/search"
+          mapItem={(o: { id_organigramme: string; lib_orga: string }) => ({
+            id: o.id_organigramme,
+            label: o.lib_orga,
+          })}
           onClose={() => setOrgaPickerOpen(false)}
-          onSelect={(r: RecruteurItem) => {
+          onPick={(it: PickerItem) => {
             setOrgaPickerOpen(false)
-            // Note : pour la V1, on demande au RecruteurPicker de retourner
-            // un id_salarie, mais Fen_DPAE attend un idorganigramme. A terme
-            // un OrgaPicker dedie sera plus propre.
-            update({ idorganigramme: Number(r.id_salarie) })
-            setOrgaLib(`${r.nom} ${r.prenom}`)
+            update({ idorganigramme: Number(it.id) })
+            setOrgaLib(it.label)
           }}
         />
       )}
       {coopteurPickerOpen && (
-        <RecruteurPicker
+        <SearchPicker
+          apiBase="/api/adm"
+          getToken={getToken}
           title="Choisir le coopteur"
+          path="/tickets/salaries/search"
+          mapItem={(s: {
+            id_salarie: string
+            nom: string
+            prenom: string
+            poste?: string
+            lib_societe?: string
+          }) => ({
+            id: s.id_salarie,
+            label: `${s.nom} ${cap(s.prenom)}`,
+            sublabel: [s.poste, s.lib_societe].filter(Boolean).join(' · '),
+          })}
           onClose={() => setCoopteurPickerOpen(false)}
-          onSelect={(r: RecruteurItem) => {
+          onPick={(it: PickerItem) => {
             setCoopteurPickerOpen(false)
-            update({ coopteur: Number(r.id_salarie) })
-            setCoopteurLib(`${r.nom} ${r.prenom}`)
+            update({ coopteur: Number(it.id) })
+            setCoopteurLib(it.label)
           }}
         />
       )}
       {joCoopteurPickerOpen && (
-        <RecruteurPicker
+        <SearchPicker
+          apiBase="/api/adm"
+          getToken={getToken}
           title="Choisir le coopteur JO"
+          path="/tickets/salaries/search"
+          mapItem={(s: {
+            id_salarie: string
+            nom: string
+            prenom: string
+            poste?: string
+            lib_societe?: string
+          }) => ({
+            id: s.id_salarie,
+            label: `${s.nom} ${cap(s.prenom)}`,
+            sublabel: [s.poste, s.lib_societe].filter(Boolean).join(' · '),
+          })}
           onClose={() => setJoCoopteurPickerOpen(false)}
-          onSelect={(r: RecruteurItem) => {
+          onPick={(it: PickerItem) => {
             setJoCoopteurPickerOpen(false)
-            update({ jo_coopteur: Number(r.id_salarie) })
-            setJoCoopteurLib(`${r.nom} ${r.prenom}`)
+            update({ jo_coopteur: Number(it.id) })
+            setJoCoopteurLib(it.label)
           }}
         />
       )}
