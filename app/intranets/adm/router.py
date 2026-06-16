@@ -15,6 +15,7 @@ from app.intranets.adm.routers.mon_compte import router as mon_compte_router
 from app.intranets.adm.routers.recherche import router as recherche_router
 from app.intranets.adm.routers.registre_rh import router as registre_rh_router
 from app.intranets.adm.routers.fiche_salarie import router as fiche_salarie_router
+from app.intranets.adm.routers.dpae import router as dpae_router
 from app.shared.production.router import router as production_router
 from app.shared.tickets.router import get_tickets_router
 
@@ -38,6 +39,7 @@ router.include_router(mon_compte_router)
 router.include_router(recherche_router)
 router.include_router(registre_rh_router)
 router.include_router(fiche_salarie_router)
+router.include_router(dpae_router)
 router.include_router(production_router)
 # Module tickets shared : filtre par DroitAccès pour ADM
 router.include_router(get_tickets_router("DroitAccès"))
