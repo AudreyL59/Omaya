@@ -143,6 +143,9 @@ export default function TicketsCallPage() {
   const lastModifRef = useRef('')
   const stoppedRef = useRef(false)
   const jourBasRef = useRef(jourBas)
+  // Throttle du re-fetch (lourd) des traites : au plus 1 toutes les 15s.
+  const traitesTimerRef = useRef<number | null>(null)
+  const traitesLastRef = useRef(0)
 
   useEffect(() => {
     jourBasRef.current = jourBas
@@ -173,6 +176,20 @@ export default function TicketsCallPage() {
     }
   }, [])
 
+  // Re-fetch des traites throttle (trailing) : coalesce les rafales de
+  // changements en 1 seul refresh toutes les 15s max -> evite de marteler le
+  // navigateur (re-render du gros tableau + allocations) a chaque churn.
+  const requestTraitesRefresh = useCallback(() => {
+    if (traitesTimerRef.current != null) return // un refresh est deja programme
+    const elapsed = Date.now() - traitesLastRef.current
+    const delay = Math.max(0, 15000 - elapsed)
+    traitesTimerRef.current = window.setTimeout(() => {
+      traitesTimerRef.current = null
+      traitesLastRef.current = Date.now()
+      if (!stoppedRef.current) fetchTraites(jourBasRef.current)
+    }, delay)
+  }, [fetchTraites])
+
   // Long polling sur les EN COURS uniquement (le bas est rafraichi separement).
   const poll = useCallback(async () => {
     while (!stoppedRef.current) {
@@ -194,12 +211,18 @@ export default function TicketsCallPage() {
         const body = await r.json()
         if (body.changed && body.page) {
           if (!stoppedRef.current) {
+            // Token = "MAX_MODIF#HASH_VERROU". On ne re-fetch les traites
+            // (lourd) QUE si la partie MAX_MODIF a change (vrai changement
+            // ticket). Un simple churn du verrou (prise/raccrochage d'appel,
+            // tres frequent) ne met a jour QUE le tableau du haut.
+            const prevModif = (lastModifRef.current || '').split('#')[0]
+            const nextModif = ((body.last_modif as string) || '').split('#')[0]
             setEnCours(body.page)
             lastModifRef.current = body.last_modif
             setClientNow(frDateTime(new Date()))
-            // Quand un ticket bouge cote serveur, rafraichir aussi les traites
-            // (un ticket peut etre passe de "en cours" a "traite").
-            fetchTraites(jourBasRef.current)
+            if (nextModif !== prevModif) {
+              requestTraitesRefresh()
+            }
           }
         } else {
           lastModifRef.current = body.last_modif || lastModifRef.current
@@ -208,7 +231,7 @@ export default function TicketsCallPage() {
         await new Promise((res) => setTimeout(res, 3000))
       }
     }
-  }, [fetchTraites])
+  }, [requestTraitesRefresh])
 
   // Refetch traites a la demande (changement de date par l'user)
   const refetchNow = useCallback(async () => {
@@ -225,7 +248,7 @@ export default function TicketsCallPage() {
         if (p && !stoppedRef.current) {
           setEnCours(p)
           lastModifRef.current = p.last_modif
-          setClientNow(new Date().toLocaleString('fr-FR'))
+          setClientNow(frDateTime(new Date()))
         }
       })
       const p2 = fetchTraites(jourBasRef.current)
@@ -236,6 +259,10 @@ export default function TicketsCallPage() {
     })()
     return () => {
       stoppedRef.current = true
+      if (traitesTimerRef.current != null) {
+        clearTimeout(traitesTimerRef.current)
+        traitesTimerRef.current = null
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
