@@ -2929,7 +2929,6 @@ ticket_bo,TK_CallSFR,pgt_tk_call_sfr,DateFin_PriseEnCharge,date_fin_prise_en_cha
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDtk_CallSFRAuto,id_tk_call_sfr_auto,bigint,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,InterventionVend,intervention_vend,boolean,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,InfoVente,info_vente,text,
-ticket_bo,TK_CallSFR,pgt_tk_call_sfr,IDclient,id_client,bigint,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,CodeValid,code_valid,varchar(6),
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,Opt_Rappel,opt_rappel,boolean,
 ticket_bo,TK_CallSFR,pgt_tk_call_sfr,Opt_Partenaire,opt_partenaire,boolean,

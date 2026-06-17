@@ -125,7 +125,6 @@ CREATE TABLE ticket_bo.pgt_tk_call_sfr (
     id_tk_call_sfr_auto       bigint,  -- IDtk_CallSFRAuto
     intervention_vend         boolean,  -- InterventionVend
     info_vente                text,  -- InfoVente
-    id_client                 bigint,  -- IDclient
     code_valid                varchar(6),  -- CodeValid
     opt_rappel                boolean,  -- Opt_Rappel
     opt_partenaire            boolean,  -- Opt_Partenaire
@@ -139,7 +138,6 @@ CREATE INDEX ix_pgt_tk_call_sfr_id_tk_liste ON ticket_bo.pgt_tk_call_sfr (id_tk_
 CREATE INDEX ix_pgt_tk_call_sfr_id_salarie ON ticket_bo.pgt_tk_call_sfr (id_salarie);
 CREATE INDEX ix_pgt_tk_call_sfr_modif_date ON ticket_bo.pgt_tk_call_sfr (modif_date);
 CREATE INDEX ix_pgt_tk_call_sfr_appel_en_cours ON ticket_bo.pgt_tk_call_sfr (appel_en_cours);
-CREATE INDEX ix_pgt_tk_call_sfr_id_client ON ticket_bo.pgt_tk_call_sfr (id_client);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr_panier (
     id_tk_call_sfr              bigint,  -- IDtk_CallSFR
