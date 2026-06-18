@@ -1196,27 +1196,27 @@ function CodesPlan2({
     window.open(portail.lien, '_blank', 'noopener')
     // Auto-fill 3s apres l'ouverture (le temps que le portail charge)
     if (extKey && extInstalled === true) {
-      setTimeout(() => {
-        fillPartenaire(extKey, {
-          siret: societe.siret,
-          login: isUrssaf ? societe.siret : portail.login,
-          mdp: portail.mdp,
-          nom: data.nom,
-          nom_marital: data.nom_marital,
-          prenom: data.prenom,
-          sexe: data.sexe,
-          date_naiss: data.date_naiss,
-          lieu_naiss: data.lieu_naiss,
-          dep_naiss: data.dep_naiss,
-          num_ss: data.num_ss,
-          adresse: data.adresse1,
-          cp: data.cp,
-          ville: data.ville,
-          tel_mob: data.tel_mob,
-          mail: data.mail,
-          date_debut: data.date_debut,
-        })
-      }, 3000)
+      const fillData = {
+        siret: societe.siret,
+        login: isUrssaf ? societe.siret : portail.login,
+        mdp: portail.mdp,
+        nom: data.nom,
+        nom_marital: data.nom_marital,
+        prenom: data.prenom,
+        sexe: data.sexe,
+        date_naiss: data.date_naiss,
+        lieu_naiss: data.lieu_naiss,
+        dep_naiss: data.dep_naiss,
+        num_ss: data.num_ss,
+        adresse: data.adresse1,
+        cp: data.cp,
+        ville: data.ville,
+        tel_mob: data.tel_mob,
+        mail: data.mail,
+        date_debut: data.date_debut,
+      }
+      console.log('[omaya-dpae] fillData envoye a extension:', fillData)
+      setTimeout(() => fillPartenaire(extKey, fillData), 3000)
     }
   }
 
