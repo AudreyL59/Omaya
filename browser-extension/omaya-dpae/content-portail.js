@@ -244,22 +244,26 @@ const FILLERS = {
     return 1
   },
 
-  // IAG : page de login + validation du formulaire myForm
-  // cf. WinDev : HTMLValeurChamp(login/password) + HTMLValideFormulaire(myForm)
-  // Apres submit -> dashboard.php, le content script est re-injecte et
-  // reprend les data via sessionStorage pour remplir l'etape 2.
+  // IAG : detecte si on est sur la page de login OU deja sur dashboard
+  // (session persistante par cookie). Cf. WinDev qui ne gerait que le cas
+  // login - ici on est plus tolerant.
   iag: (data) => {
+    const loginInput = document.querySelector('input[name="login"]')
+    if (!loginInput) {
+      // Pas de champ login -> deja connecte, on remplit le dashboard direct
+      console.log('[omaya-dpae] IAG deja connecte, step 2 directe')
+      return fillIagStep2(data)
+    }
+    // Sinon : etape 1 (login + click submit), step 2 reprise au reload
     let n = 0
     if (fillField('IAG login', ['input[name="login"]'], data.login)) n++
     if (fillField('IAG password', ['input[name="password"]'], data.mdp)) n++
     if (n > 0) {
-      // Sauve pour l'etape 2 (dashboard.php apres login)
       try {
         sessionStorage.setItem('omaya-dpae-iag-step2', JSON.stringify(data))
       } catch (e) {
         console.warn('[omaya-dpae] sessionStorage indispo', e)
       }
-      // Valide myForm apres 500ms
       setTimeout(() => {
         const submitBtn = findFirst([
           'form[name="myForm"] button[type="submit"]',
