@@ -52,6 +52,57 @@ function isoToFr(iso) {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 }
 
+// Retry setter du select dep_naiss (combo lazy loaded - les options
+// peuvent ne pas etre encore dans le DOM au 1er essai).
+function setDepNaissWithRetry(rawValue, attemptsLeft) {
+  const sel = document.getElementById('form_declaration:champ_dept_naiss')
+  if (!sel) {
+    if (attemptsLeft > 0) {
+      setTimeout(() => setDepNaissWithRetry(rawValue, attemptsLeft - 1), 500)
+    } else {
+      console.warn('[omaya-dpae] dep_naiss select introuvable')
+    }
+    return
+  }
+  const opts = Array.from(sel.options)
+  if (opts.length <= 1) {
+    if (attemptsLeft > 0) {
+      console.log('[omaya-dpae] dep_naiss options non chargees, retry...')
+      setTimeout(() => setDepNaissWithRetry(rawValue, attemptsLeft - 1), 500)
+    } else {
+      console.warn('[omaya-dpae] dep_naiss options jamais chargees')
+    }
+    return
+  }
+  // Essaye plusieurs formats (zero-pad, brut, padding 3 chiffres)
+  const candidates = [
+    rawValue,
+    String(parseInt(rawValue, 10) || rawValue).padStart(2, '0'),
+    String(parseInt(rawValue, 10) || rawValue).padStart(3, '0'),
+  ]
+  let matched = null
+  for (const v of candidates) {
+    const opt = opts.find((o) => o.value === v)
+    if (opt) {
+      matched = opt
+      break
+    }
+  }
+  if (!matched) {
+    console.warn(
+      '[omaya-dpae] dep_naiss valeur', rawValue, 'non trouvee. Options dispo (5 premieres):',
+      opts.slice(0, 5).map((o) => `${o.value}=${o.textContent.trim()}`),
+    )
+    return
+  }
+  sel.value = matched.value
+  const wrapper = sel.closest('.select-custom')
+  const label = wrapper?.querySelector('.select-custom__label')
+  if (label) label.textContent = matched.textContent.trim()
+  sel.dispatchEvent(new Event('change', { bubbles: true }))
+  console.log('[omaya-dpae] dep_naiss ->', matched.value, matched.textContent.trim())
+}
+
 // URSSAF DUE etape 2 : remplit le formulaire de declaration apres
 // le clic sur 'Commencer la declaration'.
 //
@@ -63,14 +114,48 @@ function fillUrssafStep2(data) {
   const f = (label, idName, value) =>
     fillField(label, [`[id="${idName}"]`, `[name="${idName}"]`], value) && n++
 
+  // Helper specifique pour les inputs widgetises (date PrimeFaces) :
+  // focus + setValue + dispatch input/change/blur
+  const fInputDeep = (label, idName, value) => {
+    if (!value) return false
+    const el = document.getElementById(idName)
+    if (!el) {
+      console.warn(`[omaya-dpae] champ '${label}' (${idName}) introuvable`)
+      return false
+    }
+    try { el.focus() } catch {}
+    const proto = window.HTMLInputElement.prototype
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
+    if (setter) setter.call(el, String(value))
+    else el.value = String(value)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+    el.dispatchEvent(new Event('blur', { bubbles: true }))
+    console.log(`[omaya-dpae] ${label} (deep) = ${value}`)
+    return true
+  }
+
   f('Nom naissance', 'form_declaration:champ_nom_naiss', data.nom)
   f('Nom marital', 'form_declaration:champ_nom_marital', data.nom_marital)
   f('Prenom', 'form_declaration:champ_prenom', data.prenom)
   f('Date naissance', 'form_declaration:champ_date_naissance', isoToFr(data.date_naiss))
   f('Lieu naissance', 'form_declaration:champ_commune_naiss', data.lieu_naiss)
-  f('No secu', 'form_declaration:champ_no_secu', (data.num_ss || '').replace(/\s/g, ''))
+
+  // No secu : log explicite si vide cote Omaya
+  const numSs = (data.num_ss || '').replace(/\s/g, '')
+  if (!numSs) {
+    console.warn('[omaya-dpae] No_secu vide cote Omaya - aucun remplissage')
+  } else if (fInputDeep('No secu', 'form_declaration:champ_no_secu', numSs)) {
+    n++
+  }
+
   f('Tel', 'form_declaration:champ_tel', data.tel_mob)
-  f('Date embauche', 'form_declaration:date_embInputDate', isoToFr(data.date_debut))
+
+  // Date embauche : widget PrimeFaces calendar -> focus + blur en plus
+  if (fInputDeep('Date embauche', 'form_declaration:date_embInputDate', isoToFr(data.date_debut))) {
+    n++
+  }
+
   f('Heure embauche', 'form_declaration:champ_heure_cpl_embauche', '09:00')
   f('Periode essai', 'form_declaration:champ_periode_essai', '90')
 
@@ -91,35 +176,13 @@ function fillUrssafStep2(data) {
   }
 
   // Departement de naissance : combo native + wrapper '.select-custom'
-  // qui doit etre mis a jour manuellement (sinon le label visible reste vide).
+  // qui doit etre mis a jour manuellement. Souvent en lazy load -> retry
+  // jusqu'a 5x toutes les 500ms.
   if (data.dep_naiss != null && data.dep_naiss !== '' && data.dep_naiss !== 0) {
-    const sel = document.getElementById('form_declaration:champ_dept_naiss')
-    if (sel) {
-      // Le select stocke des valeurs avec zero-pad (ex: '02', '62')
-      const v2 = String(data.dep_naiss).padStart(2, '0')
-      const v1 = String(data.dep_naiss)
-      const candidates = [v2, v1]
-      let matched = false
-      for (const v of candidates) {
-        if (Array.from(sel.options).some((o) => o.value === v)) {
-          sel.value = v
-          matched = true
-          break
-        }
-      }
-      if (matched) {
-        const wrapper = sel.closest('.select-custom')
-        const label = wrapper?.querySelector('.select-custom__label')
-        if (label && sel.options[sel.selectedIndex]) {
-          label.textContent = sel.options[sel.selectedIndex].textContent.trim()
-        }
-        sel.dispatchEvent(new Event('change', { bubbles: true }))
-        console.log('[omaya-dpae] URSSAF dep_naiss ->', sel.value)
-        n++
-      } else {
-        console.warn('[omaya-dpae] URSSAF dep_naiss non trouve dans options', data.dep_naiss)
-      }
-    }
+    setDepNaissWithRetry(String(data.dep_naiss), 5)
+    n++
+  } else {
+    console.warn('[omaya-dpae] dep_naiss vide cote Omaya - aucun remplissage')
   }
 
   // Type de contrat : radio par defaut form_declaration:champ_contrat:0 (CDI)
