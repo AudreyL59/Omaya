@@ -3,7 +3,7 @@
   "name": "Omaya DPAE Filler",
   "version": "0.1.0",
   "description": "Remplit automatiquement les portails partenaires (URSSAF, IAG, SFR, ENI...) depuis le module Nouvelle DPAE d'Omaya.",
-  "permissions": ["tabs", "storage"],
+  "permissions": ["tabs", "storage", "webNavigation"],
   "host_permissions": [
     "https://*.omaya.fr/*",
     "http://localhost/*",
@@ -38,7 +38,8 @@
         "https://*.ohm-energie.com/*"
       ],
       "js": ["content-portail.js"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }
