@@ -15,13 +15,17 @@ export interface FillData {
   login?: string
   mdp?: string
   nom?: string
+  nom_marital?: string
   prenom?: string
   date_naiss?: string
+  lieu_naiss?: string
+  num_ss?: string
   adresse?: string
   cp?: string
   ville?: string
   tel_mob?: string
   mail?: string
+  date_debut?: string
 }
 
 export interface FillResult {

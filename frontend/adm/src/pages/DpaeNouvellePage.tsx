@@ -1202,13 +1202,17 @@ function CodesPlan2({
           login: isUrssaf ? societe.siret : portail.login,
           mdp: portail.mdp,
           nom: data.nom,
+          nom_marital: data.nom_marital,
           prenom: data.prenom,
           date_naiss: data.date_naiss,
+          lieu_naiss: data.lieu_naiss,
+          num_ss: data.num_ss,
           adresse: data.adresse1,
           cp: data.cp,
           ville: data.ville,
           tel_mob: data.tel_mob,
           mail: data.mail,
+          date_debut: data.date_debut,
         })
       }, 3000)
     }
