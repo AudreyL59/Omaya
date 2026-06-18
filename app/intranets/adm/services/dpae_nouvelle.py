@@ -1073,13 +1073,12 @@ def terminer_dpae(id_salarie: int, id_ticket: int, op_id: int) -> dict:
 
 
 def recup_da_dr_mails(id_organigramme: int) -> list[str]:
-    """Cf. WinDev RecupListeDaDr : remonte la chaine id_parent de
-    l'organigramme et retourne les mails des salaries dont le poste
-    contient 'Dir' (Directeurs / DA / DR)."""
+    """Cf. WinDev RecupListeDaDr : pour chaque orga de la chaine id_parent,
+    recupere les responsables actifs (resp_equipe / resp_adjoint, DateFin
+    vide) et filtre ceux dont le poste contient 'Dir'."""
     if not id_organigramme:
         return []
     db = get_pg_connection("rh")
-    # 1. Remonte la hierarchie (max 10 niveaux pour eviter une boucle)
     ids: list[int] = []
     seen: set[int] = set()
     current = int(id_organigramme)
@@ -1096,22 +1095,40 @@ def recup_da_dr_mails(id_organigramme: int) -> list[str]:
         current = _int(row.get("id_parent"))
     if not ids:
         return []
-    # 2. Cherche les directeurs actifs rattaches a ces orgas
-    placeholders = ",".join(["?"] * len(ids))
-    rows = db.query(
-        f"""SELECT DISTINCT sc.mail
-              FROM rh.pgt_salarie_organigramme so
-              JOIN rh.pgt_salarie_embauche se ON se.id_salarie = so.id_salarie
-              JOIN rh.pgt_type_poste tp ON tp.id_type_poste = se.id_type_poste
-              JOIN rh.pgt_salarie_coordonnees sc ON sc.id_salarie = so.id_salarie
-             WHERE so.idorganigramme IN ({placeholders})
-               AND COALESCE(so.aff_actif, FALSE) = TRUE
-               AND COALESCE(se.en_activite, FALSE) = TRUE
-               AND tp.lib_poste ILIKE '%dir%'
-               AND sc.mail IS NOT NULL AND sc.mail <> ''""",
-        tuple(ids),
-    )
-    return [_str(r.get("mail")) for r in (rows or []) if r.get("mail")]
+
+    # Pour chaque orga, requete responsables actifs uniquement (cf. WinDev
+    # ReqRespOrgaActif_byOrgaID : HLitPremier + DateFin=''). On collecte
+    # par ordre de remontee (le DA le plus proche d'abord).
+    mails_seen: set[str] = set()
+    out: list[str] = []
+    for oid in ids:
+        rows = db.query(
+            """SELECT sc.mail, tp.lib_poste
+                 FROM rh.pgt_salarie_organigramme so
+                 JOIN rh.pgt_salarie_embauche se
+                      ON se.id_salarie = so.id_salarie
+            LEFT JOIN rh.pgt_type_poste tp
+                      ON tp.id_type_poste = se.id_type_poste
+            LEFT JOIN rh.pgt_salarie_coordonnees sc
+                      ON sc.id_salarie = so.id_salarie
+                WHERE so.idorganigramme = ?
+                  AND COALESCE(so.aff_actif, FALSE) = TRUE
+                  AND so.date_fin IS NULL
+                  AND COALESCE(se.en_activite, FALSE) = TRUE
+                  AND (COALESCE(se.resp_equipe, FALSE) = TRUE
+                       OR COALESCE(se.resp_adjoint, FALSE) = TRUE)""",
+            (oid,),
+        ) or []
+        for r in rows:
+            mail = _str(r.get("mail")).strip()
+            poste = _str(r.get("lib_poste")).lower()
+            if not mail or mail in mails_seen:
+                continue
+            if "dir" not in poste:
+                continue
+            mails_seen.add(mail)
+            out.append(mail)
+    return out
 
 
 def envoyer_infos_partenaire(
