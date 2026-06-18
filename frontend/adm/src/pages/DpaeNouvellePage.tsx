@@ -1050,21 +1050,6 @@ function CodesPlan2({
       )
   }, [selPartId])
 
-  // Auto-fill URSSAF : 2.5s apres le chargement de l'iframe (le temps que
-  // urssafbloctools.min.js se stabilise), on injecte le SIRET. Necessite
-  // l'extension Omaya DPAE Filler installee.
-  useEffect(() => {
-    if (!isUrssaf) return
-    if (!societe.siret) return
-    if (extInstalled !== true) return
-    const t = setTimeout(() => {
-      fillPartenaire('urssaf', {
-        siret: societe.siret,
-        login: societe.siret,
-      })
-    }, 2500)
-    return () => clearTimeout(t)
-  }, [isUrssaf, societe.siret, extInstalled, selPartId])
 
   const reloadFaits = () =>
     fetch(`/api/adm/dpae/codes/${savedId}`, {
@@ -1188,10 +1173,6 @@ function CodesPlan2({
     }
   }
 
-  const ouvrirPortail = () => {
-    if (portail.lien) window.open(portail.lien, '_blank', 'noopener')
-  }
-
   // Resout la cle partenaire pour l'extension (matche FILLERS dans
   // content-portail.js). On utilise des aliases sur le libelle.
   const extKey = (() => {
@@ -1204,6 +1185,34 @@ function CodesPlan2({
     if (u.includes('OHM')) return 'ohm'
     return ''
   })()
+
+  // Liste des portails qui necessitent un onglet separe (cookies tiers
+  // bloques en iframe -> 'session expiree'). A etendre au besoin.
+  const NEED_SEPARATE_TAB = new Set(['urssaf'])
+  const needSeparateTab = NEED_SEPARATE_TAB.has(extKey)
+
+  const ouvrirPortail = () => {
+    if (!portail.lien) return
+    window.open(portail.lien, '_blank', 'noopener')
+    // Auto-fill 3s apres l'ouverture (le temps que le portail charge)
+    if (extKey && extInstalled === true) {
+      setTimeout(() => {
+        fillPartenaire(extKey, {
+          siret: societe.siret,
+          login: isUrssaf ? societe.siret : portail.login,
+          mdp: portail.mdp,
+          nom: data.nom,
+          prenom: data.prenom,
+          date_naiss: data.date_naiss,
+          adresse: data.adresse1,
+          cp: data.cp,
+          ville: data.ville,
+          tel_mob: data.tel_mob,
+          mail: data.mail,
+        })
+      }, 3000)
+    }
+  }
 
   const remplirPortail = async () => {
     if (!extKey) {
@@ -1504,7 +1513,36 @@ function CodesPlan2({
             {portail.lien || 'Aucun lien'}
           </span>
         </div>
-        {portail.lien ? (
+        {needSeparateTab ? (
+          <div
+            className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center"
+            style={{ color: COL_BRUN }}
+          >
+            <p className="text-sm font-semibold">
+              {selPart?.lib_partenaire} doit s'ouvrir dans un onglet séparé
+            </p>
+            <p className="text-xs italic max-w-md" style={{ color: '#92400E' }}>
+              Le navigateur bloque les cookies de session URSSAF dans une
+              iframe (protection anti-tracking). Sans cookies, le portail
+              répond « session expirée ».
+            </p>
+            <button
+              type="button"
+              onClick={ouvrirPortail}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-md text-white text-sm font-medium"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              <ExternalLink className="w-4 h-4" />
+              Ouvrir {selPart?.lib_partenaire} dans un nouvel onglet
+            </button>
+            {extInstalled === true && (
+              <p className="text-xs italic max-w-md" style={{ color: COL_BRUN }}>
+                Le formulaire sera rempli automatiquement 3s après l'ouverture
+                (extension Omaya DPAE Filler détectée).
+              </p>
+            )}
+          </div>
+        ) : portail.lien ? (
           <iframe
             key={selPartId}
             src={portail.lien}
