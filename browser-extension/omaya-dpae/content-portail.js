@@ -244,11 +244,39 @@ const FILLERS = {
     return 1
   },
 
-  // IAG : page de login
+  // IAG : page de login + validation du formulaire myForm
+  // cf. WinDev : HTMLValeurChamp(login/password) + HTMLValideFormulaire(myForm)
   iag: (data) => {
     let n = 0
     if (fillField('IAG login', ['input[name="login"]'], data.login)) n++
     if (fillField('IAG password', ['input[name="password"]'], data.mdp)) n++
+    if (n > 0) {
+      // Valide myForm apres 500ms (laisse le temps a la valeur d'etre prise)
+      setTimeout(() => {
+        const submitBtn = findFirst([
+          'form[name="myForm"] button[type="submit"]',
+          'form[name="myForm"] input[type="submit"]',
+          'form[id="myForm"] button[type="submit"]',
+          'form[id="myForm"] input[type="submit"]',
+          'form[name="myForm"] [type="submit"]',
+        ])
+        if (submitBtn) {
+          console.log('[omaya-dpae] IAG click submit myForm')
+          submitBtn.click()
+        } else {
+          // Fallback : form.submit() (sans event JS, mais ca passe)
+          const form =
+            document.forms?.myForm ||
+            document.querySelector('form[name="myForm"], form[id="myForm"]')
+          if (form) {
+            console.log('[omaya-dpae] IAG submit myForm (fallback)')
+            form.submit()
+          } else {
+            console.warn('[omaya-dpae] IAG myForm introuvable')
+          }
+        }
+      }, 500)
+    }
     return n
   },
 
