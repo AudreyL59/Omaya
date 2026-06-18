@@ -773,13 +773,18 @@ def save_dpae(payload: dict, op_id: int) -> dict:
 # ===========================================================================
 
 
+URSSAF_PSEUDO_ID = "0"  # URSSAF n'existe pas dans pgt_partenaire (institution)
+
+
 def list_partenaires_portail() -> list[dict]:
     """Combo Partenaire du Plan 2 : SELECT DISTINCT pgt_portail_partenaire
-    JOIN pgt_partenaire WHERE IsActif = TRUE (cf. WinDev combo URSSAF)."""
+    JOIN pgt_partenaire WHERE IsActif = TRUE.
+
+    URSSAF ajoute en tete (pas dans pgt_partenaire, cf. WinDev qui le
+    hardcode car ce n'est pas un partenaire commercial)."""
     db_rec = get_pg_connection("recrutement")
     db_adv = get_pg_connection("adv")
 
-    # On lit d'abord les id_partenaire actifs sur le portail
     rows = db_rec.query(
         """SELECT DISTINCT id_partenaire
              FROM recrutement.pgt_portail_partenaire
@@ -788,10 +793,7 @@ def list_partenaires_portail() -> list[dict]:
               AND id_partenaire IS NOT NULL""",
     ) or []
     ids = [_int(r.get("id_partenaire")) for r in rows if _int(r.get("id_partenaire"))]
-    if not ids:
-        return []
 
-    # Resout les libelles depuis adv.pgt_partenaire (cross-base, on charge tout)
     parts = db_adv.query(
         "SELECT id_partenaire, lib_partenaire FROM adv.pgt_partenaire",
     ) or []
@@ -805,11 +807,27 @@ def list_partenaires_portail() -> list[dict]:
             "lib_partenaire": lib,
         })
     out.sort(key=lambda x: x["lib_partenaire"])
+    # URSSAF en premiere position
+    out.insert(0, {
+        "id_partenaire": URSSAF_PSEUDO_ID,
+        "lib_partenaire": "URSSAF",
+    })
     return out
 
 
 def get_portail_credentials(id_partenaire: int) -> dict:
     """Charge le lien portail + login + mdp + mail_contact du partenaire."""
+    # Cas special URSSAF (pseudo id=0) : lien DUE en dur, pas de login/mdp
+    # generique (cf. WinDev infoUrssaf qui utilisait societe.SIRET).
+    if int(id_partenaire) == 0:
+        return {
+            "lien_portail": "https://www.due.urssaf.fr/declarant/index.jsf",
+            "login": "",
+            "mdp": "",
+            "mail_contact": "",
+            "id_entite": "",
+        }
+
     db = get_pg_connection("recrutement")
     row = db.query_one(
         """SELECT lien_portail, login, mdp, mail_contact, id_entite
