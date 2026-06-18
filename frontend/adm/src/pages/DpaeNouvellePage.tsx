@@ -268,7 +268,21 @@ export default function DpaeNouvellePage() {
       })
       const j = await r.json()
       if (!r.ok) {
-        throw new Error((j as { detail?: string })?.detail || String(r.status))
+        // detail peut etre soit une string (HTTPException), soit un array
+        // de validation Pydantic [{loc, msg, type, ...}].
+        const d = (j as { detail?: unknown })?.detail
+        let msg: string
+        if (typeof d === 'string') msg = d
+        else if (Array.isArray(d))
+          msg = d
+            .map((e) =>
+              e && typeof e === 'object' && 'msg' in e
+                ? `${(e as { loc?: unknown[] }).loc?.slice(1).join('.') || ''}: ${(e as { msg: string }).msg}`
+                : JSON.stringify(e),
+            )
+            .join(' ; ')
+        else msg = String(r.status)
+        throw new Error(msg)
       }
       setSavedId(String(j.id_salarie))
       setSavedMatricule(String(j.matricule_tr))

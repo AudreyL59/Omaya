@@ -10,13 +10,26 @@ Endpoints :
 
 from __future__ import annotations
 
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import dpae_nouvelle as svc_n
 from app.intranets.adm.services import dpae_recherche as svc
+
+
+# Le frontend envoie les IDs 8 octets en string (preservation precision JS).
+# String vide '' / None -> 0, sinon coerce en int.
+def _coerce_int(v: Any) -> int:
+    if v is None or v == "":
+        return 0
+    return int(v)
+
+
+IdField = Annotated[int, BeforeValidator(_coerce_int)]
 
 
 router = APIRouter(prefix="/dpae", tags=["adm-dpae"])
@@ -71,13 +84,19 @@ def get_preremplir(
 
 
 class DpaeSavePayload(BaseModel):
-    type_dpae: int = 0
-    id_elem: int = 0
-    id_cv_suivi: int = 0
-    id_ticket: int = 0
-    id_cvtheque: int = 0
+    # IDs 8 octets : envoyes en string par le frontend (precision JS).
+    # IdField coerce '' / None -> 0.
+    type_dpae: IdField = 0
+    id_elem: IdField = 0
+    id_cv_suivi: IdField = 0
+    id_ticket: IdField = 0
+    id_cvtheque: IdField = 0
+    idorganigramme: IdField = 0
+    id_ste: IdField = 0
+    coopteur: IdField = 0
+    jo_coopteur: IdField = 0
 
-    civilite: int = 0
+    civilite: IdField = 0
     sexe: str = ""
     nom: str = ""
     nom_marital: str = ""
@@ -85,13 +104,13 @@ class DpaeSavePayload(BaseModel):
     nationalite: str = "Française"
     date_naiss: str = ""
     lieu_naiss: str = ""
-    dep_naiss: int = 0
+    dep_naiss: IdField = 0
     num_ss: str = ""
     cpam: str = ""
     num_cin: str = ""
-    situation_fam: int = 0
+    situation_fam: IdField = 0
     avec_enfant: bool = False
-    nb_enfants: int = 0
+    nb_enfants: IdField = 0
     travailleur_handi: bool = False
 
     adresse1: str = ""
@@ -107,19 +126,15 @@ class DpaeSavePayload(BaseModel):
     iban: str = ""
     bic: str = ""
 
-    idorganigramme: int = 0
-    id_ste: int = 0
-    id_type_poste: int = 0
-    id_type_ctt: int = 1
-    id_type_horaire: int = 1
+    id_type_poste: IdField = 0
+    id_type_ctt: IdField = 1
+    id_type_horaire: IdField = 1
     date_debut: str = ""
 
     coopte: bool = False
-    coopteur: int = 0
     jodirecte: bool = False
-    jo_coopteur: int = 0
 
-    id_mutuelle: int = 0
+    id_mutuelle: IdField = 0
     adhesion: bool = False
     adhesion_date: str = ""
     mutuelle_dossier: bool = False
