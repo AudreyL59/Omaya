@@ -29,6 +29,10 @@ import { showToast } from '@shared/ui/dialog'
 import SearchPicker, {
   type PickerItem,
 } from '@shared/tickets/forms/SearchPicker'
+import {
+  fillPartenaire,
+  isExtensionInstalled,
+} from '@/lib/dpae-extension'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -983,6 +987,7 @@ function CodesPlan2({
     mdp: '',
   })
   const [societe, setSociete] = useState({ raison_sociale: '', siret: '' })
+  const [extInstalled, setExtInstalled] = useState<boolean | null>(null)
   const [dpaeNum, setDpaeNum] = useState('')
   const [code, setCode] = useState('')
   const [login2, setLogin2] = useState('')
@@ -1022,6 +1027,8 @@ function CodesPlan2({
           siret: d.siret || '',
         }),
       )
+    // Detection de l'extension Omaya DPAE Filler (ping/pong)
+    isExtensionInstalled().then(setExtInstalled)
   }, [savedId])
 
   // Quand on change de partenaire : charge le portail
@@ -1169,6 +1176,57 @@ function CodesPlan2({
     if (portail.lien) window.open(portail.lien, '_blank', 'noopener')
   }
 
+  // Resout la cle partenaire pour l'extension (matche FILLERS dans
+  // content-portail.js). On utilise des aliases sur le libelle.
+  const extKey = (() => {
+    const u = libUpper
+    if (u === 'URSSAF') return 'urssaf'
+    if (u === 'IAG') return 'iag'
+    if (u === 'SFR') return 'sfr'
+    if (u === 'ENI') return 'eni'
+    if (u.includes('PLENITUDE')) return 'plenitude'
+    if (u.includes('OHM')) return 'ohm'
+    return ''
+  })()
+
+  const remplirPortail = async () => {
+    if (!extKey) {
+      showToast('Aucun mapping de remplissage pour ce partenaire.', 'info')
+      return
+    }
+    if (extInstalled === false) {
+      showToast(
+        "L'extension Omaya DPAE Filler n'est pas installée. Voir browser-extension/omaya-dpae/README.md",
+        'error',
+      )
+      return
+    }
+    const fillData = {
+      siret: societe.siret,
+      login: isUrssaf ? societe.siret : portail.login,
+      mdp: portail.mdp,
+      nom: data.nom,
+      prenom: data.prenom,
+      date_naiss: data.date_naiss,
+      adresse: data.adresse1,
+      cp: data.cp,
+      ville: data.ville,
+      tel_mob: data.tel_mob,
+      mail: data.mail,
+    }
+    const res = await fillPartenaire(extKey, fillData)
+    if (res.ok) {
+      showToast(`Formulaire rempli (${res.tabs} onglet(s)).`, 'success')
+    } else if (res.tabs === 0) {
+      showToast(
+        "Aucun onglet partenaire ouvert. Clique d'abord sur 'Ouvrir dans un nouvel onglet'.",
+        'info',
+      )
+    } else {
+      showToast(`Échec remplissage : ${res.error || 'inconnu'}`, 'error')
+    }
+  }
+
   // Infos salarie pour le copy/paste manuel vers le portail
   const infosSalarie =
     `${data.nom} ${data.prenom}\n` +
@@ -1240,6 +1298,30 @@ function CodesPlan2({
             <ExternalLink className="w-4 h-4" />
             Ouvrir dans un nouvel onglet
           </button>
+          {extKey && (
+            <button
+              type="button"
+              onClick={remplirPortail}
+              disabled={extInstalled === false}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm border disabled:opacity-50"
+              style={{
+                borderColor: COL_PRIMARY,
+                color: COL_PRIMARY,
+              }}
+              title="Nécessite l'extension Omaya DPAE Filler"
+            >
+              Remplir le formulaire (extension)
+            </button>
+          )}
+          {extInstalled === false && (
+            <p
+              className="text-xs italic mt-1 p-2 rounded"
+              style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}
+            >
+              ⚠ Pour le remplissage auto, installe l'extension navigateur
+              Omaya DPAE Filler. Voir <code>browser-extension/omaya-dpae/README.md</code>.
+            </p>
+          )}
         </Card>
 
         <Card

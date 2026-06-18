@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Omaya DPAE Filler",
+  "version": "0.1.0",
+  "description": "Remplit automatiquement les portails partenaires (URSSAF, IAG, SFR, ENI...) depuis le module Nouvelle DPAE d'Omaya.",
+  "permissions": ["tabs", "storage"],
+  "host_permissions": [
+    "https://*.omaya.fr/*",
+    "http://localhost/*",
+    "https://www.due.urssaf.fr/*",
+    "https://*.gestioniag.fr/*",
+    "https://*.sfr.fr/*",
+    "https://*.eni-energie.com/*",
+    "https://*.plenitude.com/*",
+    "https://*.ohm-energie.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.omaya.fr/*",
+        "http://localhost:5173/*",
+        "http://localhost:5174/*",
+        "http://localhost:5175/*"
+      ],
+      "js": ["content-omaya.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.due.urssaf.fr/*",
+        "https://*.gestioniag.fr/*",
+        "https://*.sfr.fr/*",
+        "https://*.eni-energie.com/*",
+        "https://*.plenitude.com/*",
+        "https://*.ohm-energie.com/*"
+      ],
+      "js": ["content-portail.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
