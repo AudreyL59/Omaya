@@ -1078,8 +1078,13 @@ function CodesPlan2({
   }
 
   const uploadDpaePdf = async (file: File) => {
+    // Renomme en 'DPAE_<num_dpae>.<ext>' (cf. demande utilisateur).
+    const dot = file.name.lastIndexOf('.')
+    const ext = dot >= 0 ? file.name.slice(dot) : ''
+    const targetName = `DPAE_${dpaeNum.trim()}${ext}`
     const fd = new FormData()
     fd.append('file', file)
+    fd.append('target_filename', targetName)
     const r = await fetch(`/api/adm/dpae/urssaf/${savedId}/pdf`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}` },
@@ -1116,30 +1121,35 @@ function CodesPlan2({
       setBusy(false)
       return
     }
+    setBusy(false)
+
     // Apres validation, propose d'uploader le PDF DPAE (cf. WinDev)
     const ok = await showConfirm({
       title: 'PDF DPAE',
       message: 'Voulez-vous ajouter le PDF DPAE dans le dossier salarié ?',
       confirmLabel: 'Choisir un fichier',
     })
-    if (ok) {
-      // File picker via input cache
-      const input = document.createElement('input')
-      input.type = 'file'
-      input.accept = '.pdf,application/pdf'
-      input.onchange = async () => {
-        const f = input.files?.[0]
-        if (!f) return
-        try {
-          await uploadDpaePdf(f)
-          showToast(`PDF DPAE uploadé : ${f.name}`, 'success')
-        } catch (e) {
-          showToast(`Échec upload : ${(e as Error).message}`, 'error')
-        }
+    if (!ok) return
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pdf,application/pdf'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      setBusy(true)
+      try {
+        const res = await uploadDpaePdf(f)
+        showToast(
+          `PDF DPAE uploadé : ${(res as { filename?: string })?.filename || f.name}`,
+          'success',
+        )
+      } catch (e) {
+        showToast(`Échec upload : ${(e as Error).message}`, 'error')
+      } finally {
+        setBusy(false)
       }
-      input.click()
     }
-    setBusy(false)
+    input.click()
   }
 
   const validerCodes = async () => {
