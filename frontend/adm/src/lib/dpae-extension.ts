@@ -17,8 +17,10 @@ export interface FillData {
   nom?: string
   nom_marital?: string
   prenom?: string
+  sexe?: string
   date_naiss?: string
   lieu_naiss?: string
+  dep_naiss?: number | string
   num_ss?: string
   adresse?: string
   cp?: string

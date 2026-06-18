@@ -54,9 +54,11 @@ function isoToFr(iso) {
 
 // URSSAF DUE etape 2 : remplit le formulaire de declaration apres
 // le clic sur 'Commencer la declaration'.
+//
+// Conformement au JS WinDev original, on click sur chaque input avant
+// de dispatcher 'change' pour forcer la revalidation cote site URSSAF
+// (sinon les listeners onBlur/onChange ne se declenchent pas toujours).
 function fillUrssafStep2(data) {
-  // Selecteurs : id colon-escape n'est pas necessaire dans une chaine
-  // quotee, et [id="..."] / [name="..."] est tolere.
   let n = 0
   const f = (label, idName, value) =>
     fillField(label, [`[id="${idName}"]`, `[name="${idName}"]`], value) && n++
@@ -71,6 +73,70 @@ function fillUrssafStep2(data) {
   f('Date embauche', 'form_declaration:date_embInputDate', isoToFr(data.date_debut))
   f('Heure embauche', 'form_declaration:champ_heure_cpl_embauche', '09:00')
   f('Periode essai', 'form_declaration:champ_periode_essai', '90')
+
+  // Force le focus + revalidation des champs critiques (cf. WinDev .click()
+  // suivi de dispatchEvent('change')).
+  for (const id of [
+    'form_declaration:champ_nom_naiss',
+    'form_declaration:champ_nom_marital',
+    'form_declaration:champ_prenom',
+    'form_declaration:champ_date_naissance',
+    'form_declaration:champ_no_secu',
+  ]) {
+    const el = document.getElementById(id)
+    if (el) {
+      try { el.click() } catch {}
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+  }
+
+  // Departement de naissance : combo native + wrapper '.select-custom'
+  // qui doit etre mis a jour manuellement (sinon le label visible reste vide).
+  if (data.dep_naiss != null && data.dep_naiss !== '' && data.dep_naiss !== 0) {
+    const sel = document.getElementById('form_declaration:champ_dept_naiss')
+    if (sel) {
+      // Le select stocke des valeurs avec zero-pad (ex: '02', '62')
+      const v2 = String(data.dep_naiss).padStart(2, '0')
+      const v1 = String(data.dep_naiss)
+      const candidates = [v2, v1]
+      let matched = false
+      for (const v of candidates) {
+        if (Array.from(sel.options).some((o) => o.value === v)) {
+          sel.value = v
+          matched = true
+          break
+        }
+      }
+      if (matched) {
+        const wrapper = sel.closest('.select-custom')
+        const label = wrapper?.querySelector('.select-custom__label')
+        if (label && sel.options[sel.selectedIndex]) {
+          label.textContent = sel.options[sel.selectedIndex].textContent.trim()
+        }
+        sel.dispatchEvent(new Event('change', { bubbles: true }))
+        console.log('[omaya-dpae] URSSAF dep_naiss ->', sel.value)
+        n++
+      } else {
+        console.warn('[omaya-dpae] URSSAF dep_naiss non trouve dans options', data.dep_naiss)
+      }
+    }
+  }
+
+  // Type de contrat : radio par defaut form_declaration:champ_contrat:0 (CDI)
+  const radioContrat = document.getElementById('form_declaration:champ_contrat:0')
+  if (radioContrat) {
+    radioContrat.click()
+    n++
+  }
+
+  // Sexe : radio H (champ_sexe:0) ou F (champ_sexe:1)
+  const sexeKey = (data.sexe || '').toUpperCase() === 'H' ? '0' : '1'
+  const radioSexe = document.getElementById(`form_declaration:champ_sexe:${sexeKey}`)
+  if (radioSexe) {
+    radioSexe.click()
+    n++
+  }
+
   return n
 }
 
