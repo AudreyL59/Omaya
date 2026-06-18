@@ -1490,6 +1490,7 @@ function CodesPlan2({
         </div>
         {portail.lien ? (
           <iframe
+            key={selPartId}
             src={portail.lien}
             title="Portail partenaire"
             className="flex-1 w-full"
