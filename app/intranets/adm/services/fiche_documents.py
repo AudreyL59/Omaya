@@ -133,7 +133,22 @@ def list_files(id_salarie: int, sous_rep_key: str = "internes") -> dict:
                         size = ftp.size(nom) or 0
                     except Exception:
                         pass
-                    entries.append((nom, {"size": str(size), "type": "file"}))
+                    # MDTM : recupere la date de modification format
+                    # "213 YYYYMMDDHHMMSS" (RFC 3659).
+                    modify = ""
+                    try:
+                        resp = ftp.sendcmd(f"MDTM {nom}")
+                        # ex: "213 20260618083937"
+                        parts_resp = resp.split()
+                        if len(parts_resp) >= 2 and parts_resp[0] == "213":
+                            modify = parts_resp[1][:14]
+                    except Exception:
+                        pass
+                    entries.append((nom, {
+                        "size": str(size),
+                        "type": "file",
+                        "modify": modify,
+                    }))
             except Exception:
                 entries = []
 
