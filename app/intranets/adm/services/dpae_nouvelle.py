@@ -1072,6 +1072,48 @@ def terminer_dpae(id_salarie: int, id_ticket: int, op_id: int) -> dict:
     return {"ok": True}
 
 
+def recup_da_dr_mails(id_organigramme: int) -> list[str]:
+    """Cf. WinDev RecupListeDaDr : remonte la chaine id_parent de
+    l'organigramme et retourne les mails des salaries dont le poste
+    contient 'Dir' (Directeurs / DA / DR)."""
+    if not id_organigramme:
+        return []
+    db = get_pg_connection("rh")
+    # 1. Remonte la hierarchie (max 10 niveaux pour eviter une boucle)
+    ids: list[int] = []
+    seen: set[int] = set()
+    current = int(id_organigramme)
+    while current and current not in seen and len(ids) < 10:
+        seen.add(current)
+        ids.append(current)
+        row = db.query_one(
+            """SELECT id_parent FROM rh.pgt_organigramme
+                WHERE idorganigramme = ? LIMIT 1""",
+            (current,),
+        )
+        if not row:
+            break
+        current = _int(row.get("id_parent"))
+    if not ids:
+        return []
+    # 2. Cherche les directeurs actifs rattaches a ces orgas
+    placeholders = ",".join(["?"] * len(ids))
+    rows = db.query(
+        f"""SELECT DISTINCT sc.mail
+              FROM rh.pgt_salarie_organigramme so
+              JOIN rh.pgt_salarie_embauche se ON se.id_salarie = so.id_salarie
+              JOIN rh.pgt_type_poste tp ON tp.id_type_poste = se.id_type_poste
+              JOIN rh.pgt_salarie_coordonnees sc ON sc.id_salarie = so.id_salarie
+             WHERE so.idorganigramme IN ({placeholders})
+               AND COALESCE(so.aff_actif, FALSE) = TRUE
+               AND COALESCE(se.en_activite, FALSE) = TRUE
+               AND tp.lib_poste ILIKE '%dir%'
+               AND sc.mail IS NOT NULL AND sc.mail <> ''""",
+        tuple(ids),
+    )
+    return [_str(r.get("mail")) for r in (rows or []) if r.get("mail")]
+
+
 def envoyer_infos_partenaire(
     id_salarie: int,
     id_partenaire: int,
@@ -1109,6 +1151,15 @@ def envoyer_infos_partenaire(
     nom = _str(sal.get("nom"))
     prenom = _str(sal.get("prenom"))
     prenom_cap = (prenom[:1].upper() + prenom[1:].lower()) if prenom else ""
+
+    # Cc Directeurs de l'orga du salarie (cf. WinDev RecupListeDaDr)
+    org = db_rh.query_one(
+        """SELECT idorganigramme FROM rh.pgt_salarie_organigramme
+            WHERE id_salarie = ? AND COALESCE(aff_actif, FALSE) = TRUE
+         ORDER BY date_debut DESC LIMIT 1""",
+        (int(id_salarie),),
+    )
+    mails_da = recup_da_dr_mails(_int((org or {}).get("idorganigramme")))
 
     lib_upper = lib_partenaire.upper()
     if lib_upper == "URSSAF":
@@ -1211,6 +1262,7 @@ def envoyer_infos_partenaire(
                 sujet=sujet,
                 html=html,
                 destinataires=[mail_candidat],
+                cc=mails_da or None,
                 cci=["intranet@omaya.fr"],
                 attachments=attachments or None,
             )
@@ -1224,5 +1276,6 @@ def envoyer_infos_partenaire(
         "mail": res_mail,
         "gsm": gsm,
         "mail_dest": mail_candidat,
+        "cc_da": mails_da,
         "pj": pdf_filename if pdf_filename else "",
     }
