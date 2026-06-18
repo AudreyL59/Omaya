@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+from app.shared.notifications.mail import envoi_mail
 from app.shared.notifications.sms import envoi_sms
 
 
@@ -1080,12 +1081,18 @@ def envoyer_infos_partenaire(
     mdp: str,
     dpae_num: str = "",
     op_id: int = 0,
+    pdf_filename: str = "",
 ) -> dict:
-    """envoieInfoPartenaire WinDev : envoie un SMS recap au candidat avec
-    les codes/lien selon le partenaire (URSSAF / IAG / SFR / ENI / autre).
+    """envoieInfoPartenaire WinDev : SMS au candidat + mail HTML
+    (avec eventuel PDF DPAE en PJ pour URSSAF).
 
-    Pour V1 : juste le SMS - le mail HTML pourra etre ajoute plus tard.
+    pdf_filename : nom du fichier DPAE stocke dans gestionRH/{id}/. Si
+    fourni et URSSAF, telecharge depuis FTP et attache au mail.
     """
+    # Import lazy pour eviter cycle (fiche_documents -> SMTP qui peut
+    # importer dpae_nouvelle un jour)
+    from app.intranets.adm.services import fiche_documents as docs_svc
+
     db_rh = get_pg_connection("rh")
     cv = db_rh.query_one(
         """SELECT tel_mob, mail FROM rh.pgt_salarie_coordonnees
@@ -1093,8 +1100,15 @@ def envoyer_infos_partenaire(
         (int(id_salarie),),
     ) or {}
     gsm = _str(cv.get("tel_mob"))
-    if not gsm:
-        return {"ok": False, "error": "Pas de GSM sur la fiche"}
+    mail_candidat = _str(cv.get("mail"))
+
+    sal = db_rh.query_one(
+        "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1",
+        (int(id_salarie),),
+    ) or {}
+    nom = _str(sal.get("nom"))
+    prenom = _str(sal.get("prenom"))
+    prenom_cap = (prenom[:1].upper() + prenom[1:].lower()) if prenom else ""
 
     lib_upper = lib_partenaire.upper()
     if lib_upper == "URSSAF":
@@ -1103,6 +1117,21 @@ def envoyer_infos_partenaire(
             "Vous recevrez une copie par mail\n"
             f"Num DPAE : {dpae_num}\n"
             "---\nCdt"
+        )
+        sujet = f"DPAE {nom} {prenom} du {datetime.now().strftime('%d/%m/%Y')}"
+        html = (
+            "<p>Bonjour,</p>"
+            f"<p>La DPAE pour <b>{nom} {prenom_cap}</b> a été faite ce jour "
+            "auprès des URSSAF :</p>"
+            "<ul>"
+            f"<li><b>N° de DUE :</b> {dpae_num}</li>"
+            f"<li><b>Faite le :</b> {datetime.now().strftime('%d/%m/%Y')}</li>"
+            "</ul>"
+            "<p>Demande de casier judiciaire : "
+            "<a href='https://casier-judiciaire.justice.gouv.fr/'>"
+            "casier-judiciaire.justice.gouv.fr</a></p>"
+            "<p>Cordialement.</p>"
+            "<p><i>PS : Ceci est un mail automatique, ne pas répondre.</i></p>"
         )
     elif lib_upper == "IAG":
         texte = (
@@ -1114,6 +1143,21 @@ def envoyer_infos_partenaire(
             "https://casier-judiciaire.justice.gouv.fr\n"
             "---\nCdt"
         )
+        sujet = f"Identifiant IAG {nom} {prenom}"
+        html = (
+            "<p>Bonjour,</p>"
+            "<p>Votre inscription IAG est faite.</p>"
+            "<p><b>A FAIRE OBLIGATOIREMENT DANS LES 72H :</b></p>"
+            "<p>Formation IAG : "
+            "<a href='https://formation.gestioniag.fr'>formation.gestioniag.fr</a></p>"
+            "<ul>"
+            f"<li><b>Code IAG :</b> {code}</li>"
+            "</ul>"
+            "<p>Demande de casier judiciaire : "
+            "<a href='https://casier-judiciaire.justice.gouv.fr/'>"
+            "casier-judiciaire.justice.gouv.fr</a></p>"
+            "<p>Cordialement.</p>"
+        )
     elif lib_upper == "ENI":
         texte = (
             "Votre inscription ENI est faite.\n"
@@ -1122,12 +1166,63 @@ def envoyer_infos_partenaire(
             "Sinon vous devrez attendre 72h pour un nouveau lien.\n"
             "---\nCdt"
         )
+        sujet = f"Identifiant ENI {nom} {prenom}"
+        html = (
+            "<p>Bonjour,</p>"
+            "<p>Votre inscription ENI est faite. Vous devez valider "
+            "<b>IMPERATIVEMENT dans les 24h</b> le lien envoyé sur "
+            f"<b>{mail_candidat}</b>.</p>"
+            "<p>Sinon il faudra attendre 72h pour un nouveau lien.</p>"
+            "<p>Cordialement.</p>"
+        )
     else:
         texte = (
             f"Votre inscription {lib_partenaire} est faite.\n"
             f"Code : {code}\nLogin : {login}\nMDP : {mdp}\n"
             "---\nCdt"
         )
+        sujet = f"Identifiant {lib_partenaire} {nom} {prenom}"
+        html = (
+            f"<p>Bonjour {prenom_cap},</p>"
+            f"<p>Votre inscription <b>{lib_partenaire}</b> est faite :</p>"
+            "<ul>"
+            f"<li><b>Code :</b> {code}</li>"
+            f"<li><b>Login :</b> {login}</li>"
+            f"<li><b>MDP :</b> {mdp}</li>"
+            "</ul>"
+            "<p>Cordialement.</p>"
+        )
 
-    res_sms = envoi_sms(texte, gsm)
-    return {"ok": True, "sms": res_sms, "gsm": gsm, "texte": texte}
+    # SMS
+    res_sms = ""
+    if gsm:
+        res_sms = envoi_sms(texte, gsm)
+
+    # Mail (si candidat a un mail)
+    res_mail = ""
+    if mail_candidat:
+        attachments = []
+        if pdf_filename:
+            pdf_content = docs_svc.download_file(id_salarie, "internes", pdf_filename)
+            if pdf_content:
+                attachments.append((pdf_filename, pdf_content))
+        try:
+            envoi_mail(
+                sujet=sujet,
+                html=html,
+                destinataires=[mail_candidat],
+                cci=["intranet@omaya.fr"],
+                attachments=attachments or None,
+            )
+            res_mail = "envoye"
+        except Exception as e:
+            res_mail = f"erreur: {e}"
+
+    return {
+        "ok": True,
+        "sms": res_sms,
+        "mail": res_mail,
+        "gsm": gsm,
+        "mail_dest": mail_candidat,
+        "pj": pdf_filename if pdf_filename else "",
+    }

@@ -224,6 +224,26 @@ def _ftp_makedirs(ftp: ftplib.FTP, abs_path: str) -> None:
             pass  # existe deja
 
 
+def download_file(id_salarie: int, sous_rep_key: str, filename: str) -> bytes | None:
+    """RETR un fichier depuis le FTP. Retourne le contenu binaire ou None."""
+    rep_ftp, _ = _resolve_rep_ftp(id_salarie, sous_rep_key)
+    ftp = _ftp_connect()
+    if not ftp:
+        return None
+    try:
+        ftp.cwd(rep_ftp)
+        buf = io.BytesIO()
+        ftp.retrbinary(f"RETR {filename}", buf.write)
+        return buf.getvalue()
+    except Exception:
+        return None
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass
+
+
 def upload_file(id_salarie: int, sous_rep_key: str, filename: str, content: bytes) -> dict:
     """STOR le fichier sur le FTP (transposition Btn '+').
 

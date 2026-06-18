@@ -282,12 +282,13 @@ def post_terminer(
 
 
 class InfosPartenairePayload(BaseModel):
-    id_partenaire: int
+    id_partenaire: IdField = 0
     lib_partenaire: str
     code: str = ""
     login: str = ""
     mdp: str = ""
     dpae_num: str = ""
+    pdf_filename: str = ""
 
 
 @router.post("/envoyer-infos/{id_salarie}")
@@ -296,9 +297,10 @@ def post_envoyer_infos(
     payload: InfosPartenairePayload,
     user: UserToken = Depends(get_current_user),
 ):
-    """envoieInfoPartenaire WinDev : SMS recap au candidat."""
+    """envoieInfoPartenaire WinDev : SMS au candidat + mail HTML
+    (avec PDF DPAE en PJ si pdf_filename fourni pour URSSAF)."""
     return svc_n.envoyer_infos_partenaire(
         id_salarie, payload.id_partenaire, payload.lib_partenaire,
         payload.code, payload.login, payload.mdp, payload.dpae_num,
-        op_id=user.id_salarie,
+        op_id=user.id_salarie, pdf_filename=payload.pdf_filename,
     )

@@ -1058,7 +1058,7 @@ function CodesPlan2({
       .then((r) => r.json())
       .then(setElemsFaits)
 
-  const envoyerSmsCandidat = async () => {
+  const envoyerSmsCandidat = async (pdfFilename: string = '') => {
     if (!selPart) return
     await fetch(`/api/adm/dpae/envoyer-infos/${savedId}`, {
       method: 'POST',
@@ -1067,12 +1067,13 @@ function CodesPlan2({
         Authorization: `Bearer ${getToken()}`,
       },
       body: JSON.stringify({
-        id_partenaire: Number(selPartId),
+        id_partenaire: selPartId,
         lib_partenaire: selPart.lib_partenaire,
         code,
         login: login2,
         mdp: mdp2,
         dpae_num: dpaeNum,
+        pdf_filename: pdfFilename,
       }),
     })
   }
@@ -1113,9 +1114,8 @@ function CodesPlan2({
         body: JSON.stringify({ dpae_num: dpaeNum.trim() }),
       })
       if (!r.ok) throw new Error(String(r.status))
-      await envoyerSmsCandidat()
       await reloadFaits()
-      showToast('URSSAF validée + SMS envoyé.', 'success')
+      showToast('URSSAF validée.', 'success')
     } catch (e) {
       showToast(`Échec URSSAF : ${(e as Error).message}`, 'error')
       setBusy(false)
@@ -1129,7 +1129,12 @@ function CodesPlan2({
       message: 'Voulez-vous ajouter le PDF DPAE dans le dossier salarié ?',
       confirmLabel: 'Choisir un fichier',
     })
-    if (!ok) return
+    if (!ok) {
+      // Pas de PDF -> envoi SMS + mail sans PJ
+      await envoyerSmsCandidat()
+      showToast('SMS + mail au candidat envoyés (sans PJ).', 'info')
+      return
+    }
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.pdf,application/pdf'
@@ -1138,13 +1143,14 @@ function CodesPlan2({
       if (!f) return
       setBusy(true)
       try {
-        const res = await uploadDpaePdf(f)
-        showToast(
-          `PDF DPAE uploadé : ${(res as { filename?: string })?.filename || f.name}`,
-          'success',
-        )
+        const res = (await uploadDpaePdf(f)) as { filename?: string }
+        const finalName = res?.filename || f.name
+        showToast(`PDF DPAE uploadé : ${finalName}`, 'success')
+        // Envoi SMS + mail avec le PDF en PJ
+        await envoyerSmsCandidat(finalName)
+        showToast('SMS + mail au candidat envoyés (avec PDF).', 'success')
       } catch (e) {
-        showToast(`Échec upload : ${(e as Error).message}`, 'error')
+        showToast(`Échec : ${(e as Error).message}`, 'error')
       } finally {
         setBusy(false)
       }
