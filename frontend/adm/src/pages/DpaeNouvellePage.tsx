@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showConfirm, showToast } from '@shared/ui/dialog'
 import SearchPicker, {
   type PickerItem,
 } from '@shared/tickets/forms/SearchPicker'
@@ -1077,6 +1077,21 @@ function CodesPlan2({
     })
   }
 
+  const uploadDpaePdf = async (file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const r = await fetch(`/api/adm/dpae/urssaf/${savedId}/pdf`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` },
+      body: fd,
+    })
+    if (!r.ok) {
+      const j = (await r.json().catch(() => ({}))) as { detail?: string }
+      throw new Error(j?.detail || String(r.status))
+    }
+    return r.json()
+  }
+
   const validerUrssaf = async () => {
     if (!dpaeNum.trim()) {
       showToast('Saisis le N° DPAE.', 'info')
@@ -1098,9 +1113,33 @@ function CodesPlan2({
       showToast('URSSAF validée + SMS envoyé.', 'success')
     } catch (e) {
       showToast(`Échec URSSAF : ${(e as Error).message}`, 'error')
-    } finally {
       setBusy(false)
+      return
     }
+    // Apres validation, propose d'uploader le PDF DPAE (cf. WinDev)
+    const ok = await showConfirm({
+      title: 'PDF DPAE',
+      message: 'Voulez-vous ajouter le PDF DPAE dans le dossier salarié ?',
+      confirmLabel: 'Choisir un fichier',
+    })
+    if (ok) {
+      // File picker via input cache
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.pdf,application/pdf'
+      input.onchange = async () => {
+        const f = input.files?.[0]
+        if (!f) return
+        try {
+          await uploadDpaePdf(f)
+          showToast(`PDF DPAE uploadé : ${f.name}`, 'success')
+        } catch (e) {
+          showToast(`Échec upload : ${(e as Error).message}`, 'error')
+        }
+      }
+      input.click()
+    }
+    setBusy(false)
   }
 
   const validerCodes = async () => {

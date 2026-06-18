@@ -12,8 +12,10 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, BeforeValidator
+
+from app.intranets.adm.services import fiche_documents as docs_svc
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -205,6 +207,24 @@ def post_urssaf(
 ):
     """Btn 'Valider les infos URSSAF'."""
     return svc_n.update_dpae_urssaf(id_salarie, payload.dpae_num, user.id_salarie)
+
+
+@router.post("/urssaf/{id_salarie}/pdf")
+async def post_urssaf_pdf(
+    id_salarie: int,
+    file: UploadFile = File(...),
+    _user: UserToken = Depends(get_current_user),
+):
+    """Upload du PDF DPAE dans le dossier salarie (FTP gestionRH/{id}/).
+    Cf. WinDev btn 'Valider URSSAF' qui propose d'ajouter la DPAE en PDF
+    apres validation."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide")
+    res = docs_svc.upload_file(id_salarie, "internes", file.filename or "DPAE.pdf", content)
+    if not res.get("ok"):
+        raise HTTPException(status_code=500, detail=res.get("error") or "Echec upload")
+    return res
 
 
 class CodesPayload(BaseModel):
