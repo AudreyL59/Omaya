@@ -246,12 +246,20 @@ const FILLERS = {
 
   // IAG : page de login + validation du formulaire myForm
   // cf. WinDev : HTMLValeurChamp(login/password) + HTMLValideFormulaire(myForm)
+  // Apres submit -> dashboard.php, le content script est re-injecte et
+  // reprend les data via sessionStorage pour remplir l'etape 2.
   iag: (data) => {
     let n = 0
     if (fillField('IAG login', ['input[name="login"]'], data.login)) n++
     if (fillField('IAG password', ['input[name="password"]'], data.mdp)) n++
     if (n > 0) {
-      // Valide myForm apres 500ms (laisse le temps a la valeur d'etre prise)
+      // Sauve pour l'etape 2 (dashboard.php apres login)
+      try {
+        sessionStorage.setItem('omaya-dpae-iag-step2', JSON.stringify(data))
+      } catch (e) {
+        console.warn('[omaya-dpae] sessionStorage indispo', e)
+      }
+      // Valide myForm apres 500ms
       setTimeout(() => {
         const submitBtn = findFirst([
           'form[name="myForm"] button[type="submit"]',
@@ -264,7 +272,6 @@ const FILLERS = {
           console.log('[omaya-dpae] IAG click submit myForm')
           submitBtn.click()
         } else {
-          // Fallback : form.submit() (sans event JS, mais ca passe)
           const form =
             document.forms?.myForm ||
             document.querySelector('form[name="myForm"], form[id="myForm"]')
@@ -311,34 +318,51 @@ const FILLERS = {
   },
 }
 
-// Au chargement du content script : si on est sur URSSAF apres un submit
-// step 1, le sessionStorage contient les donnees a injecter en step 2.
-// Le content script est re-injecte sur la nouvelle page (meme origine
-// urssaf.fr), donc le storage est accessible.
-;(function reprendreUrssafStep2() {
-  if (!/due\.urssaf\.fr/.test(location.href)) return
+// IAG step 2 : apres le submit du login, dashboard.php (meme origine
+// gestioniag.fr) doit recevoir les infos identitaires du candidat.
+// cf. WinDev : nom, prenom, adr1, adr2, cp, ville, teleph.
+function fillIagStep2(data) {
+  let n = 0
+  if (fillField('IAG nom', ['input[name="nom"]'], data.nom)) n++
+  if (fillField('IAG prenom', ['input[name="prenom"]'], data.prenom)) n++
+  if (fillField('IAG adr1', ['input[name="adr1"]'], data.adresse)) n++
+  if (fillField('IAG adr2', ['input[name="adr2"]'], data.adresse2)) n++
+  if (fillField('IAG cp', ['input[name="cp"]'], data.cp)) n++
+  if (fillField('IAG ville', ['input[name="ville"]'], data.ville)) n++
+  if (fillField('IAG teleph', ['input[name="teleph"]'], data.tel_mob)) n++
+  return n
+}
+
+// Generique : si on est sur le bon domaine avec un flag sessionStorage,
+// reprend les data et rejoue la step 2 apres un delai de stabilisation.
+function reprendreStep2(domainRegex, storageKey, fillFn, delayMs) {
+  if (!domainRegex.test(location.href)) return
   let raw = null
   try {
-    raw = sessionStorage.getItem('omaya-dpae-urssaf-step2')
+    raw = sessionStorage.getItem(storageKey)
   } catch {}
   if (!raw) return
   let data
   try {
     data = JSON.parse(raw)
   } catch {
-    sessionStorage.removeItem('omaya-dpae-urssaf-step2')
+    sessionStorage.removeItem(storageKey)
     return
   }
-  // Attend 2s que le formulaire declaration soit rendu
   setTimeout(() => {
-    const n = fillUrssafStep2(data)
-    console.log('[omaya-dpae] URSSAF step 2 -> ' + n + ' champs remplis')
+    const n = fillFn(data)
+    console.log(`[omaya-dpae] ${storageKey} -> ${n} champs remplis`)
     if (n > 0) {
       try {
-        sessionStorage.removeItem('omaya-dpae-urssaf-step2')
+        sessionStorage.removeItem(storageKey)
       } catch {}
     }
-  }, 2000)
+  }, delayMs)
+}
+
+;(function reprises() {
+  reprendreStep2(/due\.urssaf\.fr/, 'omaya-dpae-urssaf-step2', fillUrssafStep2, 2000)
+  reprendreStep2(/gestioniag\.fr/, 'omaya-dpae-iag-step2', fillIagStep2, 2000)
 })()
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

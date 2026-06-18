@@ -23,6 +23,7 @@ export interface FillData {
   dep_naiss?: number | string
   num_ss?: string
   adresse?: string
+  adresse2?: string
   cp?: string
   ville?: string
   tel_mob?: string

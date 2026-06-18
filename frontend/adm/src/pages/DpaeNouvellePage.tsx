@@ -1210,6 +1210,7 @@ function CodesPlan2({
         dep_naiss: data.dep_naiss,
         num_ss: data.num_ss,
         adresse: data.adresse1,
+        adresse2: data.adresse2,
         cp: data.cp,
         ville: data.ville,
         tel_mob: data.tel_mob,
