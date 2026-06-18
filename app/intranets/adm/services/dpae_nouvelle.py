@@ -51,6 +51,25 @@ def _iso_date(v: Any) -> str:
     return s
 
 
+def _iso_date_birth(v: Any) -> str:
+    """Comme _iso_date mais avec pivot 30 sur les annees < 100. WinDev/HFSQL
+    stocke parfois 'JJ/MM/AA' en interpretant 'AA' comme an 0017 au lieu de
+    2017 (cf. dates de naissance des tickets DPAE)."""
+    s = _iso_date(v)
+    if not s or len(s) < 10:
+        return s
+    try:
+        year = int(s[:4])
+    except ValueError:
+        return s
+    if year >= 1900:
+        return s
+    if year < 100:
+        new_year = 2000 + year if year < 30 else 1900 + year
+        return f"{new_year:04d}{s[4:]}"
+    return s
+
+
 def _new_id() -> int:
     """idEntierDateHeureSys WinDev : YYYYMMDDHHMMSSmmm."""
     n = datetime.now()
@@ -217,7 +236,7 @@ def load_preremplissage(
             out["nom"] = _str(tkd.get("nom"))
             out["nom_marital"] = _str(tkd.get("nom_marital"))
             out["prenom"] = _str(tkd.get("prenom"))
-            out["date_naiss"] = _iso_date(tkd.get("dnaiss"))
+            out["date_naiss"] = _iso_date_birth(tkd.get("dnaiss"))
             out["lieu_naiss"] = _str(tkd.get("lnaiss"))
             out["dep_naiss"] = _int(tkd.get("dep_naiss"))
             out["num_ss"] = _str(tkd.get("num_ss"))
@@ -257,7 +276,7 @@ def load_preremplissage(
             out["nom"] = _str(tk.get("nom"))
             out["nom_marital"] = _str(tk.get("nom_marital"))
             out["prenom"] = _str(tk.get("prenom"))
-            out["date_naiss"] = _iso_date(tk.get("dnaiss"))
+            out["date_naiss"] = _iso_date_birth(tk.get("dnaiss"))
             out["lieu_naiss"] = _str(tk.get("lnaiss"))
             out["dep_naiss"] = _int(tk.get("dep_naiss"))
             out["num_ss"] = _str(tk.get("num_ss"))
@@ -296,7 +315,7 @@ def load_preremplissage(
             (int(id_elem),),
         )
         if cv and not id_ticket:
-            out["date_naiss"] = _iso_date(cv.get("date_naissance"))
+            out["date_naiss"] = _iso_date_birth(cv.get("date_naissance"))
             out["nom"] = _str(cv.get("nom"))
             out["prenom"] = _str(cv.get("prenom"))
             out["adresse1"] = _str(cv.get("adresse"))
@@ -349,7 +368,7 @@ def load_preremplissage(
                 v = sal.get(k)
                 if v is not None:
                     out[k] = v if not isinstance(v, bool) else bool(v)
-            out["date_naiss"] = _iso_date(sal.get("date_naiss"))
+            out["date_naiss"] = _iso_date_birth(sal.get("date_naiss"))
             out["avec_enfant"] = bool(sal.get("avec_enfant"))
             out["travailleur_handi"] = bool(sal.get("travailleur_handi"))
         coord = db_rh.query_one(
