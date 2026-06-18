@@ -345,7 +345,12 @@ export default function DpaeNouvellePage() {
           saving={saving}
         />
       ) : (
-        <CodesPlan2 savedId={savedId} idTicket={idTicket} navigate={navigate} />
+        <CodesPlan2
+          savedId={savedId}
+          idTicket={idTicket}
+          data={data}
+          navigate={navigate}
+        />
       )}
 
       {orgaPickerOpen && (
@@ -962,10 +967,12 @@ interface CodeFait {
 function CodesPlan2({
   savedId,
   idTicket,
+  data,
   navigate,
 }: {
   savedId: string
   idTicket: string
+  data: DpaePayload
   navigate: (path: string) => void
 }) {
   const [partenaires, setPartenaires] = useState<PartenairePortail[]>([])
@@ -1150,188 +1157,243 @@ function CodesPlan2({
     if (portail.lien) window.open(portail.lien, '_blank', 'noopener')
   }
 
+  // Infos salarie pour le copy/paste manuel vers le portail
+  const infosSalarie =
+    `${data.nom} ${data.prenom}\n` +
+    `${data.adresse1}${data.adresse2 ? ' ' + data.adresse2 : ''}\n` +
+    `${data.cp} ${data.ville}\n` +
+    `${data.tel_mob}${data.mail ? '  ' + data.mail : ''}\n` +
+    (data.date_naiss
+      ? `Né(e) le ${data.date_naiss.slice(8, 10)}/${data.date_naiss.slice(5, 7)}/${data.date_naiss.slice(0, 4)}\n`
+      : '') +
+    (data.lieu_naiss ? `à ${data.lieu_naiss}\n` : '') +
+    `${data.num_ss}${data.sexe ? '  Sexe : ' + data.sexe : ''}`
+
   return (
-    <div className="grid grid-cols-3 gap-4">
-      {/* Col 1 : credentials du portail */}
-      <Card title="Portail partenaire">
-        <Field label="Partenaire">
-          <select
-            value={selPartId}
-            onChange={(e) => setSelPartId(e.target.value)}
-            className={inputCls}
-          >
-            {partenaires.map((p) => (
-              <option key={p.id_partenaire} value={p.id_partenaire}>
-                {p.lib_partenaire}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Login (portail)">
-          <input
-            type="text"
-            value={portail.login}
-            readOnly
-            className={inputCls}
-          />
-        </Field>
-        <Field label="MDP (portail)">
-          <input
-            type="text"
-            value={portail.mdp}
-            readOnly
-            className={inputCls}
-          />
-        </Field>
-        <button
-          type="button"
-          onClick={ouvrirPortail}
-          disabled={!portail.lien}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
-          style={{ backgroundColor: COL_PRIMARY }}
-        >
-          <ExternalLink className="w-4 h-4" />
-          Ouvrir le portail
-        </button>
-      </Card>
-
-      {/* Col 2 : Validation codes */}
-      <Card
-        title={
-          isUrssaf
-            ? 'Validation URSSAF'
-            : isOhm
-              ? 'Demande Ohm Énergie'
-              : 'Codes partenaire'
-        }
-      >
-        {isUrssaf ? (
-          <>
-            <Field label="N° DPAE">
-              <input
-                type="text"
-                value={dpaeNum}
-                onChange={(e) => setDpaeNum(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-            <button
-              type="button"
-              onClick={validerUrssaf}
-              disabled={busy}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
-              style={{ backgroundColor: COL_PRIMARY }}
+    <div className="grid grid-cols-[420px_1fr] gap-4">
+      {/* Col 1 : forms + faits */}
+      <div className="space-y-4">
+        <Card title="Portail partenaire">
+          <Field label="Partenaire">
+            <select
+              value={selPartId}
+              onChange={(e) => setSelPartId(e.target.value)}
+              className={inputCls}
             >
-              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-              Valider les infos URSSAF
-            </button>
-          </>
-        ) : isOhm ? (
-          <>
-            <p className="text-xs italic mb-2" style={{ color: COL_BRUN }}>
-              Crée une demande de code Ohm Énergie (ticket BO) à transmettre
-              au service partenaires.
-            </p>
-            <button
-              type="button"
-              onClick={envoyerCharte}
-              disabled={busy}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
-              style={{ backgroundColor: COL_PRIMARY }}
-            >
-              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-              Envoyer la charte éthique
-            </button>
-          </>
-        ) : (
-          <>
-            <Field label="Code">
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-            <Field label="Login">
-              <input
-                type="text"
-                value={login2}
-                onChange={(e) => setLogin2(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-            <Field label="MDP">
-              <input
-                type="text"
-                value={mdp2}
-                onChange={(e) => setMdp2(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-            {isIag && (
-              <p className="text-xs italic" style={{ color: COL_BRUN }}>
-                Si tu remplis le formulaire IAG côté portail, le code et le
-                login sont nécessaires ici pour l'enregistrement local.
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={validerCodes}
-              disabled={busy}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
-              style={{ backgroundColor: COL_PRIMARY }}
-            >
-              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-              Valider les codes Partenaires
-            </button>
-          </>
-        )}
-      </Card>
-
-      {/* Col 3 : ZR_ElemsFaits + Terminer */}
-      <Card title="Éléments faits">
-        {elemsFaits.length === 0 ? (
-          <p className="text-xs italic" style={{ color: COL_BRUN }}>
-            Aucun partenaire validé pour l'instant.
-          </p>
-        ) : (
-          <ul className="space-y-1.5 text-sm">
-            {elemsFaits.map((e, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-2 p-2 rounded"
-                style={{ backgroundColor: COL_BG_SOFT, color: COL_BRUN }}
-              >
-                <span style={{ color: '#16a34a' }}>✓</span>
-                <div className="flex-1">
-                  <div className="font-semibold">{e.lib_partenaire}</div>
-                  {(e.code || e.login) && (
-                    <div className="text-xs opacity-75">
-                      {e.code && `Code ${e.code}`}
-                      {e.code && e.login && ' · '}
-                      {e.login && `Login ${e.login}`}
-                    </div>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="mt-4 pt-3 border-t" style={{ borderColor: COL_BORDER }}>
+              {partenaires.map((p) => (
+                <option key={p.id_partenaire} value={p.id_partenaire}>
+                  {p.lib_partenaire}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Login (portail)">
+            <input
+              type="text"
+              value={portail.login}
+              readOnly
+              className={inputCls}
+            />
+          </Field>
+          <Field label="MDP (portail)">
+            <input
+              type="text"
+              value={portail.mdp}
+              readOnly
+              className={inputCls}
+            />
+          </Field>
           <button
             type="button"
-            onClick={terminerDpae}
-            disabled={busy}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-white text-sm font-medium disabled:opacity-50"
+            onClick={ouvrirPortail}
+            disabled={!portail.lien}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
             style={{ backgroundColor: COL_PRIMARY }}
+            title="Ouvre le portail dans un nouvel onglet (utile si le portail bloque l'embed iframe)"
           >
-            {busy && <Loader2 className="w-4 h-4 animate-spin" />}
-            Terminer ma DPAE
+            <ExternalLink className="w-4 h-4" />
+            Ouvrir dans un nouvel onglet
           </button>
+        </Card>
+
+        <Card
+          title={
+            isUrssaf
+              ? 'Validation URSSAF'
+              : isOhm
+                ? 'Demande Ohm Énergie'
+                : 'Codes partenaire'
+          }
+        >
+          {isUrssaf ? (
+            <>
+              <Field label="N° DPAE">
+                <input
+                  type="text"
+                  value={dpaeNum}
+                  onChange={(e) => setDpaeNum(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <button
+                type="button"
+                onClick={validerUrssaf}
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
+                style={{ backgroundColor: COL_PRIMARY }}
+              >
+                {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+                Valider les infos URSSAF
+              </button>
+            </>
+          ) : isOhm ? (
+            <>
+              <p className="text-xs italic mb-2" style={{ color: COL_BRUN }}>
+                Crée une demande de code Ohm Énergie (ticket BO) à transmettre
+                au service partenaires.
+              </p>
+              <button
+                type="button"
+                onClick={envoyerCharte}
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
+                style={{ backgroundColor: COL_PRIMARY }}
+              >
+                {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+                Envoyer la charte éthique
+              </button>
+            </>
+          ) : (
+            <>
+              <Field label="Code">
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Login">
+                <input
+                  type="text"
+                  value={login2}
+                  onChange={(e) => setLogin2(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="MDP">
+                <input
+                  type="text"
+                  value={mdp2}
+                  onChange={(e) => setMdp2(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+              {isIag && (
+                <p className="text-xs italic" style={{ color: COL_BRUN }}>
+                  Remplis le formulaire IAG côté portail puis renseigne ici
+                  le code et le login pour l'enregistrement local.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={validerCodes}
+                disabled={busy}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
+                style={{ backgroundColor: COL_PRIMARY }}
+              >
+                {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+                Valider les codes Partenaires
+              </button>
+            </>
+          )}
+        </Card>
+
+        <Card title="Infos salarié (à copier/coller)">
+          <textarea
+            readOnly
+            value={infosSalarie}
+            rows={7}
+            className="w-full p-2 border rounded text-xs font-mono resize-none"
+            style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+          />
+        </Card>
+
+        <Card title="Éléments faits">
+          {elemsFaits.length === 0 ? (
+            <p className="text-xs italic" style={{ color: COL_BRUN }}>
+              Aucun partenaire validé pour l'instant.
+            </p>
+          ) : (
+            <ul className="space-y-1.5 text-sm">
+              {elemsFaits.map((e, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 p-2 rounded"
+                  style={{ backgroundColor: COL_BG_SOFT, color: COL_BRUN }}
+                >
+                  <span style={{ color: '#16a34a' }}>✓</span>
+                  <div className="flex-1">
+                    <div className="font-semibold">{e.lib_partenaire}</div>
+                    {(e.code || e.login) && (
+                      <div className="text-xs opacity-75">
+                        {e.code && `Code ${e.code}`}
+                        {e.code && e.login && ' · '}
+                        {e.login && `Login ${e.login}`}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div
+            className="mt-4 pt-3 border-t"
+            style={{ borderColor: COL_BORDER }}
+          >
+            <button
+              type="button"
+              onClick={terminerDpae}
+              disabled={busy}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-white text-sm font-medium disabled:opacity-50"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+              Terminer ma DPAE
+            </button>
+          </div>
+        </Card>
+      </div>
+
+      {/* Col 2 : iframe du portail (peut etre refuse par X-Frame-Options) */}
+      <div
+        className="bg-white rounded-lg shadow-sm border flex flex-col"
+        style={{ borderColor: COL_BORDER, minHeight: '85vh' }}
+      >
+        <div
+          className="flex items-center gap-2 px-3 py-2 border-b text-xs"
+          style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          <span className="font-mono truncate flex-1">
+            {portail.lien || 'Aucun lien'}
+          </span>
         </div>
-      </Card>
+        {portail.lien ? (
+          <iframe
+            src={portail.lien}
+            title="Portail partenaire"
+            className="flex-1 w-full"
+            style={{ border: 'none', minHeight: '80vh' }}
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm italic text-[#A68D8A]">
+            Sélectionne un partenaire pour charger son portail.
+          </div>
+        )}
+      </div>
     </div>
   )
 }
