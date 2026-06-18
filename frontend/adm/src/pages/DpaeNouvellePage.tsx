@@ -1050,6 +1050,22 @@ function CodesPlan2({
       )
   }, [selPartId])
 
+  // Auto-fill URSSAF : 2.5s apres le chargement de l'iframe (le temps que
+  // urssafbloctools.min.js se stabilise), on injecte le SIRET. Necessite
+  // l'extension Omaya DPAE Filler installee.
+  useEffect(() => {
+    if (!isUrssaf) return
+    if (!societe.siret) return
+    if (extInstalled !== true) return
+    const t = setTimeout(() => {
+      fillPartenaire('urssaf', {
+        siret: societe.siret,
+        login: societe.siret,
+      })
+    }, 2500)
+    return () => clearTimeout(t)
+  }, [isUrssaf, societe.siret, extInstalled, selPartId])
+
   const reloadFaits = () =>
     fetch(`/api/adm/dpae/codes/${savedId}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
