@@ -776,6 +776,28 @@ def save_dpae(payload: dict, op_id: int) -> dict:
 URSSAF_PSEUDO_ID = "0"  # URSSAF n'existe pas dans pgt_partenaire (institution)
 
 
+def get_societe_salarie(id_salarie: int) -> dict:
+    """Societe d'embauche du salarie + raison sociale + SIRET.
+    Cf. WinDev infoUrssaf : LOGIN = ChaineFormate(societe.SIRET, ccSansEspaceInterieur).
+    """
+    db = get_pg_connection("rh")
+    emb = db.query_one(
+        """SELECT s.id_ste, st.raison_sociale, st.rs_interne, st.siret
+             FROM rh.pgt_salarie_embauche s
+        LEFT JOIN rh.pgt_societe st ON st.id_ste = s.id_ste
+            WHERE s.id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    )
+    if not emb or not _int(emb.get("id_ste")):
+        return {}
+    siret_clean = "".join(c for c in _str(emb.get("siret")) if c.isdigit())
+    return {
+        "id_ste": str(_int(emb.get("id_ste"))),
+        "raison_sociale": _str(emb.get("rs_interne") or emb.get("raison_sociale")),
+        "siret": siret_clean,
+    }
+
+
 def list_partenaires_portail() -> list[dict]:
     """Combo Partenaire du Plan 2 : SELECT DISTINCT pgt_portail_partenaire
     JOIN pgt_partenaire WHERE IsActif = TRUE.

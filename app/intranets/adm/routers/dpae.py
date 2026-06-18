@@ -175,6 +175,15 @@ def get_portail(
     return svc_n.get_portail_credentials(id_partenaire)
 
 
+@router.get("/societe-salarie/{id_salarie}")
+def get_societe_salarie(
+    id_salarie: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Societe d'embauche du salarie (raison sociale + SIRET pour URSSAF)."""
+    return svc_n.get_societe_salarie(id_salarie)
+
+
 @router.get("/codes/{id_salarie}")
 def get_codes_salarie(
     id_salarie: int,

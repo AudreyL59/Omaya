@@ -982,6 +982,7 @@ function CodesPlan2({
     login: '',
     mdp: '',
   })
+  const [societe, setSociete] = useState({ raison_sociale: '', siret: '' })
   const [dpaeNum, setDpaeNum] = useState('')
   const [code, setCode] = useState('')
   const [login2, setLogin2] = useState('')
@@ -1010,6 +1011,17 @@ function CodesPlan2({
     })
       .then((r) => r.json())
       .then(setElemsFaits)
+    // Societe d'embauche du salarie (SIRET = login URSSAF cf. WinDev)
+    fetch(`/api/adm/dpae/societe-salarie/${savedId}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: { raison_sociale?: string; siret?: string }) =>
+        setSociete({
+          raison_sociale: d.raison_sociale || '',
+          siret: d.siret || '',
+        }),
+      )
   }, [savedId])
 
   // Quand on change de partenaire : charge le portail
@@ -1174,6 +1186,20 @@ function CodesPlan2({
       {/* Col 1 : forms + faits */}
       <div className="space-y-4">
         <Card title="Portail partenaire">
+          <Field label="Société">
+            <input
+              type="text"
+              value={
+                societe.raison_sociale
+                  ? societe.siret
+                    ? `${societe.raison_sociale} (${societe.siret})`
+                    : societe.raison_sociale
+                  : ''
+              }
+              readOnly
+              className={inputCls}
+            />
+          </Field>
           <Field label="Partenaire">
             <select
               value={selPartId}
@@ -1187,10 +1213,10 @@ function CodesPlan2({
               ))}
             </select>
           </Field>
-          <Field label="Login (portail)">
+          <Field label={isUrssaf ? 'Login (SIRET société)' : 'Login (portail)'}>
             <input
               type="text"
-              value={portail.login}
+              value={isUrssaf ? societe.siret : portail.login}
               readOnly
               className={inputCls}
             />
