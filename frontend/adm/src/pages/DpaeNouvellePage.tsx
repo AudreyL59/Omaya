@@ -1187,8 +1187,9 @@ function CodesPlan2({
   })()
 
   // Liste des portails qui necessitent un onglet separe (cookies tiers
-  // bloques en iframe -> 'session expiree'). A etendre au besoin.
-  const NEED_SEPARATE_TAB = new Set(['urssaf'])
+  // bloques en iframe ou X-Frame-Options qui refuse l'embed). A etendre
+  // au besoin.
+  const NEED_SEPARATE_TAB = new Set(['urssaf', 'iag'])
   const needSeparateTab = NEED_SEPARATE_TAB.has(extKey)
 
   const ouvrirPortail = () => {
