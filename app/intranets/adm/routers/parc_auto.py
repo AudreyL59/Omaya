@@ -242,6 +242,65 @@ def post_info_complementaire(
     )
 
 
+# Documents lies a l'attribution = FTP /Vehicules/{id_vehicule}/{id_vehicule_pc}/
+# (cf. WinDev listerFichierPC).
+
+
+@router.get("/vehicules/{id_vehicule}/conducteurs/{id_vehicule_pc}/documents")
+def get_documents_pc(
+    id_vehicule: int,
+    id_vehicule_pc: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    return doc_svc.list_files(id_vehicule, str(id_vehicule_pc))
+
+
+@router.post("/vehicules/{id_vehicule}/conducteurs/{id_vehicule_pc}/documents")
+async def post_document_pc(
+    id_vehicule: int,
+    id_vehicule_pc: int,
+    file: UploadFile = File(...),
+    _user: UserToken = Depends(get_current_user),
+):
+    content = await file.read()
+    res = doc_svc.upload_file(
+        id_vehicule, file.filename or "document", content, str(id_vehicule_pc),
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec upload")
+    return res
+
+
+@router.get("/vehicules/{id_vehicule}/conducteurs/{id_vehicule_pc}/documents/download")
+def get_document_pc_content(
+    id_vehicule: int,
+    id_vehicule_pc: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    content = doc_svc.download_file(id_vehicule, name, str(id_vehicule_pc))
+    if content is None:
+        raise HTTPException(404, "Fichier introuvable")
+    return Response(
+        content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@router.delete("/vehicules/{id_vehicule}/conducteurs/{id_vehicule_pc}/documents")
+def delete_document_pc(
+    id_vehicule: int,
+    id_vehicule_pc: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    res = doc_svc.delete_file(id_vehicule, name, str(id_vehicule_pc))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
 # ---------------------------------------------------------------------------
 # Plan 3 - Carnet d'entretien (types 1/2/3) + Releves kilometriques (type 4)
 # ---------------------------------------------------------------------------

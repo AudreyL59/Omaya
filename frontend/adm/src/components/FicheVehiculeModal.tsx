@@ -1033,7 +1033,14 @@ function ConducteursTab({
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => r.json())
-      .then((d: Conducteur[]) => setList(Array.isArray(d) ? d : []))
+      .then((d: Conducteur[]) => {
+        const list = Array.isArray(d) ? d : []
+        setList(list)
+        // Pre-selection 1ere ligne (cf. WinDev qui charge MoiMeme au load)
+        if (list.length > 0) {
+          setSelected((cur) => cur || list[0].id_vehicule_pc)
+        }
+      })
       .catch(() => setList([]))
       .finally(() => setLoading(false))
   }, [idVehicule])
@@ -1430,15 +1437,10 @@ function ConducteursTab({
             </div>
 
             <div>
-              <h3
-                className="text-xs font-bold uppercase tracking-wide mb-2 pb-1 border-b"
-                style={{ color: COL_BRUN, borderColor: COL_BORDER }}
-              >
-                Documents liés à l'attribution / restitution
-              </h3>
-              <p className="text-xs italic" style={{ color: '#A68D8A' }}>
-                FTP /Vehicules/{idVehicule}/{detail.id_vehicule_pc}/ : module à venir.
-              </p>
+              <DocumentsPCSection
+                idVehicule={idVehicule}
+                idVehiculePc={detail.id_vehicule_pc}
+              />
             </div>
           </div>
         </>
@@ -1466,6 +1468,200 @@ function CheckRow({
       />
       <span>{label}</span>
     </label>
+  )
+}
+
+// ============================================================================
+// Documents liés à l'attribution / restitution (FTP /Vehicules/{id}/{idPC}/)
+// ============================================================================
+
+function DocumentsPCSection({
+  idVehicule,
+  idVehiculePc,
+}: {
+  idVehicule: string
+  idVehiculePc: string
+}) {
+  const [files, setFiles] = useState<VDoc[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<string>('')
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    setSelected('')
+    fetch(
+      `/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs/${idVehiculePc}/documents`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    )
+      .then((r) => r.json())
+      .then((d: { files?: VDoc[] }) => setFiles(d?.files || []))
+      .catch(() => setFiles([]))
+      .finally(() => setLoading(false))
+  }, [idVehicule, idVehiculePc])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const handleUpload = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      setBusy(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', f)
+        const r = await fetch(
+          `/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs/${idVehiculePc}/documents`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}` },
+            body: fd,
+          },
+        )
+        if (!r.ok) throw new Error(String(r.status))
+        showToast(`Fichier chargé : ${f.name}`, 'success')
+        reload()
+      } catch (e) {
+        showToast(`Échec upload : ${(e as Error).message}`, 'error')
+      } finally {
+        setBusy(false)
+      }
+    }
+    input.click()
+  }
+
+  const handleDownload = async () => {
+    if (!selected) return
+    const url = `/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs/${idVehiculePc}/documents/download?name=${encodeURIComponent(selected)}`
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const blob = await r.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = selected
+      link.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (e) {
+      showToast(`Échec téléchargement : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selected) return
+    const ok = await showConfirm({
+      title: 'Supprimer ce document ?',
+      message: `« ${selected} » sera supprimé.`,
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    setBusy(true)
+    try {
+      const r = await fetch(
+        `/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs/${idVehiculePc}/documents?name=${encodeURIComponent(selected)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Document supprimé.', 'success')
+      setSelected('')
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <div
+        className="flex items-center justify-between mb-2 pb-1 border-b"
+        style={{ borderColor: COL_BORDER }}
+      >
+        <h3
+          className="text-xs font-bold uppercase tracking-wide"
+          style={{ color: COL_BRUN }}
+        >
+          Documents liés à l'attribution / restitution
+        </h3>
+        <div className="flex gap-1.5">
+          <IconBtn onClick={handleUpload} title="Ajouter un document" disabled={busy}>
+            <Plus className="w-4 h-4" />
+          </IconBtn>
+          <IconBtn onClick={handleDownload} title="Télécharger" disabled={!selected}>
+            <Download className="w-4 h-4" />
+          </IconBtn>
+          <IconBtn onClick={handleDelete} title="Supprimer" disabled={!selected || busy} danger>
+            <Trash2 className="w-4 h-4" />
+          </IconBtn>
+        </div>
+      </div>
+      <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+        <table className="w-full text-xs">
+          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+            <tr>
+              <th className="px-2 py-1.5 text-left">Nom Fichier</th>
+              <th className="px-2 py-1.5 text-right w-20">Taille</th>
+              <th className="px-2 py-1.5 text-left w-24">Date</th>
+              <th className="px-2 py-1.5 text-left w-16">Heure</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="p-4 text-center">
+                  <Loader2 className="w-4 h-4 animate-spin inline" />
+                </td>
+              </tr>
+            ) : files.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="p-4 text-center italic" style={{ color: '#A68D8A' }}>
+                  Aucun document.
+                </td>
+              </tr>
+            ) : (
+              files.map((f) => {
+                const isSel = selected === f.nom
+                return (
+                  <tr
+                    key={f.nom}
+                    onClick={() => setSelected(f.nom)}
+                    onDoubleClick={handleDownload}
+                    className="cursor-pointer border-b"
+                    style={{
+                      backgroundColor: isSel ? COL_PRIMARY : 'white',
+                      color: isSel ? 'white' : COL_BRUN,
+                      borderColor: COL_BORDER,
+                    }}
+                  >
+                    <td className="px-2 py-1">{f.nom}</td>
+                    <td className="px-2 py-1 text-right">{f.taille_mo.toFixed(2)} Mo</td>
+                    <td className="px-2 py-1">
+                      {f.date_iso.length >= 10
+                        ? `${f.date_iso.slice(8, 10)}/${f.date_iso.slice(5, 7)}/${f.date_iso.slice(0, 4)}`
+                        : ''}
+                    </td>
+                    <td className="px-2 py-1">
+                      {f.date_iso.length >= 16 ? f.date_iso.slice(11, 16) : ''}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
@@ -1818,6 +2014,18 @@ function ReleveKmPlan({
   const kmDepart = condSelected?.k_mdepart || 0
   const kmParcourus = Math.max(0, nouvRel - kmDepart)
   const kmRestants = Math.max(0, (meta.forfait_km || 0) + kmDepart - nouvRel)
+  // KM fait sur le mois : nouvRel - derniere releve du meme mois courant
+  const kmFaitSurMois = (() => {
+    if (!nouvRel || !dateRel || dateRel.length < 7) return 0
+    const mois = dateRel.slice(0, 7) // YYYY-MM
+    const sameMonth = releves.filter(
+      (r) => r.date_releve.startsWith(mois) && r.km > 0,
+    )
+    if (sameMonth.length === 0) return 0
+    // Plus grosse releve du mois (la plus recente est en tete car trie DESC)
+    const maxKm = Math.max(...sameMonth.map((r) => r.km))
+    return Math.max(0, nouvRel - maxKm)
+  })()
 
   const handleSave = async () => {
     if (!idPc || !nouvRel) return
@@ -1894,7 +2102,7 @@ function ReleveKmPlan({
             <Field label="Forfait kilométrique">
               <input type="number" value={meta.forfait_km} readOnly className={`${inputCls} bg-white`} />
             </Field>
-            <Field label="KM mensuel">
+            <Field label="KM Max /mois">
               <input type="number" value={meta.km_mensuel} readOnly className={`${inputCls} bg-white`} />
             </Field>
             <div className="col-span-2">
@@ -1939,6 +2147,9 @@ function ReleveKmPlan({
             </Field>
             <Field label="Kilométrage restant">
               <input type="number" value={kmRestants} readOnly className={`${inputCls} bg-white`} />
+            </Field>
+            <Field label="KM fait sur le mois">
+              <input type="number" value={kmFaitSurMois} readOnly className={`${inputCls} bg-white`} />
             </Field>
           </div>
           <div className="flex items-center gap-2 mt-2">

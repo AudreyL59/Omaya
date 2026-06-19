@@ -67,8 +67,11 @@ def _ftp_makedirs(ftp: ftplib.FTP, path: str) -> None:
                 pass
 
 
-def _rep_ftp(id_vehicule: int) -> str:
-    return f"/OMAYA/Vehicules/{int(id_vehicule)}"
+def _rep_ftp(id_vehicule: int, sub: str = "") -> str:
+    base = f"/OMAYA/Vehicules/{int(id_vehicule)}"
+    if sub:
+        return f"{base}/{sub}"
+    return base
 
 
 def _sanitize_filename(name: str) -> str:
@@ -88,10 +91,10 @@ def _parse_mlsd_entry(entry: tuple) -> dict:
     return {"nom": name, "taille": size, "date_iso": date_iso}
 
 
-def list_files(id_vehicule: int) -> dict:
-    """Liste les fichiers FTP du vehicule. Retourne {ok, files: [{nom,
-    taille_mo, date_iso}]}."""
-    rep = _rep_ftp(id_vehicule)
+def list_files(id_vehicule: int, sub: str = "") -> dict:
+    """Liste les fichiers FTP du vehicule (ou d'un sous-rep type
+    id_vehicule_pc / 'PV_xxx' / 'ACC_xxx'). Retourne {ok, files: [...]}."""
+    rep = _rep_ftp(id_vehicule, sub)
     out = {"ok": False, "files": []}
     ftp = _ftp_connect()
     if not ftp:
@@ -158,11 +161,12 @@ def list_files(id_vehicule: int) -> dict:
             pass
 
 
-def upload_file(id_vehicule: int, filename: str, content: bytes) -> dict:
-    """STOR du fichier dans /OMAYA/Vehicules/{id}/."""
+def upload_file(id_vehicule: int, filename: str, content: bytes,
+                sub: str = "") -> dict:
+    """STOR du fichier dans /OMAYA/Vehicules/{id}/[sub]/."""
     if not content:
         return {"ok": False, "error": "Contenu vide"}
-    rep = _rep_ftp(id_vehicule)
+    rep = _rep_ftp(id_vehicule, sub)
     safe = _sanitize_filename(filename)
     ftp = _ftp_connect()
     if not ftp:
@@ -184,9 +188,9 @@ def upload_file(id_vehicule: int, filename: str, content: bytes) -> dict:
             pass
 
 
-def download_file(id_vehicule: int, filename: str) -> bytes | None:
+def download_file(id_vehicule: int, filename: str, sub: str = "") -> bytes | None:
     """RETR depuis FTP."""
-    rep = _rep_ftp(id_vehicule)
+    rep = _rep_ftp(id_vehicule, sub)
     ftp = _ftp_connect()
     if not ftp:
         return None
@@ -204,9 +208,9 @@ def download_file(id_vehicule: int, filename: str) -> bytes | None:
             pass
 
 
-def delete_file(id_vehicule: int, filename: str) -> dict:
+def delete_file(id_vehicule: int, filename: str, sub: str = "") -> dict:
     """DELE FTP."""
-    rep = _rep_ftp(id_vehicule)
+    rep = _rep_ftp(id_vehicule, sub)
     ftp = _ftp_connect()
     if not ftp:
         return {"ok": False, "error": "Connexion FTP impossible"}
