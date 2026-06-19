@@ -44,7 +44,6 @@ interface Vehicule {
 }
 
 const COL_BRUN = '#4E1D17'
-const COL_PRIMARY = '#17494E'
 const COL_BORDER = '#E5DDDC'
 const COL_BG_SOFT = '#FAF6F2'
 
