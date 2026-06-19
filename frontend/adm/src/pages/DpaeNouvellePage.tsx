@@ -1249,12 +1249,6 @@ function CodesPlan2({
     return ''
   })()
 
-  // Liste des portails qui necessitent un onglet separe (cookies tiers
-  // bloques en iframe ou X-Frame-Options qui refuse l'embed). A etendre
-  // au besoin.
-  const NEED_SEPARATE_TAB = new Set(['urssaf', 'iag'])
-  const needSeparateTab = NEED_SEPARATE_TAB.has(extKey)
-
   const ouvrirPortail = () => {
     if (!portail.lien) return
     window.open(portail.lien, '_blank', 'noopener')
@@ -1336,8 +1330,7 @@ function CodesPlan2({
     `${data.num_ss}${data.sexe ? '  Sexe : ' + data.sexe : ''}`
 
   return (
-    <div className="grid grid-cols-[420px_1fr] gap-4">
-      {/* Col 1 : forms + faits */}
+    <div className="grid grid-cols-2 gap-4">
       <div className="space-y-4">
         <Card title="Portail partenaire">
           <Field label="Société">
@@ -1568,65 +1561,6 @@ function CodesPlan2({
             </button>
           </div>
         </Card>
-      </div>
-
-      {/* Col 2 : iframe du portail (peut etre refuse par X-Frame-Options) */}
-      <div
-        className="bg-white rounded-lg shadow-sm border flex flex-col"
-        style={{ borderColor: COL_BORDER, minHeight: '85vh' }}
-      >
-        <div
-          className="flex items-center gap-2 px-3 py-2 border-b text-xs"
-          style={{ borderColor: COL_BORDER, color: COL_BRUN }}
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          <span className="font-mono truncate flex-1">
-            {portail.lien || 'Aucun lien'}
-          </span>
-        </div>
-        {needSeparateTab ? (
-          <div
-            className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center"
-            style={{ color: COL_BRUN }}
-          >
-            <p className="text-sm font-semibold">
-              {selPart?.lib_partenaire} doit s'ouvrir dans un onglet séparé
-            </p>
-            <p className="text-xs italic max-w-md" style={{ color: '#92400E' }}>
-              Le navigateur bloque les cookies de session URSSAF dans une
-              iframe (protection anti-tracking). Sans cookies, le portail
-              répond « session expirée ».
-            </p>
-            <button
-              type="button"
-              onClick={ouvrirPortail}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-md text-white text-sm font-medium"
-              style={{ backgroundColor: COL_PRIMARY }}
-            >
-              <ExternalLink className="w-4 h-4" />
-              Ouvrir {selPart?.lib_partenaire} dans un nouvel onglet
-            </button>
-            {extInstalled === true && (
-              <p className="text-xs italic max-w-md" style={{ color: COL_BRUN }}>
-                Le formulaire sera rempli automatiquement 3s après l'ouverture
-                (extension Omaya DPAE Filler détectée).
-              </p>
-            )}
-          </div>
-        ) : portail.lien ? (
-          <iframe
-            key={selPartId}
-            src={portail.lien}
-            title="Portail partenaire"
-            className="flex-1 w-full"
-            style={{ border: 'none', minHeight: '80vh' }}
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-sm italic text-[#A68D8A]">
-            Sélectionne un partenaire pour charger son portail.
-          </div>
-        )}
       </div>
     </div>
   )
