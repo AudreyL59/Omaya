@@ -1224,11 +1224,18 @@ function CodesPlan2({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${getToken()}`,
         },
-        body: JSON.stringify({ id_ticket: idTicket ? Number(idTicket) : 0 }),
+        body: JSON.stringify({ id_ticket: idTicket || '0' }),
       })
       if (!r.ok) throw new Error(String(r.status))
       showToast('DPAE terminée. Ouverture de la fiche salarié...', 'success')
-      navigate(`/salaries/registre`)
+      // Cf. WinDev OuvreSoeur(Fen_FicheSalarié, IdElem) : on ouvre la
+      // fiche salarie nouvellement creee via query params.
+      const q = new URLSearchParams({
+        ouvrir: savedId,
+        nom: data.nom,
+        prenom: data.prenom,
+      }).toString()
+      navigate(`/salaries/registre?${q}`)
     } catch (e) {
       showToast(`Échec : ${(e as Error).message}`, 'error')
     } finally {

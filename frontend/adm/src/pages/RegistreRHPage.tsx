@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import { Loader2, AlertCircle, ExternalLink, FileText, FileSpreadsheet } from 'lucide-react'
 import { getToken } from '@/api'
@@ -83,7 +84,23 @@ function refLabel(refs: RefOption[], id: number): string {
 // --- Page ----------------------------------------------------------------
 
 export default function RegistreRHPage() {
+  const [searchParams] = useSearchParams()
   const [ficheOpen, setFicheOpen] = useState<{ id: string; nom: string; prenom: string } | null>(null)
+  const autoOpenedRef = useRef(false)
+
+  // Auto-ouverture de la fiche depuis ?ouvrir=<id>&nom=<nom>&prenom=<prenom>
+  // (ex: navigation depuis Fen_DPAE_Nouvelle apres 'Terminer ma DPAE').
+  useEffect(() => {
+    if (autoOpenedRef.current) return
+    const id = searchParams.get('ouvrir')
+    if (!id) return
+    autoOpenedRef.current = true
+    setFicheOpen({
+      id,
+      nom: searchParams.get('nom') || '',
+      prenom: searchParams.get('prenom') || '',
+    })
+  }, [searchParams])
   const [societes, setSocietes] = useState<SocieteOption[]>([])
   const [refs, setRefs] = useState<RegistreRefs | null>(null)
   const [selectedSte, setSelectedSte] = useState<string>('')

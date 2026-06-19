@@ -1074,36 +1074,20 @@ def terminer_dpae(id_salarie: int, id_ticket: int, op_id: int) -> dict:
                             (int(id_salarie), id_d, int(op_id)),
                         )
 
-    # Cloture le ticket DPAE source (cf. WinDev UPDATE TK_Liste)
+    # Cloture le ticket source (cf. WinDev UPDATE TK_Liste)
+    # La table est ticket.pgt_tk_liste (schema 'ticket').
     if id_ticket:
-        try:
-            db_tk = get_pg_connection("ticket_bo")
-            db_tk.query(
-                """UPDATE ticket_bo.pgt_tk_liste
-                      SET cloturee = TRUE,
-                          date_cloture = NOW(),
-                          modif_date = NOW(),
-                          modif_op = ?,
-                          modif_elem = 'modif'
-                    WHERE id_tk_liste = ?""",
-                (int(op_id), int(id_ticket)),
-            )
-        except Exception:
-            # ticket pas dans ticket_bo ? essaye ticket_dpae
-            try:
-                db_tkdpae = get_pg_connection("ticket_dpae")
-                db_tkdpae.query(
-                    """UPDATE ticket_dpae.pgt_tk_liste
-                          SET cloturee = TRUE,
-                              date_cloture = NOW(),
-                              modif_date = NOW(),
-                              modif_op = ?,
-                              modif_elem = 'modif'
-                        WHERE id_tk_liste = ?""",
-                    (int(op_id), int(id_ticket)),
-                )
-            except Exception:
-                pass
+        db_tk = get_pg_connection("ticket")
+        db_tk.query(
+            """UPDATE ticket.pgt_tk_liste
+                  SET cloturee = TRUE,
+                      date_cloture = NOW(),
+                      modif_date = NOW(),
+                      modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (int(op_id), int(id_ticket)),
+        )
     return {"ok": True}
 
 
