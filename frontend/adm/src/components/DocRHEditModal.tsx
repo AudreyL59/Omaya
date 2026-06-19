@@ -653,17 +653,37 @@ export default function DocRHEditModal({
                     ⇥
                   </ToolBtn>
                 </div>
+                {/* Zone d'edition : container gris + 'feuille A4' centree
+                    pour donner un aspect document Word. */}
                 <div
-                  ref={editorRef}
-                  contentEditable={editorReady}
-                  suppressContentEditableWarning
-                  className="border min-h-[300px] max-h-[400px] overflow-y-auto p-4 text-sm focus:outline-none rounded-b"
+                  className="border-x border-b overflow-y-auto rounded-b"
                   style={{
                     borderColor: COL_BORDER,
-                    color: COL_BRUN,
-                    fontFamily: 'Calibri, "Segoe UI", sans-serif',
+                    backgroundColor: '#E5E5E5',
+                    maxHeight: '60vh',
+                    padding: '16px 0',
                   }}
-                />
+                >
+                  <div
+                    ref={editorRef}
+                    contentEditable={editorReady}
+                    suppressContentEditableWarning
+                    className="docrh-page focus:outline-none"
+                    style={{
+                      width: '210mm',
+                      minHeight: '297mm',
+                      margin: '0 auto',
+                      padding: '25mm',
+                      backgroundColor: 'white',
+                      boxShadow:
+                        '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+                      color: '#000',
+                      fontFamily: 'Calibri, "Segoe UI", sans-serif',
+                      fontSize: '11pt',
+                      lineHeight: 1.4,
+                    }}
+                  />
+                </div>
                 <p
                   className="text-xs italic mt-1.5"
                   style={{ color: COL_BRUN }}
