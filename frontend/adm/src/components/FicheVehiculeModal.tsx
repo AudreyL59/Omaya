@@ -1168,42 +1168,60 @@ function ConducteursTab({
 
   return (
     <div className="space-y-6">
-      {/* Titre commun + 2 colonnes alignees (toolbar + tableau) */}
+      {/* Titre commun + toolbar unique 6 boutons + grille 2 colonnes */}
       <h3
         className="text-xs font-bold uppercase tracking-wide mb-2"
         style={{ color: COL_BRUN }}
       >
         Listes des conducteurs
       </h3>
+      <div className="flex items-center justify-start gap-2 mb-3 flex-wrap">
+        <IconBtn
+          onClick={() => showToast('Fen_Attribution : à venir.', 'info')}
+          title="Ajouter une attribution"
+        >
+          <Plus className="w-4 h-4" />
+        </IconBtn>
+        <IconBtn
+          onClick={() =>
+            showToast('Fen_Attribution (modifier) : à venir.', 'info')
+          }
+          title="Modifier"
+          disabled={!selected}
+        >
+          <FileText className="w-4 h-4" />
+        </IconBtn>
+        <IconBtn
+          onClick={handleDelete}
+          title="Supprimer"
+          disabled={!selected || saving}
+          danger
+        >
+          <Trash2 className="w-4 h-4" />
+        </IconBtn>
+        <div className="w-px h-6 bg-[#A68D8A]/30 mx-1" />
+        {[
+          ['Générer la mise à dispo', 'Mise à disposition'],
+          ['Générer le PV de livraison', 'PV de livraison'],
+          ['Générer le PV de restitution', 'PV de restitution'],
+        ].map(([label, kind]) => (
+          <button
+            key={kind}
+            type="button"
+            disabled={!selected}
+            onClick={() =>
+              showToast(`${label} : à venir (création ticket).`, 'info')
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs border disabled:opacity-50 h-8 whitespace-nowrap"
+            style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+          >
+            <Printer className="w-3.5 h-3.5 shrink-0" />
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col">
-          <div className="flex gap-1.5 mb-2 h-9 items-center">
-            <IconBtn
-              onClick={() =>
-                showToast('Fen_Attribution : à venir.', 'info')
-              }
-              title="Ajouter une attribution"
-            >
-              <Plus className="w-4 h-4" />
-            </IconBtn>
-            <IconBtn
-              onClick={() =>
-                showToast('Fen_Attribution (modifier) : à venir.', 'info')
-              }
-              title="Modifier"
-              disabled={!selected}
-            >
-              <FileText className="w-4 h-4" />
-            </IconBtn>
-            <IconBtn
-              onClick={handleDelete}
-              title="Supprimer"
-              disabled={!selected || saving}
-              danger
-            >
-              <Trash2 className="w-4 h-4" />
-            </IconBtn>
-          </div>
           <div
             className="border rounded overflow-auto"
             style={{ borderColor: COL_BORDER, maxHeight: 220 }}
@@ -1267,27 +1285,6 @@ function ConducteursTab({
         </div>
 
         <div className="flex flex-col">
-          <div className="flex items-center justify-start gap-2 mb-2 h-9">
-            {[
-              ['Générer la mise à dispo', 'Mise à disposition'],
-              ['Générer le PV de livraison', 'PV de livraison'],
-              ['Générer le PV de restitution', 'PV de restitution'],
-            ].map(([label, kind]) => (
-              <button
-                key={kind}
-                type="button"
-                disabled={!selected}
-                onClick={() =>
-                  showToast(`${label} : à venir (création ticket).`, 'info')
-                }
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs border disabled:opacity-50 h-8 whitespace-nowrap"
-                style={{ borderColor: COL_BORDER, color: COL_BRUN }}
-              >
-                <Printer className="w-3.5 h-3.5 shrink-0" />
-                {label}
-              </button>
-            ))}
-          </div>
           <div
             className="border rounded overflow-auto"
             style={{ borderColor: COL_BORDER, maxHeight: 220 }}
