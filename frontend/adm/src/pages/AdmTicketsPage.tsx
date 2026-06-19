@@ -7,7 +7,8 @@
  * /adm/salaries/registre.
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 
 import TicketsPage from '@shared/tickets/TicketsPage'
@@ -23,7 +24,23 @@ interface OpenFiche {
 }
 
 export default function AdmTicketsPage() {
+  const [searchParams] = useSearchParams()
   const [fiche, setFiche] = useState<OpenFiche | null>(null)
+  const autoOpenedRef = useRef(false)
+
+  // Auto-ouverture de la fiche salarie depuis ?ouvrir=<id>&nom=...&prenom=...
+  // (navigation 'Terminer ma DPAE' qui ouvre aussi la fiche).
+  useEffect(() => {
+    if (autoOpenedRef.current) return
+    const id = searchParams.get('ouvrir')
+    if (!id) return
+    autoOpenedRef.current = true
+    setFiche({
+      id,
+      nom: searchParams.get('nom') || '',
+      prenom: searchParams.get('prenom') || '',
+    })
+  }, [searchParams])
 
   return (
     <>
@@ -31,6 +48,7 @@ export default function AdmTicketsPage() {
         apiBase={ADM_API}
         getToken={getToken}
         onOpenFicheSalarie={(id, nom, prenom) => setFiche({ id, nom, prenom })}
+        initialTypeId={searchParams.get('type') || undefined}
       />
       <AnimatePresence>
         {fiche && (

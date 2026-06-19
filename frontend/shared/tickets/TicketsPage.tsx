@@ -97,6 +97,9 @@ interface TicketsPageProps {
   /** Optionnel : si fourni, les FI* peuvent ouvrir la fiche salarie complete
    *  dans une modal. Cote ADM, branche sur <FicheSalarieModal/>. */
   onOpenFicheSalarie?: (idSalarie: string, nom: string, prenom: string) => void
+  /** Optionnel : id_type_demande a pre-selectionner au chargement (ex
+   *  navigation 'Terminer ma DPAE' qui force le type 'DPAE'=3). */
+  initialTypeId?: string
 }
 
 function shortDateTime(raw: string | undefined | null): string {
@@ -118,7 +121,7 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
 }
 
-export default function TicketsPage({ apiBase, getToken, onOpenFicheSalarie }: TicketsPageProps) {
+export default function TicketsPage({ apiBase, getToken, onOpenFicheSalarie, initialTypeId }: TicketsPageProps) {
   const [sidebar, setSidebar] = useState<TicketSidebarItem[]>([])
   const [loadingSidebar, setLoadingSidebar] = useState(true)
   const [selectedType, setSelectedType] = useState<TicketTypeDemande | null>(null)
@@ -159,14 +162,24 @@ export default function TicketsPage({ apiBase, getToken, onOpenFicheSalarie }: T
       .then((r) => r.json())
       .then((d: TicketSidebarItem[]) => {
         setSidebar(Array.isArray(d) ? d : [])
-        // Premier service ouvert par défaut
-        if (Array.isArray(d) && d.length > 0) {
-          setOpenServices(new Set([d[0].service]))
+        // Tous les services replies par defaut (l'utilisateur les ouvre
+        // explicitement en cliquant). Si initialTypeId est fourni
+        // (navigation 'Terminer DPAE'), on ouvre le service du type
+        // concerne et on auto-selectionne le type.
+        if (Array.isArray(d) && initialTypeId) {
+          for (const svc of d) {
+            const t = svc.types.find((x) => x.id_type_demande === initialTypeId)
+            if (t) {
+              setOpenServices(new Set([svc.service]))
+              setSelectedType(t)
+              break
+            }
+          }
         }
       })
       .catch(() => setSidebar([]))
       .finally(() => setLoadingSidebar(false))
-  }, [apiBase])
+  }, [apiBase, initialTypeId])
 
   // Charge la liste complète des statuts (pour le combo "Statuer")
   useEffect(() => {
@@ -1171,16 +1184,18 @@ function FiltersPopup({
           onChange={(e) => onChangeDateAu(e.target.value)}
           className="w-full px-2 py-1 border border-c-line-strong rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-c-brand-line"
         />
-        {(dateDu || dateAu || cloturee) && (
-          <button
-            onClick={() => {
-              onChangeCloturee(false)
-              onChangeDateDu('')
-              onChangeDateAu('')
-            }}
-            className="mt-3 text-xs text-c-ink-faint hover:text-c-ink underline"
-          >Réinitialiser</button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            onChangeCloturee(false)
+            onChangeDateDu('')
+            onChangeDateAu('')
+          }}
+          disabled={!dateDu && !dateAu && !cloturee}
+          className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-xs border border-c-line-strong text-c-ink hover:bg-c-brand-soft disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Supprimer les filtres
+        </button>
       </div>
     </>
   )

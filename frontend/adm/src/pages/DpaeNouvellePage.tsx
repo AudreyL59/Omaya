@@ -1228,14 +1228,16 @@ function CodesPlan2({
       })
       if (!r.ok) throw new Error(String(r.status))
       showToast('DPAE terminée. Ouverture de la fiche salarié...', 'success')
-      // Cf. WinDev OuvreSoeur(Fen_FicheSalarié, IdElem) : on ouvre la
-      // fiche salarie nouvellement creee via query params.
+      // Cf. WinDev OuvreSoeur(Fen_FicheSalarié, IdElem) + clic sur le
+      // ticket DPAE (TK_TypeDemande=3) : on bascule vers la page Tickets
+      // pre-filtree sur DPAE + ouverture auto de la fiche salarie.
       const q = new URLSearchParams({
+        type: '3',
         ouvrir: savedId,
         nom: data.nom,
         prenom: data.prenom,
       }).toString()
-      navigate(`/salaries/registre?${q}`)
+      navigate(`/tickets?${q}`)
     } catch (e) {
       showToast(`Échec : ${(e as Error).message}`, 'error')
     } finally {
