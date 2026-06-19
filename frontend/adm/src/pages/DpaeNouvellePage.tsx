@@ -1027,6 +1027,14 @@ function CodesPlan2({
           siret: d.siret || '',
         }),
       )
+    // Si DPAE deja saisie (reprise type_dpae=3), pre-remplit le N° DPAE
+    fetch(`/api/adm/dpae/dpae-state/${savedId}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: { dpae_num?: string }) => {
+        if (d.dpae_num) setDpaeNum(d.dpae_num)
+      })
     // Detection de l'extension Omaya DPAE Filler (ping/pong)
     isExtensionInstalled().then(setExtInstalled)
   }, [savedId])

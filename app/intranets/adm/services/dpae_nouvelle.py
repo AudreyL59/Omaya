@@ -873,9 +873,13 @@ def get_portail_credentials(id_partenaire: int) -> dict:
 
 def list_codes_salarie(id_salarie: int) -> list[dict]:
     """Liste les partenaires deja codes pour le salarie (cf. ZR_ElemsFaits
-    WinDev qui s'enrichit a chaque validation)."""
+    WinDev qui s'enrichit a chaque validation).
+
+    Si le salarie a deja un DPAE_num (URSSAF deja valide auparavant pour
+    une reprise type_dpae=3), URSSAF est ajoute en tete de la liste."""
     db_rh = get_pg_connection("rh")
     db_adv = get_pg_connection("adv")
+
     rows = db_rh.query(
         """SELECT id_partenaire, code, login, mdp, modif_date
              FROM rh.pgt_salarie_partenaire
@@ -884,14 +888,28 @@ def list_codes_salarie(id_salarie: int) -> list[dict]:
          ORDER BY modif_date DESC""",
         (int(id_salarie),),
     ) or []
-    if not rows:
-        return []
+
     parts = db_adv.query(
         "SELECT id_partenaire, lib_partenaire FROM adv.pgt_partenaire",
     ) or []
     lib_by_id = {_int(p.get("id_partenaire")): _str(p.get("lib_partenaire")) for p in parts}
 
-    out = []
+    out: list[dict] = []
+    # URSSAF marquee comme faite si dpae_num deja saisi sur salarie_embauche
+    emb = db_rh.query_one(
+        """SELECT dpae_num, dpae_date FROM rh.pgt_salarie_embauche
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    )
+    if emb and _str(emb.get("dpae_num")).strip():
+        out.append({
+            "id_partenaire": "0",
+            "lib_partenaire": "URSSAF",
+            "code": _str(emb.get("dpae_num")),
+            "login": "",
+            "mdp": "",
+        })
+
     for r in rows:
         id_p = _int(r.get("id_partenaire"))
         out.append({
@@ -902,6 +920,23 @@ def list_codes_salarie(id_salarie: int) -> list[dict]:
             "mdp": _str(r.get("mdp")),
         })
     return out
+
+
+def get_dpae_state(id_salarie: int) -> dict:
+    """Etat URSSAF du salarie (dpae_num + dpae_date). Utilise pour
+    pre-remplir le champ N° DPAE en reprise type_dpae=3."""
+    db = get_pg_connection("rh")
+    row = db.query_one(
+        """SELECT dpae_num, dpae_date FROM rh.pgt_salarie_embauche
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    )
+    if not row:
+        return {"dpae_num": "", "dpae_date": ""}
+    return {
+        "dpae_num": _str(row.get("dpae_num")),
+        "dpae_date": _iso_date(row.get("dpae_date")),
+    }
 
 
 def update_dpae_urssaf(id_salarie: int, dpae_num: str, op_id: int) -> dict:

@@ -195,6 +195,15 @@ def get_codes_salarie(
     return svc_n.list_codes_salarie(id_salarie)
 
 
+@router.get("/dpae-state/{id_salarie}")
+def get_dpae_state(
+    id_salarie: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Etat URSSAF du salarie (dpae_num + dpae_date)."""
+    return svc_n.get_dpae_state(id_salarie)
+
+
 class UrssafPayload(BaseModel):
     dpae_num: str
 
