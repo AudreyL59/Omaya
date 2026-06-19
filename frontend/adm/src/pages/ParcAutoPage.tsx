@@ -195,16 +195,24 @@ function VehiculeCard({ v }: { v: Vehicule }) {
         minHeight: '110px',
       }}
     >
-      {/* Logo societe en filigrane (decale a gauche, taille reduite) */}
+      {/* Logo societe en filigrane (50% largeur, colore en fond de page
+          via mask-image + backgroundColor #FAF6F2). */}
       {v.ste_logo && (
-        <img
-          src={v.ste_logo}
-          alt=""
-          className="absolute top-1/2 left-3 -translate-y-1/2 pointer-events-none"
+        <div
+          aria-hidden
+          className="absolute top-0 left-0 pointer-events-none"
           style={{
-            maxWidth: '70px',
-            maxHeight: '60px',
-            opacity: 0.08,
+            width: '50%',
+            height: '100%',
+            backgroundColor: '#FAF6F2',
+            WebkitMaskImage: `url("${v.ste_logo}")`,
+            maskImage: `url("${v.ste_logo}")`,
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
           }}
         />
       )}
