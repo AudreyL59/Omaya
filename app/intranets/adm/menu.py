@@ -39,7 +39,7 @@ def _droit(user: UserToken, code: str | None) -> bool:
 # Items dont la page cible existe déjà côté frontend (Routes explicites dans App.tsx).
 # Tout ce qui n'est pas dans ce set est "non codé" → grisé pour le user de
 # référence (id_salarie=6), masqué pour les autres.
-_CODED_ITEMS: set[str] = {"agenda_rec", "stats_rh", "organigramme", "suivi_production", "registre_rh", "dpae"}
+_CODED_ITEMS: set[str] = {"agenda_rec", "stats_rh", "organigramme", "suivi_production", "registre_rh", "dpae", "ctt_travail"}
 _CODED_HEADER: set[str] = {"organigramme", "tickets"}
 
 # User de référence pour qui les items non codés restent visibles (en grisé)

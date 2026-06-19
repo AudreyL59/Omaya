@@ -13,6 +13,7 @@ import RecherchePage from '@/pages/RecherchePage'
 import RegistreRHPage from '@/pages/RegistreRHPage'
 import DpaeRecherchePage from '@/pages/DpaeRecherchePage'
 import DpaeNouvellePage from '@/pages/DpaeNouvellePage'
+import CttTravailPage from '@/pages/CttTravailPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -54,6 +55,7 @@ function App() {
           <Route path="salaries/registre" element={<RegistreRHPage />} />
           <Route path="salaries/dpae" element={<DpaeRecherchePage />} />
           <Route path="salaries/dpae/nouvelle" element={<DpaeNouvellePage />} />
+          <Route path="salaries/contrats" element={<CttTravailPage />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />
