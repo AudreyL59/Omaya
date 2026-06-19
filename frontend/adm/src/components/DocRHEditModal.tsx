@@ -95,6 +95,9 @@ export default function DocRHEditModal({
   const [testing, setTesting] = useState(false)
   const editorRef = useRef<HTMLDivElement | null>(null)
   const [editorReady, setEditorReady] = useState(false)
+  // HTML a injecter dans l'editeur une fois qu'il est rendu (sinon
+  // editorRef.current est null pendant le useEffect d'init).
+  const [pendingHtml, setPendingHtml] = useState<string | null>(null)
 
   const update = (patch: Partial<DocMeta>) => setMeta((m) => ({ ...m, ...patch }))
 
@@ -147,7 +150,10 @@ export default function DocRHEditModal({
       const r = await fetch(`/api/adm/ctt-travail/${id}/content`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       })
-      if (!r.ok) return
+      if (!r.ok) {
+        setPendingHtml('')
+        return
+      }
       const buf = await r.arrayBuffer()
       const bytes = new Uint8Array(buf)
       // Detect DOCX (magic PK\x03\x04)
@@ -159,23 +165,33 @@ export default function DocRHEditModal({
         bytes[3] === 0x04
       let html = ''
       if (isDocx) {
-        // Import dynamique de mammoth (allege le bundle hors edition)
         // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore - pas de types officiels pour mammoth
         const mammoth = (await import('mammoth/mammoth.browser.js')).default
         const res = await mammoth.convertToHtml({ arrayBuffer: buf })
         html = res.value
       } else {
-        // HTML stocke
         html = new TextDecoder('utf-8').decode(buf)
       }
-      if (editorRef.current) {
-        editorRef.current.innerHTML = html
-      }
+      // Stocke - sera injecte par le useEffect [pendingHtml, editorReady]
+      // quand le contentEditable sera rendu.
+      setPendingHtml(html)
     } catch (e) {
       console.error('[doc-rh] loadContent', e)
+      setPendingHtml('')
     }
   }
+
+  // Injecte le HTML dans l'editeur APRES que contentEditable soit rendu
+  // (editorRef.current est null tant que loading=true et div d'attente est
+  // affiche).
+  useEffect(() => {
+    if (!editorReady || pendingHtml === null) return
+    if (editorRef.current) {
+      editorRef.current.innerHTML = pendingHtml
+      setPendingHtml(null)
+    }
+  }, [editorReady, pendingHtml])
 
   // ---- Toolbar contenteditable -----------------------------------------
   const exec = (cmd: string, value?: string) => {

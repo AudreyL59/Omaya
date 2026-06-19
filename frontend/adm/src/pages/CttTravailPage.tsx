@@ -228,37 +228,61 @@ export default function CttTravailPage() {
                 <Th>Type Doc RH</Th>
                 <Th>Titre</Th>
                 <Th>Info cplt</Th>
-                <Th>Société</Th>
                 <Th className="text-center">Prio</Th>
                 <Th className="text-center">DPAE</Th>
                 <Th>Dern. modif</Th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => {
-                const isSel = selected === r.id_doc_rh
-                return (
-                  <tr
-                    key={r.id_doc_rh}
-                    onClick={() => setSelected(r.id_doc_rh)}
-                    onDoubleClick={handleModifier}
-                    className="cursor-pointer border-b"
-                    style={{
-                      backgroundColor: isSel ? COL_PRIMARY : 'white',
-                      color: isSel ? 'white' : COL_BRUN,
-                      borderColor: COL_BORDER,
-                    }}
-                  >
-                    <Td>{r.lib_type}</Td>
-                    <Td>{r.titre}</Td>
-                    <Td>{r.info_cpl}</Td>
-                    <Td>{r.lib_produit}</Td>
-                    <Td className="text-center">{r.prioritaire ? '✓' : ''}</Td>
-                    <Td className="text-center">{r.doc_dpae ? '✓' : ''}</Td>
-                    <Td>{fmtDate(r.modif_date)}</Td>
-                  </tr>
-                )
-              })}
+              {(() => {
+                // Regroupement par produit (cf. ruptures WinDev).
+                // Les rows sont deja triees par lib_produit cote backend.
+                const blocks: React.ReactNode[] = []
+                let currentGroup: string | null = null
+                rows.forEach((r) => {
+                  const grp = r.lib_produit || 'Sans produit'
+                  if (grp !== currentGroup) {
+                    currentGroup = grp
+                    blocks.push(
+                      <tr key={`grp-${grp}`}>
+                        <td
+                          colSpan={6}
+                          className="px-3 py-1.5 text-xs font-bold uppercase tracking-wide"
+                          style={{
+                            backgroundColor: COL_BG_SOFT,
+                            color: COL_BRUN,
+                            borderTop: `1px solid ${COL_BORDER}`,
+                          }}
+                        >
+                          {grp}
+                        </td>
+                      </tr>,
+                    )
+                  }
+                  const isSel = selected === r.id_doc_rh
+                  blocks.push(
+                    <tr
+                      key={r.id_doc_rh}
+                      onClick={() => setSelected(r.id_doc_rh)}
+                      onDoubleClick={handleModifier}
+                      className="cursor-pointer border-b"
+                      style={{
+                        backgroundColor: isSel ? COL_PRIMARY : 'white',
+                        color: isSel ? 'white' : COL_BRUN,
+                        borderColor: COL_BORDER,
+                      }}
+                    >
+                      <Td>{r.lib_type}</Td>
+                      <Td>{r.titre}</Td>
+                      <Td>{r.info_cpl}</Td>
+                      <Td className="text-center">{r.prioritaire ? '✓' : ''}</Td>
+                      <Td className="text-center">{r.doc_dpae ? '✓' : ''}</Td>
+                      <Td>{fmtDate(r.modif_date)}</Td>
+                    </tr>,
+                  )
+                })
+                return blocks
+              })()}
             </tbody>
           </table>
         )}
