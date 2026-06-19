@@ -1267,7 +1267,7 @@ function ConducteursTab({
         </div>
 
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 mb-2 h-9">
+          <div className="flex items-center justify-start gap-2 mb-2 h-9">
             {[
               ['Générer la mise à dispo', 'Mise à disposition'],
               ['Générer le PV de livraison', 'PV de livraison'],
@@ -1280,10 +1280,10 @@ function ConducteursTab({
                 onClick={() =>
                   showToast(`${label} : à venir (création ticket).`, 'info')
                 }
-                className="flex items-center gap-1 px-2 py-1 rounded text-xs border disabled:opacity-50 h-7"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs border disabled:opacity-50 h-8 whitespace-nowrap"
                 style={{ borderColor: COL_BORDER, color: COL_BRUN }}
               >
-                <Printer className="w-3.5 h-3.5" />
+                <Printer className="w-3.5 h-3.5 shrink-0" />
                 {label}
               </button>
             ))}
