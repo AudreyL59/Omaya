@@ -195,24 +195,41 @@ function VehiculeCard({ v }: { v: Vehicule }) {
         minHeight: '110px',
       }}
     >
-      {/* Logo societe en fond (filigrane) */}
+      {/* Logo societe en filigrane (decale a gauche, taille reduite) */}
       {v.ste_logo && (
         <img
           src={v.ste_logo}
           alt=""
-          className="absolute inset-0 w-full h-full object-cover opacity-[0.08] pointer-events-none"
+          className="absolute top-1/2 left-3 -translate-y-1/2 pointer-events-none"
+          style={{
+            maxWidth: '70px',
+            maxHeight: '60px',
+            opacity: 0.08,
+          }}
         />
       )}
 
-      {/* Layout : 2 col - logo marque gauche (grand) + infos centrees */}
+      {/* Layout : 2 col - logo marque gauche (grand, en teal) + infos centrees */}
       <div className="relative grid grid-cols-[110px_1fr] h-full">
         <div className="flex items-center justify-center p-2">
           {v.marque_logo ? (
-            <img
-              src={v.marque_logo}
-              alt={v.marque_nom}
-              className="max-w-[90px] max-h-[80px] object-contain"
-              style={{ filter: 'opacity(0.95)' }}
+            // CSS mask-image : applique le logo PNG transparent comme masque
+            // et le colore en teal (cf. WinDev dIncrusteCouleur RVB(24,76,82))
+            <div
+              aria-label={v.marque_nom}
+              style={{
+                width: '90px',
+                height: '80px',
+                backgroundColor: '#17494E',
+                WebkitMaskImage: `url("${v.marque_logo}")`,
+                maskImage: `url("${v.marque_logo}")`,
+                WebkitMaskRepeat: 'no-repeat',
+                maskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'center',
+                maskPosition: 'center',
+                WebkitMaskSize: 'contain',
+                maskSize: 'contain',
+              }}
             />
           ) : (
             <Car className="w-14 h-14" style={{ color: COL_BORDER }} />
