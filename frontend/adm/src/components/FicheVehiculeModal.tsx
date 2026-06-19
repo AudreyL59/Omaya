@@ -1168,16 +1168,16 @@ function ConducteursTab({
 
   return (
     <div className="space-y-6">
-      {/* 2 colonnes : Liste conducteurs (gauche) + Docs Ulease (droite) */}
+      {/* Titre commun + 2 colonnes alignees (toolbar + tableau) */}
+      <h3
+        className="text-xs font-bold uppercase tracking-wide mb-2"
+        style={{ color: COL_BRUN }}
+      >
+        Listes des conducteurs
+      </h3>
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <h3
-            className="text-xs font-bold uppercase tracking-wide mb-2"
-            style={{ color: COL_BRUN }}
-          >
-            Listes des conducteurs
-          </h3>
-          <div className="flex gap-1.5 mb-2">
+        <div className="flex flex-col">
+          <div className="flex gap-1.5 mb-2 h-9 items-center">
             <IconBtn
               onClick={() =>
                 showToast('Fen_Attribution : à venir.', 'info')
@@ -1266,29 +1266,27 @@ function ConducteursTab({
           </div>
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              {[
-                ['Générer la mise à dispo', 'Mise à disposition'],
-                ['Générer le PV de livraison', 'PV de livraison'],
-                ['Générer le PV de restitution', 'PV de restitution'],
-              ].map(([label, kind]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  disabled={!selected}
-                  onClick={() =>
-                    showToast(`${label} : à venir (création ticket).`, 'info')
-                  }
-                  className="flex items-center gap-1 px-2 py-1 rounded text-xs border disabled:opacity-50"
-                  style={{ borderColor: COL_BORDER, color: COL_BRUN }}
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2 mb-2 h-9">
+            {[
+              ['Générer la mise à dispo', 'Mise à disposition'],
+              ['Générer le PV de livraison', 'PV de livraison'],
+              ['Générer le PV de restitution', 'PV de restitution'],
+            ].map(([label, kind]) => (
+              <button
+                key={kind}
+                type="button"
+                disabled={!selected}
+                onClick={() =>
+                  showToast(`${label} : à venir (création ticket).`, 'info')
+                }
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs border disabled:opacity-50 h-7"
+                style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                {label}
+              </button>
+            ))}
           </div>
           <div
             className="border rounded overflow-auto"
@@ -1340,12 +1338,17 @@ function ConducteursTab({
         <>
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <h3
-                className="text-xs font-bold uppercase tracking-wide mb-2 pb-1 border-b"
-                style={{ color: COL_BRUN, borderColor: COL_BORDER }}
+              <div
+                className="flex items-center mb-2 pb-1 border-b min-h-[34px]"
+                style={{ borderColor: COL_BORDER }}
               >
-                Information attribution du véhicule
-              </h3>
+                <h3
+                  className="text-xs font-bold uppercase tracking-wide"
+                  style={{ color: COL_BRUN }}
+                >
+                  Information attribution du véhicule
+                </h3>
+              </div>
               <div className="space-y-2">
                 <div>
                   <label className="block text-xs mb-0.5" style={{ color: COL_BRUN }}>
@@ -1598,7 +1601,7 @@ function DocumentsPCSection({
   return (
     <div>
       <div
-        className="flex items-center justify-between mb-2 pb-1 border-b"
+        className="flex items-center justify-between mb-2 pb-1 border-b min-h-[34px]"
         style={{ borderColor: COL_BORDER }}
       >
         <h3
