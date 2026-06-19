@@ -18,6 +18,7 @@ import {
   CarFront,
   CreditCard,
   Database,
+  Gauge,
   Loader2,
   Plus,
   Search,
@@ -280,14 +281,22 @@ function VehiculeCard({ v }: { v: Vehicule }) {
         </div>
       )}
 
-      {/* Pastille bas-droite (placeholder visu - cf. icone palette WinDev) */}
-      <div
-        className="absolute bottom-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px]"
-        style={{ backgroundColor: '#9CA3AF' }}
-        title="Carburant"
+      {/* Bouton bas-droite : ajout d'une releve kilometrique */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          showToast(
+            `Ajout relevé kilométrique ${v.immat} : à venir.`,
+            'info',
+          )
+        }}
+        className="absolute bottom-2 right-2 w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#17494E]/10 transition-colors"
+        title="Ajouter une relève kilométrique"
+        style={{ color: '#17494E' }}
       >
-        ⛽
-      </div>
+        <Gauge className="w-5 h-5" />
+      </button>
     </div>
   )
 }
