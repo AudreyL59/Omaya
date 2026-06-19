@@ -326,7 +326,10 @@ export default function FicheVehiculeModal({
               {tab === 'conducteurs' && (
                 <ConducteursTab idVehicule={idVehicule} lookups={lookups} />
               )}
-              {tab !== 'info' && tab !== 'conducteurs' && (
+              {tab === 'carnet' && (
+                <CarnetEntretienTab idVehicule={idVehicule} meta={meta} />
+              )}
+              {tab !== 'info' && tab !== 'conducteurs' && tab !== 'carnet' && (
                 <div
                   className="text-sm italic p-10 text-center"
                   style={{ color: COL_BRUN }}
@@ -1463,6 +1466,556 @@ function CheckRow({
       />
       <span>{label}</span>
     </label>
+  )
+}
+
+// ============================================================================
+// Plan 3 - Carnet d'entretien (Révision / CT / Pneus / Relève)
+// ============================================================================
+
+interface Entretien {
+  id_vehicule_entretien: string
+  type_entretien: number
+  realise_le: string
+  montant_ht: number
+  montant_ttc: number
+  c_rentretien: string
+}
+
+interface Releve {
+  id_vehicule_releve: string
+  id_vehicule_pc: string
+  conducteur: string
+  km: number
+  km_parcouru: number
+  km_restant: number
+  date_releve: string
+  alerte: boolean
+  commentaire: string
+  op_lib: string
+}
+
+interface CondAll {
+  id_vehicule_pc: string
+  id_salarie: string
+  k_mdepart: number
+  mobile: string
+  titre: string
+}
+
+const TYPE_LABEL: Record<number, string> = {
+  1: 'Révision annuelle',
+  2: 'Contrôle technique',
+  3: 'Remplacement Pneus',
+  4: 'Relève kilométrique',
+}
+
+function CarnetEntretienTab({
+  idVehicule,
+  meta,
+}: {
+  idVehicule: string
+  meta: VehiculeMeta
+}) {
+  const [type, setType] = useState<1 | 2 | 3 | 4>(1)
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-4 pb-2 border-b" style={{ borderColor: COL_BORDER }}>
+        {[1, 2, 3, 4].map((t) => {
+          const active = type === t
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setType(t as 1 | 2 | 3 | 4)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors"
+              style={{
+                backgroundColor: active ? COL_PRIMARY : 'transparent',
+                color: active ? 'white' : COL_BRUN,
+                border: `1px solid ${active ? COL_PRIMARY : COL_BORDER}`,
+              }}
+            >
+              {TYPE_LABEL[t]}
+            </button>
+          )
+        })}
+      </div>
+
+      {type !== 4 ? (
+        <EntretienPlan
+          idVehicule={idVehicule}
+          typeEntretien={type}
+          label={TYPE_LABEL[type]}
+        />
+      ) : (
+        <ReleveKmPlan idVehicule={idVehicule} meta={meta} />
+      )}
+    </div>
+  )
+}
+
+function EntretienPlan({
+  idVehicule,
+  typeEntretien,
+  label,
+}: {
+  idVehicule: string
+  typeEntretien: number
+  label: string
+}) {
+  const [list, setList] = useState<Entretien[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<Entretien | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/entretiens?type_entretien=${typeEntretien}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: Entretien[]) => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false))
+  }, [idVehicule, typeEntretien])
+
+  useEffect(() => {
+    reload()
+    setEditing(null)
+  }, [reload])
+
+  const handleAdd = () => {
+    setEditing({
+      id_vehicule_entretien: '0',
+      type_entretien: typeEntretien,
+      realise_le: new Date().toISOString().slice(0, 10),
+      montant_ht: 0,
+      montant_ttc: 0,
+      c_rentretien: '',
+    })
+  }
+
+  const handleSave = async () => {
+    if (!editing) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/adm/parc-auto/entretiens`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          id_vehicule_entretien: Number(editing.id_vehicule_entretien) || 0,
+          id_vehicule: Number(idVehicule) || 0,
+          type_entretien: typeEntretien,
+          realise_le: editing.realise_le,
+          montant_ht: editing.montant_ht,
+          montant_ttc: editing.montant_ttc,
+          c_rentretien: editing.c_rentretien,
+        }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Entretien enregistré.', 'success')
+      reload()
+      setEditing(null)
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const ok = await showConfirm({
+      title: 'Supprimer cet enregistrement ?',
+      message: 'L\'entretien sera supprimé.',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    try {
+      const r = await fetch(`/api/adm/parc-auto/entretiens/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Entretien supprimé.', 'success')
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const fmtDate = (s: string) =>
+    s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : ''
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold" style={{ color: COL_BRUN }}>
+          {label}
+        </h3>
+        <IconBtn onClick={handleAdd} title="Ajouter">
+          <Plus className="w-4 h-4" />
+        </IconBtn>
+      </div>
+
+      <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+        <table className="w-full text-sm">
+          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+            <tr>
+              <th className="px-3 py-2 text-left">Réalisé le</th>
+              <th className="px-3 py-2 text-right w-28">Montant HT</th>
+              <th className="px-3 py-2 text-right w-28">Montant TTC</th>
+              <th className="px-3 py-2 text-left">Compte rendu / facture</th>
+              <th className="px-3 py-2 w-12" />
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} className="p-6 text-center"><Loader2 className="w-4 h-4 animate-spin inline" /></td></tr>
+            ) : list.length === 0 ? (
+              <tr><td colSpan={5} className="p-6 text-center italic" style={{ color: '#A68D8A' }}>Aucun enregistrement.</td></tr>
+            ) : (
+              list.map((e) => (
+                <tr
+                  key={e.id_vehicule_entretien}
+                  onClick={() => setEditing(e)}
+                  className="cursor-pointer border-b"
+                  style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                >
+                  <td className="px-3 py-1.5">{fmtDate(e.realise_le)}</td>
+                  <td className="px-3 py-1.5 text-right">{e.montant_ht.toFixed(2)} €</td>
+                  <td className="px-3 py-1.5 text-right">{e.montant_ttc.toFixed(2)} €</td>
+                  <td className="px-3 py-1.5">{e.c_rentretien}</td>
+                  <td className="px-3 py-1.5 text-center">
+                    <button
+                      type="button"
+                      onClick={(ev) => { ev.stopPropagation(); handleDelete(e.id_vehicule_entretien) }}
+                      className="text-red-600 hover:text-red-800"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <div className="border rounded p-4 bg-[#FAF6F2]" style={{ borderColor: COL_BORDER }}>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Réalisé le">
+              <input
+                type="date"
+                value={editing.realise_le}
+                onChange={(e) => setEditing({ ...editing, realise_le: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Montant HT">
+              <input
+                type="number"
+                step="0.01"
+                value={editing.montant_ht || ''}
+                onChange={(e) => setEditing({ ...editing, montant_ht: Number(e.target.value) || 0 })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Montant TTC">
+              <input
+                type="number"
+                step="0.01"
+                value={editing.montant_ttc || ''}
+                onChange={(e) => setEditing({ ...editing, montant_ttc: Number(e.target.value) || 0 })}
+                className={inputCls}
+              />
+            </Field>
+            <div className="col-span-3">
+              <Field label="Compte rendu / facture">
+                <input
+                  type="text"
+                  value={editing.c_rentretien}
+                  onChange={(e) => setEditing({ ...editing, c_rentretien: e.target.value })}
+                  className={inputCls}
+                  placeholder="Référence ou nom du document"
+                />
+              </Field>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => setEditing(null)}
+              className="px-3 py-1.5 rounded text-sm border"
+              style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-1.5 rounded text-white text-sm font-medium disabled:opacity-50"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReleveKmPlan({
+  idVehicule,
+  meta,
+}: {
+  idVehicule: string
+  meta: VehiculeMeta
+}) {
+  const [conducteurs, setConducteurs] = useState<CondAll[]>([])
+  const [releves, setReleves] = useState<Releve[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const [idPc, setIdPc] = useState('')
+  const [dateRel, setDateRel] = useState(new Date().toISOString().slice(0, 10))
+  const [nouvRel, setNouvRel] = useState(0)
+  const [alerte, setAlerte] = useState(false)
+  const [commentaire, setCommentaire] = useState('')
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs-all`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => r.json()),
+      fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/releves`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => r.json()),
+    ])
+      .then(([cs, rs]) => {
+        const list = (cs as CondAll[]) || []
+        setConducteurs(list)
+        if (list.length && !idPc) setIdPc(list[0].id_vehicule_pc)
+        setReleves((rs as Releve[]) || [])
+      })
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idVehicule])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const condSelected = conducteurs.find((c) => c.id_vehicule_pc === idPc)
+  const kmDepart = condSelected?.k_mdepart || 0
+  const kmParcourus = Math.max(0, nouvRel - kmDepart)
+  const kmRestants = Math.max(0, (meta.forfait_km || 0) + kmDepart - nouvRel)
+
+  const handleSave = async () => {
+    if (!idPc || !nouvRel) return
+    const ok = await showConfirm({
+      title: 'Information de la relève',
+      message: `Conducteur : ${condSelected?.titre || ''}\nRelève : ${nouvRel} km`,
+      confirmLabel: 'Enregistrer',
+    })
+    if (!ok) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/adm/parc-auto/releves`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          id_vehicule: Number(idVehicule) || 0,
+          id_vehicule_pc: Number(idPc) || 0,
+          date_releve: dateRel,
+          km: nouvRel,
+          km_parcouru: kmParcourus,
+          km_restant: kmRestants,
+          alerte,
+          commentaire,
+        }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Relevé enregistré.', 'success')
+      setNouvRel(0)
+      setCommentaire('')
+      setAlerte(false)
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const ok = await showConfirm({
+      title: 'Confirmez-vous la suppression de cette relève ?',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    try {
+      const r = await fetch(`/api/adm/parc-auto/releves/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Relevé supprimé.', 'success')
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const fmtDate = (s: string) =>
+    s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : ''
+
+  if (loading) {
+    return <div className="p-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-[#A68D8A]" /></div>
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="border rounded p-4 bg-[#FAF6F2] space-y-2" style={{ borderColor: COL_BORDER }}>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Forfait kilométrique">
+              <input type="number" value={meta.forfait_km} readOnly className={`${inputCls} bg-white`} />
+            </Field>
+            <Field label="KM mensuel">
+              <input type="number" value={meta.km_mensuel} readOnly className={`${inputCls} bg-white`} />
+            </Field>
+            <div className="col-span-2">
+              <Field label="Conducteur">
+                <select
+                  value={idPc}
+                  onChange={(e) => setIdPc(e.target.value)}
+                  className={inputCls}
+                >
+                  {conducteurs.map((c) => (
+                    <option key={c.id_vehicule_pc} value={c.id_vehicule_pc}>
+                      {c.titre}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <Field label="Kilométrage de Départ">
+              <input type="number" value={kmDepart} readOnly className={`${inputCls} bg-white`} />
+            </Field>
+            <Field label="N° Mobile">
+              <input type="text" value={condSelected?.mobile || ''} readOnly className={`${inputCls} bg-white`} />
+            </Field>
+            <Field label="Date de la relève">
+              <input
+                type="date"
+                value={dateRel}
+                onChange={(e) => setDateRel(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Nouvelle Relève (km)">
+              <input
+                type="number"
+                value={nouvRel || ''}
+                onChange={(e) => setNouvRel(Number(e.target.value) || 0)}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Km parcourus">
+              <input type="number" value={kmParcourus} readOnly className={`${inputCls} bg-white`} />
+            </Field>
+            <Field label="Kilométrage restant">
+              <input type="number" value={kmRestants} readOnly className={`${inputCls} bg-white`} />
+            </Field>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <CheckRow label="Ne répond pas" checked={alerte} onChange={setAlerte} />
+          </div>
+          <div className="flex justify-end mt-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !idPc || !nouvRel}
+              className="flex items-center gap-2 px-4 py-2 rounded text-white text-sm font-medium disabled:opacity-50"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Enregistrer la relève
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-xs font-bold uppercase mb-2" style={{ color: COL_BRUN }}>
+            Infos complémentaires
+          </h3>
+          <textarea
+            value={commentaire}
+            onChange={(e) => setCommentaire(e.target.value)}
+            rows={10}
+            placeholder="Commentaire optionnel..."
+            className="w-full p-2 border rounded text-sm resize-none"
+            style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+          />
+        </div>
+      </div>
+
+      <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+        <table className="w-full text-sm">
+          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+            <tr>
+              <th className="px-3 py-2 text-left">Conducteur</th>
+              <th className="px-3 py-2 text-right w-24">Relève (KM)</th>
+              <th className="px-3 py-2 text-right w-24">KM parcourus</th>
+              <th className="px-3 py-2 text-right w-24">KM restant</th>
+              <th className="px-3 py-2 text-left w-28">Date relève</th>
+              <th className="px-3 py-2 text-left">Opérateur</th>
+              <th className="px-3 py-2 text-center w-20">Alerte</th>
+              <th className="px-3 py-2 w-12" />
+            </tr>
+          </thead>
+          <tbody>
+            {releves.length === 0 ? (
+              <tr><td colSpan={8} className="p-6 text-center italic" style={{ color: '#A68D8A' }}>Aucune relève.</td></tr>
+            ) : (
+              releves.map((r) => (
+                <tr key={r.id_vehicule_releve} className="border-b" style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
+                  <td className="px-3 py-1.5">{r.conducteur}</td>
+                  <td className="px-3 py-1.5 text-right">{r.km}</td>
+                  <td className="px-3 py-1.5 text-right">{r.km_parcouru}</td>
+                  <td className="px-3 py-1.5 text-right">{r.km_restant}</td>
+                  <td className="px-3 py-1.5">{fmtDate(r.date_releve)}</td>
+                  <td className="px-3 py-1.5">{r.op_lib}</td>
+                  <td className="px-3 py-1.5 text-center">{r.alerte ? '⚠' : ''}</td>
+                  <td className="px-3 py-1.5 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(r.id_vehicule_releve)}
+                      className="text-red-600 hover:text-red-800"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 

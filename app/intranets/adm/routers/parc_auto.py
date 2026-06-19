@@ -13,6 +13,7 @@ from app.intranets.adm.services import fiche_vehicule as fv_svc
 from app.intranets.adm.services import parc_auto as svc
 from app.intranets.adm.services import vehicule_conducteurs as cond_svc
 from app.intranets.adm.services import vehicule_documents as doc_svc
+from app.intranets.adm.services import vehicule_entretien as ent_svc
 
 
 router = APIRouter(prefix="/parc-auto", tags=["adm-parc-auto"])
@@ -239,3 +240,93 @@ def post_info_complementaire(
         id_vehicule_pc, payload.commentaire,
         user.prenom or user.email.split("@")[0], user.id_salarie,
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan 3 - Carnet d'entretien (types 1/2/3) + Releves kilometriques (type 4)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/vehicules/{id_vehicule}/entretiens")
+def get_entretiens(
+    id_vehicule: int,
+    type_entretien: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """List entretiens d'un type (1=revision, 2=CT, 3=pneus)."""
+    return ent_svc.list_entretiens(id_vehicule, type_entretien)
+
+
+class EntretienPayload(BaseModel):
+    id_vehicule_entretien: int = 0
+    id_vehicule: int
+    type_entretien: int
+    realise_le: str = ""
+    montant_ht: float = 0.0
+    montant_ttc: float = 0.0
+    c_rentretien: str = ""
+
+
+@router.post("/entretiens")
+def post_entretien(
+    payload: EntretienPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer entretien (create ou update)."""
+    return ent_svc.save_entretien(payload.model_dump(), user.id_salarie)
+
+
+@router.delete("/entretiens/{id_vehicule_entretien}")
+def delete_entretien(
+    id_vehicule_entretien: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Poubelle entretien."""
+    return ent_svc.delete_entretien(id_vehicule_entretien, user.id_salarie)
+
+
+@router.get("/vehicules/{id_vehicule}/releves")
+def get_releves(
+    id_vehicule: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Liste des releves kilometriques du vehicule."""
+    return ent_svc.list_releves(id_vehicule)
+
+
+@router.get("/vehicules/{id_vehicule}/conducteurs-all")
+def get_conducteurs_all(
+    id_vehicule: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Combo conducteur Plan 4 (tous, meme historiques)."""
+    return ent_svc.list_conducteurs_all(id_vehicule)
+
+
+class RelevePayload(BaseModel):
+    id_vehicule: int
+    id_vehicule_pc: int = 0
+    date_releve: str
+    km: int
+    km_parcouru: int = 0
+    km_restant: int = 0
+    alerte: bool = False
+    commentaire: str = ""
+
+
+@router.post("/releves")
+def post_releve(
+    payload: RelevePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer la releve."""
+    return ent_svc.save_releve(payload.model_dump(), user.id_salarie)
+
+
+@router.delete("/releves/{id_vehicule_releve}")
+def delete_releve(
+    id_vehicule_releve: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Poubelle releve."""
+    return ent_svc.delete_releve(id_vehicule_releve, user.id_salarie)
