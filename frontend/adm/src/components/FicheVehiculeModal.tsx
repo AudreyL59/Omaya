@@ -323,7 +323,10 @@ export default function FicheVehiculeModal({
                   </div>
                 </>
               )}
-              {tab !== 'info' && (
+              {tab === 'conducteurs' && (
+                <ConducteursTab idVehicule={idVehicule} lookups={lookups} />
+              )}
+              {tab !== 'info' && tab !== 'conducteurs' && (
                 <div
                   className="text-sm italic p-10 text-center"
                   style={{ color: COL_BRUN }}
@@ -956,6 +959,510 @@ function IconBtn({
     >
       {children}
     </button>
+  )
+}
+
+// ============================================================================
+// Plan 2 - Conducteurs (attributions)
+// ============================================================================
+
+interface Conducteur {
+  id_vehicule_pc: string
+  id_conducteur: string
+  id_salarie: string
+  id_ste: string
+  perception_date: string
+  perception_heure: string
+  restitution_date: string
+  restitution_heure: string
+  nom_complet: string
+  prenom: string
+  lib_conducteur: string
+}
+
+interface AttribDetail {
+  id_vehicule_pc: string
+  id_vehicule: string
+  id_conducteur: string
+  id_ste: string
+  perception_date: string
+  perception_heure: string
+  restitution_date: string
+  restitution_heure: string
+  conv_dispo: boolean
+  fiche_enlev: boolean
+  permis_cnd: boolean
+  info_vehicule: string
+  k_mdepart: number
+  cg_conducteur: boolean
+  cg_originale_dossier: boolean
+  c_vet_vignette: boolean
+  fiche_rest: boolean
+  temporaire: boolean
+}
+
+interface DocUlease {
+  id_tk_liste: string
+  type_doc: string
+  date_edition: string
+  signe: boolean
+}
+
+function ConducteursTab({
+  idVehicule,
+  lookups,
+}: {
+  idVehicule: string
+  lookups: Lookups
+}) {
+  const [list, setList] = useState<Conducteur[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<string>('')
+  const [detail, setDetail] = useState<AttribDetail | null>(null)
+  const [docs, setDocs] = useState<DocUlease[]>([])
+  const [saving, setSaving] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
+  const [infoText, setInfoText] = useState('')
+
+  const reloadList = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: Conducteur[]) => setList(Array.isArray(d) ? d : []))
+      .catch(() => setList([]))
+      .finally(() => setLoading(false))
+  }, [idVehicule])
+
+  useEffect(() => {
+    reloadList()
+  }, [reloadList])
+
+  // Au clic sur une ligne : charge details + docs Ulease
+  useEffect(() => {
+    if (!selected) {
+      setDetail(null)
+      setDocs([])
+      return
+    }
+    Promise.all([
+      fetch(`/api/adm/parc-auto/conducteurs/${selected}`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/adm/parc-auto/conducteurs/${selected}/doc-ulease`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => (r.ok ? r.json() : [])),
+    ]).then(([d, dd]) => {
+      setDetail(d as AttribDetail)
+      setDocs((dd as DocUlease[]) || [])
+    })
+  }, [selected])
+
+  const updateField = (patch: Partial<AttribDetail>) =>
+    setDetail((d) => (d ? { ...d, ...patch } : d))
+
+  const handleSave = async () => {
+    if (!detail) return
+    setSaving(true)
+    try {
+      const r = await fetch(
+        `/api/adm/parc-auto/conducteurs/${detail.id_vehicule_pc}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({
+            id_ste: Number(detail.id_ste) || 0,
+            temporaire: detail.temporaire,
+            conv_dispo: detail.conv_dispo,
+            cg_originale_dossier: detail.cg_originale_dossier,
+            cg_conducteur: detail.cg_conducteur,
+            fiche_rest: detail.fiche_rest,
+            c_vet_vignette: detail.c_vet_vignette,
+            permis_cnd: detail.permis_cnd,
+            fiche_enlev: detail.fiche_enlev,
+            info_vehicule: detail.info_vehicule,
+          }),
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Attribution enregistrée.', 'success')
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selected) return
+    const ok = await showConfirm({
+      title: 'Supprimer cette attribution ?',
+      message: 'L\'attribution sera supprimée.',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/adm/parc-auto/conducteurs/${selected}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Attribution supprimée.', 'success')
+      setSelected('')
+      reloadList()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAddInfo = async () => {
+    if (!selected || !infoText.trim()) return
+    setSaving(true)
+    try {
+      const r = await fetch(
+        `/api/adm/parc-auto/conducteurs/${selected}/info-complementaire`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ commentaire: infoText }),
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      updateField({ info_vehicule: d.info_vehicule })
+      setInfoText('')
+      setShowInfo(false)
+      showToast('Commentaire ajouté.', 'success')
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fmtDate = (s: string) =>
+    s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : ''
+
+  return (
+    <div className="space-y-6">
+      {/* 2 colonnes : Liste conducteurs (gauche) + Docs Ulease (droite) */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3
+              className="text-xs font-bold uppercase tracking-wide"
+              style={{ color: COL_BRUN }}
+            >
+              Listes des conducteurs
+            </h3>
+            <div className="flex gap-1.5">
+              <IconBtn
+                onClick={() =>
+                  showToast('Fen_Attribution : à venir.', 'info')
+                }
+                title="Ajouter une attribution"
+              >
+                <Plus className="w-4 h-4" />
+              </IconBtn>
+              <IconBtn
+                onClick={() =>
+                  showToast('Fen_Attribution (modifier) : à venir.', 'info')
+                }
+                title="Modifier"
+                disabled={!selected}
+              >
+                <FileText className="w-4 h-4" />
+              </IconBtn>
+              <IconBtn
+                onClick={handleDelete}
+                title="Supprimer"
+                disabled={!selected || saving}
+                danger
+              >
+                <Trash2 className="w-4 h-4" />
+              </IconBtn>
+            </div>
+          </div>
+          <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+            <table className="w-full text-xs">
+              <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+                <tr>
+                  <th className="px-2 py-1.5 text-left">Perception</th>
+                  <th className="px-1 py-1.5 text-left w-12">à</th>
+                  <th className="px-2 py-1.5 text-left">Restitution</th>
+                  <th className="px-1 py-1.5 text-left w-12">à</th>
+                  <th className="px-2 py-1.5 text-left">Conducteur</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center">
+                      <Loader2 className="w-4 h-4 animate-spin inline" />
+                    </td>
+                  </tr>
+                ) : list.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="p-6 text-center italic"
+                      style={{ color: '#A68D8A' }}
+                    >
+                      Aucune attribution.
+                    </td>
+                  </tr>
+                ) : (
+                  list.map((c) => {
+                    const isSel = selected === c.id_vehicule_pc
+                    return (
+                      <tr
+                        key={c.id_vehicule_pc}
+                        onClick={() => setSelected(c.id_vehicule_pc)}
+                        className="cursor-pointer border-b"
+                        style={{
+                          backgroundColor: isSel ? COL_PRIMARY : 'white',
+                          color: isSel ? 'white' : COL_BRUN,
+                          borderColor: COL_BORDER,
+                        }}
+                      >
+                        <td className="px-2 py-1">{fmtDate(c.perception_date)}</td>
+                        <td className="px-1 py-1">{c.perception_heure}</td>
+                        <td className="px-2 py-1">{fmtDate(c.restitution_date)}</td>
+                        <td className="px-1 py-1">{c.restitution_heure}</td>
+                        <td className="px-2 py-1">{c.lib_conducteur}</td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              {[
+                ['Générer la mise à dispo', 'Mise à disposition'],
+                ['Générer le PV de livraison', 'PV de livraison'],
+                ['Générer le PV de restitution', 'PV de restitution'],
+              ].map(([label, kind]) => (
+                <button
+                  key={kind}
+                  type="button"
+                  disabled={!selected}
+                  onClick={() =>
+                    showToast(`${label} : à venir (création ticket).`, 'info')
+                  }
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs border disabled:opacity-50"
+                  style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+            <table className="w-full text-xs">
+              <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+                <tr>
+                  <th className="px-2 py-1.5 text-left">Type Doc</th>
+                  <th className="px-2 py-1.5 text-left w-28">Date Édition</th>
+                  <th className="px-2 py-1.5 text-center w-16">Signé</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!selected ? (
+                  <tr>
+                    <td colSpan={3} className="p-6 text-center italic" style={{ color: '#A68D8A' }}>
+                      Sélectionnez une attribution.
+                    </td>
+                  </tr>
+                ) : docs.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="p-6 text-center italic" style={{ color: '#A68D8A' }}>
+                      Aucun document.
+                    </td>
+                  </tr>
+                ) : (
+                  docs.map((d, i) => (
+                    <tr key={`${d.id_tk_liste}-${i}`} className="border-b" style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
+                      <td className="px-2 py-1">{d.type_doc}</td>
+                      <td className="px-2 py-1">{fmtDate(d.date_edition)}</td>
+                      <td className="px-2 py-1 text-center">
+                        {d.signe ? '✓' : ''}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Information Attribution + Pointage documents */}
+      {detail && (
+        <>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <h3
+                className="text-xs font-bold uppercase tracking-wide mb-2 pb-1 border-b"
+                style={{ color: COL_BRUN, borderColor: COL_BORDER }}
+              >
+                Information attribution du véhicule
+              </h3>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-xs mb-0.5" style={{ color: COL_BRUN }}>
+                    Réseau
+                  </label>
+                  <select
+                    value={detail.id_ste}
+                    onChange={(e) => updateField({ id_ste: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="0">—</option>
+                    {lookups.societes.map((s) => (
+                      <option key={s.id_ste} value={s.id_ste}>
+                        {s.lib}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <CheckRow
+                  label="Perception Temporaire"
+                  checked={detail.temporaire}
+                  onChange={(c) => updateField({ temporaire: c })}
+                />
+              </div>
+
+              <h3
+                className="text-xs font-bold uppercase tracking-wide mt-4 mb-2 pb-1 border-b"
+                style={{ color: COL_BRUN, borderColor: COL_BORDER }}
+              >
+                Pointage des documents à remettre et à récupérer
+              </h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <CheckRow label="Convention de mise à dispo signée" checked={detail.conv_dispo} onChange={(c) => updateField({ conv_dispo: c })} />
+                <CheckRow label="Carte Grise originale dossier" checked={detail.cg_originale_dossier} onChange={(c) => updateField({ cg_originale_dossier: c })} />
+                <CheckRow label="Carte Grise photocopie Conducteur" checked={detail.cg_conducteur} onChange={(c) => updateField({ cg_conducteur: c })} />
+                <CheckRow label="Fiche de Restitution" checked={detail.fiche_rest} onChange={(c) => updateField({ fiche_rest: c })} />
+                <CheckRow label="Carte verte + vignette" checked={detail.c_vet_vignette} onChange={(c) => updateField({ c_vet_vignette: c })} />
+                <CheckRow label="Permis du Conducteur" checked={detail.permis_cnd} onChange={(c) => updateField({ permis_cnd: c })} />
+                <CheckRow label="Fiche d'enlèvement" checked={detail.fiche_enlev} onChange={(c) => updateField({ fiche_enlev: c })} />
+              </div>
+
+              <div className="flex items-center gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowInfo((s) => !s)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded text-xs border"
+                  style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                >
+                  <FileText className="w-4 h-4" />
+                  Information complémentaire
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-1.5 rounded text-white text-sm font-medium disabled:opacity-50"
+                  style={{ backgroundColor: COL_PRIMARY }}
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Enregistrer
+                </button>
+              </div>
+
+              {showInfo && (
+                <div className="mt-3 border rounded p-3 bg-white" style={{ borderColor: COL_BORDER }}>
+                  <textarea
+                    rows={4}
+                    value={infoText}
+                    onChange={(e) => setInfoText(e.target.value)}
+                    placeholder="Nouveau commentaire (sera daté et signé automatiquement)..."
+                    className="w-full p-2 border rounded text-sm resize-none"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  />
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="button"
+                      onClick={handleAddInfo}
+                      disabled={!infoText.trim()}
+                      className="px-3 py-1 rounded text-xs text-white disabled:opacity-50"
+                      style={{ backgroundColor: COL_PRIMARY }}
+                    >
+                      Ajouter
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {detail.info_vehicule && (
+                <div className="mt-3">
+                  <h4 className="text-xs font-semibold mb-1" style={{ color: COL_BRUN }}>
+                    Historique des commentaires
+                  </h4>
+                  <pre className="text-xs whitespace-pre-wrap p-2 border rounded bg-[#FAF6F2]" style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
+{detail.info_vehicule}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3
+                className="text-xs font-bold uppercase tracking-wide mb-2 pb-1 border-b"
+                style={{ color: COL_BRUN, borderColor: COL_BORDER }}
+              >
+                Documents liés à l'attribution / restitution
+              </h3>
+              <p className="text-xs italic" style={{ color: '#A68D8A' }}>
+                FTP /Vehicules/{idVehicule}/{detail.id_vehicule_pc}/ : module à venir.
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function CheckRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (c: boolean) => void
+}) {
+  return (
+    <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: COL_BRUN }}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="accent-[#17494E]"
+      />
+      <span>{label}</span>
+    </label>
   )
 }
 

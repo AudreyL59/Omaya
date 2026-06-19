@@ -11,6 +11,7 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import fiche_vehicule as fv_svc
 from app.intranets.adm.services import parc_auto as svc
+from app.intranets.adm.services import vehicule_conducteurs as cond_svc
 from app.intranets.adm.services import vehicule_documents as doc_svc
 
 
@@ -152,3 +153,89 @@ def post_carte_grise(
 ):
     """Marque le fichier comme carte grise du vehicule."""
     return doc_svc.set_as_carte_grise(id_vehicule, name, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Plan 2 - Conducteurs (attributions)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/vehicules/{id_vehicule}/conducteurs")
+def get_conducteurs(
+    id_vehicule: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Liste des attributions du vehicule (ReqListeCondByVehicule)."""
+    return cond_svc.list_conducteurs(id_vehicule)
+
+
+@router.get("/conducteurs/{id_vehicule_pc}")
+def get_attribution(
+    id_vehicule_pc: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Details d'une attribution (FichierVersEcran)."""
+    a = cond_svc.get_attribution(id_vehicule_pc)
+    if not a:
+        raise HTTPException(404, "Attribution introuvable")
+    return a
+
+
+class AttributionPayload(BaseModel):
+    id_ste: int = 0
+    temporaire: bool = False
+    conv_dispo: bool = False
+    cg_originale_dossier: bool = False
+    cg_conducteur: bool = False
+    fiche_rest: bool = False
+    c_vet_vignette: bool = False
+    permis_cnd: bool = False
+    fiche_enlev: bool = False
+    info_vehicule: str = ""
+
+
+@router.put("/conducteurs/{id_vehicule_pc}")
+def put_attribution(
+    id_vehicule_pc: int,
+    payload: AttributionPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer Plan 2."""
+    return cond_svc.update_attribution(
+        id_vehicule_pc, payload.model_dump(), user.id_salarie,
+    )
+
+
+@router.delete("/conducteurs/{id_vehicule_pc}")
+def delete_attribution(
+    id_vehicule_pc: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Poubelle Plan 2 : soft delete vehicule_conducteur."""
+    return cond_svc.delete_attribution(id_vehicule_pc, user.id_salarie)
+
+
+@router.get("/conducteurs/{id_vehicule_pc}/doc-ulease")
+def get_doc_ulease(
+    id_vehicule_pc: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """DocUleaseEdite : liste docs (mise a dispo / PV) lies a l'attribution."""
+    return cond_svc.list_doc_ulease_for_pc(id_vehicule_pc)
+
+
+class InfoComplementaire(BaseModel):
+    commentaire: str
+
+
+@router.post("/conducteurs/{id_vehicule_pc}/info-complementaire")
+def post_info_complementaire(
+    id_vehicule_pc: int,
+    payload: InfoComplementaire,
+    user: UserToken = Depends(get_current_user),
+):
+    """Append daté au champ info_vehicule (avec prenom user)."""
+    return cond_svc.add_info_complementaire(
+        id_vehicule_pc, payload.commentaire,
+        user.prenom or user.email.split("@")[0], user.id_salarie,
+    )
