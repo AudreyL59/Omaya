@@ -69,17 +69,12 @@ export default function ParcAutoPage() {
     return rows.filter((v) => v.immat.toUpperCase().replace(/[\s-]/g, '').includes(q))
   }, [rows, search])
 
-  // Regroupement par raison sociale pour les ruptures (cf. ORDER BY WinDev)
-  const grouped = useMemo(() => {
-    const map = new Map<string, Vehicule[]>()
-    for (const v of filtered) {
-      const k = v.raison_sociale || 'Sans société'
-      const list = map.get(k) || []
-      list.push(v)
-      map.set(k, list)
-    }
-    return Array.from(map.entries())
-  }, [filtered])
+  // Tri par immatriculation (cf. WinDev qui melange visuellement sans
+  // ruptures par societe sur l'ecran TDB).
+  const sortedByImmat = useMemo(
+    () => [...filtered].sort((a, b) => a.immat.localeCompare(b.immat)),
+    [filtered],
+  )
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal">
@@ -148,38 +143,16 @@ export default function ParcAutoPage() {
         <div className="p-10 flex justify-center">
           <Loader2 className="w-5 h-5 animate-spin text-[#A68D8A]" />
         </div>
+      ) : sortedByImmat.length === 0 && search ? (
+        <div className="p-10 text-center text-sm italic text-[#A68D8A]">
+          Aucun véhicule pour « {search} ».
+        </div>
       ) : (
-        <div className="space-y-6">
-          {/* Carte 'Ajouter un véhicule' en tête */}
-          {!search && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <AddCard />
-              {/* Pas de groupe initial = on remplit la ligne avec les
-                  premières cartes du premier groupe */}
-            </div>
-          )}
-
-          {grouped.map(([ste, vehs]) => (
-            <div key={ste}>
-              <h2
-                className="text-xs font-bold uppercase tracking-wide mb-2"
-                style={{ color: COL_BRUN }}
-              >
-                {ste} ({vehs.length})
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {vehs.map((v) => (
-                  <VehiculeCard key={v.id_vehicule} v={v} />
-                ))}
-              </div>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {!search && <AddCard />}
+          {sortedByImmat.map((v) => (
+            <VehiculeCard key={v.id_vehicule} v={v} />
           ))}
-
-          {filtered.length === 0 && (
-            <div className="p-10 text-center text-sm italic text-[#A68D8A]">
-              Aucun véhicule {search ? 'pour cette recherche' : ''}.
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -191,12 +164,21 @@ function AddCard() {
     <button
       type="button"
       onClick={() => showToast('Ajout véhicule : à venir.', 'info')}
-      className="flex items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed hover:bg-white transition-colors"
-      style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+      className="flex items-center justify-center gap-3 rounded-lg bg-white hover:bg-[#FAF6F2] transition-colors"
+      style={{
+        border: `1px solid ${COL_BORDER}`,
+        color: COL_BRUN,
+        minHeight: '110px',
+      }}
     >
-      <Plus className="w-5 h-5" />
-      <Car className="w-5 h-5" />
-      <span className="text-sm font-medium">Ajouter un véhicule</span>
+      <div className="relative">
+        <Car className="w-7 h-7" style={{ color: COL_BRUN }} />
+        <Plus
+          className="absolute -top-1 -right-2 w-3.5 h-3.5"
+          style={{ color: COL_BRUN }}
+        />
+      </div>
+      <span className="text-base font-medium">Ajouter un véhicule</span>
     </button>
   )
 }
@@ -207,60 +189,79 @@ function VehiculeCard({ v }: { v: Vehicule }) {
       onClick={() =>
         showToast(`Fiche véhicule ${v.immat} : à venir.`, 'info')
       }
-      className="relative p-4 rounded-lg bg-white border cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
-      style={{ borderColor: COL_BORDER, minHeight: '128px' }}
+      className="relative rounded-lg bg-white cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
+      style={{
+        border: `1px solid ${COL_BORDER}`,
+        minHeight: '110px',
+      }}
     >
-      {/* Logo société en fond (faible opacité) */}
+      {/* Logo societe en fond (filigrane) */}
       {v.ste_logo && (
         <img
           src={v.ste_logo}
           alt=""
-          className="absolute inset-0 w-full h-full object-contain opacity-10 pointer-events-none"
+          className="absolute inset-0 w-full h-full object-cover opacity-[0.08] pointer-events-none"
         />
       )}
 
-      <div className="relative flex items-start gap-3">
-        {/* Logo marque */}
-        {v.marque_logo ? (
-          <img
-            src={v.marque_logo}
-            alt={v.marque_nom}
-            className="w-12 h-12 object-contain shrink-0"
-          />
-        ) : (
-          <div className="w-12 h-12 shrink-0 flex items-center justify-center">
-            <Car className="w-8 h-8" style={{ color: COL_BORDER }} />
-          </div>
-        )}
+      {/* Layout : 2 col - logo marque gauche (grand) + infos centrees */}
+      <div className="relative grid grid-cols-[110px_1fr] h-full">
+        <div className="flex items-center justify-center p-2">
+          {v.marque_logo ? (
+            <img
+              src={v.marque_logo}
+              alt={v.marque_nom}
+              className="max-w-[90px] max-h-[80px] object-contain"
+              style={{ filter: 'opacity(0.95)' }}
+            />
+          ) : (
+            <Car className="w-14 h-14" style={{ color: COL_BORDER }} />
+          )}
+        </div>
 
-        <div className="flex-1 min-w-0 text-center">
-          <div className="text-base font-bold" style={{ color: COL_BRUN }}>
+        <div className="flex flex-col justify-center items-center text-center py-3 pr-4">
+          <div
+            className="text-lg font-bold tracking-wide"
+            style={{ color: COL_BRUN }}
+          >
             {v.immat || '—'}
           </div>
-          <div className="text-xs mt-0.5" style={{ color: COL_BRUN }}>
+          <div className="text-xs mt-1" style={{ color: COL_BRUN }}>
             {v.modele}
           </div>
-          <div className="flex items-center justify-center gap-1.5 mt-2 text-xs">
+          <div
+            className="flex items-center justify-center gap-1.5 mt-2 text-xs font-semibold"
+            style={{ color: COL_BRUN }}
+          >
             <span
-              className="inline-flex items-center justify-center w-4 h-4 rounded-full"
-              style={{ backgroundColor: '#16a34a', color: 'white' }}
+              className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[9px]"
+              style={{ backgroundColor: '#16a34a' }}
             >
               ✓
             </span>
-            <span style={{ color: COL_BRUN }}>{v.lib_etat || 'INCONNU'}</span>
+            <span>{v.lib_etat || 'INCONNU'}</span>
           </div>
         </div>
+      </div>
 
-        {/* Badge alerte */}
-        {v.has_alerte && (
-          <div
-            className="absolute top-0 right-0 w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold cursor-help"
-            style={{ backgroundColor: '#B91C1C' }}
-            title={v.alertes.join('\n')}
-          >
-            !
-          </div>
-        )}
+      {/* Badge alerte rouge - haut droite */}
+      {v.has_alerte && (
+        <div
+          className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-white text-sm font-bold cursor-help shadow"
+          style={{ backgroundColor: '#B91C1C' }}
+          title={v.alertes.join('\n')}
+        >
+          !
+        </div>
+      )}
+
+      {/* Pastille bas-droite (placeholder visu - cf. icone palette WinDev) */}
+      <div
+        className="absolute bottom-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px]"
+        style={{ backgroundColor: '#9CA3AF' }}
+        title="Carburant"
+      >
+        ⛽
       </div>
     </div>
   )
