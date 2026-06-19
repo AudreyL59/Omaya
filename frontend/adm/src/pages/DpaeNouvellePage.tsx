@@ -1347,7 +1347,7 @@ function CodesPlan2({
             title="Ouvre le portail dans un nouvel onglet (utile si le portail bloque l'embed iframe)"
           >
             <ExternalLink className="w-4 h-4" />
-            Ouvrir dans un nouvel onglet
+            Ouvrir et remplir dans un nouvel onglet
           </button>
           {extInstalled === false && (
             <p
@@ -1452,7 +1452,10 @@ function CodesPlan2({
             </>
           )}
         </Card>
+      </div>
 
+      {/* Colonne droite : infos a copier + elements faits + Terminer */}
+      <div className="space-y-4">
         <Card title="Infos salarié (à copier/coller)">
           <textarea
             readOnly
