@@ -259,12 +259,20 @@ function VehiculeCard({ v }: { v: Vehicule }) {
             className="flex items-center justify-center gap-1.5 mt-2 text-xs font-semibold"
             style={{ color: COL_BRUN }}
           >
-            <span
-              className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[9px]"
-              style={{ backgroundColor: '#16a34a' }}
-            >
-              ✓
-            </span>
+            {v.etat_logo ? (
+              <img
+                src={v.etat_logo}
+                alt=""
+                className="w-4 h-4 object-contain"
+              />
+            ) : (
+              <span
+                className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[9px]"
+                style={{ backgroundColor: '#16a34a' }}
+              >
+                ✓
+              </span>
+            )}
             <span>{v.lib_etat || 'INCONNU'}</span>
           </div>
         </div>
