@@ -464,13 +464,16 @@ def _societe_variables(id_ste: int) -> dict:
     }
 
 
-def publipostage_test(id_doc_rh: int, id_ste: int, titre_doc: str = "") -> bytes | None:
-    """Btn 'Tester Mise en page' : substitue les variables S_*/STE_* dans
-    le DOCX et retourne le binaire modifie.
+def is_docx(content: bytes) -> bool:
+    """Detecte le magic header DOCX/ZIP (PK\\x03\\x04)."""
+    return bool(content) and content[:4] == b"PK\x03\x04"
 
-    Salarie fictif (cf. Publipostage_TESTSalarie WinDev) + variables
-    de la societe choisie. V1.1 ne gere pas les images (LOGO, signatures,
-    cachet, paraphes) : ce sera V1.2."""
+
+def publipostage_test(
+    id_doc_rh: int, id_ste: int, titre_doc: str = "",
+) -> tuple[bytes, str] | None:
+    """Btn 'Tester Mise en page' : substitue les variables S_*/STE_* dans
+    le contenu (DOCX ou HTML) et retourne (bytes, mime_type)."""
     content = download_doc_content(id_doc_rh)
     if not content:
         return None
@@ -480,8 +483,22 @@ def publipostage_test(id_doc_rh: int, id_ste: int, titre_doc: str = "") -> bytes
         if titre_doc:
             ste_vars["DOCTITRE"] = titre_doc
         variables.update(ste_vars)
+
+    if is_docx(content):
+        try:
+            return (
+                _replace_in_docx(content, variables),
+                "application/vnd.openxmlformats-officedocument."
+                "wordprocessingml.document",
+            )
+        except Exception:
+            return None
+
+    # HTML : simple str.replace
     try:
-        return _replace_in_docx(content, variables)
+        html = content.decode("utf-8")
+        for key, val in variables.items():
+            html = html.replace(key, str(val))
+        return html.encode("utf-8"), "text/html; charset=utf-8"
     except Exception:
-        # Si le contenu n'est pas un DOCX valide
         return None

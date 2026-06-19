@@ -134,6 +134,26 @@ async def post_content(
     return res
 
 
+class HtmlContentPayload(BaseModel):
+    html: str = ""
+
+
+@router.post("/{id_doc_rh}/content-html")
+def post_content_html(
+    id_doc_rh: int,
+    payload: HtmlContentPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Save du contenu en HTML (depuis l'editeur inline). Le bytea
+    'contenu' devient le HTML encode en UTF-8."""
+    res = svc.upload_doc_content(
+        id_doc_rh, payload.html.encode("utf-8"), user.id_salarie
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
 @router.get("/{id_doc_rh}/content")
 def get_content(
     id_doc_rh: int,
@@ -156,18 +176,20 @@ def post_publipostage_test(
     id_ste: int,
     _user: UserToken = Depends(get_current_user),
 ):
-    """Btn 'Tester Mise en page' : substitue les variables et renvoie le DOCX
-    rempli avec donnees fictives de salarie + societe choisie.
-    Note V1.1 : pas d'insertion d'images (logo/cachet/signatures)."""
+    """Btn 'Tester Mise en page' : substitue les variables et renvoie le
+    document rempli. Si stockage DOCX -> retourne du .docx; si HTML ->
+    retourne du HTML."""
     meta = svc.get_doc_meta(id_doc_rh)
     titre = meta.get("titre") if meta else ""
-    content = svc.publipostage_test(id_doc_rh, id_ste, titre_doc=titre or "")
-    if content is None:
-        raise HTTPException(400, "Pas de contenu DOCX a publiposter")
+    result = svc.publipostage_test(id_doc_rh, id_ste, titre_doc=titre or "")
+    if result is None:
+        raise HTTPException(400, "Pas de contenu a publiposter")
+    content, mime = result
+    ext = "docx" if "wordprocessingml" in mime else "html"
     return Response(
         content,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        media_type=mime,
         headers={
-            "Content-Disposition": f'attachment; filename="test_{id_doc_rh}.docx"',
+            "Content-Disposition": f'attachment; filename="test_{id_doc_rh}.{ext}"',
         },
     )

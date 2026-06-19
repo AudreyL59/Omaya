@@ -11,14 +11,19 @@
  * V1.3 : insertion images logo/cachet/signatures.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  Bold,
   Download,
   Eye,
+  Italic,
+  List,
+  ListOrdered,
   Loader2,
   RotateCcw,
   Save,
+  Underline as UnderlineIcon,
   Upload,
   X,
 } from 'lucide-react'
@@ -90,6 +95,8 @@ export default function DocRHEditModal({
   const [saving, setSaving] = useState(false)
   const [steTest, setSteTest] = useState('')
   const [testing, setTesting] = useState(false)
+  const editorRef = useRef<HTMLDivElement | null>(null)
+  const [editorReady, setEditorReady] = useState(false)
 
   const update = (patch: Partial<DocMeta>) => setMeta((m) => ({ ...m, ...patch }))
 
@@ -119,6 +126,12 @@ export default function DocRHEditModal({
         }).then((r) => r.json())
         if (cancelled) return
         setMeta(m as DocMeta)
+
+        // Charge et convertit le contenu pour l'editeur inline
+        if ((m as DocMeta).taille_contenu > 0) {
+          await loadContentToEditor(id)
+        }
+        if (!cancelled) setEditorReady(true)
       } catch (e) {
         showToast(`Échec chargement : ${(e as Error).message}`, 'error')
       } finally {
@@ -130,10 +143,53 @@ export default function DocRHEditModal({
     }
   }, [initialId])
 
+  // ---- Chargement du contenu (DOCX -> HTML via mammoth, ou HTML brut) ---
+  const loadContentToEditor = async (id: string) => {
+    try {
+      const r = await fetch(`/api/adm/ctt-travail/${id}/content`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) return
+      const buf = await r.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      // Detect DOCX (magic PK\x03\x04)
+      const isDocx =
+        bytes.length >= 4 &&
+        bytes[0] === 0x50 &&
+        bytes[1] === 0x4b &&
+        bytes[2] === 0x03 &&
+        bytes[3] === 0x04
+      let html = ''
+      if (isDocx) {
+        // Import dynamique de mammoth (allege le bundle hors edition)
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - pas de types officiels pour mammoth
+        const mammoth = (await import('mammoth/mammoth.browser.js')).default
+        const res = await mammoth.convertToHtml({ arrayBuffer: buf })
+        html = res.value
+      } else {
+        // HTML stocke
+        html = new TextDecoder('utf-8').decode(buf)
+      }
+      if (editorRef.current) {
+        editorRef.current.innerHTML = html
+      }
+    } catch (e) {
+      console.error('[doc-rh] loadContent', e)
+    }
+  }
+
+  // ---- Toolbar contenteditable -----------------------------------------
+  const exec = (cmd: string, value?: string) => {
+    document.execCommand(cmd, false, value)
+    editorRef.current?.focus()
+  }
+
   // ---- Save -------------------------------------------------------------
   const saveMeta = async () => {
     setSaving(true)
     try {
+      // 1. Metadonnees
       const r = await fetch(`/api/adm/ctt-travail/${docId}`, {
         method: 'PUT',
         headers: {
@@ -154,6 +210,23 @@ export default function DocRHEditModal({
         }),
       })
       if (!r.ok) throw new Error(String(r.status))
+
+      // 2. Contenu HTML (si l'editeur a du contenu)
+      const html = editorRef.current?.innerHTML || ''
+      if (html.trim()) {
+        const rh = await fetch(`/api/adm/ctt-travail/${docId}/content-html`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ html }),
+        })
+        if (!rh.ok) throw new Error(`content: ${rh.status}`)
+        const j = await rh.json()
+        update({ taille_contenu: j.taille })
+      }
+
       showToast('Doc RH enregistré.', 'success')
       onSaved()
     } catch (e) {
@@ -473,46 +546,123 @@ export default function DocRHEditModal({
                 </p>
               </div>
 
-              {/* Contenu DOCX */}
+              {/* Contenu - editeur inline */}
               <div
                 className="mt-5 pt-4 border-t"
                 style={{ borderColor: COL_BORDER }}
               >
-                <h4
-                  className="text-xs font-bold uppercase mb-2 tracking-wide"
-                  style={{ color: COL_BRUN }}
-                >
-                  Contenu DOCX
-                </h4>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs" style={{ color: COL_BRUN }}>
-                    {meta.taille_contenu === 0
-                      ? 'Aucun document chargé'
-                      : `Document chargé (${(meta.taille_contenu / 1024).toFixed(1)} Ko)`}
-                  </span>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={uploadDocx}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border"
-                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                <div className="flex items-center justify-between mb-2">
+                  <h4
+                    className="text-xs font-bold uppercase tracking-wide"
+                    style={{ color: COL_BRUN }}
                   >
-                    <Upload className="w-4 h-4" />
-                    Charger un DOCX
-                  </button>
-                  {meta.taille_contenu > 0 && (
+                    Contenu du document
+                  </h4>
+                  <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={downloadDocx}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border"
+                      onClick={uploadDocx}
+                      title="Charger un DOCX existant (remplace le contenu)"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
                       style={{ borderColor: COL_BORDER, color: COL_BRUN }}
                     >
-                      <Download className="w-4 h-4" />
-                      Télécharger le DOCX
+                      <Upload className="w-3.5 h-3.5" />
+                      Importer DOCX
                     </button>
-                  )}
-                  <span className="flex-1" />
+                    {meta.taille_contenu > 0 && (
+                      <button
+                        type="button"
+                        onClick={downloadDocx}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Télécharger
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* Toolbar editeur */}
+                <div
+                  className="flex flex-wrap items-center gap-1 px-2 py-1 border-b border-x rounded-t"
+                  style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}
+                >
+                  <ToolBtn onClick={() => exec('bold')} title="Gras">
+                    <Bold className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('italic')} title="Italique">
+                    <Italic className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('underline')} title="Souligné">
+                    <UnderlineIcon className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn
+                    onClick={() => exec('formatBlock', '<h1>')}
+                    title="Titre 1"
+                  >
+                    H1
+                  </ToolBtn>
+                  <ToolBtn
+                    onClick={() => exec('formatBlock', '<h2>')}
+                    title="Titre 2"
+                  >
+                    H2
+                  </ToolBtn>
+                  <ToolBtn
+                    onClick={() => exec('formatBlock', '<p>')}
+                    title="Paragraphe"
+                  >
+                    ¶
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn onClick={() => exec('insertUnorderedList')} title="Liste">
+                    <List className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('insertOrderedList')} title="Liste num">
+                    <ListOrdered className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn
+                    onClick={() => exec('justifyLeft')}
+                    title="Aligner à gauche"
+                  >
+                    ⇤
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('justifyCenter')} title="Centrer">
+                    ↔
+                  </ToolBtn>
+                  <ToolBtn
+                    onClick={() => exec('justifyRight')}
+                    title="Aligner à droite"
+                  >
+                    ⇥
+                  </ToolBtn>
+                </div>
+                <div
+                  ref={editorRef}
+                  contentEditable={editorReady}
+                  suppressContentEditableWarning
+                  className="border min-h-[300px] max-h-[400px] overflow-y-auto p-4 text-sm focus:outline-none rounded-b"
+                  style={{
+                    borderColor: COL_BORDER,
+                    color: COL_BRUN,
+                    fontFamily: 'Calibri, "Segoe UI", sans-serif',
+                  }}
+                />
+                <p
+                  className="text-xs italic mt-1.5"
+                  style={{ color: COL_BRUN }}
+                >
+                  Variables disponibles : S_NOM, S_PRENOM, S_DNAISS, S_ADRESSE,
+                  S_CP, S_VILLE, S_GSM, DATE_CTS, FIN_PER_ESSAI, STE_RS,
+                  STE_SIRET, STE_GERANT_NOM, etc.
+                </p>
+
+                <div
+                  className="mt-3 pt-2 border-t flex"
+                  style={{ borderColor: COL_BORDER }}
+                >
                   <button
                     type="button"
                     onClick={onClose}
@@ -579,6 +729,29 @@ function Checkbox({
       />
       {label}
     </label>
+  )
+}
+
+function ToolBtn({
+  onClick,
+  title,
+  children,
+}: {
+  onClick: () => void
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseDown={(e) => e.preventDefault()}
+      title={title}
+      className="px-2 py-1 rounded hover:bg-white text-xs"
+      style={{ color: COL_BRUN }}
+    >
+      {children}
+    </button>
   )
 }
 
