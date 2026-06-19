@@ -23,6 +23,7 @@ import {
 
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
+import DocRHEditModal from '@/components/DocRHEditModal'
 
 interface DocRH {
   id_doc_rh: string
@@ -52,6 +53,7 @@ export default function CttTravailPage() {
   const [selected, setSelected] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)  // null=closed, ''=nouveau, '<id>'=modifier
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -71,13 +73,10 @@ export default function CttTravailPage() {
   const selectedRow = rows.find((r) => r.id_doc_rh === selected)
 
   // ---- Actions ----------------------------------------------------------
-  const handleNouveau = () => {
-    showToast('Édition d\'un document : module à venir.', 'info')
-  }
-
+  const handleNouveau = () => setEditing('')
   const handleModifier = () => {
     if (!selectedRow) return
-    showToast('Édition d\'un document : module à venir.', 'info')
+    setEditing(selectedRow.id_doc_rh)
   }
 
   const handleDupliquer = async () => {
@@ -264,6 +263,17 @@ export default function CttTravailPage() {
           </table>
         )}
       </div>
+
+      {editing !== null && (
+        <DocRHEditModal
+          idDocRh={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            reload()
+          }}
+        />
+      )}
     </div>
   )
 }

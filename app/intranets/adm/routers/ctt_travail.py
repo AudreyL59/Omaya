@@ -4,7 +4,8 @@ Router Fen_ListeDocRH (ADM Salaries -> Liste des contrats de travail).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -60,3 +61,113 @@ def delete_doc(
 ):
     """Btn Supprimer : soft delete."""
     return svc.delete_doc(id_doc_rh, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Fen_EditionDocRH
+# ---------------------------------------------------------------------------
+
+
+@router.get("/lookups")
+def get_lookups(_user: UserToken = Depends(get_current_user)):
+    """Combos Fen_EditionDocRH : types doc / produits / societes / type photo."""
+    return {
+        "types_doc": svc.list_types_doc(),
+        "types_produit": svc.list_types_produit(),
+        "societes": svc.list_societes_actives(),
+        "types_photo_dpae": svc.list_types_photo_dpae(),
+    }
+
+
+@router.post("/new")
+def post_new(user: UserToken = Depends(get_current_user)):
+    """Btn Nouveau : cree un doc vide."""
+    return svc.create_doc_blank(user.id_salarie)
+
+
+@router.get("/{id_doc_rh}")
+def get_doc(
+    id_doc_rh: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Metadonnees du doc + taille du contenu."""
+    d = svc.get_doc_meta(id_doc_rh)
+    if not d:
+        raise HTTPException(404, "Document introuvable")
+    return d
+
+
+class DocRHMetaPayload(BaseModel):
+    id_type_doc: int = 0
+    titre: str = ""
+    info_cpl: str = ""
+    id_type_produit: int = 1
+    id_ste: int = 0
+    doc_actif: bool = True
+    prioritaire: bool = False
+    doc_dpae: bool = False
+    doc_dpae_distrib: bool = False
+    id_tk_type_photo_dpae: int = 0
+
+
+@router.put("/{id_doc_rh}")
+def put_meta(
+    id_doc_rh: int,
+    payload: DocRHMetaPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer : update metadonnees (sans contenu)."""
+    return svc.update_doc_meta(id_doc_rh, payload.model_dump(), user.id_salarie)
+
+
+@router.post("/{id_doc_rh}/content")
+async def post_content(
+    id_doc_rh: int,
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Upload du DOCX -> remplace le contenu bytea."""
+    content = await file.read()
+    res = svc.upload_doc_content(id_doc_rh, content, user.id_salarie)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
+@router.get("/{id_doc_rh}/content")
+def get_content(
+    id_doc_rh: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Telecharge le DOCX original."""
+    content = svc.download_doc_content(id_doc_rh)
+    if content is None:
+        raise HTTPException(404, "Aucun contenu")
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'inline; filename="doc_{id_doc_rh}.docx"'},
+    )
+
+
+@router.post("/{id_doc_rh}/publipostage-test")
+def post_publipostage_test(
+    id_doc_rh: int,
+    id_ste: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Tester Mise en page' : substitue les variables et renvoie le DOCX
+    rempli avec donnees fictives de salarie + societe choisie.
+    Note V1.1 : pas d'insertion d'images (logo/cachet/signatures)."""
+    meta = svc.get_doc_meta(id_doc_rh)
+    titre = meta.get("titre") if meta else ""
+    content = svc.publipostage_test(id_doc_rh, id_ste, titre_doc=titre or "")
+    if content is None:
+        raise HTTPException(400, "Pas de contenu DOCX a publiposter")
+    return Response(
+        content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="test_{id_doc_rh}.docx"',
+        },
+    )

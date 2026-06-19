@@ -173,3 +173,315 @@ def delete_doc(id_doc_rh: int, op_id: int) -> dict:
         (int(op_id), int(id_doc_rh)),
     )
     return {"ok": True}
+
+
+# ===========================================================================
+# Fen_EditionDocRH (edition d'un doc RH)
+# ===========================================================================
+
+
+def list_types_doc() -> list[dict]:
+    """Combo Type Doc."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_type_doc, lib_type FROM rh.pgt_doc_rhtype
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+         ORDER BY lib_type""",
+    ) or []
+    return [
+        {"id_type_doc": str(_int(r.get("id_type_doc"))), "lib": _str(r.get("lib_type"))}
+        for r in rows
+    ]
+
+
+def list_types_produit() -> list[dict]:
+    """Combo Produit."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_type_produit, lib FROM rh.pgt_type_produit
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+         ORDER BY lib""",
+    ) or []
+    return [
+        {"id_type_produit": str(_int(r.get("id_type_produit"))), "lib": _str(r.get("lib"))}
+        for r in rows
+    ]
+
+
+def list_societes_actives() -> list[dict]:
+    """Combo Societe (Fen_EditionDocRH combo ListeSTE + meta du doc)."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_ste, raison_sociale, rs_interne FROM rh.pgt_societe
+            WHERE COALESCE(is_actif, FALSE) = TRUE
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+         ORDER BY raison_sociale""",
+    ) or []
+    return [
+        {
+            "id_ste": str(_int(r.get("id_ste"))),
+            "raison_sociale": _str(r.get("raison_sociale")),
+            "rs_interne": _str(r.get("rs_interne")),
+        }
+        for r in rows
+    ]
+
+
+def list_types_photo_dpae() -> list[dict]:
+    """Combo Type Photo (TK_TypePhotoDPAE)."""
+    db = get_pg_connection("ticket_dpae")
+    rows = db.query(
+        """SELECT id_tk_type_photo_dpae, lib_type_doc
+             FROM ticket_dpae.pgt_tk_type_photo_dpae
+            WHERE COALESCE(desactiver, FALSE) = FALSE
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+         ORDER BY lib_type_doc""",
+    ) or []
+    return [
+        {
+            "id_tk_type_photo_dpae": str(_int(r.get("id_tk_type_photo_dpae"))),
+            "lib": _str(r.get("lib_type_doc")),
+        }
+        for r in rows
+    ]
+
+
+def get_doc_meta(id_doc_rh: int) -> dict | None:
+    """Toutes les metadonnees du doc (pour Fen_EditionDocRH)."""
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        """SELECT id_doc_rh, id_type_doc, titre, info_cpl, id_type_produit,
+                  doc_actif, prioritaire, id_ste, doc_dpae,
+                  doc_dpae_distrib, id_tk_type_photo_dpae,
+                  octet_length(contenu) AS taille_contenu
+             FROM rh.pgt_doc_rh
+            WHERE id_doc_rh = ? LIMIT 1""",
+        (int(id_doc_rh),),
+    )
+    if not r:
+        return None
+    return {
+        "id_doc_rh": str(_int(r.get("id_doc_rh"))),
+        "id_type_doc": str(_int(r.get("id_type_doc")) or ""),
+        "titre": _str(r.get("titre")),
+        "info_cpl": _str(r.get("info_cpl")),
+        "id_type_produit": str(_int(r.get("id_type_produit")) or ""),
+        "doc_actif": bool(r.get("doc_actif")),
+        "prioritaire": bool(r.get("prioritaire")),
+        "id_ste": str(_int(r.get("id_ste")) or ""),
+        "doc_dpae": bool(r.get("doc_dpae")),
+        "doc_dpae_distrib": bool(r.get("doc_dpae_distrib")),
+        "id_tk_type_photo_dpae": str(_int(r.get("id_tk_type_photo_dpae")) or ""),
+        "taille_contenu": _int(r.get("taille_contenu")),
+    }
+
+
+def create_doc_blank(op_id: int) -> dict:
+    """Btn Nouveau : cree un docRH vide. Cf. WinDev HRAZ + HAjoute."""
+    db = get_pg_connection("rh")
+    new_id = _new_id()
+    db.query(
+        """INSERT INTO rh.pgt_doc_rh
+              (id_doc_rh, id_type_doc, titre, info_cpl, id_type_produit,
+               datecrea, doc_actif, prioritaire, id_ste, doc_dpae,
+               doc_dpae_distrib, id_tk_type_photo_dpae,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, NULL, 'Nouveau document', '', 1,
+                   NOW(), TRUE, FALSE, 0, FALSE,
+                   FALSE, 0,
+                   NOW(), ?, 'new')""",
+        (new_id, int(op_id)),
+    )
+    return {"ok": True, "id_doc_rh": str(new_id)}
+
+
+def update_doc_meta(id_doc_rh: int, payload: dict, op_id: int) -> dict:
+    """PUT metadonnees (sans contenu)."""
+    db = get_pg_connection("rh")
+    db.query(
+        """UPDATE rh.pgt_doc_rh
+              SET id_type_doc = ?,
+                  titre = ?,
+                  info_cpl = ?,
+                  id_type_produit = ?,
+                  id_ste = ?,
+                  doc_actif = ?,
+                  prioritaire = ?,
+                  doc_dpae = ?,
+                  doc_dpae_distrib = ?,
+                  id_tk_type_photo_dpae = ?,
+                  modif_date = NOW(),
+                  modif_op = ?,
+                  modif_elem = 'modif'
+            WHERE id_doc_rh = ?""",
+        (
+            _int(payload.get("id_type_doc")),
+            _str(payload.get("titre")),
+            _str(payload.get("info_cpl")),
+            _int(payload.get("id_type_produit")) or 1,
+            _int(payload.get("id_ste")),
+            bool(payload.get("doc_actif")),
+            bool(payload.get("prioritaire")),
+            bool(payload.get("doc_dpae")),
+            bool(payload.get("doc_dpae_distrib")),
+            _int(payload.get("id_tk_type_photo_dpae")),
+            int(op_id),
+            int(id_doc_rh),
+        ),
+    )
+    return {"ok": True}
+
+
+def upload_doc_content(id_doc_rh: int, content: bytes, op_id: int) -> dict:
+    """Replace le bytea 'contenu' (upload d'un .docx)."""
+    if not content:
+        return {"ok": False, "error": "Contenu vide"}
+    db = get_pg_connection("rh")
+    import psycopg2
+    # On a besoin de Binary pour bytea
+    db.query(
+        """UPDATE rh.pgt_doc_rh
+              SET contenu = ?,
+                  modif_date = NOW(),
+                  modif_op = ?,
+                  modif_elem = 'modif'
+            WHERE id_doc_rh = ?""",
+        (psycopg2.Binary(content), int(op_id), int(id_doc_rh)),
+    )
+    return {"ok": True, "taille": len(content)}
+
+
+def download_doc_content(id_doc_rh: int) -> bytes | None:
+    """RETR du bytea 'contenu'."""
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        "SELECT contenu FROM rh.pgt_doc_rh WHERE id_doc_rh = ? LIMIT 1",
+        (int(id_doc_rh),),
+    )
+    if not r:
+        return None
+    c = r.get("contenu")
+    if c is None:
+        return None
+    return bytes(c) if isinstance(c, memoryview) else c
+
+
+# Donnees fictives pour Publipostage_TESTSalarie (cf. WinDev)
+_FAKE_SALARIE = {
+    "S_TITRE": "Melle",
+    "S_NOM": "NOM_DE_FAMILLE_TRES_LONG",
+    "S_PRENOM": "LAURE-EMMANUELLE",
+    "S_LNAISS": "Evreux",
+    "S_DEPNAISS": "27",
+    "S_ADRESSE": "21 rue de la paix",
+    "S_CP": "75000",
+    "S_VILLE": "PARIS",
+    "S_GSM": "0612121212",
+    "S_NUMSS": "283092712312355",
+    "S_DNAISS": "06/09/1983",
+    "FIN_PER_ESSAI": "01/01/2027",
+    "DATE_CTS": datetime.now().strftime("%d/%m/%Y"),
+    "DATE_ANC": datetime.now().strftime("%d/%m/%Y"),
+    "DATE_AVENANT": datetime.now().strftime("%d/%m/%Y"),
+    "SECTEURAGENCE": "27.27.27",
+    "S_MENTION": "",
+    "S_SIGN": "",
+}
+
+
+def _replace_in_docx(content: bytes, variables: dict) -> bytes:
+    """Remplace les variables texte dans un DOCX. Utilise python-docx
+    qui ne sait pas remplacer si le texte est decoupe sur plusieurs runs ;
+    on fusionne les runs par paragraphe a la volee."""
+    from io import BytesIO
+
+    from docx import Document
+
+    doc = Document(BytesIO(content))
+
+    def replace_in_para(para):
+        full = para.text
+        modified = full
+        for key, val in variables.items():
+            if key in modified:
+                modified = modified.replace(key, str(val))
+        if modified != full:
+            # Vide tous les runs sauf le premier, met le texte dans le premier
+            for run in para.runs[1:]:
+                run.text = ""
+            if para.runs:
+                para.runs[0].text = modified
+            else:
+                para.add_run(modified)
+
+    for para in doc.paragraphs:
+        replace_in_para(para)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    replace_in_para(para)
+    # Headers/footers
+    for section in doc.sections:
+        for para in section.header.paragraphs:
+            replace_in_para(para)
+        for para in section.footer.paragraphs:
+            replace_in_para(para)
+
+    out = BytesIO()
+    doc.save(out)
+    return out.getvalue()
+
+
+def _societe_variables(id_ste: int) -> dict:
+    """Variables STE_* depuis pgt_societe."""
+    db = get_pg_connection("rh")
+    s = db.query_one(
+        """SELECT raison_sociale, code_ape, rcs, capital, adresse1, cp,
+                  ville, siren, siret, gerant_nom, gerant_type
+             FROM rh.pgt_societe WHERE id_ste = ? LIMIT 1""",
+        (int(id_ste),),
+    )
+    if not s:
+        return {}
+    return {
+        "DOCTITRE": "",
+        "STE_RS": _str(s.get("raison_sociale")),
+        "STE_APE": _str(s.get("code_ape")),
+        "STE_RCS": _str(s.get("rcs")),
+        "STE_CAPITAL": _str(s.get("capital")),
+        "STE_ADR": f"{_str(s.get('adresse1'))} {_str(s.get('cp'))} {_str(s.get('ville'))}".strip(),
+        "STE_VILLE": _str(s.get("ville")),
+        "STE_SIREN": _str(s.get("siren")),
+        "STE_SIRET": _str(s.get("siret")),
+        "STE_GERANT_NOM": _str(s.get("gerant_nom")),
+        "STE_GERANT_TYPE": _str(s.get("gerant_type")),
+        # Images STE_LOGO / GER_SIGN / STE_CACHET : non gerees en V1.1
+        # (necessitent python-docx insertion d'images, V1.2)
+        "STE_LOGO": "",
+        "GER_SIGN": "",
+        "STE_CACHET": "",
+    }
+
+
+def publipostage_test(id_doc_rh: int, id_ste: int, titre_doc: str = "") -> bytes | None:
+    """Btn 'Tester Mise en page' : substitue les variables S_*/STE_* dans
+    le DOCX et retourne le binaire modifie.
+
+    Salarie fictif (cf. Publipostage_TESTSalarie WinDev) + variables
+    de la societe choisie. V1.1 ne gere pas les images (LOGO, signatures,
+    cachet, paraphes) : ce sera V1.2."""
+    content = download_doc_content(id_doc_rh)
+    if not content:
+        return None
+    variables = dict(_FAKE_SALARIE)
+    if id_ste:
+        ste_vars = _societe_variables(id_ste)
+        if titre_doc:
+            ste_vars["DOCTITRE"] = titre_doc
+        variables.update(ste_vars)
+    try:
+        return _replace_in_docx(content, variables)
+    except Exception:
+        # Si le contenu n'est pas un DOCX valide
+        return None
