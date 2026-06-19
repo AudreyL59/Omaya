@@ -1,14 +1,12 @@
 /**
  * Fen_EditionDocRH (transposition WinDev) - edition d'un doc RH.
  *
- * V1.1 : metadonnees + upload/download du DOCX (le contenu n'est pas
- * edite en WYSIWYG dans le navigateur, il faut uploader un .docx).
- * Le btn 'Tester Mise en page' substitue les variables S_*/STE_* avec
- * des donnees fictives + une societe choisie -> telecharge le DOCX
- * publiposte (cf. Publipostage_TESTSalarie WinDev).
+ * V1.2 : metadonnees + editeur inline contentEditable + import/export DOCX.
+ * Btn 'Tester Mise en page' substitue les variables (S_NOM, STE_RS, etc.)
+ * avec des donnees fictives + une societe choisie -> telecharge le
+ * document publiposte (cf. Publipostage_TESTSalarie WinDev).
  *
- * V1.2 (a venir) : editeur WYSIWYG inline (mammoth + TipTap).
- * V1.3 : insertion images logo/cachet/signatures.
+ * V1.3 : insertion images logo/cachet/signatures dans le publipostage.
  */
 
 import { useEffect, useRef, useState } from 'react'
