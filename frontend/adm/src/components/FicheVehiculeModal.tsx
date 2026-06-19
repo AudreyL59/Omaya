@@ -19,7 +19,6 @@ import {
   Printer,
   Save,
   Trash2,
-  Upload,
   X,
 } from 'lucide-react'
 
