@@ -43,8 +43,22 @@ from ..service import (
 # --------------------------------------------------------------------
 
 def _memo_img(db_key: str, table: str, key_field: str, key_value: int,
-              field: str) -> bytes | None:
+              field: str, pg: bool = False) -> bytes | None:
     try:
+        if pg:
+            r = get_pg_connection(db_key).query_one(
+                f"SELECT {key_field}, {field} FROM {table} "
+                f"WHERE {key_field} = ?",
+                (int(key_value),),
+            )
+            v = r.get(field) if r else None
+            if not v:
+                return None
+            if isinstance(v, memoryview):
+                return bytes(v)
+            if isinstance(v, bytes):
+                return v
+            return base64.b64decode(v)
         r = get_connection(db_key).query_one(
             f"SELECT {key_field}, {field} FROM {table} WHERE {key_field} = ?",
             (int(key_value),),
@@ -77,8 +91,10 @@ def _photo_cached(id_ticket: int, id_photo: int) -> str | None:
     path = os.path.join(_cache_dir(id_ticket), f"{int(id_photo)}.jpg")
     if os.path.exists(path) and os.path.getsize(path) > 0:
         return path
-    data = _memo_img("ticket_rh", "TK_DemandeSignPV_Photo",
-                     "IDTK_DemandeSignPV_Photo", int(id_photo), "Photo")
+    data = _memo_img(
+        "ticket_rh", "ticket_rh.pgt_tk_demandesignpv_photo",
+        "id_tk_demande_sign_pv_photo", int(id_photo), "photo", pg=True,
+    )
     small = _shrink_image(data)
     if not small:
         return None
@@ -255,22 +271,20 @@ def _fmt_dt(v: object) -> str:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        "SELECT IDTK_Liste, IDdemandeSignPVUlease, IDSalarie, idDA, IdPC, "
-        "contratValidé, contratSigné, IDSalarie_Ulease "
-        "FROM TK_DemandeSignPVUlease WHERE IDTK_Liste = ?",
+        "SELECT id_tk_liste, id_demande_sign_pv_ulease, id_salarie, id_da, "
+        "id_pc, contrat_valide, contrat_signe, id_salarie_ulease "
+        "FROM ticket_rh.pgt_tk_demande_sign_pv_ulease WHERE id_tk_liste = ?",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
-    titre = _memo_text(id_ticket, "TitreContrat")
-    observations = _memo_text(id_ticket, "Observations")
-    id_pc = _clean_id(_to_int(r.get("IdPC")))
+    titre = _memo_text(id_ticket, "titre_contrat")
+    observations = _memo_text(id_ticket, "observations")
+    id_pc = _clean_id(_to_int(r.get("id_pc")))
     infos = _infos_pc(id_pc)
     photos = _photos(id_ticket)
-    # NB : on ne charge PAS les binaires ici (lourd) — le front récupère
-    # chaque image en lazy via get_file (404 = photo non recevable/vide).
     notees = sum(1 for p in photos if p["note"] > 0)
 
     is_livraison = "livraison" in titre.lower()
@@ -287,16 +301,17 @@ def load(id_ticket: int) -> dict:
         "nb_notees": notees,
         "nb_total": len(photos),
         "toutes_notees": len(photos) > 0 and notees == len(photos),
-        "contrat_valide": bool(r.get("contratValidé")),
-        "contrat_signe": bool(r.get("contratSigné")),
+        "contrat_valide": bool(r.get("contrat_valide")),
+        "contrat_signe": bool(r.get("contrat_signe")),
     }
 
 
 def _memo_text(id_ticket: int, field: str) -> str:
     try:
-        r = get_connection("ticket_rh").query_one(
-            f"SELECT IDTK_Liste, {field} FROM TK_DemandeSignPVUlease "
-            "WHERE IDTK_Liste = ?",
+        r = get_pg_connection("ticket_rh").query_one(
+            f"SELECT id_tk_liste, {field} "
+            f"FROM ticket_rh.pgt_tk_demande_sign_pv_ulease "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         return ((r.get(field) if r else "") or "").strip()
@@ -305,9 +320,11 @@ def _memo_text(id_ticket: int, field: str) -> str:
 
 
 def save(id_ticket: int, payload: dict, user_id: int) -> dict:
+    """Migration PG : pgt_tk_demande_sign_pv_ulease (ticket_rh) +
+    pgt_tk_demandesignpv_photo (ticket_rh) + pgt_salarie_doc_ulease (rh) +
+    pgt_tk_liste (ticket)."""
     action = str(payload.get("action") or "")
-    now = _now_windev()
-    rh_tk = get_connection("ticket_rh")
+    rh_tk = get_pg_connection("ticket_rh")
 
     # --- Notation d'une photo ---
     if action == "note_photo":
@@ -317,10 +334,10 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             return {"ok": False, "error": "Photo manquante"}
         try:
             rh_tk.query(
-                "UPDATE TK_DemandeSignPV_Photo SET NoteEtat = ?, "
-                "ModifDate = ?, ModifOP = ?, ModifELEM = 'modif' "
-                "WHERE IDTK_DemandeSignPV_Photo = ?",
-                (note, now, int(user_id), int(id_photo)),
+                "UPDATE ticket_rh.pgt_tk_demandesignpv_photo "
+                "SET note_etat = ?, modif_date = NOW(), modif_op = ?, "
+                "modif_elem = 'modif' WHERE id_tk_demande_sign_pv_photo = ?",
+                (note, int(user_id), int(id_photo)),
             )
         except Exception as e:
             return {"ok": False, "error": f"note_photo : {e}"}
@@ -333,10 +350,11 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             return {"ok": False, "error": "Photo manquante"}
         try:
             rh_tk.query(
-                "UPDATE TK_DemandeSignPV_Photo SET Photo = '', NoteEtat = 0, "
-                "ModifDate = ?, ModifOP = ?, ModifELEM = 'modif' "
-                "WHERE IDTK_DemandeSignPV_Photo = ?",
-                (now, int(user_id), int(id_photo)),
+                "UPDATE ticket_rh.pgt_tk_demandesignpv_photo "
+                "SET photo = NULL, note_etat = 0, modif_date = NOW(), "
+                "modif_op = ?, modif_elem = 'modif' "
+                "WHERE id_tk_demande_sign_pv_photo = ?",
+                (int(user_id), int(id_photo)),
             )
         except Exception as e:
             return {"ok": False, "error": f"del_photo : {e}"}
@@ -355,16 +373,16 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         obs = str(payload.get("observations") or "")
         try:
             rh_tk.query(
-                "UPDATE TK_DemandeSignPVUlease SET Observations = ?, "
-                "ModifDate = ?, ModifOP = ?, ModifELEM = 'modif' "
-                "WHERE IDTK_Liste = ?",
-                (obs, now, int(user_id), int(id_ticket)),
+                "UPDATE ticket_rh.pgt_tk_demande_sign_pv_ulease "
+                "SET observations = ?, modif_date = NOW(), modif_op = ?, "
+                "modif_elem = 'modif' WHERE id_tk_liste = ?",
+                (obs, int(user_id), int(id_ticket)),
             )
         except Exception as e:
             return {"ok": False, "error": f"save_obs : {e}"}
         return {"ok": True}
 
-    # --- Ce document est valide : upload PDF + salarie_docUlease + clôture ---
+    # --- Ce document est valide : upload PDF + salarie_doc_ulease + clôture ---
     if action == "valider_signe":
         from app.shared.notifications.mail import envoi_mail_rh
         from app.shared.notifications.sms import envoi_sms
@@ -373,20 +391,22 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
         cloturer = bool(payload.get("cloturer"))
         r = rh_tk.query_one(
-            "SELECT IDTK_Liste, IDdemandeSignPVUlease, IDSalarie, idDA, IdPC, "
-            "IDSalarie_Ulease FROM TK_DemandeSignPVUlease WHERE IDTK_Liste = ?",
+            "SELECT id_tk_liste, id_demande_sign_pv_ulease, id_salarie, "
+            "id_da, id_pc, id_salarie_ulease "
+            "FROM ticket_rh.pgt_tk_demande_sign_pv_ulease "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         if not r:
             return {"ok": False, "error": "PV introuvable"}
-        id_pc = _clean_id(_to_int(r.get("IdPC")))
-        id_da = _clean_id(_to_int(r.get("idDA")))
-        id_demande = _clean_id(_to_int(r.get("IDdemandeSignPVUlease")))
-        id_doc_ulease = _clean_id(_to_int(r.get("IDSalarie_Ulease")))
+        id_pc = _clean_id(_to_int(r.get("id_pc")))
+        id_da = _clean_id(_to_int(r.get("id_da")))
+        id_demande = _clean_id(_to_int(r.get("id_demande_sign_pv_ulease")))
+        id_doc_ulease = _clean_id(_to_int(r.get("id_salarie_ulease")))
         infos = _infos_pc(id_pc)
         id_salarie = infos["id_salarie"]
         id_vehicule = infos["id_vehicule"]
-        titre = _memo_text(id_ticket, "TitreContrat")
+        titre = _memo_text(id_ticket, "titre_contrat")
         type_cttw = 2 if "livraison" in titre.lower() else 3
         lib_pv = "PV_Livraison" if type_cttw == 2 else "PV_Restitution"
         nom_pdf = f"{id_ticket}_{lib_pv}.pdf"
@@ -402,55 +422,58 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         except Exception as e:
             return {"ok": False, "error": f"Upload FTP : {e}"}
 
-        # salarie_docUlease (base rh)
-        rh = get_connection("rh")
+        # salarie_doc_ulease (base rh PG)
+        rh = get_pg_connection("rh")
         try:
             target = id_doc_ulease or None
             if not target:
                 ex = rh.query_one(
-                    "SELECT IDsalarie_docUlease FROM salarie_docUlease "
-                    "WHERE IDSalarie = ? AND RECU = 0 AND IDdocUleaseTYPE = ?",
+                    "SELECT id_salarie_doc_ulease FROM rh.pgt_salarie_doc_ulease "
+                    "WHERE id_salarie = ? AND recu = FALSE "
+                    "AND id_doc_ulease_type = ?",
                     (int(id_salarie), type_cttw),
                 )
                 if ex:
-                    target = _clean_id(_to_int(ex.get("IDsalarie_docUlease")))
+                    target = _clean_id(_to_int(ex.get("id_salarie_doc_ulease")))
             if target:
                 rh.query(
-                    "UPDATE salarie_docUlease SET RECU = 1, RECUDATE = ?, "
-                    "ModifOP = ?, ModifDate = ?, ModifELEM = 'modif' "
-                    "WHERE IDsalarie_docUlease = ?",
-                    (now, int(user_id), now, int(target)),
+                    "UPDATE rh.pgt_salarie_doc_ulease SET recu = TRUE, "
+                    "recu_date = NOW(), modif_op = ?, modif_date = NOW(), "
+                    "modif_elem = 'modif' WHERE id_salarie_doc_ulease = ?",
+                    (int(user_id), int(target)),
                 )
             else:
-                new_id = int(now)
+                from datetime import datetime
+                new_id = int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
                 rh.query(
-                    """INSERT INTO salarie_docUlease
-                    (IDsalarie_docUlease, IDdocUleaseTYPE, IDSalarie, ID_DA,
-                     DATE_Edition, RECU, RECUDATE, ModifOP, ModifDate,
-                     ModifELEM)
-                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'new')""",
+                    """INSERT INTO rh.pgt_salarie_doc_ulease
+                    (id_salarie_doc_ulease, id_doc_ulease_type, id_salarie,
+                     id_da, date_edition, recu, recu_date,
+                     modif_op, modif_date, modif_elem)
+                    VALUES (?, ?, ?, ?, NOW(), TRUE, NOW(), ?, NOW(), 'new')""",
                     (new_id, type_cttw, int(id_salarie), int(id_da),
-                     str(id_demande), now, int(user_id), now),
+                     int(user_id)),
                 )
                 rh_tk.query(
-                    "UPDATE TK_DemandeSignPVUlease SET IDSalarie_Ulease = ?, "
-                    "ModifDate = ?, ModifOP = ?, ModifELEM = 'modif' "
-                    "WHERE IDTK_Liste = ?",
-                    (new_id, now, int(user_id), int(id_ticket)),
+                    "UPDATE ticket_rh.pgt_tk_demande_sign_pv_ulease "
+                    "SET id_salarie_ulease = ?, modif_date = NOW(), "
+                    "modif_op = ?, modif_elem = 'modif' "
+                    "WHERE id_tk_liste = ?",
+                    (new_id, int(user_id), int(id_ticket)),
                 )
         except Exception as e:
-            return {"ok": False, "error": f"salarie_docUlease : {e}"}
+            return {"ok": False, "error": f"salarie_doc_ulease : {e}"}
 
         # SMS + mail au salarié
         sms_result = ""
         try:
             c = rh.query_one(
-                "SELECT IDSalarie, MAIL, TélMob FROM salarie_coordonnées "
-                "WHERE IDSalarie = ?",
+                "SELECT id_salarie, mail, tel_mob "
+                "FROM rh.pgt_salarie_coordonnees WHERE id_salarie = ?",
                 (int(id_salarie),),
             )
-            mail = (c.get("MAIL") or "").strip() if c else ""
-            gsm = (c.get("TélMob") or "") if c else ""
+            mail = (c.get("mail") or "").strip() if c else ""
+            gsm = (c.get("tel_mob") or "") if c else ""
             for ch in (".", " ", "/", "-"):
                 gsm = gsm.replace(ch, "")
             if gsm:
@@ -475,13 +498,13 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
         if cloturer:
             try:
-                get_connection("ticket").query(
-                    """UPDATE TK_Liste SET Cloturée = 1, DateCloture = ?,
-                        modification = 1, opModif = ?, idModif = 0,
-                        TypeModif = 'TKSTATUT', ModifDate = ?, ModifOP = ?,
-                        ModifELEM = 'modif'
-                    WHERE IDTK_Liste = ?""",
-                    (now, int(user_id), now, int(user_id), int(id_ticket)),
+                get_pg_connection("ticket").query(
+                    """UPDATE ticket.pgt_tk_liste SET cloturee = TRUE,
+                        date_cloture = NOW(), modification = TRUE,
+                        op_modif = ?, id_modif = 0, type_modif = 'TKSTATUT',
+                        modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                    (int(user_id), int(user_id), int(id_ticket)),
                 )
                 ajout_histo_tk(int(id_ticket), 4, int(user_id))
             except Exception:
@@ -535,28 +558,30 @@ def _societe_salarie(id_salarie: int) -> dict:
            "siren": "", "guimmick": None}
     if not id_salarie:
         return out
-    rh = get_connection("rh")
+    rh = get_pg_connection("rh")
     try:
         e = rh.query_one(
-            "SELECT TOP 1 IDSalarie, IdSte FROM salarie_embauche "
-            "WHERE IDSalarie = ? ORDER BY DateDebut DESC",
+            "SELECT id_salarie, id_ste FROM rh.pgt_salarie_embauche "
+            "WHERE id_salarie = ? ORDER BY date_debut DESC LIMIT 1",
             (int(id_salarie),),
         )
-        id_ste = _clean_id(_to_int(e.get("IdSte"))) if e else 0
+        id_ste = _clean_id(_to_int(e.get("id_ste"))) if e else 0
         if not id_ste:
             return out
         s = rh.query_one(
-            "SELECT IdSte, RaisonSociale, SIREN, ADRESSE1, Cp, VILLE "
-            "FROM societe WHERE IdSte = ?",
+            "SELECT id_ste, raison_sociale, siren, adresse1, cp, ville "
+            "FROM rh.pgt_societe WHERE id_ste = ?",
             (int(id_ste),),
         )
         if s:
-            out["raison"] = (s.get("RaisonSociale") or "").strip()
-            out["siren"] = (s.get("SIREN") or "").strip()
-            out["adresse"] = (s.get("ADRESSE1") or "").strip()
-            out["cp"] = (s.get("Cp") or "").strip()
-            out["ville"] = (s.get("VILLE") or "").strip()
-        out["guimmick"] = _memo_img("rh", "societe", "IdSte", id_ste, "GUIMMICK")
+            out["raison"] = (s.get("raison_sociale") or "").strip()
+            out["siren"] = (s.get("siren") or "").strip()
+            out["adresse"] = (s.get("adresse1") or "").strip()
+            out["cp"] = (s.get("cp") or "").strip()
+            out["ville"] = (s.get("ville") or "").strip()
+        out["guimmick"] = _memo_img(
+            "rh", "rh.pgt_societe", "id_ste", id_ste, "guimmick", pg=True,
+        )
     except Exception:
         pass
     return out
@@ -607,13 +632,14 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
     d = load(id_ticket)
     if not d.get("found"):
         raise ValueError("PV introuvable")
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        "SELECT IDTK_Liste, IDSalarie, IdPC FROM TK_DemandeSignPVUlease "
-        "WHERE IDTK_Liste = ?",
+        "SELECT id_tk_liste, id_salarie, id_pc "
+        "FROM ticket_rh.pgt_tk_demande_sign_pv_ulease "
+        "WHERE id_tk_liste = ?",
         (int(id_ticket),),
     )
-    id_pc = _clean_id(_to_int(r.get("IdPC"))) if r else 0
+    id_pc = _clean_id(_to_int(r.get("id_pc"))) if r else 0
     infos = _infos_pc(id_pc)
     ste = _societe_salarie(infos["id_salarie"])
 
@@ -656,8 +682,8 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
     # Paraphe (répété en pied de page) + logo société, lus une fois
     logo = reader(ste["guimmick"], shrink=True)
     paraphe = reader(
-        _memo_img("ticket_rh", "TK_DemandeSignPVUlease", "IDTK_Liste",
-                  int(id_ticket), "paraphe"),
+        _memo_img("ticket_rh", "ticket_rh.pgt_tk_demande_sign_pv_ulease",
+                  "id_tk_liste", int(id_ticket), "paraphe", pg=True),
         shrink=True,
     )
 
@@ -790,9 +816,11 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
             break
     # Signatures (empilées à gauche) + photo salarié (à droite)
     sy = box_bottom - 8 * mm
-    for field in ("Signature", "paraphe", "luApp"):
-        data = _memo_img("ticket_rh", "TK_DemandeSignPVUlease", "IDTK_Liste",
-                         int(id_ticket), field)
+    for field in ("signature", "paraphe", "lu_app"):
+        data = _memo_img(
+            "ticket_rh", "ticket_rh.pgt_tk_demande_sign_pv_ulease",
+            "id_tk_liste", int(id_ticket), field, pg=True,
+        )
         ir = reader(data, shrink=True)
         if ir:
             try:
@@ -802,8 +830,8 @@ def _generate_pv_pdf(id_ticket: int) -> bytes:
                 pass
             sy -= 22 * mm
     photo_sal = reader(
-        _memo_img("ticket_rh", "TK_DemandeSignPVUlease", "IDTK_Liste",
-                  int(id_ticket), "PhotoSalarié"),
+        _memo_img("ticket_rh", "ticket_rh.pgt_tk_demande_sign_pv_ulease",
+                  "id_tk_liste", int(id_ticket), "photo_salarie", pg=True),
         shrink=True,
     )
     if photo_sal:

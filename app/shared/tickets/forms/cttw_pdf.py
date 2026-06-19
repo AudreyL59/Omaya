@@ -51,8 +51,28 @@ def _memo_bytes(
     *,
     table: str = "TK_DemandeCttW",
     db_key: str = "ticket_rh",
+    pg: bool = False,
 ) -> bytes | None:
+    """Lit un champ binaire d'un ticket. pg=True -> PG (snake_case),
+    sinon HFSQL (PascalCase via bridge)."""
     try:
+        if pg:
+            from app.core.database.pg import get_pg_connection
+            db = get_pg_connection(db_key)
+            # En PG les binaires reviennent en bytes/memoryview directement.
+            r = db.query_one(
+                f"SELECT id_tk_liste, {field} FROM {table} "
+                f"WHERE id_tk_liste = ?",
+                (int(id_ticket),),
+            )
+            v = r.get(field) if r else None
+            if not v:
+                return None
+            if isinstance(v, memoryview):
+                return bytes(v)
+            if isinstance(v, bytes):
+                return v
+            return base64.b64decode(v)
         db = get_connection(db_key)
         r = db.query_one(
             f"SELECT IDTK_Liste, {field} FROM {table} "
@@ -112,9 +132,10 @@ def _image_or_fallback(
     *,
     table: str = "TK_DemandeCttW",
     db_key: str = "ticket_rh",
+    pg: bool = False,
 ) -> bytes | None:
     """Mémo binaire `field` sinon HTTP rest.omaya.fr puis sos.rest."""
-    img = _memo_bytes(id_ticket, field, table=table, db_key=db_key)
+    img = _memo_bytes(id_ticket, field, table=table, db_key=db_key, pg=pg)
     if img:
         return img
     for base in (CTTW_SIGN_URL, CTTW_SIGN_URL_FALLBACK):
@@ -510,40 +531,52 @@ def regenerate_signed_pdf(
     sign_suffix: str = "CttWSignature",
     luapp_suffix: str = "CttWLuApp",
     tmp_prefix: str = "cttw_",
+    pg: bool = False,
 ) -> bytes:
     """Régénère le PDF signé complet (contrat + signatures + récap).
 
     Paramétrable pour réutilisation par FI_CttCourtage (type 23) :
     table=TK_DemandeCttCourtage, db_key=ticket, tokens S_*_DISTRIB,
     suffixes CttCourtageSignature/LuApp.
+
+    pg=True : lecture en PostgreSQL (table en snake_case, champs
+    snake_case : contenu/signature/paraphe/photo_salarie/lu_app).
     """
     from docx import Document
     from pypdf import PdfReader, PdfWriter
 
-    docx_raw = _memo_bytes(id_ticket, "Contenu", table=table, db_key=db_key)
+    # Champs binaires : snake_case en PG, PascalCase en HFSQL.
+    f_contenu = "contenu" if pg else "Contenu"
+    f_sign = "signature" if pg else "Signature"
+    f_paraphe = "paraphe"  # même nom dans les 2
+    f_photo = "photo_salarie" if pg else "PhotoSalarié"
+    f_luapp = "lu_app" if pg else "luApp"
+
+    docx_raw = _memo_bytes(
+        id_ticket, f_contenu, table=table, db_key=db_key, pg=pg,
+    )
     if not docx_raw:
         raise ValueError("Contrat (Contenu) introuvable ou vide")
 
     sign = _image_or_fallback(
-        id_ticket, "Signature", sign_suffix, table=table, db_key=db_key
+        id_ticket, f_sign, sign_suffix, table=table, db_key=db_key, pg=pg,
     )
     lu_app = _image_or_fallback(
-        id_ticket, "luApp", luapp_suffix, table=table, db_key=db_key
+        id_ticket, f_luapp, luapp_suffix, table=table, db_key=db_key, pg=pg,
     )
     paraphe = _memo_bytes(
-        id_ticket, "paraphe", table=table, db_key=db_key
+        id_ticket, f_paraphe, table=table, db_key=db_key, pg=pg,
     )
     photo = _memo_bytes(
-        id_ticket, "PhotoSalarié", table=table, db_key=db_key
+        id_ticket, f_photo, table=table, db_key=db_key, pg=pg,
     )
 
     # ContenuValidation (pages validees + code SMS) -- memo texte sec, PG OK.
-    # Le binaire/memo des autres champs reste sur HFSQL (cf. _memo_bytes ci-dessus).
     _PG_TABLES = {
         "TK_DemandeCttW": "pgt_tk_demande_ctt_w",
         "TK_DemandeCttCourtage": "pgt_tk_demande_ctt_courtage",
     }
-    pg_table = _PG_TABLES.get(table)
+    pg_table = table if pg else _PG_TABLES.get(table)
     cv = None
     if pg_table:
         try:

@@ -14,7 +14,6 @@ dans le dossier véhicule (si IdPC) ou salarié.
 """
 
 from app.core.config import FTP_GESTION_RH_PATH
-from app.core.database import get_connection
 from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
 
@@ -31,12 +30,14 @@ from ..service import (
 PDF_NON_SIGNE_URL = "https://interne.omaya.fr/TempCttw/{id}-DocUlease.pdf"
 
 # kwargs de régénération PDF spécifiques ULEASE (cf. cttw_pdf paramétré)
+# pg=True : table snake_case ticket_rh.pgt_tk_demande_sign_ulease.
 _PDF_KWARGS = dict(
-    table="TK_DemandeSignUlease",
+    table="ticket_rh.pgt_tk_demande_sign_ulease",
     db_key="ticket_rh",
     sign_suffix="UleaseSignature",
     luapp_suffix="UleaseLuApp",
     tmp_prefix="ulease_",
+    pg=True,
 )
 
 
@@ -93,20 +94,22 @@ def _id_vehicule(id_pc: int) -> int:
 # --------------------------------------------------------------------
 
 def load(id_ticket: int) -> dict:
-    db = get_connection("ticket_rh")
+    # Migration PG (cf. SalarieDocUleaseModal + ParcAuto generer-pv qui
+    # ecrivent dans pgt_tk_demande_sign_ulease en PG).
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        """SELECT IDTK_Liste, IDSalarie, idDA, IdPC, contratGénéré,
-            contratValidé, contratSigné, contratAnnul, datesignature,
-            TitreContrat, TypeCttW
-        FROM TK_DemandeSignUlease WHERE IDTK_Liste = ?""",
+        """SELECT id_tk_liste, id_salarie, id_da, id_pc, contrat_genere,
+            contrat_valide, contrat_signe, contrat_annul, datesignature,
+            titre_contrat, type_ctt_w
+        FROM ticket_rh.pgt_tk_demande_sign_ulease WHERE id_tk_liste = ?""",
         (int(id_ticket),),
     )
     if not r:
         return {"found": False}
-    id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
-    id_da = _clean_id(_to_int(r.get("idDA")))
-    contrat_valide = bool(r.get("contratValidé"))
-    contrat_signe = bool(r.get("contratSigné"))
+    id_salarie = _clean_id(_to_int(r.get("id_salarie")))
+    id_da = _clean_id(_to_int(r.get("id_da")))
+    contrat_valide = bool(r.get("contrat_valide"))
+    contrat_signe = bool(r.get("contrat_signe"))
     plan = 2 if contrat_valide else 1
 
     base = {
@@ -116,13 +119,13 @@ def load(id_ticket: int) -> dict:
         "salarie_nom": _salarie_nom(id_salarie),
         "id_da": str(id_da) if id_da else "",
         "da_nom": _salarie_nom(id_da),
-        "id_pc": str(_clean_id(_to_int(r.get("IdPC")))) or "",
-        "titre_contrat": (r.get("TitreContrat") or "").strip(),
-        "type_cttw": (r.get("TypeCttW") or "").strip(),
-        "contrat_genere": bool(r.get("contratGénéré")),
+        "id_pc": str(_clean_id(_to_int(r.get("id_pc")))) or "",
+        "titre_contrat": (r.get("titre_contrat") or "").strip(),
+        "type_cttw": (r.get("type_ctt_w") or "").strip(),
+        "contrat_genere": bool(r.get("contrat_genere")),
         "contrat_valide": contrat_valide,
         "contrat_signe": contrat_signe,
-        "contrat_annul": bool(r.get("contratAnnul")),
+        "contrat_annul": bool(r.get("contrat_annul")),
         "date_signature": date_only_to_iso(r.get("datesignature")),
     }
     if plan == 1:
@@ -133,30 +136,31 @@ def load(id_ticket: int) -> dict:
 
 
 def print_pdf(id_ticket: int, payload: dict) -> bytes:
-    """Régénère le PDF ULEASE signé (Plan 2 + bouton Rafraîchir)."""
+    """Régénère le PDF ULEASE signé (Plan 2 + bouton Rafraîchir). PG."""
     from .cttw_pdf import regenerate_signed_pdf
 
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
     r = db.query_one(
-        "SELECT IDTK_Liste, IDSalarie, idDA, datesignature "
-        "FROM TK_DemandeSignUlease WHERE IDTK_Liste = ?",
+        "SELECT id_tk_liste, id_salarie, id_da, datesignature "
+        "FROM ticket_rh.pgt_tk_demande_sign_ulease WHERE id_tk_liste = ?",
         (int(id_ticket),),
     )
     if not r:
         raise ValueError("Document introuvable")
     return regenerate_signed_pdf(
         int(id_ticket),
-        _salarie_nom(_clean_id(_to_int(r.get("IDSalarie")))),
-        _salarie_nom(_clean_id(_to_int(r.get("idDA")))),
+        _salarie_nom(_clean_id(_to_int(r.get("id_salarie")))),
+        _salarie_nom(_clean_id(_to_int(r.get("id_da")))),
         date_only_to_iso(r.get("datesignature")) or "",
         **_PDF_KWARGS,
     )
 
 
 def save(id_ticket: int, payload: dict, user_id: int) -> dict:
+    """Migration PG complète : pgt_tk_demande_sign_ulease (ticket_rh),
+    pgt_tk_liste (ticket), pgt_salarie_doc_ulease (rh)."""
     action = str(payload.get("action") or "")
-    now = _now_windev()
-    db = get_connection("ticket_rh")
+    db = get_pg_connection("ticket_rh")
 
     # --- Choisir le DA ---
     if action == "da":
@@ -164,35 +168,38 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         if not id_da.isdigit():
             return {"ok": False, "error": "DA invalide"}
         db.query(
-            "UPDATE TK_DemandeSignUlease SET idDA = ?, ModifDate = ?, "
-            "ModifOP = ?, ModifELEM = 'modif' WHERE IDTK_Liste = ?",
-            (int(id_da), now, int(user_id), int(id_ticket)),
+            "UPDATE ticket_rh.pgt_tk_demande_sign_ulease SET id_da = ?, "
+            "modif_date = NOW(), modif_op = ?, modif_elem = 'modif' "
+            "WHERE id_tk_liste = ?",
+            (int(id_da), int(user_id), int(id_ticket)),
         )
         return {"ok": True}
 
     # --- Valider document pour signature (Plan 1 → 2) ---
     if action == "valider":
         cur = db.query_one(
-            "SELECT IDSalarie, idDA FROM TK_DemandeSignUlease "
-            "WHERE IDTK_Liste = ?",
+            "SELECT id_salarie, id_da FROM ticket_rh.pgt_tk_demande_sign_ulease "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         if not cur:
             return {"ok": False, "error": "Document introuvable"}
-        id_da = _clean_id(_to_int(cur.get("idDA")))
+        id_da = _clean_id(_to_int(cur.get("id_da")))
         db.query(
-            """UPDATE TK_DemandeSignUlease SET contratValidé = 1,
-                contratSigné = 0, contratAnnul = 0, datesignature = '',
-                ContenuValidation = '', PhotoSalarié = '', Signature = '',
-                paraphe = '', luApp = '', ModifDate = ?, ModifOP = ?,
-                ModifELEM = 'modif'
-            WHERE IDTK_Liste = ?""",
-            (now, int(user_id), int(id_ticket)),
+            """UPDATE ticket_rh.pgt_tk_demande_sign_ulease
+                SET contrat_valide = TRUE, contrat_signe = FALSE,
+                    contrat_annul = FALSE, datesignature = NULL,
+                    contenu_validation = NULL, photo_salarie = NULL,
+                    signature = NULL, paraphe = NULL, lu_app = NULL,
+                    modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_tk_liste = ?""",
+            (int(user_id), int(id_ticket)),
         )
-        get_connection("ticket").query(
-            "UPDATE TK_Liste SET IDTK_Statut = 22, ModifDate = ?, "
-            "ModifElem = 'modif' WHERE IDTK_Liste = ?",
-            (now, int(id_ticket)),
+        get_pg_connection("ticket").query(
+            "UPDATE ticket.pgt_tk_liste SET id_tk_statut = 22, "
+            "modif_date = NOW(), modif_elem = 'modif' "
+            "WHERE id_tk_liste = ?",
+            (int(id_ticket),),
         )
         sms_result = ""
         _, gsm_da = _coord_salarie(id_da)
@@ -215,34 +222,35 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         if not (pb_sign or pb_par or pb_mention):
             return {"ok": False, "error": "Coche au moins un problème"}
         cur = db.query_one(
-            "SELECT IDSalarie, idDA FROM TK_DemandeSignUlease "
-            "WHERE IDTK_Liste = ?",
+            "SELECT id_salarie, id_da FROM ticket_rh.pgt_tk_demande_sign_ulease "
+            "WHERE id_tk_liste = ?",
             (int(id_ticket),),
         )
         if not cur:
             return {"ok": False, "error": "Document introuvable"}
-        id_salarie = _clean_id(_to_int(cur.get("IDSalarie")))
-        id_da = _clean_id(_to_int(cur.get("idDA")))
+        id_salarie = _clean_id(_to_int(cur.get("id_salarie")))
+        id_da = _clean_id(_to_int(cur.get("id_da")))
 
         sets = [
-            "contratValidé = 1", "contratSigné = 0", "contratAnnul = 0",
-            "datesignature = ''", "ContenuValidation = ''",
+            "contrat_valide = TRUE", "contrat_signe = FALSE",
+            "contrat_annul = FALSE", "datesignature = NULL",
+            "contenu_validation = NULL",
         ]
         elems: list[str] = []
         if pb_sign:
-            sets += ["PhotoSalarié = ''", "Signature = ''"]
+            sets += ["photo_salarie = NULL", "signature = NULL"]
             elems.append(" - la signature et la photo")
         if pb_par:
-            sets.append("paraphe = ''")
+            sets.append("paraphe = NULL")
             elems.append(" - la paraphe")
         if pb_mention:
-            sets.append("luApp = ''")
+            sets.append("lu_app = NULL")
             elems.append(" - la mention 'Lu et approuvé'")
-        sets += ["ModifDate = ?", "ModifOP = ?", "ModifELEM = 'modif'"]
+        sets += ["modif_date = NOW()", "modif_op = ?", "modif_elem = 'modif'"]
         db.query(
-            f"UPDATE TK_DemandeSignUlease SET {', '.join(sets)} "
-            "WHERE IDTK_Liste = ?",
-            (now, int(user_id), int(id_ticket)),
+            f"UPDATE ticket_rh.pgt_tk_demande_sign_ulease SET {', '.join(sets)} "
+            "WHERE id_tk_liste = ?",
+            (int(user_id), int(id_ticket)),
         )
         if pb_sign and pb_par and pb_mention:
             statut = 7
@@ -252,12 +260,13 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
             statut = 10
         else:
             statut = 9
-        get_connection("ticket").query(
-            """UPDATE TK_Liste SET IDTK_Statut = ?, modification = 1,
-                opModif = ?, idModif = 0, TypeModif = 'TKSTATUT',
-                ModifDate = ?, ModifOP = ?, ModifELEM = 'modif'
-            WHERE IDTK_Liste = ?""",
-            (statut, int(user_id), now, int(user_id), int(id_ticket)),
+        get_pg_connection("ticket").query(
+            """UPDATE ticket.pgt_tk_liste SET id_tk_statut = ?,
+                modification = TRUE, op_modif = ?, id_modif = 0,
+                type_modif = 'TKSTATUT', modif_date = NOW(),
+                modif_op = ?, modif_elem = 'modif'
+            WHERE id_tk_liste = ?""",
+            (statut, int(user_id), int(user_id), int(id_ticket)),
         )
         ajout_histo_tk(int(id_ticket), statut, int(user_id))
         sms_result = ""
@@ -283,19 +292,20 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
         cloturer = bool(payload.get("cloturer"))
         r = db.query_one(
-            """SELECT IDTK_Liste, IDdemandeSignUlease, IDSalarie, idDA,
-                IdPC, TypeCttW, IDSalarie_Ulease, datesignature
-            FROM TK_DemandeSignUlease WHERE IDTK_Liste = ?""",
+            """SELECT id_tk_liste, id_demande_sign_ulease, id_salarie, id_da,
+                id_pc, type_ctt_w, id_salarie_ulease, datesignature
+            FROM ticket_rh.pgt_tk_demande_sign_ulease
+            WHERE id_tk_liste = ?""",
             (int(id_ticket),),
         )
         if not r:
             return {"ok": False, "error": "Document introuvable"}
-        id_demande = _clean_id(_to_int(r.get("IDdemandeSignUlease")))
-        id_salarie = _clean_id(_to_int(r.get("IDSalarie")))
-        id_da = _clean_id(_to_int(r.get("idDA")))
-        id_pc = _clean_id(_to_int(r.get("IdPC")))
-        type_cttw = str(r.get("TypeCttW") or "").strip()
-        id_doc_ulease = _clean_id(_to_int(r.get("IDSalarie_Ulease")))
+        id_demande = _clean_id(_to_int(r.get("id_demande_sign_ulease")))
+        id_salarie = _clean_id(_to_int(r.get("id_salarie")))
+        id_da = _clean_id(_to_int(r.get("id_da")))
+        id_pc = _clean_id(_to_int(r.get("id_pc")))
+        type_cttw = str(r.get("type_ctt_w") or "").strip()
+        id_doc_ulease = _clean_id(_to_int(r.get("id_salarie_ulease")))
         salarie_nom = _salarie_nom(id_salarie)
         nom_pdf = f"{id_ticket}_DocUleaseSigne.pdf"
 
@@ -318,44 +328,48 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
         except Exception as e:
             return {"ok": False, "error": f"Génération/upload PDF : {e}"}
 
-        # 2. salarie_docUlease : marquer RECU (base rh)
-        rh = get_connection("rh")
+        # 2. salarie_doc_ulease : marquer RECU (base rh PG)
+        rh = get_pg_connection("rh")
         try:
             target = id_doc_ulease or None
             if not target:
                 ex = rh.query_one(
-                    "SELECT IDsalarie_docUlease FROM salarie_docUlease "
-                    "WHERE IDSalarie = ? AND RECU = 0 AND IDdocUleaseTYPE = ?",
-                    (int(id_salarie), type_cttw),
+                    "SELECT id_salarie_doc_ulease FROM rh.pgt_salarie_doc_ulease "
+                    "WHERE id_salarie = ? AND recu = FALSE "
+                    "AND id_doc_ulease_type = ?",
+                    (int(id_salarie), int(type_cttw) if type_cttw.isdigit() else 0),
                 )
                 if ex:
-                    target = _clean_id(_to_int(ex.get("IDsalarie_docUlease")))
+                    target = _clean_id(_to_int(ex.get("id_salarie_doc_ulease")))
             if target:
                 rh.query(
-                    """UPDATE salarie_docUlease SET RECU = 1, RECUDATE = ?,
-                        ModifOP = ?, ModifDate = ?, ModifELEM = 'modif'
-                    WHERE IDsalarie_docUlease = ?""",
-                    (now, int(user_id), now, int(target)),
+                    """UPDATE rh.pgt_salarie_doc_ulease SET recu = TRUE,
+                        recu_date = NOW(), modif_op = ?, modif_date = NOW(),
+                        modif_elem = 'modif'
+                    WHERE id_salarie_doc_ulease = ?""",
+                    (int(user_id), int(target)),
                 )
             else:
-                new_id = int(now)
+                from datetime import datetime
+                new_id = int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
                 rh.query(
-                    """INSERT INTO salarie_docUlease
-                    (IDsalarie_docUlease, IDdocUleaseTYPE, IDSalarie, ID_DA,
-                     DATE_Edition, RECU, RECUDATE, ModifOP, ModifDate,
-                     ModifELEM)
-                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, 'new')""",
-                    (new_id, type_cttw, int(id_salarie), int(id_da),
-                     str(id_demande), now, int(user_id), now),
+                    """INSERT INTO rh.pgt_salarie_doc_ulease
+                    (id_salarie_doc_ulease, id_doc_ulease_type, id_salarie,
+                     id_da, date_edition, recu, recu_date,
+                     modif_op, modif_date, modif_elem)
+                    VALUES (?, ?, ?, ?, NOW(), TRUE, NOW(), ?, NOW(), 'new')""",
+                    (new_id, int(type_cttw) if type_cttw.isdigit() else 0,
+                     int(id_salarie), int(id_da), int(user_id)),
                 )
                 db.query(
-                    "UPDATE TK_DemandeSignUlease SET IDSalarie_Ulease = ?, "
-                    "ModifDate = ?, ModifOP = ?, ModifELEM = 'modif' "
-                    "WHERE IDTK_Liste = ?",
-                    (new_id, now, int(user_id), int(id_ticket)),
+                    "UPDATE ticket_rh.pgt_tk_demande_sign_ulease "
+                    "SET id_salarie_ulease = ?, modif_date = NOW(), "
+                    "modif_op = ?, modif_elem = 'modif' "
+                    "WHERE id_tk_liste = ?",
+                    (new_id, int(user_id), int(id_ticket)),
                 )
         except Exception as e:
-            return {"ok": False, "error": f"salarie_docUlease : {e}"}
+            return {"ok": False, "error": f"salarie_doc_ulease : {e}"}
 
         # 3. SMS + mail au salarié
         sms_result = ""
@@ -387,13 +401,14 @@ def save(id_ticket: int, payload: dict, user_id: int) -> dict:
 
         # 4. Clôture optionnelle
         if cloturer:
-            get_connection("ticket").query(
-                """UPDATE TK_Liste SET Cloturée = 1, DateCloture = ?,
-                    modification = 1, opModif = ?, idModif = 0,
-                    TypeModif = 'TKSTATUT', ModifDate = ?, ModifOP = ?,
-                    ModifELEM = 'modif'
-                WHERE IDTK_Liste = ?""",
-                (now, int(user_id), now, int(user_id), int(id_ticket)),
+            get_pg_connection("ticket").query(
+                """UPDATE ticket.pgt_tk_liste SET cloturee = TRUE,
+                    date_cloture = NOW(), modification = TRUE,
+                    op_modif = ?, id_modif = 0,
+                    type_modif = 'TKSTATUT', modif_date = NOW(),
+                    modif_op = ?, modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+                (int(user_id), int(user_id), int(id_ticket)),
             )
             ajout_histo_tk(int(id_ticket), 4, int(user_id))
 
