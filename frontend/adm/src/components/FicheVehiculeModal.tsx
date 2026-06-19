@@ -6,16 +6,20 @@
  * Plans 2-5 placeholders en attente du code WinDev.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Car as CarIcon,
+  Download,
   ExternalLink,
+  FileText,
   Gauge,
   Loader2,
+  Plus,
   Printer,
   Save,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react'
 
@@ -301,13 +305,24 @@ export default function FicheVehiculeModal({
             {/* Contenu */}
             <div className="flex-1 overflow-y-auto p-6">
               {tab === 'info' && (
-                <InfoVehiculeTab
-                  meta={meta}
-                  update={update}
-                  lookups={lookups}
-                  onSave={handleSave}
-                  saving={saving}
-                />
+                <>
+                  <InfoVehiculeTab
+                    meta={meta}
+                    update={update}
+                    lookups={lookups}
+                    onSave={handleSave}
+                    saving={saving}
+                  />
+                  <div className="mt-6">
+                    <DocumentsSection
+                      idVehicule={idVehicule}
+                      meta={meta}
+                      onCarteGriseChange={(name) =>
+                        update({ carte_grise: true, lien_carte_grise: name })
+                      }
+                    />
+                  </div>
+                </>
               )}
               {tab !== 'info' && (
                 <div
@@ -651,6 +666,297 @@ function InfoVehiculeTab({
         />
       </Section>
     </div>
+  )
+}
+
+// ============================================================================
+// Documents du véhicule (FTP /OMAYA/Vehicules/{id}/)
+// ============================================================================
+
+interface VDoc {
+  nom: string
+  taille_mo: number
+  date_iso: string
+}
+
+function DocumentsSection({
+  idVehicule,
+  meta,
+  onCarteGriseChange,
+}: {
+  idVehicule: string
+  meta: VehiculeMeta
+  onCarteGriseChange: (name: string) => void
+}) {
+  const [files, setFiles] = useState<VDoc[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<string>('')
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/documents`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: { files?: VDoc[] }) => setFiles(d?.files || []))
+      .catch(() => setFiles([]))
+      .finally(() => setLoading(false))
+  }, [idVehicule])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const handleUpload = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      setBusy(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', f)
+        const r = await fetch(
+          `/api/adm/parc-auto/vehicules/${idVehicule}/documents`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}` },
+            body: fd,
+          },
+        )
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}))
+          throw new Error((j as { detail?: string })?.detail || String(r.status))
+        }
+        showToast(`Fichier chargé : ${f.name}`, 'success')
+        reload()
+      } catch (e) {
+        showToast(`Échec upload : ${(e as Error).message}`, 'error')
+      } finally {
+        setBusy(false)
+      }
+    }
+    input.click()
+  }
+
+  const handleDownload = async () => {
+    if (!selected) return
+    const url = `/api/adm/parc-auto/vehicules/${idVehicule}/documents/download?name=${encodeURIComponent(selected)}`
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const blob = await r.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = selected
+      link.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (e) {
+      showToast(`Échec téléchargement : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selected) return
+    const ok = await showConfirm({
+      title: 'Supprimer ce document ?',
+      message: `« ${selected} » sera supprimé.`,
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    setBusy(true)
+    try {
+      const r = await fetch(
+        `/api/adm/parc-auto/vehicules/${idVehicule}/documents?name=${encodeURIComponent(selected)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      showToast('Document supprimé.', 'success')
+      setSelected('')
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleSetCarteGrise = async () => {
+    if (!selected) return
+    setBusy(true)
+    try {
+      const r = await fetch(
+        `/api/adm/parc-auto/vehicules/${idVehicule}/documents/carte-grise?name=${encodeURIComponent(selected)}`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      onCarteGriseChange(selected)
+      showToast('Défini comme Carte grise.', 'success')
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3 pb-1 border-b" style={{ borderColor: COL_BORDER }}>
+        <h2
+          className="text-xs font-bold uppercase tracking-wide"
+          style={{ color: COL_BRUN }}
+        >
+          Documents du véhicule
+        </h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleSetCarteGrise}
+            disabled={!selected || busy}
+            className="flex items-center gap-1 px-2 py-1 rounded text-xs border disabled:opacity-50"
+            style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Définir comme Carte grise
+          </button>
+          <span className="flex-1" />
+          <IconBtn onClick={handleUpload} title="Ajouter un document" disabled={busy}>
+            <Plus className="w-4 h-4" />
+          </IconBtn>
+          <IconBtn onClick={handleDownload} title="Télécharger" disabled={!selected}>
+            <Download className="w-4 h-4" />
+          </IconBtn>
+          <IconBtn onClick={handleDelete} title="Supprimer" disabled={!selected || busy} danger>
+            <Trash2 className="w-4 h-4" />
+          </IconBtn>
+        </div>
+      </div>
+
+      <div
+        className="border rounded overflow-hidden"
+        style={{ borderColor: COL_BORDER }}
+      >
+        <table className="w-full text-sm">
+          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+            <tr>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase">
+                Nom Fichier
+              </th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase w-24">
+                Taille (Mo)
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase w-28">
+                Date
+              </th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase w-20">
+                Heure
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="p-6 text-center">
+                  <Loader2 className="w-4 h-4 animate-spin inline" />
+                </td>
+              </tr>
+            ) : files.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={4}
+                  className="p-6 text-center italic"
+                  style={{ color: '#A68D8A' }}
+                >
+                  Aucun document.
+                </td>
+              </tr>
+            ) : (
+              files.map((f) => {
+                const isSel = selected === f.nom
+                const isCG = meta.carte_grise && meta.lien_carte_grise === f.nom
+                return (
+                  <tr
+                    key={f.nom}
+                    onClick={() => setSelected(f.nom)}
+                    onDoubleClick={handleDownload}
+                    className="cursor-pointer border-b"
+                    style={{
+                      backgroundColor: isSel ? COL_PRIMARY : 'white',
+                      color: isSel ? 'white' : COL_BRUN,
+                      borderColor: COL_BORDER,
+                    }}
+                  >
+                    <td className="px-3 py-1.5">
+                      {isCG && '★ '}
+                      {f.nom}
+                    </td>
+                    <td className="px-3 py-1.5 text-right">
+                      {f.taille_mo.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {f.date_iso.length >= 10
+                        ? `${f.date_iso.slice(8, 10)}/${f.date_iso.slice(5, 7)}/${f.date_iso.slice(0, 4)}`
+                        : ''}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {f.date_iso.length >= 16 ? f.date_iso.slice(11, 16) : ''}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function IconBtn({
+  onClick,
+  title,
+  disabled,
+  danger,
+  children,
+}: {
+  onClick: () => void
+  title: string
+  disabled?: boolean
+  danger?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="p-1.5 rounded border disabled:opacity-50"
+      style={{
+        borderColor: danger ? '#B91C1C' : COL_BORDER,
+        color: danger ? '#B91C1C' : COL_BRUN,
+        backgroundColor: 'white',
+      }}
+    >
+      {children}
+    </button>
   )
 }
 

@@ -4,13 +4,14 @@ Router Fen_TdbUlease + Fen_FicheVehicule (ADM Ulease -> Parc Auto).
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import fiche_vehicule as fv_svc
 from app.intranets.adm.services import parc_auto as svc
+from app.intranets.adm.services import vehicule_documents as doc_svc
 
 
 router = APIRouter(prefix="/parc-auto", tags=["adm-parc-auto"])
@@ -83,3 +84,71 @@ def delete_vehicule(
 ):
     """Btn Supprimer la fiche : soft delete."""
     return fv_svc.delete_vehicule(id_vehicule, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Documents FTP du vehicule (Plan 1 section 'Documents du vehicule')
+# ---------------------------------------------------------------------------
+
+
+@router.get("/vehicules/{id_vehicule}/documents")
+def get_documents(
+    id_vehicule: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """FTPListeFichier sur /OMAYA/Vehicules/{id}/."""
+    return doc_svc.list_files(id_vehicule)
+
+
+@router.post("/vehicules/{id_vehicule}/documents")
+async def post_document(
+    id_vehicule: int,
+    file: UploadFile = File(...),
+    _user: UserToken = Depends(get_current_user),
+):
+    """Upload d'un fichier vers /OMAYA/Vehicules/{id}/."""
+    content = await file.read()
+    res = doc_svc.upload_file(id_vehicule, file.filename or "document", content)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec upload")
+    return res
+
+
+@router.get("/vehicules/{id_vehicule}/documents/download")
+def get_document_content(
+    id_vehicule: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Download du fichier."""
+    content = doc_svc.download_file(id_vehicule, name)
+    if content is None:
+        raise HTTPException(404, "Fichier introuvable")
+    return Response(
+        content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@router.delete("/vehicules/{id_vehicule}/documents")
+def delete_document(
+    id_vehicule: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    """DELE du fichier sur le FTP."""
+    res = doc_svc.delete_file(id_vehicule, name)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
+@router.post("/vehicules/{id_vehicule}/documents/carte-grise")
+def post_carte_grise(
+    id_vehicule: int,
+    name: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Marque le fichier comme carte grise du vehicule."""
+    return doc_svc.set_as_carte_grise(id_vehicule, name, user.id_salarie)
