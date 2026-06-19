@@ -1171,40 +1171,38 @@ function ConducteursTab({
       {/* 2 colonnes : Liste conducteurs (gauche) + Docs Ulease (droite) */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <h3
-              className="text-xs font-bold uppercase tracking-wide"
-              style={{ color: COL_BRUN }}
+          <h3
+            className="text-xs font-bold uppercase tracking-wide mb-2"
+            style={{ color: COL_BRUN }}
+          >
+            Listes des conducteurs
+          </h3>
+          <div className="flex gap-1.5 mb-2">
+            <IconBtn
+              onClick={() =>
+                showToast('Fen_Attribution : à venir.', 'info')
+              }
+              title="Ajouter une attribution"
             >
-              Listes des conducteurs
-            </h3>
-            <div className="flex gap-1.5">
-              <IconBtn
-                onClick={() =>
-                  showToast('Fen_Attribution : à venir.', 'info')
-                }
-                title="Ajouter une attribution"
-              >
-                <Plus className="w-4 h-4" />
-              </IconBtn>
-              <IconBtn
-                onClick={() =>
-                  showToast('Fen_Attribution (modifier) : à venir.', 'info')
-                }
-                title="Modifier"
-                disabled={!selected}
-              >
-                <FileText className="w-4 h-4" />
-              </IconBtn>
-              <IconBtn
-                onClick={handleDelete}
-                title="Supprimer"
-                disabled={!selected || saving}
-                danger
-              >
-                <Trash2 className="w-4 h-4" />
-              </IconBtn>
-            </div>
+              <Plus className="w-4 h-4" />
+            </IconBtn>
+            <IconBtn
+              onClick={() =>
+                showToast('Fen_Attribution (modifier) : à venir.', 'info')
+              }
+              title="Modifier"
+              disabled={!selected}
+            >
+              <FileText className="w-4 h-4" />
+            </IconBtn>
+            <IconBtn
+              onClick={handleDelete}
+              title="Supprimer"
+              disabled={!selected || saving}
+              danger
+            >
+              <Trash2 className="w-4 h-4" />
+            </IconBtn>
           </div>
           <div
             className="border rounded overflow-auto"
