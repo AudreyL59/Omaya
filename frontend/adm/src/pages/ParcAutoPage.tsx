@@ -28,6 +28,8 @@ import {
 
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
+import FicheVehiculeModal from '@/components/FicheVehiculeModal'
+import { AnimatePresence } from 'framer-motion'
 
 interface Vehicule {
   id_vehicule: string
@@ -52,8 +54,9 @@ export default function ParcAutoPage() {
   const [rows, setRows] = useState<Vehicule[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [ficheOpen, setFicheOpen] = useState<string | null>(null)
 
-  useEffect(() => {
+  const reload = () => {
     setLoading(true)
     fetch('/api/adm/parc-auto/vehicules', {
       headers: { Authorization: `Bearer ${getToken()}` },
@@ -62,6 +65,10 @@ export default function ParcAutoPage() {
       .then((d: Vehicule[]) => setRows(Array.isArray(d) ? d : []))
       .catch(() => setRows([]))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    reload()
   }, [])
 
   const filtered = useMemo(() => {
@@ -152,10 +159,24 @@ export default function ParcAutoPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {!search && <AddCard />}
           {sortedByImmat.map((v) => (
-            <VehiculeCard key={v.id_vehicule} v={v} />
+            <VehiculeCard
+              key={v.id_vehicule}
+              v={v}
+              onOpen={() => setFicheOpen(v.id_vehicule)}
+            />
           ))}
         </div>
       )}
+
+      <AnimatePresence>
+        {ficheOpen && (
+          <FicheVehiculeModal
+            idVehicule={ficheOpen}
+            onClose={() => setFicheOpen(null)}
+            onChanged={reload}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -184,12 +205,10 @@ function AddCard() {
   )
 }
 
-function VehiculeCard({ v }: { v: Vehicule }) {
+function VehiculeCard({ v, onOpen }: { v: Vehicule; onOpen: () => void }) {
   return (
     <div
-      onClick={() =>
-        showToast(`Fiche véhicule ${v.immat} : à venir.`, 'info')
-      }
+      onClick={onOpen}
       className="relative rounded-lg bg-white cursor-pointer hover:shadow-md transition-shadow overflow-hidden"
       style={{
         border: `1px solid ${COL_BORDER}`,
