@@ -1279,44 +1279,6 @@ function CodesPlan2({
     }
   }
 
-  const remplirPortail = async () => {
-    if (!extKey) {
-      showToast('Aucun mapping de remplissage pour ce partenaire.', 'info')
-      return
-    }
-    if (extInstalled === false) {
-      showToast(
-        "L'extension Omaya DPAE Filler n'est pas installée. Voir browser-extension/omaya-dpae/README.md",
-        'error',
-      )
-      return
-    }
-    const fillData = {
-      siret: societe.siret,
-      login: isUrssaf ? societe.siret : portail.login,
-      mdp: portail.mdp,
-      nom: data.nom,
-      prenom: data.prenom,
-      date_naiss: data.date_naiss,
-      adresse: data.adresse1,
-      cp: data.cp,
-      ville: data.ville,
-      tel_mob: data.tel_mob,
-      mail: data.mail,
-    }
-    const res = await fillPartenaire(extKey, fillData)
-    if (res.ok) {
-      showToast(`Formulaire rempli (${res.tabs} onglet(s)).`, 'success')
-    } else if (res.tabs === 0) {
-      showToast(
-        "Aucun onglet partenaire ouvert. Clique d'abord sur 'Ouvrir dans un nouvel onglet'.",
-        'info',
-      )
-    } else {
-      showToast(`Échec remplissage : ${res.error || 'inconnu'}`, 'error')
-    }
-  }
-
   // Infos salarie pour le copy/paste manuel vers le portail
   const infosSalarie =
     `${data.nom} ${data.prenom}\n` +
@@ -1387,21 +1349,6 @@ function CodesPlan2({
             <ExternalLink className="w-4 h-4" />
             Ouvrir dans un nouvel onglet
           </button>
-          {extKey && (
-            <button
-              type="button"
-              onClick={remplirPortail}
-              disabled={extInstalled === false}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm border disabled:opacity-50"
-              style={{
-                borderColor: COL_PRIMARY,
-                color: COL_PRIMARY,
-              }}
-              title="Nécessite l'extension Omaya DPAE Filler"
-            >
-              Remplir le formulaire (extension)
-            </button>
-          )}
           {extInstalled === false && (
             <p
               className="text-xs italic mt-1 p-2 rounded"
