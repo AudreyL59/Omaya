@@ -1861,7 +1861,8 @@ function ReleveKmPlan({
 
   const handleDelete = async (id: string) => {
     const ok = await showConfirm({
-      title: 'Confirmez-vous la suppression de cette relève ?',
+      title: 'Supprimer cette relève ?',
+      message: 'La relève kilométrique sera supprimée.',
       confirmLabel: 'Supprimer',
     })
     if (!ok) return
