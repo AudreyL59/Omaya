@@ -24,6 +24,7 @@ import {
 
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
+import SalarieDocUleaseModal from '@/components/fiche/ulease/SalarieDocUleaseModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -1029,6 +1030,10 @@ function ConducteursTab({
   const [saving, setSaving] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
   const [infoText, setInfoText] = useState('')
+  const [genDispoOpen, setGenDispoOpen] = useState<{
+    idSalarie: string
+    idVehiculePC: string
+  } | null>(null)
 
   const reloadList = useCallback(() => {
     setLoading(true)
@@ -1135,6 +1140,66 @@ function ConducteursTab({
     }
   }
 
+  const handleGenererMiseDispo = () => {
+    const cond = list.find((c) => c.id_vehicule_pc === selected)
+    if (!cond || !cond.id_salarie || cond.id_salarie === '0') {
+      showToast(
+        'Conducteur sans IDSalarie : impossible d\'ouvrir le générateur.',
+        'error',
+      )
+      return
+    }
+    setGenDispoOpen({
+      idSalarie: cond.id_salarie,
+      idVehiculePC: cond.id_vehicule_pc,
+    })
+  }
+
+  const handleGenererPV = async (typePv: 'livraison' | 'restitution') => {
+    if (!selected) return
+    const ok = await showConfirm({
+      title: 'Suivi d’édition',
+      message: 'Souhaitez-vous ajouter un suivi d’édition pour ce salarié ?',
+      confirmLabel: 'Oui',
+      cancelLabel: 'Non',
+    })
+    setSaving(true)
+    try {
+      const r = await fetch(
+        `/api/adm/parc-auto/conducteurs/${selected}/generer-pv`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ type_pv: typePv, suivi_edition: ok }),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const d = await r.json()
+      showToast(
+        `${d.titre} créé (${d.nb_photos} photos). Ticket #${d.id_tk_liste}.`,
+        'success',
+      )
+      // Recharge docs Ulease pour afficher le nouveau PV
+      if (selected) {
+        fetch(`/api/adm/parc-auto/conducteurs/${selected}/doc-ulease`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        })
+          .then((r) => r.json())
+          .then((dd) => setDocs((dd as DocUlease[]) || []))
+      }
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleAddInfo = async () => {
     if (!selected || !infoText.trim()) return
     setSaving(true)
@@ -1201,17 +1266,15 @@ function ConducteursTab({
         </IconBtn>
         <div className="w-px h-6 bg-[#A68D8A]/30 mx-1" />
         {[
-          ['Générer la mise à dispo', 'Mise à disposition'],
-          ['Générer le PV de livraison', 'PV de livraison'],
-          ['Générer le PV de restitution', 'PV de restitution'],
-        ].map(([label, kind]) => (
+          { label: 'Générer la mise à dispo', onClick: handleGenererMiseDispo },
+          { label: 'Générer le PV de livraison', onClick: () => handleGenererPV('livraison') },
+          { label: 'Générer le PV de restitution', onClick: () => handleGenererPV('restitution') },
+        ].map(({ label, onClick }) => (
           <button
-            key={kind}
+            key={label}
             type="button"
-            disabled={!selected}
-            onClick={() =>
-              showToast(`${label} : à venir (création ticket).`, 'info')
-            }
+            disabled={!selected || saving}
+            onClick={onClick}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs border disabled:opacity-50 h-8 whitespace-nowrap"
             style={{ borderColor: COL_BORDER, color: COL_BRUN }}
           >
@@ -1457,6 +1520,24 @@ function ConducteursTab({
             </div>
           </div>
         </>
+      )}
+
+      {genDispoOpen && (
+        <SalarieDocUleaseModal
+          idSalarie={genDispoOpen.idSalarie}
+          idVehiculePC={genDispoOpen.idVehiculePC}
+          onClose={() => setGenDispoOpen(null)}
+          onGenerated={() => {
+            // Recharge docs Ulease du PC
+            if (selected) {
+              fetch(`/api/adm/parc-auto/conducteurs/${selected}/doc-ulease`, {
+                headers: { Authorization: `Bearer ${getToken()}` },
+              })
+                .then((r) => r.json())
+                .then((dd) => setDocs((dd as DocUlease[]) || []))
+            }
+          }}
+        />
       )}
     </div>
   )

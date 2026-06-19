@@ -242,6 +242,31 @@ def post_info_complementaire(
     )
 
 
+class GenererPvPayload(BaseModel):
+    type_pv: str  # 'livraison' | 'restitution'
+    suivi_edition: bool = True
+
+
+@router.post("/conducteurs/{id_vehicule_pc}/generer-pv")
+def post_generer_pv(
+    id_vehicule_pc: int,
+    payload: GenererPvPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Generer PV livraison/restitution' : cree salarie_doc_ulease +
+    tk_demande_sign_pv_ulease + tk_liste + tk_demandesignpv_photo (1 par
+    photo typecapacite). Retourne id_tk_liste."""
+    res = cond_svc.generer_pv(
+        id_vehicule_pc,
+        payload.type_pv,
+        payload.suivi_edition,
+        user.id_salarie,
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
 # Documents lies a l'attribution = FTP /Vehicules/{id_vehicule}/{id_vehicule_pc}/
 # (cf. WinDev listerFichierPC).
 

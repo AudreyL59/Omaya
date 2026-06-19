@@ -231,6 +231,116 @@ def list_doc_ulease_for_pc(id_vehicule_pc: int) -> list[dict]:
     return out
 
 
+def _new_id() -> int:
+    """idEntierDateHeureSys (cf. WinDev)."""
+    return int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
+
+
+def generer_pv(id_vehicule_pc: int, type_pv: str, suivi_edition: bool,
+               op_id: int) -> dict:
+    """Btn Generer PV livraison / restitution.
+
+    Cree :
+    - (optionnel) salarie_doc_ulease (suivi d'edition, type=3) si demande.
+    - tk_demande_sign_pv_ulease (titre = 'PV de livraison' ou 'PV de restitution')
+    - tk_liste (service=JU, type=35, statut=1)
+    - tk_demandesignpv_photo pour chaque typecapacite_photo lie a la capacite.
+    """
+    if type_pv not in ("livraison", "restitution"):
+        return {"ok": False, "error": "type_pv invalide"}
+    titre = "PV de livraison" if type_pv == "livraison" else "PV de restitution"
+
+    db_ul = get_pg_connection("ulease")
+    db_rh = get_pg_connection("rh")
+    db_tk = get_pg_connection("ticket")
+    db_tkr = get_pg_connection("ticket_rh")
+
+    # 1. Recuperer le conducteur + l'id_vehicule + type_capacite
+    row = db_ul.query_one(
+        """SELECT vc.id_vehicule, c.id_salarie,
+                  vf.id_vehicule_type_capacite
+             FROM ulease.pgt_vehicule_conducteur vc
+        LEFT JOIN ulease.pgt_conducteur c
+               ON c.id_conducteur = vc.id_conducteur
+        LEFT JOIN ulease.pgt_vehicule_fiche vf
+               ON vf.id_vehicule = vc.id_vehicule
+            WHERE vc.id_vehicule_pc = ? LIMIT 1""",
+        (int(id_vehicule_pc),),
+    )
+    if not row:
+        return {"ok": False, "error": "Attribution introuvable"}
+    id_salarie_cond = _int(row.get("id_salarie"))
+    id_type_capacite = _int(row.get("id_vehicule_type_capacite"))
+
+    # 2. Suivi edition (optionnel)
+    id_rh_edit = 0
+    if suivi_edition:
+        id_rh_edit = _new_id()
+        db_rh.query(
+            """INSERT INTO rh.pgt_salarie_doc_ulease
+                 (id_salarie_doc_ulease, id_doc_ulease_type, id_salarie,
+                  id_da, date_edition, recu,
+                  modif_op, modif_date, modif_elem)
+               VALUES (?, 3, ?, ?, NOW(), FALSE, ?, NOW(), 'new')""",
+            (id_rh_edit, int(op_id), id_salarie_cond, int(op_id)),
+        )
+
+    # 3. tk_demande_sign_pv_ulease
+    id_pv = _new_id()
+    db_tkr.query(
+        """INSERT INTO ticket_rh.pgt_tk_demande_sign_pv_ulease
+             (id_demande_sign_pv_ulease, id_tk_liste, idorganigramme,
+              id_salarie_ulease, id_salarie, id_da, id_pc,
+              titre_contrat, contrat_genere, contrat_valide, contrat_signe,
+              contrat_annul,
+              modif_date, modif_op, modif_elem)
+           VALUES (?, ?, 0, ?, ?, 0, ?, ?, TRUE, TRUE, FALSE, FALSE,
+                   NOW(), ?, 'new')""",
+        (
+            id_pv, id_pv, id_rh_edit, id_salarie_cond, int(id_vehicule_pc),
+            titre, int(op_id),
+        ),
+    )
+
+    # 4. tk_liste (Service=JU, type=35, statut=1)
+    db_tk.query(
+        """INSERT INTO ticket.pgt_tk_liste
+             (id_tk_liste, date_crea, op_crea, op_dest, service,
+              id_tk_type_demande, id_tk_statut, cloturee,
+              op_traitement_staff, ordre_traitement_staff,
+              modif_date, modif_op, modif_elem)
+           VALUES (?, NOW(), ?, ?, 'JU', 35, 1, FALSE, 0, 0,
+                   NOW(), ?, 'new')""",
+        (id_pv, int(op_id), id_salarie_cond, int(op_id)),
+    )
+
+    # 5. tk_demandesignpv_photo pour chaque typecapacite_photo
+    photos = db_ul.query(
+        """SELECT id_type_capacite_photo FROM ulease.pgt_typecapacite_photo
+            WHERE id_vehicule_type_capacite = ?
+              AND (modif_elem IS NULL OR modif_elem <> 'suppr')
+         ORDER BY lib_photo ASC""",
+        (id_type_capacite,),
+    ) or []
+    for p in photos:
+        id_photo = _new_id()
+        db_tkr.query(
+            """INSERT INTO ticket_rh.pgt_tk_demandesignpv_photo
+                 (id_tk_demande_sign_pv_photo, id_demande_sign_ulease_auto,
+                  id_type_capacite_photo,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, NOW(), ?, 'new')""",
+            (id_photo, id_pv, _int(p.get("id_type_capacite_photo")), int(op_id)),
+        )
+
+    return {
+        "ok": True,
+        "id_tk_liste": str(id_pv),
+        "titre": titre,
+        "nb_photos": len(photos),
+    }
+
+
 def add_info_complementaire(id_vehicule_pc: int, commentaire: str,
                             user_prenom: str, op_id: int) -> dict:
     """Btn Information complementaire : append au champ info_vehicule.
