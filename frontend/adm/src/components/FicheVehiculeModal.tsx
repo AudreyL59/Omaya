@@ -855,11 +855,14 @@ function DocumentsSection({
       </div>
 
       <div
-        className="border rounded overflow-hidden"
-        style={{ borderColor: COL_BORDER }}
+        className="border rounded overflow-auto"
+        style={{ borderColor: COL_BORDER, maxHeight: 320 }}
       >
         <table className="w-full text-sm">
-          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+          <thead
+            className="sticky top-0"
+            style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+          >
             <tr>
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase">
                 Nom Fichier
@@ -1203,9 +1206,15 @@ function ConducteursTab({
               </IconBtn>
             </div>
           </div>
-          <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+          <div
+            className="border rounded overflow-auto"
+            style={{ borderColor: COL_BORDER, maxHeight: 220 }}
+          >
             <table className="w-full text-xs">
-              <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+              <thead
+                className="sticky top-0"
+                style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+              >
                 <tr>
                   <th className="px-2 py-1.5 text-left">Perception</th>
                   <th className="px-1 py-1.5 text-left w-12">à</th>
@@ -1283,9 +1292,15 @@ function ConducteursTab({
               ))}
             </div>
           </div>
-          <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+          <div
+            className="border rounded overflow-auto"
+            style={{ borderColor: COL_BORDER, maxHeight: 220 }}
+          >
             <table className="w-full text-xs">
-              <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+              <thead
+                className="sticky top-0"
+                style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+              >
                 <tr>
                   <th className="px-2 py-1.5 text-left">Type Doc</th>
                   <th className="px-2 py-1.5 text-left w-28">Date Édition</th>
@@ -1606,9 +1621,15 @@ function DocumentsPCSection({
           </IconBtn>
         </div>
       </div>
-      <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+      <div
+        className="border rounded overflow-auto"
+        style={{ borderColor: COL_BORDER, maxHeight: 240 }}
+      >
         <table className="w-full text-xs">
-          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+          <thead
+            className="sticky top-0"
+            style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+          >
             <tr>
               <th className="px-2 py-1.5 text-left">Nom Fichier</th>
               <th className="px-2 py-1.5 text-right w-20">Taille</th>
