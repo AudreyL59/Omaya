@@ -112,6 +112,67 @@ export default function DocRHEditModal({
   const [currentFont, setCurrentFont] = useState('')
   const [currentSize, setCurrentSize] = useState('')
   const [currentColor, setCurrentColor] = useState('#000000')
+  const [currentLineHeight, setCurrentLineHeight] = useState('')
+
+  // Trouve le bloc englobant (p/div/h1-6/li/blockquote/pre) le plus proche.
+  const findBlockAncestor = (node: Node | null): HTMLElement | null => {
+    if (!node) return null
+    let el: HTMLElement | null =
+      node.nodeType === Node.TEXT_NODE
+        ? node.parentElement
+        : (node as HTMLElement)
+    const BLOCK_TAGS = new Set([
+      'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'blockquote', 'pre', 'td', 'th',
+    ])
+    while (el && editorRef.current?.contains(el)) {
+      if (BLOCK_TAGS.has(el.tagName.toLowerCase())) return el
+      el = el.parentElement
+    }
+    return null
+  }
+
+  // Applique line-height a tous les blocs touches par la selection.
+  const applyLineHeight = (lh: string) => {
+    if (!editorRef.current) return
+    const sel = window.getSelection()
+    let range: Range | null = null
+    if (sel && sel.rangeCount > 0) range = sel.getRangeAt(0)
+    else if (savedRange.current) range = savedRange.current
+    if (!range) {
+      editorRef.current.focus()
+      return
+    }
+    const startBlock = findBlockAncestor(range.startContainer)
+    const endBlock = findBlockAncestor(range.endContainer)
+    const blocks = new Set<HTMLElement>()
+    if (startBlock) blocks.add(startBlock)
+    if (endBlock) blocks.add(endBlock)
+    // Si selection couvre plusieurs blocs : ajouter ceux entre start et end
+    if (startBlock && endBlock && startBlock !== endBlock) {
+      const walker = document.createTreeWalker(
+        editorRef.current,
+        NodeFilter.SHOW_ELEMENT,
+      )
+      let inRange = false
+      let node: Node | null = walker.currentNode
+      while (node) {
+        if (node === startBlock) inRange = true
+        if (inRange && node instanceof HTMLElement) {
+          const t = node.tagName.toLowerCase()
+          if (['p','div','li','h1','h2','h3','h4','h5','h6','blockquote','pre','td','th'].includes(t)) {
+            blocks.add(node)
+          }
+        }
+        if (node === endBlock) break
+        node = walker.nextNode()
+      }
+    }
+    blocks.forEach((b) => (b.style.lineHeight = lh))
+    editorRef.current.focus()
+    setCurrentLineHeight(lh)
+    setIsDirty(true)
+  }
 
   useEffect(() => {
     const rgbToHex = (rgb: string): string => {
@@ -150,6 +211,25 @@ export default function DocRHEditModal({
       const fsPx = parseFloat(cs.fontSize)
       if (fsPx) setCurrentSize(`${Math.round(fsPx / 1.333)}pt`)
       setCurrentColor(rgbToHex(cs.color))
+      // Interligne : lit le line-height du bloc parent
+      const block = findBlockAncestor(node)
+      if (block) {
+        const blockCs = window.getComputedStyle(block)
+        const lh = blockCs.lineHeight
+        const fs = parseFloat(blockCs.fontSize)
+        let lhVal = ''
+        if (lh && lh !== 'normal' && fs) {
+          const ratio = parseFloat(lh) / fs
+          // Match contre les options disponibles
+          for (const opt of LINE_HEIGHT_OPTIONS) {
+            if (Math.abs(parseFloat(opt) - ratio) < 0.05) {
+              lhVal = opt
+              break
+            }
+          }
+        }
+        setCurrentLineHeight(lhVal)
+      }
     }
     document.addEventListener('selectionchange', handler)
     return () => document.removeEventListener('selectionchange', handler)
@@ -797,6 +877,23 @@ export default function DocRHEditModal({
                       }}
                     />
                   </label>
+                  {/* Combo Interligne (s'applique aux blocs p/div/li/h*) */}
+                  <select
+                    value={currentLineHeight}
+                    onMouseDown={memorizeSelection}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v) applyLineHeight(v)
+                    }}
+                    title="Interligne (applique aux paragraphes)"
+                    className="text-xs px-1 py-0.5 rounded border bg-white"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  >
+                    <option value="">Interligne</option>
+                    {LINE_HEIGHT_OPTIONS.map((lh) => (
+                      <option key={lh} value={lh}>{lh}</option>
+                    ))}
+                  </select>
                   <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
                   <ToolBtn onClick={() => exec('bold')} title="Gras">
                     <Bold className="w-3.5 h-3.5" />
@@ -943,6 +1040,8 @@ const FONT_OPTIONS: { value: string; label: string }[] = [
 ]
 
 const SIZE_OPTIONS = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48]
+
+const LINE_HEIGHT_OPTIONS = ['1', '1.15', '1.5', '2', '2.5', '3']
 
 const inputCls =
   'w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#17494E]'
