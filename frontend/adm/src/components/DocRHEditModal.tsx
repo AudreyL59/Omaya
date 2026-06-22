@@ -96,6 +96,22 @@ export default function DocRHEditModal({
   const [steTest, setSteTest] = useState('')
   const [testing, setTesting] = useState(false)
   const editorRef = useRef<HTMLDivElement | null>(null)
+  // Memorise la selection courante avant qu'un controle de la toolbar
+  // (color picker natif, combo) ne fasse perdre le focus du contentEditable.
+  const savedRange = useRef<Range | null>(null)
+  const memorizeSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedRange.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
+  const restoreSelection = () => {
+    if (!savedRange.current || !editorRef.current) return
+    editorRef.current.focus()
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(savedRange.current)
+  }
   const [editorReady, setEditorReady] = useState(false)
   // HTML a injecter dans l'editeur une fois qu'il est rendu (sinon
   // editorRef.current est null pendant le useEffect d'init).
@@ -703,6 +719,13 @@ export default function DocRHEditModal({
                     className="flex items-center gap-1 text-xs px-1 py-0.5 rounded border bg-white cursor-pointer"
                     style={{ borderColor: COL_BORDER, color: COL_BRUN }}
                     title="Couleur du texte (applique a la selection)"
+                    onMouseDown={(e) => {
+                      // Memorise la selection AVANT que le click n'ouvre
+                      // le color picker (qui sinon ferait perdre le focus).
+                      memorizeSelection()
+                      // Ne pas voler le focus du contentEditable.
+                      e.preventDefault()
+                    }}
                   >
                     <span
                       className="inline-block w-4 h-4 rounded border"
@@ -717,8 +740,10 @@ export default function DocRHEditModal({
                         // Met a jour le pastille visuel via le sibling span
                         const span = (e.target.parentElement?.firstChild as HTMLElement)
                         if (span) span.style.backgroundColor = c
-                        // Applique via execCommand foreColor (large support).
-                        exec('foreColor', c)
+                        // Restaure la selection memorisee avant d'appliquer
+                        restoreSelection()
+                        document.execCommand('foreColor', false, c)
+                        editorRef.current?.focus()
                       }}
                     />
                   </label>
