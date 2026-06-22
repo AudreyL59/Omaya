@@ -319,12 +319,11 @@ export default function DocRHEditModal({
       }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `test_${meta.titre || docId}.docx`
-      link.click()
-      URL.revokeObjectURL(url)
-      showToast('Document publiposté téléchargé.', 'success')
+      // Ouvre le PDF dans un nouvel onglet (avec footer auto)
+      window.open(url, '_blank')
+      // Garde l'URL active 60s pour laisser l'onglet la charger
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      showToast('PDF de test généré.', 'success')
     } catch (e) {
       showToast(`Échec test : ${(e as Error).message}`, 'error')
     } finally {

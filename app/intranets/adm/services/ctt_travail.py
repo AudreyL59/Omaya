@@ -433,6 +433,41 @@ def _replace_in_docx(content: bytes, variables: dict) -> bytes:
     return out.getvalue()
 
 
+def _societe_for_footer(id_ste: int) -> dict:
+    """Recupere les infos societe + guimmick base64 pour le footer PDF."""
+    db = get_pg_connection("rh")
+    s = db.query_one(
+        """SELECT raison_sociale, adresse1, cp, ville, siret, guimmick
+             FROM rh.pgt_societe WHERE id_ste = ? LIMIT 1""",
+        (int(id_ste),),
+    )
+    if not s:
+        return {}
+    import base64 as _b64
+    g = s.get("guimmick")
+    logo_b64 = ""
+    if g:
+        if isinstance(g, memoryview):
+            g = bytes(g)
+        if isinstance(g, (bytes, bytearray)):
+            sig = bytes(g[:8])
+            if sig.startswith(b"\x89PNG"):
+                mime = "image/png"
+            elif sig.startswith(b"\xff\xd8\xff"):
+                mime = "image/jpeg"
+            else:
+                mime = "image/png"
+            logo_b64 = f"data:{mime};base64,{_b64.b64encode(bytes(g)).decode('ascii')}"
+    return {
+        "raison_sociale": _str(s.get("raison_sociale")),
+        "adresse": _str(s.get("adresse1")),
+        "cp": _str(s.get("cp")),
+        "ville": _str(s.get("ville")),
+        "siret": _str(s.get("siret")),
+        "logo_b64": logo_b64,
+    }
+
+
 def _societe_variables(id_ste: int) -> dict:
     """Variables STE_* depuis pgt_societe."""
     db = get_pg_connection("rh")
@@ -500,5 +535,127 @@ def publipostage_test(
         for key, val in variables.items():
             html = html.replace(key, str(val))
         return html.encode("utf-8"), "text/html; charset=utf-8"
+    except Exception:
+        return None
+
+
+def _docx_to_html(docx_bytes: bytes) -> str:
+    """Convertit un DOCX en HTML via mammoth (cote serveur)."""
+    import io as _io
+    import mammoth
+    res = mammoth.convert_to_html(_io.BytesIO(docx_bytes))
+    return res.value
+
+
+def publipostage_test_pdf(
+    id_doc_rh: int, id_ste: int, titre_doc: str = "",
+) -> bytes | None:
+    """Btn 'Tester Mise en page' : PDF avec footer 3 colonnes (logo
+    societe / RS+adr+SIRET / Page X/Y) genere via WeasyPrint.
+
+    'SAUTDEPAGE' dans le contenu -> page-break-before forced.
+    """
+    content = download_doc_content(id_doc_rh)
+    if not content:
+        return None
+
+    variables = dict(_FAKE_SALARIE)
+    if id_ste:
+        ste_vars = _societe_variables(id_ste)
+        if titre_doc:
+            ste_vars["DOCTITRE"] = titre_doc
+        variables.update(ste_vars)
+
+    # 1. Convertit DOCX -> HTML si necessaire
+    if is_docx(content):
+        try:
+            # Substituer les variables dans le DOCX puis convertir en HTML
+            filled = _replace_in_docx(content, variables)
+            body_html = _docx_to_html(filled)
+        except Exception:
+            return None
+    else:
+        try:
+            body_html = content.decode("utf-8")
+            for key, val in variables.items():
+                body_html = body_html.replace(key, str(val))
+        except Exception:
+            return None
+
+    # 2. Transforme 'SAUTDEPAGE' en saut de page CSS
+    # Insensible a la casse + tolerant aux espaces/balises autour.
+    import re as _re
+    body_html = _re.sub(
+        r"(<[^>]+>)?\s*SAUTDEPAGE\s*(</[^>]+>)?",
+        '<div style="page-break-before: always;"></div>',
+        body_html,
+        flags=_re.IGNORECASE,
+    )
+
+    # 3. Recupere infos societe pour le footer
+    ste = _societe_for_footer(id_ste) if id_ste else {}
+    rs = ste.get("raison_sociale", "")
+    adresse = " ".join(
+        x for x in [ste.get("adresse", ""),
+                    f"{ste.get('cp', '')} {ste.get('ville', '')}".strip()]
+        if x
+    ).strip()
+    siret = ste.get("siret", "")
+    logo_b64 = ste.get("logo_b64", "")
+    footer_center_html = (
+        f"<strong>{rs}</strong>" if rs else ""
+    )
+    if adresse:
+        footer_center_html += (f"<br/>{adresse}" if footer_center_html else adresse)
+    if siret:
+        footer_center_html += (
+            f"<br/>SIRET : {siret}" if footer_center_html else f"SIRET : {siret}"
+        )
+
+    # 4. Assemble le HTML complet avec CSS @page footer
+    html_doc = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+@page {{
+    size: A4;
+    margin: 25mm 20mm 35mm 20mm;
+    @bottom-left {{ content: element(footerLeft); }}
+    @bottom-center {{ content: element(footerCenter); }}
+    @bottom-right {{
+        content: "Page " counter(page) " / " counter(pages);
+        font-size: 9pt;
+        color: #4E1D17;
+    }}
+}}
+.footerLeft {{ position: running(footerLeft); }}
+.footerCenter {{
+    position: running(footerCenter);
+    text-align: center;
+    font-size: 8pt;
+    line-height: 1.3;
+    color: #4E1D17;
+}}
+.footerLeft img {{ max-height: 22mm; max-width: 35mm; }}
+body {{
+    font-family: Calibri, "Segoe UI", sans-serif;
+    font-size: 11pt;
+    color: #000;
+    line-height: 1.4;
+}}
+h1, h2, h3 {{ color: #17494E; }}
+table {{ border-collapse: collapse; }}
+</style></head><body>
+<div class="footerLeft">
+{f'<img src="{logo_b64}" alt=""/>' if logo_b64 else ''}
+</div>
+<div class="footerCenter">
+{footer_center_html}
+</div>
+{body_html}
+</body></html>"""
+
+    # 5. WeasyPrint -> PDF
+    try:
+        from weasyprint import HTML
+        return HTML(string=html_doc).write_pdf()
     except Exception:
         return None

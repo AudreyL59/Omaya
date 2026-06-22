@@ -176,20 +176,19 @@ def post_publipostage_test(
     id_ste: int,
     _user: UserToken = Depends(get_current_user),
 ):
-    """Btn 'Tester Mise en page' : substitue les variables et renvoie le
-    document rempli. Si stockage DOCX -> retourne du .docx; si HTML ->
-    retourne du HTML."""
+    """Btn 'Tester Mise en page' : PDF avec footer auto (logo societe a
+    gauche, RS+adr+SIRET au centre, 'Page X/Y' a droite) via WeasyPrint.
+    Reconnait 'SAUTDEPAGE' dans le contenu pour forcer un saut de page."""
     meta = svc.get_doc_meta(id_doc_rh)
     titre = meta.get("titre") if meta else ""
-    result = svc.publipostage_test(id_doc_rh, id_ste, titre_doc=titre or "")
-    if result is None:
+    pdf = svc.publipostage_test_pdf(id_doc_rh, id_ste, titre_doc=titre or "")
+    if pdf is None:
         raise HTTPException(400, "Pas de contenu a publiposter")
-    content, mime = result
-    ext = "docx" if "wordprocessingml" in mime else "html"
     return Response(
-        content,
-        media_type=mime,
+        pdf,
+        media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="test_{id_doc_rh}.{ext}"',
+            "Content-Disposition":
+                f'inline; filename="test_{id_doc_rh}.pdf"',
         },
     )
