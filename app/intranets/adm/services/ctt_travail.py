@@ -658,7 +658,6 @@ body {{
     color: #000;
     line-height: 1.4;
 }}
-h1, h2, h3 {{ color: #17494E; }}
 table {{ border-collapse: collapse; }}
 </style></head><body>
 <div class="footerLeft">
