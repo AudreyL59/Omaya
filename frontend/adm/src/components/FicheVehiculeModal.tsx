@@ -39,12 +39,12 @@ type TabKey =
   | 'pv'
   | 'accidents'
 
-const MENU: { key: TabKey; label: string; coded: boolean }[] = [
-  { key: 'info',        label: 'Info Véhicule',     coded: true },
-  { key: 'conducteurs', label: 'Conducteurs',       coded: false },
-  { key: 'carnet',      label: "Carnet d'entretien",coded: false },
-  { key: 'pv',          label: 'PV / Amendes',      coded: false },
-  { key: 'accidents',   label: 'Accidents',         coded: false },
+const MENU: { key: TabKey; label: string }[] = [
+  { key: 'info',        label: 'Info Véhicule' },
+  { key: 'conducteurs', label: 'Conducteurs' },
+  { key: 'carnet',      label: "Carnet d'entretien" },
+  { key: 'pv',          label: 'PV / Amendes' },
+  { key: 'accidents',   label: 'Accidents' },
 ]
 
 interface VehiculeMeta {
@@ -292,16 +292,14 @@ export default function FicheVehiculeModal({
                     key={m.key}
                     type="button"
                     onClick={() => setTab(m.key)}
-                    title={m.coded ? '' : 'À venir'}
                     className="w-full flex items-center justify-between gap-2 px-4 py-2 text-sm text-left transition-colors"
                     style={{
                       backgroundColor: active ? 'white' : 'transparent',
-                      color: m.coded ? COL_BRUN : '#A68D8A',
+                      color: COL_BRUN,
                       fontWeight: active ? 600 : 400,
                       borderLeft: active
                         ? `3px solid ${COL_PRIMARY}`
                         : '3px solid transparent',
-                      fontStyle: m.coded ? 'normal' : 'italic',
                     }}
                   >
                     <span>{m.label}</span>
