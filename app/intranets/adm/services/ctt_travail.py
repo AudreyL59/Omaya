@@ -589,6 +589,43 @@ def publipostage_test_pdf(
         except Exception:
             return None
 
+    # Compatibilite : convertit les <font color="..."> legacy (produit par
+    # certains execCommand) en <span style="color:..."> (WeasyPrint).
+    # Capture aussi face/size en supplement.
+    def _font_to_span(m: "_re.Match[str]") -> str:
+        attrs = m.group(1) or ""
+        styles = []
+        for prop, attr in (("color", "color"), ("font-family", "face"),
+                           ("font-size", "size")):
+            val = _re.search(rf'{attr}\s*=\s*"([^"]+)"', attrs, _re.IGNORECASE)
+            if val:
+                styles.append(f"{prop}: {val.group(1)}")
+        if not styles:
+            return "<span>"
+        return f'<span style="{"; ".join(styles)}">'
+    body_html = _re.sub(
+        r"<font\b([^>]*)>",
+        _font_to_span,
+        body_html,
+        flags=_re.IGNORECASE,
+    )
+    body_html = _re.sub(r"</font>", "</span>", body_html, flags=_re.IGNORECASE)
+
+    # DEBUG (a virer plus tard) : log les styles color trouves
+    import sys
+    if "color:" in body_html:
+        print(
+            f"[publipostage_test_pdf] {body_html.count('color:')} 'color:' "
+            f"trouve(s) dans le HTML.",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"[publipostage_test_pdf] AUCUN 'color:' dans le HTML "
+            f"(len={len(body_html)}).",
+            file=sys.stderr,
+        )
+
     # 1b. STE_LOGO -> <img> avec guimmick base64 si dispo, sinon vide.
     import re as _re
     if logo_b64:
@@ -639,7 +676,7 @@ def publipostage_test_pdf(
         content: "Page " counter(page) " / " counter(pages);
         font-family: Calibri, "Segoe UI", sans-serif;
         font-size: 9pt;
-        color: #17494E;
+        color: #000;
     }}
 }}
 .footerLeft {{ position: running(footerLeft); }}
@@ -649,7 +686,7 @@ def publipostage_test_pdf(
     text-align: center;
     font-size: 8pt;
     line-height: 1.3;
-    color: #17494E;
+    color: #000;
 }}
 .footerLeft img {{ max-height: 15mm; max-width: 23mm; }}
 body {{
