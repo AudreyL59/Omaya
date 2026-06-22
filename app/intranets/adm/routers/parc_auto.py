@@ -15,6 +15,7 @@ from app.intranets.adm.services import vehicule_conducteurs as cond_svc
 from app.intranets.adm.services import vehicule_documents as doc_svc
 from app.intranets.adm.services import vehicule_entretien as ent_svc
 from app.intranets.adm.services import vehicule_accident as acc_svc
+from app.intranets.adm.services import vehicule_pochette as poch_svc
 from app.intranets.adm.services import vehicule_pv as pv_svc
 
 
@@ -48,6 +49,23 @@ def get_vehicule(
     if not v:
         raise HTTPException(404, "Véhicule introuvable")
     return v
+
+
+@router.get("/vehicules/{id_vehicule}/pochette.pdf")
+def get_pochette_pdf(
+    id_vehicule: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Btn header 'Imprimer fiche' : PDF EtatPochette_Vehicule WinDev."""
+    res = poch_svc.generate_pochette_pdf(id_vehicule)
+    if res is None:
+        raise HTTPException(404, "Véhicule introuvable ou échec PDF")
+    pdf, filename = res
+    return Response(
+        pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 class VehiculePayload(BaseModel):

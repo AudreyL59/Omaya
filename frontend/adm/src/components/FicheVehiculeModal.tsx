@@ -399,9 +399,22 @@ function ActionBar({
       </button>
       <button
         type="button"
-        onClick={() =>
-          showToast('Impression fiche véhicule : à venir.', 'info')
-        }
+        onClick={async () => {
+          try {
+            const r = await fetch(
+              `/api/adm/parc-auto/vehicules/${idVehicule}/pochette.pdf`,
+              { headers: { Authorization: `Bearer ${getToken()}` } },
+            )
+            if (!r.ok) {
+              const j = await r.json().catch(() => ({}))
+              throw new Error((j as { detail?: string })?.detail || String(r.status))
+            }
+            const blob = await r.blob()
+            window.open(URL.createObjectURL(blob), '_blank')
+          } catch (e) {
+            showToast(`Échec : ${(e as Error).message}`, 'error')
+          }
+        }}
         className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border"
         style={{ borderColor: COL_BORDER, color: COL_BRUN }}
       >
