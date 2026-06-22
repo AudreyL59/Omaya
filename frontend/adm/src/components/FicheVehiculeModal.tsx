@@ -29,6 +29,8 @@ import SalarieDocUleaseModal from '@/components/fiche/ulease/SalarieDocUleaseMod
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
+// Variante plus claire pour les lignes selectionnees (vs entetes)
+const COL_PRIMARY_LIGHT = '#3A8B92'
 const COL_BORDER = '#E5DDDC'
 const COL_BG_SOFT = '#F8F5F4'
 
@@ -920,7 +922,7 @@ function DocumentsSection({
                     onDoubleClick={handleDownload}
                     className="cursor-pointer border-b"
                     style={{
-                      backgroundColor: isSel ? COL_PRIMARY : 'white',
+                      backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
                       color: isSel ? 'white' : COL_BRUN,
                       borderColor: COL_BORDER,
                     }}
@@ -1341,7 +1343,7 @@ function ConducteursTab({
                         onClick={() => setSelected(c.id_vehicule_pc)}
                         className="cursor-pointer border-b"
                         style={{
-                          backgroundColor: isSel ? COL_PRIMARY : 'white',
+                          backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
                           color: isSel ? 'white' : COL_BRUN,
                           borderColor: COL_BORDER,
                         }}
@@ -1752,7 +1754,7 @@ function DocumentsPCSection({
                     onDoubleClick={handleDownload}
                     className="cursor-pointer border-b"
                     style={{
-                      backgroundColor: isSel ? COL_PRIMARY : 'white',
+                      backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
                       color: isSel ? 'white' : COL_BRUN,
                       borderColor: COL_BORDER,
                     }}
@@ -2598,7 +2600,7 @@ function PvAmendesTab({ idVehicule }: { idVehicule: string }) {
                       onClick={() => handleEdit(pv)}
                       className="cursor-pointer border-b"
                       style={{
-                        backgroundColor: isSel ? COL_PRIMARY : 'white',
+                        backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
                         color: isSel ? 'white' : COL_BRUN,
                         borderColor: COL_BORDER,
                       }}
@@ -2959,7 +2961,7 @@ function DocsSubSection({
                     onDoubleClick={handleDownload}
                     className="cursor-pointer border-b"
                     style={{
-                      backgroundColor: isSel ? COL_PRIMARY : 'white',
+                      backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
                       color: isSel ? 'white' : COL_BRUN,
                       borderColor: COL_BORDER,
                     }}
@@ -3184,7 +3186,7 @@ function AccidentsTab({ idVehicule }: { idVehicule: string }) {
                         onClick={() => handleEdit(acc)}
                         className="cursor-pointer border-b"
                         style={{
-                          backgroundColor: isSel ? COL_PRIMARY : 'white',
+                          backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
                           color: isSel ? 'white' : COL_BRUN,
                           borderColor: COL_BORDER,
                         }}
