@@ -105,13 +105,6 @@ export default function DocRHEditModal({
       savedRange.current = sel.getRangeAt(0).cloneRange()
     }
   }
-  const restoreSelection = () => {
-    if (!savedRange.current || !editorRef.current) return
-    editorRef.current.focus()
-    const sel = window.getSelection()
-    sel?.removeAllRanges()
-    sel?.addRange(savedRange.current)
-  }
   const [editorReady, setEditorReady] = useState(false)
   // HTML a injecter dans l'editeur une fois qu'il est rendu (sinon
   // editorRef.current est null pendant le useEffect d'init).
@@ -243,13 +236,25 @@ export default function DocRHEditModal({
   // Applique font-family / font-size / color sur la selection via span style.
   // (execCommand fontSize ne supporte que 1-7 et foreColor produit du
   // <font color="..."> mal supporte par WeasyPrint.)
+  // Utilise savedRange.current en fallback si la selection courante est
+  // perdue (cas color picker qui vole le focus).
   const applyInlineStyle = (style: Partial<CSSStyleDeclaration>) => {
+    let range: Range | null = null
     const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      range = sel.getRangeAt(0)
+    } else if (savedRange.current && !savedRange.current.collapsed) {
+      // Restaure la selection memorisee (cas color picker)
+      range = savedRange.current.cloneRange()
+      editorRef.current?.focus()
+      const s = window.getSelection()
+      s?.removeAllRanges()
+      s?.addRange(range)
+    }
+    if (!range || range.collapsed) {
       editorRef.current?.focus()
       return
     }
-    const range = sel.getRangeAt(0)
     const span = document.createElement('span')
     if (style.fontFamily) span.style.fontFamily = String(style.fontFamily)
     if (style.fontSize) span.style.fontSize = String(style.fontSize)
@@ -258,10 +263,14 @@ export default function DocRHEditModal({
       span.appendChild(range.extractContents())
       range.insertNode(span)
       // Re-select pour garder le visuel
-      sel.removeAllRanges()
+      const s2 = window.getSelection()
+      s2?.removeAllRanges()
       const newRange = document.createRange()
       newRange.selectNodeContents(span)
-      sel.addRange(newRange)
+      s2?.addRange(newRange)
+      // Met a jour savedRange pour les actions suivantes
+      savedRange.current = newRange.cloneRange()
+      setIsDirty(true)
     } catch (e) {
       console.error('[applyInlineStyle]', e)
     }
@@ -742,11 +751,8 @@ export default function DocRHEditModal({
                         // Met a jour la pastille visuelle via le sibling span
                         const span = (e.target.parentElement?.firstChild as HTMLElement)
                         if (span) span.style.backgroundColor = c
-                        // Restaure la selection memorisee avant d'appliquer
-                        restoreSelection()
-                        // applyInlineStyle produit <span style="color:..."> -
-                        // mieux supporte par WeasyPrint que <font color="...">
-                        // produit par execCommand('foreColor').
+                        // applyInlineStyle restaure savedRange si necessaire +
+                        // produit <span style="color:..."> compatible WeasyPrint.
                         applyInlineStyle({ color: c })
                       }}
                     />
