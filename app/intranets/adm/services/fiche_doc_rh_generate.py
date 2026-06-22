@@ -115,16 +115,18 @@ def _replace_text(doc, mapping: dict[str, str]) -> None:
     Strategie : pour chaque paragraphe, concatener les runs s'ils
     contiennent des fragments d'un meme token (Word peut splitter
     'S_NOM' en plusieurs runs si on a edite le doc).
+
+    Trie les cles par longueur decroissante pour eviter que 'DATE_AVENANT'
+    soit substitue avant 'DATE_AVENANT_FINESSAI' (et casse ce dernier).
     """
+    # Cles triees par longueur desc : les plus longues d'abord.
+    sorted_items = sorted(mapping.items(), key=lambda kv: -len(kv[0]))
     for p in _iter_paragraphs(doc):
-        if not any(tok in p.text for tok in mapping):
+        if not any(tok in p.text for tok, _ in sorted_items):
             continue
-        # On regroupe tout le texte du paragraphe dans le 1er run et on
-        # vide les autres -- simple et fiable pour le publipostage texte
-        # (les modeles RH n'ont pas de mise en forme intra-token).
         full = p.text
         new = full
-        for tok, val in mapping.items():
+        for tok, val in sorted_items:
             if tok in new:
                 new = new.replace(tok, val or "")
         if new == full:
@@ -461,8 +463,10 @@ def _build_publiposted_docx(
     else:
         # Format HTML : substitution texte directe (les images sont gerees
         # par generer_pdf_publiposte au moment du rendu PDF).
+        # Tri par longueur desc -> DATE_AVENANT_FINESSAI traite avant
+        # DATE_AVENANT.
         body_html = raw.decode("utf-8", errors="ignore")
-        for k, v in txt_map.items():
+        for k, v in sorted(txt_map.items(), key=lambda kv: -len(kv[0])):
             if k == "STE_LOGO":  # gere par generer_pdf_publiposte
                 continue
             body_html = body_html.replace(k, str(v))
@@ -753,7 +757,8 @@ def _build_html_publiposte(
         except Exception:
             pass
 
-    for k, v in txt_map.items():
+    # Tri par longueur desc : DATE_AVENANT_FINESSAI avant DATE_AVENANT.
+    for k, v in sorted(txt_map.items(), key=lambda kv: -len(kv[0])):
         if k == "STE_LOGO":  # gere par generer_pdf_publiposte
             continue
         body_html = body_html.replace(k, str(v))

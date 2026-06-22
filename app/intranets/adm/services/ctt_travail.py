@@ -399,10 +399,13 @@ def _replace_in_docx(content: bytes, variables: dict) -> bytes:
 
     doc = Document(BytesIO(content))
 
+    # Tri cles par longueur desc : DATE_AVENANT_FINESSAI avant DATE_AVENANT.
+    sorted_vars = sorted(variables.items(), key=lambda kv: -len(kv[0]))
+
     def replace_in_para(para):
         full = para.text
         modified = full
-        for key, val in variables.items():
+        for key, val in sorted_vars:
             if key in modified:
                 modified = modified.replace(key, str(val))
         if modified != full:
@@ -529,10 +532,10 @@ def publipostage_test(
         except Exception:
             return None
 
-    # HTML : simple str.replace
+    # HTML : simple str.replace (tri par longueur desc)
     try:
         html = content.decode("utf-8")
-        for key, val in variables.items():
+        for key, val in sorted(variables.items(), key=lambda kv: -len(kv[0])):
             html = html.replace(key, str(val))
         return html.encode("utf-8"), "text/html; charset=utf-8"
     except Exception:
@@ -734,7 +737,10 @@ def publipostage_test_pdf(
     else:
         try:
             body_html = content.decode("utf-8")
-            for key, val in variables.items():
+            # Tri par longueur desc : DATE_AVENANT_FINESSAI avant DATE_AVENANT.
+            for key, val in sorted(
+                variables.items(), key=lambda kv: -len(kv[0]),
+            ):
                 # STE_LOGO est traite par generer_pdf_publiposte.
                 if key == "STE_LOGO":
                     continue
