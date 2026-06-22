@@ -240,8 +240,9 @@ export default function DocRHEditModal({
     editorRef.current?.focus()
   }
 
-  // Applique font-family / font-size sur la selection via span style
-  // (execCommand fontSize ne supporte que 1-7, pas les pt natifs).
+  // Applique font-family / font-size / color sur la selection via span style.
+  // (execCommand fontSize ne supporte que 1-7 et foreColor produit du
+  // <font color="..."> mal supporte par WeasyPrint.)
   const applyInlineStyle = (style: Partial<CSSStyleDeclaration>) => {
     const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
@@ -252,6 +253,7 @@ export default function DocRHEditModal({
     const span = document.createElement('span')
     if (style.fontFamily) span.style.fontFamily = String(style.fontFamily)
     if (style.fontSize) span.style.fontSize = String(style.fontSize)
+    if (style.color) span.style.color = String(style.color)
     try {
       span.appendChild(range.extractContents())
       range.insertNode(span)
@@ -737,13 +739,15 @@ export default function DocRHEditModal({
                       className="w-0 h-0 opacity-0 absolute"
                       onChange={(e) => {
                         const c = e.target.value
-                        // Met a jour le pastille visuel via le sibling span
+                        // Met a jour la pastille visuelle via le sibling span
                         const span = (e.target.parentElement?.firstChild as HTMLElement)
                         if (span) span.style.backgroundColor = c
                         // Restaure la selection memorisee avant d'appliquer
                         restoreSelection()
-                        document.execCommand('foreColor', false, c)
-                        editorRef.current?.focus()
+                        // applyInlineStyle produit <span style="color:..."> -
+                        // mieux supporte par WeasyPrint que <font color="...">
+                        // produit par execCommand('foreColor').
+                        applyInlineStyle({ color: c })
                       }}
                     />
                   </label>
