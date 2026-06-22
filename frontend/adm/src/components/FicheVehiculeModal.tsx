@@ -1956,9 +1956,15 @@ function EntretienPlan({
         </IconBtn>
       </div>
 
-      <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+      <div
+        className="border rounded overflow-auto"
+        style={{ borderColor: COL_BORDER, maxHeight: 340 }}
+      >
         <table className="w-full text-sm">
-          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+          <thead
+            className="sticky top-0"
+            style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+          >
             <tr>
               <th className="px-3 py-2 text-left">Réalisé le</th>
               <th className="px-3 py-2 text-right w-28">Montant HT</th>
@@ -2284,9 +2290,15 @@ function ReleveKmPlan({
         </div>
       </div>
 
-      <div className="border rounded overflow-hidden" style={{ borderColor: COL_BORDER }}>
+      <div
+        className="border rounded overflow-auto"
+        style={{ borderColor: COL_BORDER, maxHeight: 340 }}
+      >
         <table className="w-full text-sm">
-          <thead style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
+          <thead
+            className="sticky top-0"
+            style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+          >
             <tr>
               <th className="px-3 py-2 text-left">Conducteur</th>
               <th className="px-3 py-2 text-right w-24">Relève (KM)</th>
