@@ -105,6 +105,55 @@ export default function DocRHEditModal({
       savedRange.current = sel.getRangeAt(0).cloneRange()
     }
   }
+
+  // ---- Synchronisation toolbar -> selection courante -------------------
+  // Quand la selection change dans l'editeur, met a jour les controles
+  // (Police, Taille, Couleur) pour refleter le style du texte selectionne.
+  const [currentFont, setCurrentFont] = useState('')
+  const [currentSize, setCurrentSize] = useState('')
+  const [currentColor, setCurrentColor] = useState('#000000')
+
+  useEffect(() => {
+    const rgbToHex = (rgb: string): string => {
+      const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      if (!m) return '#000000'
+      const [, r, g, b] = m
+      return (
+        '#' +
+        [r, g, b]
+          .map((x) => parseInt(x, 10).toString(16).padStart(2, '0'))
+          .join('')
+      )
+    }
+    const findFontOption = (ff: string): string => {
+      // ff = '"Calibri", "Segoe UI", sans-serif' ou 'Calibri, Segoe UI, ...'
+      const first = ff.split(',')[0].replace(/['"]/g, '').trim().toLowerCase()
+      for (const opt of FONT_OPTIONS) {
+        const optFirst = opt.value.split(',')[0]
+          .replace(/['"]/g, '').trim().toLowerCase()
+        if (optFirst === first) return opt.value
+      }
+      return ''
+    }
+    const handler = () => {
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) return
+      const node = sel.anchorNode
+      if (!node || !editorRef.current?.contains(node)) return
+      const el =
+        node.nodeType === 3
+          ? (node.parentElement as HTMLElement | null)
+          : (node as HTMLElement)
+      if (!el) return
+      const cs = window.getComputedStyle(el)
+      setCurrentFont(findFontOption(cs.fontFamily))
+      const fsPx = parseFloat(cs.fontSize)
+      if (fsPx) setCurrentSize(`${Math.round(fsPx / 1.333)}pt`)
+      setCurrentColor(rgbToHex(cs.color))
+    }
+    document.addEventListener('selectionchange', handler)
+    return () => document.removeEventListener('selectionchange', handler)
+  }, [])
   const [editorReady, setEditorReady] = useState(false)
   // HTML a injecter dans l'editeur une fois qu'il est rendu (sinon
   // editorRef.current est null pendant le useEffect d'init).
@@ -683,47 +732,45 @@ export default function DocRHEditModal({
                   className="flex flex-wrap items-center gap-1 px-2 py-1 border-b border-x rounded-t"
                   style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}
                 >
-                  {/* Combo Police */}
+                  {/* Combo Police - refleter la selection courante */}
                   <select
+                    value={currentFont}
+                    onMouseDown={memorizeSelection}
                     onChange={(e) => {
-                      if (e.target.value) {
-                        applyInlineStyle({ fontFamily: e.target.value })
-                        e.target.value = ''
+                      const v = e.target.value
+                      if (v) {
+                        applyInlineStyle({ fontFamily: v })
+                        setCurrentFont(v)
                       }
                     }}
-                    defaultValue=""
                     title="Police (applique a la selection)"
                     className="text-xs px-1 py-0.5 rounded border bg-white"
                     style={{ borderColor: COL_BORDER, color: COL_BRUN }}
                   >
                     <option value="">Police</option>
-                    <option value='Calibri, "Segoe UI", sans-serif'>Calibri</option>
-                    <option value="Arial, sans-serif">Arial</option>
-                    <option value='"Times New Roman", Times, serif'>Times</option>
-                    <option value="Verdana, sans-serif">Verdana</option>
-                    <option value='"Trebuchet MS", sans-serif'>Trebuchet</option>
-                    <option value="Georgia, serif">Georgia</option>
-                    <option value='"Courier New", monospace'>Courier New</option>
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value}>{f.label}</option>
+                    ))}
                   </select>
-                  {/* Combo Taille */}
+                  {/* Combo Taille - refleter la selection courante */}
                   <select
+                    value={currentSize}
+                    onMouseDown={memorizeSelection}
                     onChange={(e) => {
-                      if (e.target.value) {
-                        applyInlineStyle({ fontSize: e.target.value })
-                        e.target.value = ''
+                      const v = e.target.value
+                      if (v) {
+                        applyInlineStyle({ fontSize: v })
+                        setCurrentSize(v)
                       }
                     }}
-                    defaultValue=""
                     title="Taille (applique a la selection)"
                     className="text-xs px-1 py-0.5 rounded border bg-white"
                     style={{ borderColor: COL_BORDER, color: COL_BRUN }}
                   >
                     <option value="">Taille</option>
-                    {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48].map(
-                      (n) => (
-                        <option key={n} value={`${n}pt`}>{n}</option>
-                      ),
-                    )}
+                    {SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={`${n}pt`}>{n}</option>
+                    ))}
                   </select>
                   {/* Couleur de police (input type=color) */}
                   <label
@@ -731,28 +778,21 @@ export default function DocRHEditModal({
                     style={{ borderColor: COL_BORDER, color: COL_BRUN }}
                     title="Couleur du texte (applique a la selection)"
                     onMouseDown={(e) => {
-                      // Memorise la selection AVANT que le click n'ouvre
-                      // le color picker (qui sinon ferait perdre le focus).
                       memorizeSelection()
-                      // Ne pas voler le focus du contentEditable.
                       e.preventDefault()
                     }}
                   >
                     <span
                       className="inline-block w-4 h-4 rounded border"
-                      style={{ borderColor: COL_BORDER, backgroundColor: '#000' }}
+                      style={{ borderColor: COL_BORDER, backgroundColor: currentColor }}
                     />
                     <input
                       type="color"
-                      defaultValue="#000000"
+                      value={currentColor}
                       className="w-0 h-0 opacity-0 absolute"
                       onChange={(e) => {
                         const c = e.target.value
-                        // Met a jour la pastille visuelle via le sibling span
-                        const span = (e.target.parentElement?.firstChild as HTMLElement)
-                        if (span) span.style.backgroundColor = c
-                        // applyInlineStyle restaure savedRange si necessaire +
-                        // produit <span style="color:..."> compatible WeasyPrint.
+                        setCurrentColor(c)
                         applyInlineStyle({ color: c })
                       }}
                     />
@@ -891,6 +931,18 @@ export default function DocRHEditModal({
 // ============================================================================
 // UI helpers
 // ============================================================================
+
+const FONT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Calibri, "Segoe UI", sans-serif', label: 'Calibri' },
+  { value: 'Arial, sans-serif', label: 'Arial' },
+  { value: '"Times New Roman", Times, serif', label: 'Times' },
+  { value: 'Verdana, sans-serif', label: 'Verdana' },
+  { value: '"Trebuchet MS", sans-serif', label: 'Trebuchet' },
+  { value: 'Georgia, serif', label: 'Georgia' },
+  { value: '"Courier New", monospace', label: 'Courier New' },
+]
+
+const SIZE_OPTIONS = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48]
 
 const inputCls =
   'w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#17494E]'
