@@ -1,0 +1,192 @@
+"""
+Router Fen_GestionCarteCarb (ADM Ulease -> Gestion cartes carburant).
+
+Endpoints :
+  GET    /cartes                   -> liste cartes
+  POST   /cartes                   -> create/update (id=0 = create)
+  DELETE /cartes/{id}              -> soft delete
+
+  GET    /cartes/{id}/attributions -> liste attributions
+  GET    /attributions/{id}        -> detail
+  POST   /attributions             -> create/update
+  DELETE /attributions/{id}        -> soft delete
+
+  GET    /fournisseurs             -> liste fournisseurs
+  POST   /fournisseurs             -> create/update
+  POST   /fournisseurs/{id}/logo   -> upload logo (multipart)
+  DELETE /fournisseurs/{id}        -> soft delete
+
+  GET    /types-releve             -> liste types
+  POST   /types-releve             -> create/update
+  DELETE /types-releve/{id}        -> soft delete
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
+
+from app.core.auth.dependencies import get_current_user
+from app.core.auth.schemas import UserToken
+from app.intranets.adm.services import gestion_carte_carb as svc
+
+
+router = APIRouter(prefix="/carte-carb", tags=["adm-carte-carb"])
+
+
+# ---------------------------------------------------------------------------
+# Cartes carburant
+# ---------------------------------------------------------------------------
+
+
+class CartePayload(BaseModel):
+    id_carte_carburant: str = "0"
+    code_carte: str = ""
+    num_carte: str = ""
+    id_carte_fournisseur: int = 0
+    is_actif: bool = True
+
+
+@router.get("/cartes")
+def get_cartes(_user: UserToken = Depends(get_current_user)):
+    return svc.list_cartes()
+
+
+@router.post("/cartes")
+def post_carte(
+    payload: CartePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.save_carte(payload.model_dump(), user.id_salarie)
+
+
+@router.delete("/cartes/{id_carte}")
+def delete_carte(
+    id_carte: int,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.delete_carte(id_carte, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Attributions de la carte
+# ---------------------------------------------------------------------------
+
+
+class AttributionPayload(BaseModel):
+    id_carte_attribution: str = "0"
+    id_carte_carburant: str
+    id_conducteur: str
+    du: str = ""
+    au: str = ""
+
+
+@router.get("/cartes/{id_carte}/attributions")
+def get_attributions(
+    id_carte: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    return svc.list_attributions(id_carte)
+
+
+@router.get("/attributions/{id_att}")
+def get_attribution(
+    id_att: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    a = svc.get_attribution(id_att)
+    if not a:
+        raise HTTPException(404, "Attribution introuvable")
+    return a
+
+
+@router.post("/attributions")
+def post_attribution(
+    payload: AttributionPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.save_attribution(payload.model_dump(), user.id_salarie)
+
+
+@router.delete("/attributions/{id_att}")
+def delete_attribution(
+    id_att: int,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.delete_attribution(id_att, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Fournisseurs
+# ---------------------------------------------------------------------------
+
+
+class FournisseurPayload(BaseModel):
+    id_carte_fournisseur: str = "0"
+    nom_fournisseur: str = ""
+
+
+@router.get("/fournisseurs")
+def get_fournisseurs(_user: UserToken = Depends(get_current_user)):
+    return svc.list_fournisseurs()
+
+
+@router.post("/fournisseurs")
+def post_fournisseur(
+    payload: FournisseurPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.save_fournisseur(payload.model_dump(), user.id_salarie)
+
+
+@router.post("/fournisseurs/{id_four}/logo")
+async def post_logo_fournisseur(
+    id_four: int,
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    content = await file.read()
+    res = svc.upload_logo_fournisseur(id_four, content, user.id_salarie)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
+@router.delete("/fournisseurs/{id_four}")
+def delete_fournisseur(
+    id_four: int,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.delete_fournisseur(id_four, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Types de releve fournisseur
+# ---------------------------------------------------------------------------
+
+
+class TypeReleve(BaseModel):
+    id_type_releve_fournisseur: str = "0"
+    lib_type: str = ""
+    categorie: str = ""
+
+
+@router.get("/types-releve")
+def get_types(_user: UserToken = Depends(get_current_user)):
+    return svc.list_types_releve()
+
+
+@router.post("/types-releve")
+def post_type(
+    payload: TypeReleve,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.save_type_releve(payload.model_dump(), user.id_salarie)
+
+
+@router.delete("/types-releve/{id_type}")
+def delete_type(
+    id_type: int,
+    user: UserToken = Depends(get_current_user),
+):
+    return svc.delete_type_releve(id_type, user.id_salarie)

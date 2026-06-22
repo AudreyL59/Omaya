@@ -30,6 +30,7 @@ import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showToast } from '@shared/ui/dialog'
 import FicheVehiculeModal from '@/components/FicheVehiculeModal'
+import GestionCarteCarbModal from '@/components/GestionCarteCarbModal'
 import { AnimatePresence } from 'framer-motion'
 
 interface Vehicule {
@@ -57,6 +58,7 @@ export default function ParcAutoPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [ficheOpen, setFicheOpen] = useState<string | null>(null)
+  const [carteCarbOpen, setCarteCarbOpen] = useState(false)
 
   const reload = () => {
     setLoading(true)
@@ -108,9 +110,7 @@ export default function ParcAutoPage() {
         <ToolbarBtn
           icon={<CreditCard className="w-4 h-4" />}
           label="Gestion des cartes carburant"
-          onClick={() =>
-            showToast('Gestion cartes carburant : à venir.', 'info')
-          }
+          onClick={() => setCarteCarbOpen(true)}
         />
         <ToolbarBtn
           icon={<Database className="w-4 h-4" />}
@@ -179,6 +179,11 @@ export default function ParcAutoPage() {
           />
         )}
       </AnimatePresence>
+
+      <GestionCarteCarbModal
+        open={carteCarbOpen}
+        onClose={() => setCarteCarbOpen(false)}
+      />
     </div>
   )
 }

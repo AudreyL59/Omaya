@@ -18,6 +18,7 @@ from app.intranets.adm.routers.fiche_salarie import router as fiche_salarie_rout
 from app.intranets.adm.routers.dpae import router as dpae_router
 from app.intranets.adm.routers.ctt_travail import router as ctt_travail_router
 from app.intranets.adm.routers.parc_auto import router as parc_auto_router
+from app.intranets.adm.routers.gestion_carte_carb import router as carte_carb_router
 from app.shared.production.router import router as production_router
 from app.shared.tickets.router import get_tickets_router
 
@@ -44,6 +45,7 @@ router.include_router(fiche_salarie_router)
 router.include_router(dpae_router)
 router.include_router(ctt_travail_router)
 router.include_router(parc_auto_router)
+router.include_router(carte_carb_router)
 router.include_router(production_router)
 # Module tickets shared : filtre par DroitAccès pour ADM
 router.include_router(get_tickets_router("DroitAccès"))
