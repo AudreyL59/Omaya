@@ -337,7 +337,10 @@ export default function FicheVehiculeModal({
               {tab === 'carnet' && (
                 <CarnetEntretienTab idVehicule={idVehicule} meta={meta} />
               )}
-              {tab !== 'info' && tab !== 'conducteurs' && tab !== 'carnet' && (
+              {tab === 'pv' && (
+                <PvAmendesTab idVehicule={idVehicule} />
+              )}
+              {tab !== 'info' && tab !== 'conducteurs' && tab !== 'carnet' && tab !== 'pv' && (
                 <div
                   className="text-sm italic p-10 text-center"
                   style={{ color: COL_BRUN }}
@@ -2398,6 +2401,371 @@ function Field({
         {label}
       </label>
       {children}
+    </div>
+  )
+}
+
+// ============================================================================
+// Plan 4 - PV / Amendes
+// ============================================================================
+
+interface Pv {
+  id_vehicule_pv: string
+  id_vehicule_pc: string
+  conducteur: string
+  vehicule_pv_date: string
+  montant: number
+  num_pv: string
+  frais: number
+  nb_pts: number
+  paye_employeur: boolean
+  paye_employeur_date: string
+  prel_salarie: boolean
+  prel_salarie_date: string
+  comment: string
+}
+
+const EMPTY_PV: Pv = {
+  id_vehicule_pv: '0',
+  id_vehicule_pc: '0',
+  conducteur: '',
+  vehicule_pv_date: '',
+  montant: 0,
+  num_pv: '',
+  frais: 15,
+  nb_pts: 0,
+  paye_employeur: false,
+  paye_employeur_date: '',
+  prel_salarie: false,
+  prel_salarie_date: '',
+  comment: '',
+}
+
+function PvAmendesTab({ idVehicule }: { idVehicule: string }) {
+  const [list, setList] = useState<Pv[]>([])
+  const [conducteurs, setConducteurs] = useState<CondAll[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<Pv>(EMPTY_PV)
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/pv`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => r.json()),
+      fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs-all`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => r.json()),
+    ])
+      .then(([pv, cs]) => {
+        setList((pv as Pv[]) || [])
+        setConducteurs((cs as CondAll[]) || [])
+      })
+      .finally(() => setLoading(false))
+  }, [idVehicule])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const updatePv = (patch: Partial<Pv>) =>
+    setEditing((e) => ({ ...e, ...patch }))
+
+  const handleAdd = () => setEditing(EMPTY_PV)
+  const handleEdit = (pv: Pv) => setEditing(pv)
+
+  const handleDelete = async (pv: Pv) => {
+    const ok = await showConfirm({
+      title: 'Supprimer ce PV ?',
+      message: `PV n° ${pv.num_pv || pv.id_vehicule_pv} sera supprimé.`,
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/adm/parc-auto/pv/${pv.id_vehicule_pv}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('PV supprimé.', 'success')
+      if (editing.id_vehicule_pv === pv.id_vehicule_pv) setEditing(EMPTY_PV)
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const r = await fetch('/api/adm/parc-auto/pv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          id_vehicule_pv: Number(editing.id_vehicule_pv) || 0,
+          id_vehicule: Number(idVehicule) || 0,
+          id_vehicule_pc: Number(editing.id_vehicule_pc) || 0,
+          vehicule_pv_date: editing.vehicule_pv_date,
+          montant: editing.montant,
+          num_pv: editing.num_pv,
+          frais: editing.frais,
+          nb_pts: editing.nb_pts,
+          paye_employeur: editing.paye_employeur,
+          paye_employeur_date: editing.paye_employeur_date,
+          prel_salarie: editing.prel_salarie,
+          prel_salarie_date: editing.prel_salarie_date,
+          comment: editing.comment,
+        }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('PV enregistré.', 'success')
+      setEditing(EMPTY_PV)
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fmtDateTime = (s: string) =>
+    s.length >= 16
+      ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}`
+      : s
+
+  if (loading) {
+    return (
+      <div className="p-10 flex justify-center">
+        <Loader2 className="w-5 h-5 animate-spin text-[#A68D8A]" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-6">
+      {/* Gauche : tableau */}
+      <div>
+        <div className="flex gap-1.5 mb-2 h-9 items-center">
+          <IconBtn onClick={handleAdd} title="Ajouter un PV">
+            <Plus className="w-4 h-4" />
+          </IconBtn>
+        </div>
+        <div
+          className="border rounded overflow-auto"
+          style={{ borderColor: COL_BORDER, maxHeight: 320 }}
+        >
+          <table className="w-full text-xs">
+            <thead
+              className="sticky top-0"
+              style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+            >
+              <tr>
+                <th className="px-2 py-1.5 text-left">Conducteur</th>
+                <th className="px-2 py-1.5 text-left w-32">Horodatage PV</th>
+                <th className="px-2 py-1.5 text-right w-20">Montant</th>
+                <th className="px-2 py-1.5 w-12" />
+              </tr>
+            </thead>
+            <tbody>
+              {list.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="p-6 text-center italic"
+                    style={{ color: '#A68D8A' }}
+                  >
+                    Aucun PV.
+                  </td>
+                </tr>
+              ) : (
+                list.map((pv) => {
+                  const isSel = editing.id_vehicule_pv === pv.id_vehicule_pv
+                  return (
+                    <tr
+                      key={pv.id_vehicule_pv}
+                      onClick={() => handleEdit(pv)}
+                      className="cursor-pointer border-b"
+                      style={{
+                        backgroundColor: isSel ? COL_PRIMARY : 'white',
+                        color: isSel ? 'white' : COL_BRUN,
+                        borderColor: COL_BORDER,
+                      }}
+                    >
+                      <td className="px-2 py-1">{pv.conducteur}</td>
+                      <td className="px-2 py-1">{fmtDateTime(pv.vehicule_pv_date)}</td>
+                      <td className="px-2 py-1 text-right">{pv.montant.toFixed(2)} €</td>
+                      <td className="px-2 py-1 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(pv)
+                          }}
+                          className={
+                            isSel
+                              ? 'text-white hover:text-red-200'
+                              : 'text-red-600 hover:text-red-800'
+                          }
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Droite : form */}
+      <div>
+        <h3
+          className="text-xs font-bold uppercase tracking-wide mb-2 pb-1 border-b"
+          style={{ color: COL_BRUN, borderColor: COL_BORDER }}
+        >
+          Info PV
+        </h3>
+        <div className="space-y-2">
+          <Field label="Conducteur">
+            <select
+              value={editing.id_vehicule_pc}
+              onChange={(e) => updatePv({ id_vehicule_pc: e.target.value })}
+              className={inputCls}
+            >
+              <option value="0">—</option>
+              {conducteurs.map((c) => (
+                <option key={c.id_vehicule_pc} value={c.id_vehicule_pc}>
+                  {c.titre}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Horodatage du PV">
+              <input
+                type="datetime-local"
+                value={editing.vehicule_pv_date}
+                onChange={(e) => updatePv({ vehicule_pv_date: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="N° de PV">
+              <input
+                type="text"
+                value={editing.num_pv}
+                onChange={(e) => updatePv({ num_pv: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Montant">
+              <input
+                type="number"
+                step="0.01"
+                value={editing.montant || ''}
+                onChange={(e) => updatePv({ montant: Number(e.target.value) || 0 })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Nb Pts pris sur le permis">
+              <input
+                type="number"
+                value={editing.nb_pts || ''}
+                onChange={(e) => updatePv({ nb_pts: Number(e.target.value) || 0 })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Frais de dossier">
+              <input
+                type="number"
+                step="0.01"
+                value={editing.frais || ''}
+                onChange={(e) => updatePv({ frais: Number(e.target.value) || 0 })}
+                className={inputCls}
+              />
+            </Field>
+          </div>
+          <div className="flex items-center gap-3 mt-2">
+            <div style={{ width: 200 }}>
+              <CheckRow
+                label="Payé par Employeur"
+                checked={editing.paye_employeur}
+                onChange={(c) => updatePv({ paye_employeur: c })}
+              />
+            </div>
+            <input
+              type="date"
+              value={editing.paye_employeur_date}
+              onChange={(e) => updatePv({ paye_employeur_date: e.target.value })}
+              disabled={!editing.paye_employeur}
+              className={`${inputCls} ${editing.paye_employeur ? '' : 'bg-gray-100 cursor-not-allowed'}`}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <div style={{ width: 200 }}>
+              <CheckRow
+                label="PRLV Salarié"
+                checked={editing.prel_salarie}
+                onChange={(c) => updatePv({ prel_salarie: c })}
+              />
+            </div>
+            <input
+              type="text"
+              placeholder="MM-AAAA"
+              value={editing.prel_salarie_date}
+              onChange={(e) => updatePv({ prel_salarie_date: e.target.value })}
+              disabled={!editing.prel_salarie}
+              className={`${inputCls} ${editing.prel_salarie ? '' : 'bg-gray-100 cursor-not-allowed'}`}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <Field label="Infos complémentaires">
+            <textarea
+              rows={3}
+              value={editing.comment}
+              onChange={(e) => updatePv({ comment: e.target.value })}
+              className="w-full p-2 border rounded text-sm resize-none"
+              style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+            />
+          </Field>
+          <div className="flex justify-end gap-2 mt-2">
+            {editing.id_vehicule_pv !== '0' && (
+              <button
+                type="button"
+                onClick={() => setEditing(EMPTY_PV)}
+                className="px-3 py-1.5 rounded text-sm border"
+                style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+              >
+                Annuler
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || editing.id_vehicule_pc === '0'}
+              className="flex items-center gap-2 px-4 py-1.5 rounded text-white text-sm font-medium disabled:opacity-50"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              Enregistrer le PV
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

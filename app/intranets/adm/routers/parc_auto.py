@@ -14,6 +14,7 @@ from app.intranets.adm.services import parc_auto as svc
 from app.intranets.adm.services import vehicule_conducteurs as cond_svc
 from app.intranets.adm.services import vehicule_documents as doc_svc
 from app.intranets.adm.services import vehicule_entretien as ent_svc
+from app.intranets.adm.services import vehicule_pv as pv_svc
 
 
 router = APIRouter(prefix="/parc-auto", tags=["adm-parc-auto"])
@@ -414,3 +415,61 @@ def delete_releve(
 ):
     """Btn Poubelle releve."""
     return ent_svc.delete_releve(id_vehicule_releve, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Plan 4 - PV / Amendes (vehicule_amende)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/vehicules/{id_vehicule}/pv")
+def get_pv_list(
+    id_vehicule: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    return pv_svc.list_pv(id_vehicule)
+
+
+@router.get("/pv/{id_vehicule_pv}")
+def get_pv_detail(
+    id_vehicule_pv: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    p = pv_svc.get_pv(id_vehicule_pv)
+    if not p:
+        raise HTTPException(404, "PV introuvable")
+    return p
+
+
+class PvPayload(BaseModel):
+    id_vehicule_pv: int = 0
+    id_vehicule: int
+    id_vehicule_pc: int = 0
+    vehicule_pv_date: str = ""
+    montant: float = 0.0
+    num_pv: str = ""
+    frais: float = 15.0
+    nb_pts: int = 0
+    paye_employeur: bool = False
+    paye_employeur_date: str = ""
+    prel_salarie: bool = False
+    prel_salarie_date: str = ""
+    comment: str = ""
+
+
+@router.post("/pv")
+def post_pv(
+    payload: PvPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer le PV."""
+    return pv_svc.save_pv(payload.model_dump(), user.id_salarie)
+
+
+@router.delete("/pv/{id_vehicule_pv}")
+def delete_pv(
+    id_vehicule_pv: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Poubelle PV : soft delete."""
+    return pv_svc.delete_pv(id_vehicule_pv, user.id_salarie)
