@@ -566,10 +566,14 @@ def publipostage_test_pdf(
             ste_vars["DOCTITRE"] = titre_doc
         variables.update(ste_vars)
 
+    # 3 (avance). Recupere infos societe ici car logo_b64 sert aussi
+    # a remplacer STE_LOGO dans le contenu (en plus du footer).
+    ste = _societe_for_footer(id_ste) if id_ste else {}
+    logo_b64 = ste.get("logo_b64", "")
+
     # 1. Convertit DOCX -> HTML si necessaire
     if is_docx(content):
         try:
-            # Substituer les variables dans le DOCX puis convertir en HTML
             filled = _replace_in_docx(content, variables)
             body_html = _docx_to_html(filled)
         except Exception:
@@ -578,22 +582,34 @@ def publipostage_test_pdf(
         try:
             body_html = content.decode("utf-8")
             for key, val in variables.items():
+                # STE_LOGO traite separement plus bas (substitution image)
+                if key == "STE_LOGO":
+                    continue
                 body_html = body_html.replace(key, str(val))
         except Exception:
             return None
 
-    # 2. Transforme 'SAUTDEPAGE' en saut de page CSS
-    # Insensible a la casse + tolerant aux espaces/balises autour.
+    # 1b. STE_LOGO -> <img> avec guimmick base64 si dispo, sinon vide.
     import re as _re
+    if logo_b64:
+        body_html = _re.sub(
+            r"STE_LOGO",
+            f'<img src="{logo_b64}" '
+            f'style="max-height:25mm;max-width:50mm;vertical-align:middle;" '
+            f'alt=""/>',
+            body_html,
+        )
+    else:
+        body_html = body_html.replace("STE_LOGO", "")
+
+    # 2. Transforme 'SAUTDEPAGE' en saut de page CSS
     body_html = _re.sub(
         r"(<[^>]+>)?\s*SAUTDEPAGE\s*(</[^>]+>)?",
         '<div style="page-break-before: always;"></div>',
         body_html,
         flags=_re.IGNORECASE,
     )
-
-    # 3. Recupere infos societe pour le footer
-    ste = _societe_for_footer(id_ste) if id_ste else {}
+    # 3. Footer (ste + logo_b64 deja recuperes en haut)
     rs = ste.get("raison_sociale", "")
     adresse = " ".join(
         x for x in [ste.get("adresse", ""),
@@ -601,7 +617,6 @@ def publipostage_test_pdf(
         if x
     ).strip()
     siret = ste.get("siret", "")
-    logo_b64 = ste.get("logo_b64", "")
     footer_center_html = (
         f"<strong>{rs}</strong>" if rs else ""
     )
@@ -634,7 +649,7 @@ def publipostage_test_pdf(
     line-height: 1.3;
     color: #4E1D17;
 }}
-.footerLeft img {{ max-height: 22mm; max-width: 35mm; }}
+.footerLeft img {{ max-height: 15mm; max-width: 23mm; }}
 body {{
     font-family: Calibri, "Segoe UI", sans-serif;
     font-size: 11pt;

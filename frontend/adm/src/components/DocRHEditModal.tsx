@@ -199,6 +199,32 @@ export default function DocRHEditModal({
     editorRef.current?.focus()
   }
 
+  // Applique font-family / font-size sur la selection via span style
+  // (execCommand fontSize ne supporte que 1-7, pas les pt natifs).
+  const applyInlineStyle = (style: Partial<CSSStyleDeclaration>) => {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      editorRef.current?.focus()
+      return
+    }
+    const range = sel.getRangeAt(0)
+    const span = document.createElement('span')
+    if (style.fontFamily) span.style.fontFamily = String(style.fontFamily)
+    if (style.fontSize) span.style.fontSize = String(style.fontSize)
+    try {
+      span.appendChild(range.extractContents())
+      range.insertNode(span)
+      // Re-select pour garder le visuel
+      sel.removeAllRanges()
+      const newRange = document.createRange()
+      newRange.selectNodeContents(span)
+      sel.addRange(newRange)
+    } catch (e) {
+      console.error('[applyInlineStyle]', e)
+    }
+    editorRef.current?.focus()
+  }
+
   // ---- Save -------------------------------------------------------------
   const saveMeta = async () => {
     setSaving(true)
@@ -600,6 +626,49 @@ export default function DocRHEditModal({
                   className="flex flex-wrap items-center gap-1 px-2 py-1 border-b border-x rounded-t"
                   style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}
                 >
+                  {/* Combo Police */}
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        applyInlineStyle({ fontFamily: e.target.value })
+                        e.target.value = ''
+                      }
+                    }}
+                    defaultValue=""
+                    title="Police (applique a la selection)"
+                    className="text-xs px-1 py-0.5 rounded border bg-white"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  >
+                    <option value="">Police</option>
+                    <option value='Calibri, "Segoe UI", sans-serif'>Calibri</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value='"Times New Roman", Times, serif'>Times</option>
+                    <option value="Verdana, sans-serif">Verdana</option>
+                    <option value='"Trebuchet MS", sans-serif'>Trebuchet</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value='"Courier New", monospace'>Courier New</option>
+                  </select>
+                  {/* Combo Taille */}
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        applyInlineStyle({ fontSize: e.target.value })
+                        e.target.value = ''
+                      }
+                    }}
+                    defaultValue=""
+                    title="Taille (applique a la selection)"
+                    className="text-xs px-1 py-0.5 rounded border bg-white"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  >
+                    <option value="">Taille</option>
+                    {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48].map(
+                      (n) => (
+                        <option key={n} value={`${n}pt`}>{n}</option>
+                      ),
+                    )}
+                  </select>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
                   <ToolBtn onClick={() => exec('bold')} title="Gras">
                     <Bold className="w-3.5 h-3.5" />
                   </ToolBtn>
