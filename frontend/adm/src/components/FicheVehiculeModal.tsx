@@ -2119,7 +2119,12 @@ function ReleveKmPlan({
 
   const condSelected = conducteurs.find((c) => c.id_vehicule_pc === idPc)
   const kmDepart = condSelected?.k_mdepart || 0
-  const kmParcourus = Math.max(0, nouvRel - kmDepart)
+  // Km parcourus = nouvelle releve - derniere releve du tableau (releves
+  // sont triees DESC, releves[0] = la plus recente). Fallback au km de
+  // depart de l'attribution s'il n'y a pas encore de releve.
+  const lastReleveKm = releves.length > 0 ? releves[0].km : 0
+  const baseKm = lastReleveKm || kmDepart
+  const kmParcourus = Math.max(0, nouvRel - baseKm)
   const kmRestants = Math.max(0, (meta.forfait_km || 0) + kmDepart - nouvRel)
   // KM fait sur le mois : nouvRel - derniere releve du meme mois courant
   const kmFaitSurMois = (() => {
