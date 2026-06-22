@@ -240,7 +240,7 @@ export default function AttributionModal({
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col"
+            className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -264,7 +264,7 @@ export default function AttributionModal({
             ) : (
               <div className="flex-1 overflow-auto p-5 space-y-4">
                 {/* Bloc haut : conducteur + réseau / dates */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-[260px_1fr] gap-4">
                   <div className="space-y-3">
                     <button
                       type="button"
@@ -302,7 +302,7 @@ export default function AttributionModal({
 
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
-                      <label className="text-sm w-32" style={{ color: COL_BRUN }}>
+                      <label className="text-sm w-28 whitespace-nowrap" style={{ color: COL_BRUN }}>
                         Perception le :
                       </label>
                       <input
@@ -322,7 +322,7 @@ export default function AttributionModal({
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-sm w-32" style={{ color: COL_BRUN }}>
+                      <label className="text-sm w-28 whitespace-nowrap" style={{ color: COL_BRUN }}>
                         Restitution le :
                       </label>
                       <input
@@ -492,7 +492,7 @@ function SalariePicker({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[80vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div
