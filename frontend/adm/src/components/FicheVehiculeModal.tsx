@@ -1381,6 +1381,9 @@ function ConducteursTab({
                       <tr
                         key={c.id_vehicule_pc}
                         onClick={() => setSelected(c.id_vehicule_pc)}
+                        onDoubleClick={() =>
+                          setAttribModal({ mode: 'edit', idVehiculePc: c.id_vehicule_pc })
+                        }
                         className="cursor-pointer border-b"
                         style={{
                           backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
