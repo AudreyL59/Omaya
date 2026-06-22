@@ -115,6 +115,10 @@ export default function FicheVehiculeModal({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<TabKey>('info')
+  // Trigger pour forcer Carnet entretien sur type=4 (Releve KM) depuis
+  // le btn 'KM' du header. Incremente a chaque clic -> useEffect dans
+  // CarnetEntretienTab applique le changement.
+  const [kmTrigger, setKmTrigger] = useState(0)
 
   useDocumentTitle(
     meta
@@ -280,6 +284,11 @@ export default function FicheVehiculeModal({
           meta={meta}
           onDelete={handleDelete}
           saving={saving}
+          idVehicule={idVehicule}
+          onGoToKm={() => {
+            setTab('carnet')
+            setKmTrigger((n) => n + 1)
+          }}
         />
 
         {loading || !meta || !lookups ? (
@@ -343,7 +352,11 @@ export default function FicheVehiculeModal({
                 <ConducteursTab idVehicule={idVehicule} lookups={lookups} />
               )}
               {tab === 'carnet' && (
-                <CarnetEntretienTab idVehicule={idVehicule} meta={meta} />
+                <CarnetEntretienTab
+                  idVehicule={idVehicule}
+                  meta={meta}
+                  kmTrigger={kmTrigger}
+                />
               )}
               {tab === 'pv' && (
                 <PvAmendesTab idVehicule={idVehicule} />
@@ -376,10 +389,14 @@ function ActionBar({
   meta,
   onDelete,
   saving,
+  idVehicule,
+  onGoToKm,
 }: {
   meta: VehiculeMeta | null
   onDelete: () => void
   saving: boolean
+  idVehicule: string
+  onGoToKm: () => void
 }) {
   const lienCG = meta?.carte_grise && meta?.lien_carte_grise
   return (
@@ -435,11 +452,10 @@ function ActionBar({
       )}
       <button
         type="button"
-        onClick={() =>
-          showToast('Ajouter relevé kilométrique : à venir.', 'info')
-        }
+        onClick={onGoToKm}
         className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border"
         style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+        title="Ajouter une relevé kilométrique"
       >
         <Gauge className="w-4 h-4" />
         KM
@@ -1842,11 +1858,18 @@ const TYPE_LABEL: Record<number, string> = {
 function CarnetEntretienTab({
   idVehicule,
   meta,
+  kmTrigger = 0,
 }: {
   idVehicule: string
   meta: VehiculeMeta
+  kmTrigger?: number
 }) {
   const [type, setType] = useState<1 | 2 | 3 | 4>(1)
+  // Btn 'KM' du header : force le sous-onglet 'Releve KM' (type=4) +
+  // declenche l'ouverture du form d'ajout (releveTrigger).
+  useEffect(() => {
+    if (kmTrigger > 0) setType(4)
+  }, [kmTrigger])
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4 pb-2 border-b" style={{ borderColor: COL_BORDER }}>
