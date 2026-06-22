@@ -422,17 +422,16 @@ function ActionBar({
         Imprimer fiche
       </button>
       {lienCG && (
-        <button
-          type="button"
-          onClick={() =>
-            showToast('Voir la carte grise : à venir.', 'info')
-          }
+        <a
+          href={`${DOCS_URL}/Vehicules/${idVehicule}/${encodeURIComponent(lienCG)}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border"
           style={{ borderColor: COL_BORDER, color: COL_BRUN }}
         >
           <ExternalLink className="w-4 h-4" />
           Voir la Carte grise
-        </button>
+        </a>
       )}
       <button
         type="button"
