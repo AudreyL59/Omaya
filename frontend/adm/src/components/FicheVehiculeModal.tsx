@@ -146,6 +146,21 @@ export default function FicheVehiculeModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // Titre onglet navigateur : ajoute nom de la fiche en cours.
+  useEffect(() => {
+    if (!meta) return
+    const original = document.title
+    const lib = [meta.marque_nom, meta.modele, meta.immat]
+      .filter(Boolean)
+      .join(' ')
+    document.title = lib
+      ? `OMAYA Adm — Fiche ${lib}`
+      : 'OMAYA Adm — Fiche véhicule'
+    return () => {
+      document.title = original
+    }
+  }, [meta])
+
   const handleSave = async () => {
     if (!meta) return
     setSaving(true)
