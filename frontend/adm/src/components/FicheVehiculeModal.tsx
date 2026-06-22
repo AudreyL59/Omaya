@@ -30,7 +30,7 @@ import SalarieDocUleaseModal from '@/components/fiche/ulease/SalarieDocUleaseMod
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
 // Variante plus claire pour les lignes selectionnees (vs entetes)
-const COL_PRIMARY_LIGHT = '#3A8B92'
+const COL_PRIMARY_LIGHT = '#6a8d91'
 const COL_BORDER = '#E5DDDC'
 const COL_BG_SOFT = '#F8F5F4'
 
