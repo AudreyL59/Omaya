@@ -88,6 +88,8 @@ export default function DocRHEditModal({
 }: Props) {
   const [docId, setDocId] = useState(initialId)
   const [meta, setMeta] = useState<DocMeta>(EMPTY)
+  // Detection des modifications non sauvegardees (champs meta + contenu HTML).
+  const [isDirty, setIsDirty] = useState(false)
   const [lookups, setLookups] = useState<Lookups | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -99,7 +101,10 @@ export default function DocRHEditModal({
   // editorRef.current est null pendant le useEffect d'init).
   const [pendingHtml, setPendingHtml] = useState<string | null>(null)
 
-  const update = (patch: Partial<DocMeta>) => setMeta((m) => ({ ...m, ...patch }))
+  const update = (patch: Partial<DocMeta>) => {
+    setMeta((m) => ({ ...m, ...patch }))
+    setIsDirty(true)
+  }
 
   // ---- Init -------------------------------------------------------------
   useEffect(() => {
@@ -193,6 +198,26 @@ export default function DocRHEditModal({
     }
   }, [editorReady, pendingHtml])
 
+  // ---- Fermeture avec detection modifications -------------------------
+  const handleClose = async () => {
+    if (!isDirty) {
+      onClose()
+      return
+    }
+    const yes = await showConfirm({
+      title: 'Modifications non enregistrées',
+      message:
+        'Vous avez des modifications non enregistrées. ' +
+        'Voulez-vous les enregistrer avant de fermer ?',
+      confirmLabel: 'Enregistrer et fermer',
+      cancelLabel: 'Fermer sans enregistrer',
+    })
+    if (yes) {
+      await saveMeta(true)
+    }
+    onClose()
+  }
+
   // ---- Toolbar contenteditable -----------------------------------------
   const exec = (cmd: string, value?: string) => {
     document.execCommand(cmd, false, value)
@@ -267,6 +292,7 @@ export default function DocRHEditModal({
         update({ taille_contenu: j.taille })
       }
 
+      setIsDirty(false)
       if (!silent) {
         showToast('Doc RH enregistré.', 'success')
         onSaved()
@@ -365,7 +391,6 @@ export default function DocRHEditModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={onClose}
         className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
       >
         <motion.div
@@ -390,7 +415,7 @@ export default function DocRHEditModal({
                 </span>
               )}
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="p-1 hover:bg-white/40 rounded"
               >
                 <X className="w-4 h-4" style={{ color: COL_BRUN }} />
@@ -673,6 +698,30 @@ export default function DocRHEditModal({
                       ),
                     )}
                   </select>
+                  {/* Couleur de police (input type=color) */}
+                  <label
+                    className="flex items-center gap-1 text-xs px-1 py-0.5 rounded border bg-white cursor-pointer"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                    title="Couleur du texte (applique a la selection)"
+                  >
+                    <span
+                      className="inline-block w-4 h-4 rounded border"
+                      style={{ borderColor: COL_BORDER, backgroundColor: '#000' }}
+                    />
+                    <input
+                      type="color"
+                      defaultValue="#000000"
+                      className="w-0 h-0 opacity-0 absolute"
+                      onChange={(e) => {
+                        const c = e.target.value
+                        // Met a jour le pastille visuel via le sibling span
+                        const span = (e.target.parentElement?.firstChild as HTMLElement)
+                        if (span) span.style.backgroundColor = c
+                        // Applique via execCommand foreColor (large support).
+                        exec('foreColor', c)
+                      }}
+                    />
+                  </label>
                   <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
                   <ToolBtn onClick={() => exec('bold')} title="Gras">
                     <Bold className="w-3.5 h-3.5" />
@@ -753,6 +802,7 @@ export default function DocRHEditModal({
                     ref={editorRef}
                     contentEditable={editorReady}
                     suppressContentEditableWarning
+                    onInput={() => setIsDirty(true)}
                     className="docrh-page focus:outline-none"
                     style={{
                       width: '210mm',
@@ -784,7 +834,7 @@ export default function DocRHEditModal({
                 >
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={handleClose}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border"
                     style={{ borderColor: COL_BORDER, color: COL_BRUN }}
                   >
