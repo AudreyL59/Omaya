@@ -177,13 +177,16 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
       showToast('Sélectionner un document.', 'info')
       return
     }
-    // Cas AVENANT : prompt date comme pour Ticket Omaya
+    // Cas AVENANT : prompt date charté
     let dateAvenant = ''
     if (/AVENANT/i.test(selectedDoc.titre)) {
-      const raw = window.prompt(
-        "Merci de saisir la date de l'avenant (JJ/MM/AAAA) :",
-        '',
-      )
+      const raw = await showPrompt({
+        title: 'Date de l\'avenant',
+        message: 'Merci de saisir la date de l\'avenant :',
+        inputType: 'date',
+        confirmLabel: 'Valider',
+        validator: (v) => (v ? null : 'Date requise'),
+      })
       if (!raw) return
       const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
       if (m) {
@@ -191,7 +194,7 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
       } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
         dateAvenant = raw
       } else {
-        showToast('Format de date invalide (attendu JJ/MM/AAAA).', 'error')
+        showToast('Format de date invalide.', 'error')
         return
       }
     }

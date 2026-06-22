@@ -326,11 +326,15 @@ def _build_publiposted_docx(
     id_doc_rh: int,
     date_avenant: str = "",
 ) -> dict:
-    """Charge le modele DOCX et fait le publipostage (texte + images).
+    """Charge le modele (DOCX ou HTML) et fait le publipostage.
 
-    Retourne {docx_bytes, model_info, salarie_data, id_da, titre_doc, id_type_doc}.
+    Retourne :
+    - DOCX : {docx_bytes, is_docx=True, titre_doc, id_type_doc, id_da,
+             idorganigramme, nom_salarie}
+    - HTML : {html_bytes, is_docx=False, ...meme cles...}
     Pas d'ecriture DB ni de conversion PDF.
     """
+    from app.intranets.adm.services.ctt_travail import is_docx as _is_docx
     from docx import Document  # noqa: PLC0415 -- lazy
 
     # 1. Charger le modele
@@ -343,11 +347,13 @@ def _build_publiposted_docx(
     )
     if not model:
         raise ValueError(f"Modele doc RH introuvable (id={id_doc_rh})")
-    docx_raw = _bytes_or_none(model.get("contenu"))
-    if not docx_raw:
-        raise ValueError("Le modele de doc RH n'a pas de contenu DOCX.")
+    raw = _bytes_or_none(model.get("contenu"))
+    if not raw:
+        raise ValueError("Le modele de doc RH n'a pas de contenu.")
     titre_doc = _str(model.get("titre"))
     id_type_doc = _int(model.get("id_type_doc"))
+    is_docx_format = _is_docx(raw)
+    docx_raw = raw if is_docx_format else b""
 
     # 2. Donnees salarie + societe
     data = _load_salarie(int(id_salarie))
@@ -361,8 +367,8 @@ def _build_publiposted_docx(
     # 3. Determiner idDA (1er DA/DR de l'organigramme parent/courant)
     id_da = _find_id_da(int(id_salarie), _int(orga.get("idorganigramme")))
 
-    # 4. Charger le DOCX en memoire
-    doc = Document(io.BytesIO(docx_raw))
+    # 4. Charger le DOCX en memoire (si format DOCX uniquement)
+    doc = Document(io.BytesIO(docx_raw)) if is_docx_format else None
 
     # 5. Publipostage_Salarie
     civilite = _int(sal.get("civilite"))
@@ -429,32 +435,42 @@ def _build_publiposted_docx(
         "STE_GERANT_NOM": _str(societe.get("gerant_nom")),
         "STE_GERANT_TYPE": _str(societe.get("gerant_type")),
     })
-    _replace_text(doc, txt_map)
+    # Branche DOCX vs HTML
+    if doc is not None:
+        _replace_text(doc, txt_map)
 
-    # 7. Insertions images
-    img_guimmick = _bytes_or_none(societe.get("guimmick"))
-    img_paraphe = _bytes_or_none(societe.get("gerant_paraphe"))
-    img_signature = _bytes_or_none(societe.get("gerant_signature"))
-    img_cachet = _bytes_or_none(societe.get("cachet_cial"))
+        # 7. Insertions images (DOCX uniquement)
+        img_guimmick = _bytes_or_none(societe.get("guimmick"))
+        img_paraphe = _bytes_or_none(societe.get("gerant_paraphe"))
+        img_signature = _bytes_or_none(societe.get("gerant_signature"))
+        img_cachet = _bytes_or_none(societe.get("cachet_cial"))
 
-    if img_guimmick:
-        # STE_LOGO -> insertion directe + clones aux sections
-        _replace_token_with_image(doc, "STE_LOGO", img_guimmick, width_mm=20)
-    if img_signature:
-        _replace_token_with_image(doc, "GER_SIGN", img_signature, width_mm=40)
-    if img_cachet:
-        _replace_token_with_image(doc, "STE_CACHET", img_cachet, width_mm=30)
-    if img_paraphe:
-        # Pied de page (1 fois par section physique)
-        _add_paraphe_footer(doc, img_paraphe, width_mm=12)
+        if img_guimmick:
+            _replace_token_with_image(doc, "STE_LOGO", img_guimmick, width_mm=20)
+        if img_signature:
+            _replace_token_with_image(doc, "GER_SIGN", img_signature, width_mm=40)
+        if img_cachet:
+            _replace_token_with_image(doc, "STE_CACHET", img_cachet, width_mm=30)
+        if img_paraphe:
+            _add_paraphe_footer(doc, img_paraphe, width_mm=12)
 
-    # 8. Sauver le DOCX traite en memoire
-    docx_out = io.BytesIO()
-    doc.save(docx_out)
-    docx_bytes = docx_out.getvalue()
+        # 8. Sauver le DOCX
+        docx_out = io.BytesIO()
+        doc.save(docx_out)
+        content_bytes = docx_out.getvalue()
+    else:
+        # Format HTML : substitution texte directe (les images sont gerees
+        # par generer_pdf_publiposte au moment du rendu PDF).
+        body_html = raw.decode("utf-8", errors="ignore")
+        for k, v in txt_map.items():
+            if k == "STE_LOGO":  # gere par generer_pdf_publiposte
+                continue
+            body_html = body_html.replace(k, str(v))
+        content_bytes = body_html.encode("utf-8")
 
     return {
-        "docx_bytes": docx_bytes,
+        "docx_bytes": content_bytes,  # nom historique (bytea stocke)
+        "is_docx": is_docx_format,
         "titre_doc": titre_doc,
         "id_type_doc": id_type_doc,
         "id_da": id_da,
@@ -544,8 +560,25 @@ def generate_cttw(
         (id_ticket, int(op_id), id_da, int(op_id)),
     )
 
-    # 12. Conversion DOCX -> PDF
-    pdf_bytes = _docx_to_pdf(docx_bytes)
+    # 12. Generation PDF (WeasyPrint + footer + SAUTDEPAGE)
+    from app.intranets.adm.services.ctt_travail import (
+        _docx_to_html,
+        generer_pdf_publiposte,
+    )
+    if built.get("is_docx", True):
+        # DOCX publiposte -> HTML via mammoth (images embedded en data:)
+        body_html_for_pdf = _docx_to_html(docx_bytes)
+    else:
+        # Contenu deja HTML publiposte
+        body_html_for_pdf = docx_bytes.decode("utf-8", errors="ignore")
+    id_ste_for_pdf = _int(
+        (_load_salarie(int(id_salarie)).get("embauche") or {}).get("id_ste")
+    )
+    pdf_bytes = generer_pdf_publiposte(
+        body_html_for_pdf, id_ste=id_ste_for_pdf,
+    )
+    if not pdf_bytes:
+        raise RuntimeError("Generation PDF (WeasyPrint) a echoue.")
 
     # 13. Upload FTP TempCttw/ (servi par IIS interne sous interne.omaya.fr/TempCttw/)
     pdf_name = f"{id_ticket}-cttW.pdf"
