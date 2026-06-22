@@ -577,42 +577,154 @@ def preview_cttw_pdf(
 ) -> dict:
     """Genere le PDF pour aperçu/export, SANS rien ecrire en base.
 
-    Bouton 'Export PDF' Fen_SalarieDocRH. Pipeline aligne sur
-    publipostage_test_pdf (Fen_EditionDocRH) :
-      1. Publipostage DOCX (variables texte + insertion images via
-         python-docx) - reutilise _build_publiposted_docx existant.
-      2. Conversion DOCX -> HTML via mammoth (images embedded -> data:).
-      3. WeasyPrint genere le PDF avec footer auto + SAUTDEPAGE +
-         conversion <font> -> <span>.
-
-    Retourne {pdf_bytes, filename}.
+    Bouton 'Export PDF' Fen_SalarieDocRH. Supporte 2 formats de modele :
+    - DOCX (legacy) : publipostage via python-docx + mammoth -> HTML.
+    - HTML (nouveau Fen_EditionDocRH) : substitution texte directe.
+    Puis WeasyPrint avec footer auto + SAUTDEPAGE + conversion <font>.
     """
     from app.intranets.adm.services.ctt_travail import (
         _docx_to_html,
         generer_pdf_publiposte,
+        is_docx,
     )
 
-    built = _build_publiposted_docx(
-        id_salarie=id_salarie, id_doc_rh=id_doc_rh, date_avenant=date_avenant,
+    # 1. Charge le modele pour detecter le format (DOCX ou HTML).
+    db_rh = get_pg_connection("rh")
+    model = db_rh.query_one(
+        """SELECT id_doc_rh, titre, contenu
+           FROM rh.pgt_doc_rh WHERE id_doc_rh = ?""",
+        (int(id_doc_rh),),
     )
-    # Recupere id_ste de la societe du salarie pour le footer.
+    if not model:
+        raise ValueError(f"Modele doc RH introuvable (id={id_doc_rh}).")
+    content = _bytes_or_none(model.get("contenu"))
+    if not content:
+        raise ValueError("Le modele de doc RH n'a pas de contenu.")
+    titre_doc = _str(model.get("titre"))
+
+    # 2. Donnees salarie + societe pour le footer + nom de fichier.
     data = _load_salarie(int(id_salarie))
     id_ste = _int((data.get("embauche") or {}).get("id_ste"))
+    sal = data.get("salarie") or {}
+    nom = _str(sal.get("nom"))
+    prenom = _str(sal.get("prenom"))
+    nom_salarie = f"{nom} {_capitalize_first(prenom)}".strip()
 
-    # DOCX publiposte (avec images insérées) -> HTML (mammoth gere les
-    # images embarquees en data: URL).
-    body_html = _docx_to_html(built["docx_bytes"])
+    # 3. Selon le format, prepare le HTML publiposte.
+    if is_docx(content):
+        # Format DOCX : reuse _build_publiposted_docx (variables + images
+        # python-docx) puis mammoth -> HTML (images data: URLs).
+        built = _build_publiposted_docx(
+            id_salarie=id_salarie,
+            id_doc_rh=id_doc_rh,
+            date_avenant=date_avenant,
+        )
+        body_html = _docx_to_html(built["docx_bytes"])
+    else:
+        # Format HTML : substitution texte directe (les images STE_LOGO
+        # / GER_SIGN / STE_CACHET sont substituees par
+        # generer_pdf_publiposte via extra_images).
+        body_html = _build_html_publiposte(
+            content.decode("utf-8", errors="ignore"),
+            id_salarie=id_salarie,
+            titre_doc=titre_doc,
+            date_avenant=date_avenant,
+        )
 
     pdf_bytes = generer_pdf_publiposte(body_html, id_ste=id_ste)
     if not pdf_bytes:
         raise RuntimeError("Generation PDF (WeasyPrint) a echoue.")
 
-    safe_nom = built["nom_salarie"].replace(" ", "_") or str(id_salarie)
-    safe_titre = built["titre_doc"].replace("/", "-").replace("\\", "-")[:80]
+    safe_nom = nom_salarie.replace(" ", "_") or str(id_salarie)
+    safe_titre = titre_doc.replace("/", "-").replace("\\", "-")[:80]
     filename = (
         f"{safe_nom}_{safe_titre}.pdf" if safe_titre else f"{safe_nom}.pdf"
     )
     return {"pdf_bytes": pdf_bytes, "filename": filename}
+
+
+def _build_html_publiposte(
+    body_html: str,
+    *,
+    id_salarie: int,
+    titre_doc: str = "",
+    date_avenant: str = "",
+) -> str:
+    """Substitue les variables S_* / STE_* / DATE_* dans un contenu HTML
+    (Fen_EditionDocRH). Retourne le HTML publiposte (sans toucher aux
+    images : STE_LOGO/GER_SIGN/STE_CACHET sont gerees par
+    generer_pdf_publiposte)."""
+    data = _load_salarie(int(id_salarie))
+    sal = data.get("salarie") or {}
+    coord = data.get("coord") or {}
+    emb = data.get("embauche") or {}
+    orga = data.get("orga") or {}
+    id_ste = _int(emb.get("id_ste"))
+    societe = _load_societe(id_ste) if id_ste else {}
+
+    civilite = _int(sal.get("civilite"))
+    nom = _str(sal.get("nom"))
+    prenom = _str(sal.get("prenom"))
+    is_avenant = "AVENANT" in (titre_doc or "").upper()
+    txt_map = {
+        "S_TITRE": "Mr." if civilite == 1 else "Mme",
+        "S_NOM": nom,
+        "S_PRENOM": _capitalize_first(prenom),
+        "S_LNAISS": _str(sal.get("lieu_naiss")),
+        "S_DEPNAISS": _str(sal.get("dep_naiss")),
+        "S_NUMSS": _str(sal.get("num_ss")),
+        "S_DNAISS": _fmt_fr_date(sal.get("date_naiss")),
+        "S_ADRESSE": _str(coord.get("adresse1")),
+        "S_CP": _str(coord.get("cp")),
+        "S_VILLE": _str(coord.get("ville")),
+        "S_GSM": _str(coord.get("tel_mob")),
+        "FIN_PER_ESSAI": _fmt_fr_date(emb.get("date_fin_per_essai")),
+        "DATE_CTS": _fmt_fr_date(emb.get("date_debut")),
+        "DATE_ANC": _fmt_fr_date(emb.get("date_anciennete")),
+        "SECTEURAGENCE": _str(orga.get("secteur")),
+        "DOCTITRE": titre_doc,
+        "STE_RS": _str(societe.get("raison_sociale")),
+        "STE_APE": _str(societe.get("code_ape")),
+        "STE_RCS": _str(societe.get("rcs")),
+        "STE_CAPITAL": _str(societe.get("capital")),
+        "STE_ADR": " ".join(
+            x for x in (
+                _str(societe.get("adresse1")),
+                _str(societe.get("cp")),
+                _str(societe.get("ville")),
+            ) if x
+        ),
+        "STE_VILLE": _str(societe.get("ville")),
+        "STE_SIREN": _str(societe.get("siren")),
+        "STE_SIRET": _str(societe.get("siret")),
+        "STE_GERANT_NOM": _str(societe.get("gerant_nom")),
+        "STE_GERANT_TYPE": _str(societe.get("gerant_type")),
+    }
+    if is_avenant and date_avenant:
+        from datetime import date as _date
+        try:
+            d = datetime.fromisoformat(date_avenant).date()
+            mois = d.month + 3
+            annee = d.year
+            while mois > 12:
+                mois -= 12
+                annee += 1
+            from calendar import monthrange
+            jmax = monthrange(annee, mois)[1]
+            jour = min(d.day, jmax)
+            d_fin = _date(annee, mois, jour)
+            from datetime import timedelta
+            d_fin = d_fin - timedelta(days=1)
+            txt_map["DATE_AVENANT"] = d.strftime("%d/%m/%Y")
+            txt_map["DATE_AVENANT_FINESSAI"] = d_fin.strftime("%d/%m/%Y")
+        except Exception:
+            pass
+
+    for k, v in txt_map.items():
+        if k == "STE_LOGO":  # gere par generer_pdf_publiposte
+            continue
+        body_html = body_html.replace(k, str(v))
+    return body_html
 
 
 def _find_id_da(id_salarie: int, id_organigramme: int) -> int:

@@ -28,9 +28,23 @@ interface ConfirmReq {
   resolve: (v: boolean) => void
 }
 
+interface PromptReq {
+  id: number
+  title?: string
+  message: string
+  placeholder?: string
+  defaultValue?: string
+  inputType?: 'text' | 'date' | 'number' | 'email'
+  confirmLabel?: string
+  cancelLabel?: string
+  validator?: (v: string) => string | null  // null = OK, sinon msg erreur
+  resolve: (v: string | null) => void
+}
+
 // --- store singleton (pub/sub) ---
 let _toasts: Toast[] = []
 let _confirm: ConfirmReq | null = null
+let _prompt: PromptReq | null = null
 const _listeners = new Set<() => void>()
 let _seq = 1
 
@@ -72,6 +86,29 @@ function _closeConfirm(value: boolean) {
   c?.resolve(value)
 }
 
+export function showPrompt(opts: {
+  title?: string
+  message: string
+  placeholder?: string
+  defaultValue?: string
+  inputType?: 'text' | 'date' | 'number' | 'email'
+  confirmLabel?: string
+  cancelLabel?: string
+  validator?: (v: string) => string | null
+}): Promise<string | null> {
+  return new Promise((resolve) => {
+    _prompt = { id: _seq++, resolve, ...opts }
+    _emit()
+  })
+}
+
+function _closePrompt(value: string | null) {
+  const p = _prompt
+  _prompt = null
+  _emit()
+  p?.resolve(value)
+}
+
 function _brandColor(): string {
   if (typeof document === 'undefined') return '#17494E'
   const v = getComputedStyle(document.documentElement)
@@ -84,18 +121,41 @@ function _brandColor(): string {
 export function DialogHost() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [confirm, setConfirm] = useState<ConfirmReq | null>(null)
+  const [prompt, setPrompt] = useState<PromptReq | null>(null)
+  const [promptValue, setPromptValue] = useState('')
+  const [promptError, setPromptError] = useState('')
 
   useEffect(() => {
     const sync = () => {
       setToasts([..._toasts])
       setConfirm(_confirm)
+      // Reset input quand un nouveau prompt arrive
+      if (_prompt && _prompt !== prompt) {
+        setPromptValue(_prompt.defaultValue || '')
+        setPromptError('')
+      }
+      setPrompt(_prompt)
     }
     _listeners.add(sync)
     sync()
     return () => {
       _listeners.delete(sync)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const validateAndClosePrompt = () => {
+    if (!prompt) return
+    const v = promptValue.trim()
+    if (prompt.validator) {
+      const err = prompt.validator(v)
+      if (err) {
+        setPromptError(err)
+        return
+      }
+    }
+    _closePrompt(v)
+  }
 
   if (typeof document === 'undefined') return null
   const brand = _brandColor()
@@ -257,6 +317,143 @@ export function DialogHost() {
                 }}
               >
                 {confirm.confirmLabel || 'Confirmer'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modale prompt */}
+      {prompt && (
+        <>
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2147483646,
+              background: 'rgba(0,0,0,.4)',
+            }}
+            onClick={() => _closePrompt(null)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 2147483647,
+              width: 'min(92vw, 28rem)',
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 20px 50px rgba(0,0,0,.25)',
+              border: '1px solid #e5e7eb',
+              padding: 20,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <span style={{ flexShrink: 0, marginTop: 2, color: brand }}>
+                <Info className="w-6 h-6" />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {prompt.title && (
+                  <h3
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#1e293b',
+                      marginBottom: 4,
+                    }}
+                  >
+                    {prompt.title}
+                  </h3>
+                )}
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: '#475569',
+                    whiteSpace: 'pre-line',
+                    marginBottom: 10,
+                  }}
+                >
+                  {prompt.message}
+                </p>
+                <input
+                  type={prompt.inputType || 'text'}
+                  value={promptValue}
+                  placeholder={prompt.placeholder}
+                  autoFocus
+                  onChange={(e) => {
+                    setPromptValue(e.target.value)
+                    if (promptError) setPromptError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      validateAndClosePrompt()
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      _closePrompt(null)
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    border: `1px solid ${promptError ? '#dc2626' : '#cbd5e1'}`,
+                    fontSize: 14,
+                    outline: 'none',
+                  }}
+                />
+                {promptError && (
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: '#dc2626',
+                      marginTop: 4,
+                    }}
+                  >
+                    {promptError}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div
+              style={{
+                marginTop: 16,
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}
+            >
+              <button
+                onClick={() => _closePrompt(null)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #cbd5e1',
+                  fontSize: 14,
+                  background: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                {prompt.cancelLabel || 'Annuler'}
+              </button>
+              <button
+                onClick={validateAndClosePrompt}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: brand,
+                }}
+              >
+                {prompt.confirmLabel || 'Valider'}
               </button>
             </div>
           </div>

@@ -15,7 +15,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { FileText, Loader2, Send, Ticket, X } from 'lucide-react'
 
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showPrompt, showToast } from '@shared/ui/dialog'
 import { COLOR_BG_SOFT, COLOR_BRUN, COLOR_PRIMARY } from '@shared/fiche/EmbaucheTab'
 import CheckMark from '../CheckMark'
 
@@ -118,19 +118,23 @@ export default function NewDocRHModal({ idSalarie, onClose, onCreated }: Props) 
     // Cas AVENANT : demande la date d'avenant a l'operateur
     let dateAvenant = ''
     if (/AVENANT/i.test(selectedDoc.titre)) {
-      const raw = window.prompt(
-        "Merci de saisir la date de l'avenant (JJ/MM/AAAA) :",
-        '',
-      )
+      const raw = await showPrompt({
+        title: 'Date de l\'avenant',
+        message: 'Merci de saisir la date de l\'avenant :',
+        inputType: 'date',
+        confirmLabel: 'Valider',
+        validator: (v) => (v ? null : 'Date requise'),
+      })
       if (!raw) return // annule
-      // accepte JJ/MM/AAAA ou ISO
+      // showPrompt avec inputType=date retourne du ISO (YYYY-MM-DD) ;
+      // on tolere aussi le format JJ/MM/AAAA si saisi en texte.
       const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
       if (m) {
         dateAvenant = `${m[3]}-${m[2]}-${m[1]}`
       } else if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
         dateAvenant = raw
       } else {
-        showToast('Format de date invalide (attendu JJ/MM/AAAA).', 'error')
+        showToast('Format de date invalide.', 'error')
         return
       }
     }
