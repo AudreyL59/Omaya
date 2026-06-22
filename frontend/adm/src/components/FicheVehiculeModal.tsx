@@ -340,7 +340,10 @@ export default function FicheVehiculeModal({
               {tab === 'pv' && (
                 <PvAmendesTab idVehicule={idVehicule} />
               )}
-              {tab !== 'info' && tab !== 'conducteurs' && tab !== 'carnet' && tab !== 'pv' && (
+              {tab === 'accidents' && (
+                <AccidentsTab idVehicule={idVehicule} />
+              )}
+              {tab !== 'info' && tab !== 'conducteurs' && tab !== 'carnet' && tab !== 'pv' && tab !== 'accidents' && (
                 <div
                   className="text-sm italic p-10 text-center"
                   style={{ color: COL_BRUN }}
@@ -2525,8 +2528,10 @@ function PvAmendesTab({ idVehicule }: { idVehicule: string }) {
         }),
       })
       if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
       showToast('PV enregistré.', 'success')
-      setEditing(EMPTY_PV)
+      // Garde l'id pour pouvoir uploader des documents lies ensuite.
+      setEditing((e) => ({ ...e, id_vehicule_pv: d.id_vehicule_pv }))
       reload()
     } catch (e) {
       showToast(`Échec : ${(e as Error).message}`, 'error')
@@ -2550,7 +2555,7 @@ function PvAmendesTab({ idVehicule }: { idVehicule: string }) {
 
   return (
     <div className="grid grid-cols-2 gap-6">
-      {/* Gauche : tableau */}
+      {/* Gauche : tableau + docs PV */}
       <div>
         <div className="flex gap-1.5 mb-2 h-9 items-center">
           <IconBtn onClick={handleAdd} title="Ajouter un PV">
@@ -2559,7 +2564,7 @@ function PvAmendesTab({ idVehicule }: { idVehicule: string }) {
         </div>
         <div
           className="border rounded overflow-auto"
-          style={{ borderColor: COL_BORDER, maxHeight: 320 }}
+          style={{ borderColor: COL_BORDER, maxHeight: 240 }}
         >
           <table className="w-full text-xs">
             <thead
@@ -2625,6 +2630,21 @@ function PvAmendesTab({ idVehicule }: { idVehicule: string }) {
             </tbody>
           </table>
         </div>
+
+        {/* Documents liés au PV (visible apres sauvegarde) */}
+        {editing.id_vehicule_pv && editing.id_vehicule_pv !== '0' && (
+          <div className="mt-4">
+            <h3
+              className="text-xs font-bold uppercase tracking-wide mb-2"
+              style={{ color: COL_BRUN }}
+            >
+              Documents liés au PV
+            </h3>
+            <DocsSubSection
+              endpointBase={`/api/adm/parc-auto/vehicules/${idVehicule}/pv/${editing.id_vehicule_pv}`}
+            />
+          </div>
+        )}
       </div>
 
       {/* Droite : form */}
@@ -2763,6 +2783,585 @@ function PvAmendesTab({ idVehicule }: { idVehicule: string }) {
               )}
               Enregistrer le PV
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Mini section documents lies a un PV ou un Accident (FTP sous-rep)
+// ============================================================================
+
+function DocsSubSection({
+  endpointBase,
+  disabled,
+}: {
+  endpointBase: string  // ex: /api/adm/parc-auto/vehicules/123/pv/456
+  disabled?: boolean
+}) {
+  const [files, setFiles] = useState<VDoc[]>([])
+  const [loading, setLoading] = useState(false)
+  const [selected, setSelected] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(() => {
+    if (disabled) {
+      setFiles([])
+      return
+    }
+    setLoading(true)
+    setSelected('')
+    fetch(`${endpointBase}/documents`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((d: { files?: VDoc[] }) => setFiles(d?.files || []))
+      .catch(() => setFiles([]))
+      .finally(() => setLoading(false))
+  }, [endpointBase, disabled])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const handleUpload = () => {
+    if (disabled) return
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      setBusy(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', f)
+        const r = await fetch(`${endpointBase}/documents`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: fd,
+        })
+        if (!r.ok) throw new Error(String(r.status))
+        showToast(`Fichier chargé : ${f.name}`, 'success')
+        reload()
+      } catch (e) {
+        showToast(`Échec : ${(e as Error).message}`, 'error')
+      } finally {
+        setBusy(false)
+      }
+    }
+    input.click()
+  }
+
+  const handleDownload = async () => {
+    if (!selected) return
+    const url = `${endpointBase}/documents/download?name=${encodeURIComponent(selected)}`
+    try {
+      const r = await fetch(url, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const blob = await r.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = selected
+      link.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selected) return
+    const ok = await showConfirm({
+      title: 'Supprimer ce document ?',
+      message: `« ${selected} » sera supprimé.`,
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    setBusy(true)
+    try {
+      const r = await fetch(
+        `${endpointBase}/documents?name=${encodeURIComponent(selected)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Document supprimé.', 'success')
+      setSelected('')
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-2">
+        <IconBtn onClick={handleUpload} title="Ajouter" disabled={disabled || busy}>
+          <Plus className="w-4 h-4" />
+        </IconBtn>
+        <IconBtn onClick={handleDownload} title="Télécharger" disabled={!selected}>
+          <Download className="w-4 h-4" />
+        </IconBtn>
+        <IconBtn onClick={handleDelete} title="Supprimer" disabled={!selected || busy} danger>
+          <Trash2 className="w-4 h-4" />
+        </IconBtn>
+        {disabled && (
+          <span className="text-xs italic ml-2" style={{ color: '#A68D8A' }}>
+            Enregistre d'abord la fiche pour ajouter des documents.
+          </span>
+        )}
+      </div>
+      <div
+        className="border rounded overflow-auto"
+        style={{ borderColor: COL_BORDER, maxHeight: 200 }}
+      >
+        <table className="w-full text-xs">
+          <thead
+            className="sticky top-0"
+            style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+          >
+            <tr>
+              <th className="px-2 py-1.5 text-left">Nom Fichier</th>
+              <th className="px-2 py-1.5 text-right w-16">Taille</th>
+              <th className="px-2 py-1.5 text-left w-24">Date</th>
+              <th className="px-2 py-1.5 text-left w-16">Heure</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="p-4 text-center">
+                  <Loader2 className="w-4 h-4 animate-spin inline" />
+                </td>
+              </tr>
+            ) : files.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="p-4 text-center italic" style={{ color: '#A68D8A' }}>
+                  Aucun document.
+                </td>
+              </tr>
+            ) : (
+              files.map((f) => {
+                const isSel = selected === f.nom
+                return (
+                  <tr
+                    key={f.nom}
+                    onClick={() => setSelected(f.nom)}
+                    onDoubleClick={handleDownload}
+                    className="cursor-pointer border-b"
+                    style={{
+                      backgroundColor: isSel ? COL_PRIMARY : 'white',
+                      color: isSel ? 'white' : COL_BRUN,
+                      borderColor: COL_BORDER,
+                    }}
+                  >
+                    <td className="px-2 py-1">{f.nom}</td>
+                    <td className="px-2 py-1 text-right">{f.taille_mo.toFixed(2)} Mo</td>
+                    <td className="px-2 py-1">
+                      {f.date_iso.length >= 10
+                        ? `${f.date_iso.slice(8, 10)}/${f.date_iso.slice(5, 7)}/${f.date_iso.slice(0, 4)}`
+                        : ''}
+                    </td>
+                    <td className="px-2 py-1">
+                      {f.date_iso.length >= 16 ? f.date_iso.slice(11, 16) : ''}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Plan 5 - Accidents
+// ============================================================================
+
+interface Accident {
+  id_vehicule_acc: string
+  id_vehicule_pc: string
+  conducteur?: string
+  vehicule_acc_date: string
+  resp: number
+  prix_rep: number
+  prix_fran: number
+  reparable: boolean
+  deb_rep: string
+  fin_rep: string
+  repare: boolean
+  desc_: string
+}
+
+const EMPTY_ACC: Accident = {
+  id_vehicule_acc: '0',
+  id_vehicule_pc: '0',
+  conducteur: '',
+  vehicule_acc_date: '',
+  resp: 0,
+  prix_rep: 0,
+  prix_fran: 0,
+  reparable: false,
+  deb_rep: '',
+  fin_rep: '',
+  repare: false,
+  desc_: '',
+}
+
+const RESP_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: '—' },
+  { value: 1, label: 'Responsable' },
+  { value: 2, label: 'Non responsable' },
+  { value: 3, label: 'Partiellement' },
+]
+
+function AccidentsTab({ idVehicule }: { idVehicule: string }) {
+  const [list, setList] = useState<Accident[]>([])
+  const [conducteurs, setConducteurs] = useState<CondAll[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState<Accident>(EMPTY_ACC)
+
+  const reload = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/accidents`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => r.json()),
+      fetch(`/api/adm/parc-auto/vehicules/${idVehicule}/conducteurs-all`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      }).then((r) => r.json()),
+    ])
+      .then(([acc, cs]) => {
+        setList((acc as Accident[]) || [])
+        setConducteurs((cs as CondAll[]) || [])
+      })
+      .finally(() => setLoading(false))
+  }, [idVehicule])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const updateAcc = (patch: Partial<Accident>) =>
+    setEditing((e) => ({ ...e, ...patch }))
+
+  const handleAdd = () => setEditing(EMPTY_ACC)
+  const handleEdit = (acc: Accident) => setEditing(acc)
+
+  const handleDelete = async (acc: Accident) => {
+    const ok = await showConfirm({
+      title: 'Supprimer cette fiche accident ?',
+      message: 'L\'accident sera supprimé.',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/adm/parc-auto/accidents/${acc.id_vehicule_acc}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast('Accident supprimé.', 'success')
+      if (editing.id_vehicule_acc === acc.id_vehicule_acc) setEditing(EMPTY_ACC)
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const r = await fetch('/api/adm/parc-auto/accidents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({
+          id_vehicule_acc: Number(editing.id_vehicule_acc) || 0,
+          id_vehicule: Number(idVehicule) || 0,
+          id_vehicule_pc: Number(editing.id_vehicule_pc) || 0,
+          vehicule_acc_date: editing.vehicule_acc_date,
+          resp: editing.resp,
+          prix_rep: editing.prix_rep,
+          prix_fran: editing.prix_fran,
+          reparable: editing.reparable,
+          deb_rep: editing.deb_rep,
+          fin_rep: editing.fin_rep,
+          repare: editing.repare,
+          desc_: editing.desc_,
+        }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      showToast(
+        `Accident enregistré. Statut véhicule mis à jour.`,
+        'success',
+      )
+      // Garder l'id pour pouvoir uploader des docs ensuite
+      setEditing((e) => ({ ...e, id_vehicule_acc: d.id_vehicule_acc }))
+      reload()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fmtDateTime = (s: string) =>
+    s.length >= 16
+      ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}`
+      : s
+
+  if (loading) {
+    return (
+      <div className="p-10 flex justify-center">
+        <Loader2 className="w-5 h-5 animate-spin text-[#A68D8A]" />
+      </div>
+    )
+  }
+
+  const accSavedId =
+    editing.id_vehicule_acc && editing.id_vehicule_acc !== '0'
+      ? editing.id_vehicule_acc
+      : null
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-6">
+        {/* Gauche : tableau */}
+        <div>
+          <div className="flex gap-1.5 mb-2 h-9 items-center">
+            <IconBtn onClick={handleAdd} title="Ajouter un accident">
+              <Plus className="w-4 h-4" />
+            </IconBtn>
+          </div>
+          <div
+            className="border rounded overflow-auto"
+            style={{ borderColor: COL_BORDER, maxHeight: 280 }}
+          >
+            <table className="w-full text-xs">
+              <thead
+                className="sticky top-0"
+                style={{ backgroundColor: COL_PRIMARY, color: 'white' }}
+              >
+                <tr>
+                  <th className="px-2 py-1.5 text-left">Vendeur</th>
+                  <th className="px-2 py-1.5 text-left w-32">Date et heure</th>
+                  <th className="px-2 py-1.5 text-center w-20">Réparation</th>
+                  <th className="px-2 py-1.5 w-12" />
+                </tr>
+              </thead>
+              <tbody>
+                {list.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center italic" style={{ color: '#A68D8A' }}>
+                      Aucun accident.
+                    </td>
+                  </tr>
+                ) : (
+                  list.map((acc) => {
+                    const isSel = editing.id_vehicule_acc === acc.id_vehicule_acc
+                    return (
+                      <tr
+                        key={acc.id_vehicule_acc}
+                        onClick={() => handleEdit(acc)}
+                        className="cursor-pointer border-b"
+                        style={{
+                          backgroundColor: isSel ? COL_PRIMARY : 'white',
+                          color: isSel ? 'white' : COL_BRUN,
+                          borderColor: COL_BORDER,
+                        }}
+                      >
+                        <td className="px-2 py-1">{acc.conducteur}</td>
+                        <td className="px-2 py-1">{fmtDateTime(acc.vehicule_acc_date)}</td>
+                        <td className="px-2 py-1 text-center">
+                          {acc.repare ? '✓' : acc.reparable ? '⚠' : '✗'}
+                        </td>
+                        <td className="px-2 py-1 text-center">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleDelete(acc) }}
+                            className={isSel ? 'text-white hover:text-red-200' : 'text-red-600 hover:text-red-800'}
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Documents liés à l'accident */}
+          {accSavedId && (
+            <div className="mt-4">
+              <h3
+                className="text-xs font-bold uppercase tracking-wide mb-2"
+                style={{ color: COL_BRUN }}
+              >
+                Documents liés à l'accident
+              </h3>
+              <DocsSubSection
+                endpointBase={`/api/adm/parc-auto/vehicules/${idVehicule}/accidents/${accSavedId}`}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Droite : form */}
+        <div>
+          <h3
+            className="text-xs font-bold uppercase tracking-wide mb-2 pb-1 border-b"
+            style={{ color: COL_BRUN, borderColor: COL_BORDER }}
+          >
+            Info Accident
+          </h3>
+          <div className="space-y-2">
+            <Field label="Conducteur">
+              <select
+                value={editing.id_vehicule_pc}
+                onChange={(e) => updateAcc({ id_vehicule_pc: e.target.value })}
+                className={inputCls}
+              >
+                <option value="0">—</option>
+                {conducteurs.map((c) => (
+                  <option key={c.id_vehicule_pc} value={c.id_vehicule_pc}>
+                    {c.titre}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Survenu le">
+                <input
+                  type="datetime-local"
+                  value={editing.vehicule_acc_date}
+                  onChange={(e) => updateAcc({ vehicule_acc_date: e.target.value })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Responsabilité">
+                <select
+                  value={editing.resp}
+                  onChange={(e) => updateAcc({ resp: Number(e.target.value) || 0 })}
+                  className={inputCls}
+                >
+                  {RESP_OPTIONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="col-span-2">
+                <Field label="Véhicule réparable">
+                  <select
+                    value={editing.reparable ? 'oui' : 'non'}
+                    onChange={(e) => updateAcc({ reparable: e.target.value === 'oui' })}
+                    className={inputCls}
+                  >
+                    <option value="non">Non</option>
+                    <option value="oui">Oui</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Montant des réparations">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editing.prix_rep || ''}
+                  onChange={(e) => updateAcc({ prix_rep: Number(e.target.value) || 0 })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Montant de la franchise">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editing.prix_fran || ''}
+                  onChange={(e) => updateAcc({ prix_fran: Number(e.target.value) || 0 })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Réparations du">
+                <input
+                  type="date"
+                  value={editing.deb_rep}
+                  onChange={(e) => updateAcc({ deb_rep: e.target.value })}
+                  disabled={!editing.reparable}
+                  className={`${inputCls} ${editing.reparable ? '' : 'bg-gray-100 cursor-not-allowed'}`}
+                />
+              </Field>
+              <Field label="au">
+                <input
+                  type="date"
+                  value={editing.fin_rep}
+                  onChange={(e) => updateAcc({ fin_rep: e.target.value })}
+                  disabled={!editing.reparable}
+                  className={`${inputCls} ${editing.reparable ? '' : 'bg-gray-100 cursor-not-allowed'}`}
+                />
+              </Field>
+            </div>
+            <div className="mt-2">
+              <CheckRow
+                label="Véhicule réparé - Remis en circulation"
+                checked={editing.repare}
+                onChange={(c) => updateAcc({ repare: c })}
+              />
+            </div>
+            <Field label="Infos complémentaires">
+              <textarea
+                rows={4}
+                value={editing.desc_}
+                onChange={(e) => updateAcc({ desc_: e.target.value })}
+                className="w-full p-2 border rounded text-sm resize-none"
+                style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+              />
+            </Field>
+            <div className="flex justify-end gap-2 mt-2">
+              {editing.id_vehicule_acc !== '0' && (
+                <button
+                  type="button"
+                  onClick={() => setEditing(EMPTY_ACC)}
+                  className="px-3 py-1.5 rounded text-sm border"
+                  style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                >
+                  Annuler
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-1.5 rounded text-white text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: COL_PRIMARY }}
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Enregistrer
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -14,6 +14,7 @@ from app.intranets.adm.services import parc_auto as svc
 from app.intranets.adm.services import vehicule_conducteurs as cond_svc
 from app.intranets.adm.services import vehicule_documents as doc_svc
 from app.intranets.adm.services import vehicule_entretien as ent_svc
+from app.intranets.adm.services import vehicule_accident as acc_svc
 from app.intranets.adm.services import vehicule_pv as pv_svc
 
 
@@ -473,3 +474,187 @@ def delete_pv(
 ):
     """Btn Poubelle PV : soft delete."""
     return pv_svc.delete_pv(id_vehicule_pv, user.id_salarie)
+
+
+# Documents PV : FTP /Vehicules/{id_vehicule}/PV_{id_vehicule_pv}/
+
+
+@router.get("/vehicules/{id_vehicule}/pv/{id_vehicule_pv}/documents")
+def get_documents_pv(
+    id_vehicule: int,
+    id_vehicule_pv: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    return doc_svc.list_files(id_vehicule, f"PV_{int(id_vehicule_pv)}")
+
+
+@router.post("/vehicules/{id_vehicule}/pv/{id_vehicule_pv}/documents")
+async def post_document_pv(
+    id_vehicule: int,
+    id_vehicule_pv: int,
+    file: UploadFile = File(...),
+    _user: UserToken = Depends(get_current_user),
+):
+    content = await file.read()
+    res = doc_svc.upload_file(
+        id_vehicule, file.filename or "document", content,
+        f"PV_{int(id_vehicule_pv)}",
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec upload")
+    return res
+
+
+@router.get("/vehicules/{id_vehicule}/pv/{id_vehicule_pv}/documents/download")
+def get_document_pv_content(
+    id_vehicule: int,
+    id_vehicule_pv: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    content = doc_svc.download_file(
+        id_vehicule, name, f"PV_{int(id_vehicule_pv)}",
+    )
+    if content is None:
+        raise HTTPException(404, "Fichier introuvable")
+    return Response(
+        content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@router.delete("/vehicules/{id_vehicule}/pv/{id_vehicule_pv}/documents")
+def delete_document_pv(
+    id_vehicule: int,
+    id_vehicule_pv: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    res = doc_svc.delete_file(
+        id_vehicule, name, f"PV_{int(id_vehicule_pv)}",
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
+# ---------------------------------------------------------------------------
+# Plan 5 - Accidents (vehicule_accident)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/vehicules/{id_vehicule}/accidents")
+def get_accidents(
+    id_vehicule: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    return acc_svc.list_accidents(id_vehicule)
+
+
+@router.get("/accidents/{id_vehicule_acc}")
+def get_accident_detail(
+    id_vehicule_acc: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    a = acc_svc.get_accident(id_vehicule_acc)
+    if not a:
+        raise HTTPException(404, "Accident introuvable")
+    return a
+
+
+class AccidentPayload(BaseModel):
+    id_vehicule_acc: int = 0
+    id_vehicule: int
+    id_vehicule_pc: int = 0
+    vehicule_acc_date: str = ""
+    resp: int = 0
+    prix_rep: float = 0.0
+    prix_fran: float = 0.0
+    reparable: bool = False
+    deb_rep: str = ""
+    fin_rep: str = ""
+    repare: bool = False
+    desc_: str = ""
+
+
+@router.post("/accidents")
+def post_accident(
+    payload: AccidentPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer accident + maj vehicule_fiche.etat."""
+    return acc_svc.save_accident(payload.model_dump(), user.id_salarie)
+
+
+@router.delete("/accidents/{id_vehicule_acc}")
+def delete_accident(
+    id_vehicule_acc: int,
+    user: UserToken = Depends(get_current_user),
+):
+    return acc_svc.delete_accident(id_vehicule_acc, user.id_salarie)
+
+
+# Documents Accident : FTP /Vehicules/{id_vehicule}/ACC_{id_vehicule_acc}/
+
+
+@router.get("/vehicules/{id_vehicule}/accidents/{id_vehicule_acc}/documents")
+def get_documents_acc(
+    id_vehicule: int,
+    id_vehicule_acc: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    return doc_svc.list_files(id_vehicule, f"ACC_{int(id_vehicule_acc)}")
+
+
+@router.post("/vehicules/{id_vehicule}/accidents/{id_vehicule_acc}/documents")
+async def post_document_acc(
+    id_vehicule: int,
+    id_vehicule_acc: int,
+    file: UploadFile = File(...),
+    _user: UserToken = Depends(get_current_user),
+):
+    content = await file.read()
+    res = doc_svc.upload_file(
+        id_vehicule, file.filename or "document", content,
+        f"ACC_{int(id_vehicule_acc)}",
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec upload")
+    return res
+
+
+@router.get(
+    "/vehicules/{id_vehicule}/accidents/{id_vehicule_acc}/documents/download",
+)
+def get_document_acc_content(
+    id_vehicule: int,
+    id_vehicule_acc: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    content = doc_svc.download_file(
+        id_vehicule, name, f"ACC_{int(id_vehicule_acc)}",
+    )
+    if content is None:
+        raise HTTPException(404, "Fichier introuvable")
+    return Response(
+        content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@router.delete("/vehicules/{id_vehicule}/accidents/{id_vehicule_acc}/documents")
+def delete_document_acc(
+    id_vehicule: int,
+    id_vehicule_acc: int,
+    name: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    res = doc_svc.delete_file(
+        id_vehicule, name, f"ACC_{int(id_vehicule_acc)}",
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
