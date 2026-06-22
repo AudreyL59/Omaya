@@ -555,6 +555,7 @@ def publipostage_test_pdf(
 
     'SAUTDEPAGE' dans le contenu -> page-break-before forced.
     """
+    import re as _re
     content = download_doc_content(id_doc_rh)
     if not content:
         return None
@@ -627,7 +628,6 @@ def publipostage_test_pdf(
         )
 
     # 1b. STE_LOGO -> <img> avec guimmick base64 si dispo, sinon vide.
-    import re as _re
     if logo_b64:
         body_html = _re.sub(
             r"STE_LOGO",
