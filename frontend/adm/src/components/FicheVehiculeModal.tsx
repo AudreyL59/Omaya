@@ -35,6 +35,11 @@ const COL_PRIMARY_LIGHT = '#6a8d91'
 const COL_BORDER = '#E5DDDC'
 const COL_BG_SOFT = '#F8F5F4'
 
+// URL publique des documents (IIS interne sert le FTP en HTTP). Permet
+// d'ouvrir directement les fichiers via window.open sans passer par
+// l'API + token. Cf. WinDev lienDoc + '/Vehicules/...'.
+const DOCS_URL = 'https://interne.omaya.fr'
+
 type TabKey =
   | 'info'
   | 'conducteurs'
@@ -2119,28 +2124,17 @@ function EntretienPlan({
                     Charger
                   </button>
                   {editing.c_rentretien && (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          const url = `/api/adm/parc-auto/vehicules/${idVehicule}/documents/download?name=${encodeURIComponent(editing.c_rentretien)}`
-                          const r = await fetch(url, {
-                            headers: { Authorization: `Bearer ${getToken()}` },
-                          })
-                          if (!r.ok) throw new Error(String(r.status))
-                          const blob = await r.blob()
-                          window.open(URL.createObjectURL(blob), '_blank')
-                        } catch (e) {
-                          showToast(`Échec : ${(e as Error).message}`, 'error')
-                        }
-                      }}
+                    <a
+                      href={`${DOCS_URL}/Vehicules/${idVehicule}/${encodeURIComponent(editing.c_rentretien)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="flex items-center gap-1 px-3 py-1.5 rounded text-xs border whitespace-nowrap"
                       style={{ borderColor: COL_BORDER, color: COL_BRUN }}
                       title="Ouvrir le fichier"
                     >
                       <Download className="w-3.5 h-3.5" />
                       Voir
-                    </button>
+                    </a>
                   )}
                 </div>
               </Field>
