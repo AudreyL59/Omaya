@@ -342,7 +342,7 @@ export default function AttributionModal({
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-sm flex-1" style={{ color: COL_BRUN }}>
+                      <label className="text-sm whitespace-nowrap" style={{ color: COL_BRUN }}>
                         Kilométrage à la perception :
                       </label>
                       <input
@@ -350,7 +350,7 @@ export default function AttributionModal({
                         value={form.k_mdepart || ''}
                         onChange={(e) => upd('k_mdepart', Number(e.target.value) || 0)}
                         placeholder="De 0 à 100"
-                        className={`${inputCls} w-32`}
+                        className={`${inputCls} flex-1`}
                         style={{ borderColor: COL_BORDER }}
                       />
                     </div>
