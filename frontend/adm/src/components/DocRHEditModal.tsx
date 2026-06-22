@@ -226,7 +226,7 @@ export default function DocRHEditModal({
   }
 
   // ---- Save -------------------------------------------------------------
-  const saveMeta = async () => {
+  const saveMeta = async (silent = false) => {
     setSaving(true)
     try {
       // 1. Metadonnees
@@ -267,8 +267,10 @@ export default function DocRHEditModal({
         update({ taille_contenu: j.taille })
       }
 
-      showToast('Doc RH enregistré.', 'success')
-      onSaved()
+      if (!silent) {
+        showToast('Doc RH enregistré.', 'success')
+        onSaved()
+      }
     } catch (e) {
       showToast(`Échec : ${(e as Error).message}`, 'error')
     } finally {
@@ -331,7 +333,7 @@ export default function DocRHEditModal({
     }
     setTesting(true)
     try {
-      await saveMeta()
+      await saveMeta(true)
       const r = await fetch(
         `/api/adm/ctt-travail/${docId}/publipostage-test?id_ste=${steTest}`,
         {
@@ -371,7 +373,7 @@ export default function DocRHEditModal({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.95, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-lg shadow-xl w-full max-w-5xl flex flex-col max-h-[90vh] font-normal"
+          className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] flex flex-col max-h-[95vh] font-normal"
         >
           {/* Header */}
           <div
@@ -402,7 +404,7 @@ export default function DocRHEditModal({
             </div>
           ) : (
             <div className="overflow-y-auto p-4">
-              {/* Toggle Actif / Archive */}
+              {/* Toggle Actif / Archive + Save */}
               <div className="flex justify-between items-center mb-4">
                 <ActifToggle
                   value={meta.doc_actif}
@@ -410,7 +412,7 @@ export default function DocRHEditModal({
                 />
                 <button
                   type="button"
-                  onClick={saveMeta}
+                  onClick={() => saveMeta()}
                   disabled={saving}
                   className="flex items-center gap-2 px-4 py-2 rounded-md text-white text-sm font-medium disabled:opacity-50"
                   style={{ backgroundColor: COL_PRIMARY }}
@@ -420,8 +422,11 @@ export default function DocRHEditModal({
                 </button>
               </div>
 
+              {/* Layout 2 colonnes : 33% champs / 66% contenu */}
+              <div className="grid grid-cols-3 gap-6">
+              <div className="col-span-1 space-y-4">
               {/* Form metadonnees */}
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 gap-3">
                 <Field label="Type Doc">
                   <select
                     value={meta.id_type_doc}
@@ -467,7 +472,7 @@ export default function DocRHEditModal({
                 </Field>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 gap-3">
                 <Field label="Titre" wide>
                   <input
                     type="text"
@@ -486,7 +491,7 @@ export default function DocRHEditModal({
                 </Field>
               </div>
 
-              <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 gap-3">
                 <Field label="Société" wide>
                   <select
                     value={meta.id_ste}
@@ -585,11 +590,11 @@ export default function DocRHEditModal({
                 </p>
               </div>
 
+              </div>
+              {/* === Colonne droite (2/3) : Contenu === */}
+              <div className="col-span-2">
               {/* Contenu - editeur inline */}
-              <div
-                className="mt-5 pt-4 border-t"
-                style={{ borderColor: COL_BORDER }}
-              >
+              <div>
                 <div className="flex items-center justify-between mb-2">
                   <h4
                     className="text-xs font-bold uppercase tracking-wide"
@@ -706,6 +711,18 @@ export default function DocRHEditModal({
                   </ToolBtn>
                   <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
                   <ToolBtn
+                    onClick={() => {
+                      // Insere le marqueur SAUTDEPAGE a la position du curseur.
+                      // Au moment de la generation PDF, ce marqueur sera
+                      // remplace par un <div style='page-break-before:always'>.
+                      exec('insertText', 'SAUTDEPAGE')
+                    }}
+                    title="Saut de page (insere 'SAUTDEPAGE')"
+                  >
+                    ⤓
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn
                     onClick={() => exec('justifyLeft')}
                     title="Aligner à gauche"
                   >
@@ -776,6 +793,8 @@ export default function DocRHEditModal({
                   </button>
                 </div>
               </div>
+              </div>{/* fin col-span-2 */}
+              </div>{/* fin grid 2 col */}
             </div>
           )}
         </motion.div>

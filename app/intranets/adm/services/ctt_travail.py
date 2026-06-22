@@ -637,17 +637,19 @@ def publipostage_test_pdf(
     @bottom-center {{ content: element(footerCenter); }}
     @bottom-right {{
         content: "Page " counter(page) " / " counter(pages);
+        font-family: Calibri, "Segoe UI", sans-serif;
         font-size: 9pt;
-        color: #4E1D17;
+        color: #17494E;
     }}
 }}
 .footerLeft {{ position: running(footerLeft); }}
 .footerCenter {{
     position: running(footerCenter);
+    font-family: Calibri, "Segoe UI", sans-serif;
     text-align: center;
     font-size: 8pt;
     line-height: 1.3;
-    color: #4E1D17;
+    color: #17494E;
 }}
 .footerLeft img {{ max-height: 15mm; max-width: 23mm; }}
 body {{
