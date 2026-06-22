@@ -1995,12 +1995,18 @@ function EntretienPlan({
             ) : list.length === 0 ? (
               <tr><td colSpan={5} className="p-6 text-center italic" style={{ color: '#A68D8A' }}>Aucun enregistrement.</td></tr>
             ) : (
-              list.map((e) => (
+              list.map((e) => {
+                const isSel = editing?.id_vehicule_entretien === e.id_vehicule_entretien
+                return (
                 <tr
                   key={e.id_vehicule_entretien}
                   onClick={() => setEditing(e)}
                   className="cursor-pointer border-b"
-                  style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  style={{
+                    backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
+                    color: isSel ? 'white' : COL_BRUN,
+                    borderColor: COL_BORDER,
+                  }}
                 >
                   <td className="px-3 py-1.5">{fmtDate(e.realise_le)}</td>
                   <td className="px-3 py-1.5 text-right">{e.montant_ht.toFixed(2)} €</td>
@@ -2010,14 +2016,15 @@ function EntretienPlan({
                     <button
                       type="button"
                       onClick={(ev) => { ev.stopPropagation(); handleDelete(e.id_vehicule_entretien) }}
-                      className="text-red-600 hover:text-red-800"
+                      className={isSel ? 'text-white hover:text-red-200' : 'text-red-600 hover:text-red-800'}
                       title="Supprimer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>
-              ))
+                )
+              })
             )}
           </tbody>
         </table>
