@@ -218,12 +218,14 @@ def list_conducteurs_all(id_vehicule: int) -> list[dict]:
     out = []
     for r in rows:
         nom = _str(r.get("nom_conducteur"))
+        prenom = _str(r.get("prenom_conducteur")).strip().capitalize()
+        nom_complet = f"{nom} {prenom}".strip() if prenom else nom
         deb = _iso_date(r.get("perception_date"))
         fin = _iso_date(r.get("restitution_date"))
         temp = ", Temp" if r.get("temporaire") else ""
         deb_fr = f"{deb[8:10]}/{deb[5:7]}/{deb[0:4]}" if len(deb) >= 10 else ""
         fin_fr = f"{fin[8:10]}/{fin[5:7]}/{fin[0:4]}" if len(fin) >= 10 else ""
-        titre = f"{nom}{temp} ( Début : {deb_fr} - Fin : {fin_fr} )"
+        titre = f"{nom_complet}{temp} ( Début : {deb_fr} - Fin : {fin_fr} )"
         out.append({
             "id_vehicule_pc": str(_int(r.get("id_vehicule_pc"))),
             "id_salarie": str(_int(r.get("id_salarie"))),

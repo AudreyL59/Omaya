@@ -1902,8 +1902,9 @@ function EntretienPlan({
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          id_vehicule_entretien: Number(editing.id_vehicule_entretien) || 0,
-          id_vehicule: Number(idVehicule) || 0,
+          // IDs 8 octets en string pour eviter perte precision JS.
+          id_vehicule_entretien: editing.id_vehicule_entretien || '0',
+          id_vehicule: idVehicule || '0',
           type_entretien: typeEntretien,
           realise_le: editing.realise_le,
           montant_ht: editing.montant_ht,
@@ -2150,8 +2151,10 @@ function ReleveKmPlan({
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          id_vehicule: Number(idVehicule) || 0,
-          id_vehicule_pc: Number(idPc) || 0,
+          // IDs 8 octets : envoyer en string pour eviter la perte de
+          // precision JS (Number max safe int = 2^53 < 17 chiffres).
+          id_vehicule: idVehicule || '0',
+          id_vehicule_pc: idPc || '0',
           date_releve: dateRel,
           km: nouvRel,
           km_parcouru: kmParcourus,
