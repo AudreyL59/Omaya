@@ -2061,13 +2061,87 @@ function EntretienPlan({
             </Field>
             <div className="col-span-3">
               <Field label="Compte rendu / facture">
-                <input
-                  type="text"
-                  value={editing.c_rentretien}
-                  onChange={(e) => setEditing({ ...editing, c_rentretien: e.target.value })}
-                  className={inputCls}
-                  placeholder="Référence ou nom du document"
-                />
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={editing.c_rentretien}
+                    onChange={(e) => setEditing({ ...editing, c_rentretien: e.target.value })}
+                    className={`${inputCls} flex-1`}
+                    placeholder="Nom du fichier (auto au upload)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.createElement('input')
+                      input.type = 'file'
+                      input.accept = '.pdf,.jpg,.jpeg,.png'
+                      input.onchange = async () => {
+                        const f = input.files?.[0]
+                        if (!f) return
+                        // Nom auto : <TypeEntretien><AAAA_MM>.<ext>
+                        const lib = TYPE_LABEL[typeEntretien] || `Type${typeEntretien}`
+                        const d = editing.realise_le ? new Date(editing.realise_le) : new Date()
+                        const yyyy = d.getFullYear()
+                        const mm = String(d.getMonth() + 1).padStart(2, '0')
+                        const ext = f.name.includes('.')
+                          ? f.name.split('.').pop()
+                          : 'pdf'
+                        const newName = `${lib}${yyyy}_${mm}.${ext}`
+                        try {
+                          const fd = new FormData()
+                          fd.append('file', new File([f], newName, { type: f.type }))
+                          const r = await fetch(
+                            `/api/adm/parc-auto/vehicules/${idVehicule}/documents`,
+                            {
+                              method: 'POST',
+                              headers: { Authorization: `Bearer ${getToken()}` },
+                              body: fd,
+                            },
+                          )
+                          if (!r.ok) {
+                            const j = await r.json().catch(() => ({}))
+                            throw new Error((j as { detail?: string })?.detail || String(r.status))
+                          }
+                          setEditing({ ...editing, c_rentretien: newName })
+                          showToast(`Fichier chargé : ${newName}`, 'success')
+                        } catch (e) {
+                          showToast(`Échec : ${(e as Error).message}`, 'error')
+                        }
+                      }
+                      input.click()
+                    }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded text-xs border whitespace-nowrap"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                    title="Charger une facture (PDF/image) - renommee auto"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Charger
+                  </button>
+                  {editing.c_rentretien && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const url = `/api/adm/parc-auto/vehicules/${idVehicule}/documents/download?name=${encodeURIComponent(editing.c_rentretien)}`
+                          const r = await fetch(url, {
+                            headers: { Authorization: `Bearer ${getToken()}` },
+                          })
+                          if (!r.ok) throw new Error(String(r.status))
+                          const blob = await r.blob()
+                          window.open(URL.createObjectURL(blob), '_blank')
+                        } catch (e) {
+                          showToast(`Échec : ${(e as Error).message}`, 'error')
+                        }
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded text-xs border whitespace-nowrap"
+                      style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      title="Ouvrir le fichier"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Voir
+                    </button>
+                  )}
+                </div>
               </Field>
             </div>
           </div>
