@@ -547,52 +547,52 @@ def _docx_to_html(docx_bytes: bytes) -> str:
     return res.value
 
 
-def publipostage_test_pdf(
-    id_doc_rh: int, id_ste: int, titre_doc: str = "",
-) -> bytes | None:
-    """Btn 'Tester Mise en page' : PDF avec footer 3 colonnes (logo
-    societe / RS+adr+SIRET / Page X/Y) genere via WeasyPrint.
+def _bytes_to_b64_img(img_bytes: bytes | None) -> str:
+    """Encode bytes en data: URL (PNG/JPEG/...) pour insertion HTML."""
+    if not img_bytes:
+        return ""
+    import base64 as _b64
+    sig = bytes(img_bytes[:8])
+    if sig.startswith(b"\x89PNG"):
+        mime = "image/png"
+    elif sig.startswith(b"\xff\xd8\xff"):
+        mime = "image/jpeg"
+    elif sig[:6] in (b"GIF87a", b"GIF89a"):
+        mime = "image/gif"
+    elif sig.startswith(b"BM"):
+        mime = "image/bmp"
+    else:
+        mime = "image/png"
+    return f"data:{mime};base64,{_b64.b64encode(bytes(img_bytes)).decode('ascii')}"
 
-    'SAUTDEPAGE' dans le contenu -> page-break-before forced.
+
+def generer_pdf_publiposte(
+    body_html: str,
+    id_ste: int = 0,
+    extra_images: dict[str, str] | None = None,
+) -> bytes | None:
+    """Genere un PDF avec footer Omaya standard (logo societe / RS+adr+
+    SIRET / Page X/Y) via WeasyPrint. Helper reutilisable pour tout
+    module qui produit un PDF de doc RH.
+
+    Args:
+        body_html : contenu HTML deja publiposte (variables substituees).
+        id_ste : pour le footer (guimmick + RS + adresse + SIRET).
+        extra_images : substitutions de tokens images supplementaires,
+            ex: {'GER_SIGN': 'data:image/png;base64,...',
+                 'STE_CACHET': 'data:...'}. STE_LOGO est gere
+            automatiquement depuis le guimmick de la societe.
+
+    Renvoie les bytes du PDF ou None si echec.
     """
     import re as _re
-    content = download_doc_content(id_doc_rh)
-    if not content:
-        return None
 
-    variables = dict(_FAKE_SALARIE)
-    if id_ste:
-        ste_vars = _societe_variables(id_ste)
-        if titre_doc:
-            ste_vars["DOCTITRE"] = titre_doc
-        variables.update(ste_vars)
-
-    # 3 (avance). Recupere infos societe ici car logo_b64 sert aussi
-    # a remplacer STE_LOGO dans le contenu (en plus du footer).
+    # 1. Footer infos societe (RS / adresse / SIRET / guimmick)
     ste = _societe_for_footer(id_ste) if id_ste else {}
     logo_b64 = ste.get("logo_b64", "")
 
-    # 1. Convertit DOCX -> HTML si necessaire
-    if is_docx(content):
-        try:
-            filled = _replace_in_docx(content, variables)
-            body_html = _docx_to_html(filled)
-        except Exception:
-            return None
-    else:
-        try:
-            body_html = content.decode("utf-8")
-            for key, val in variables.items():
-                # STE_LOGO traite separement plus bas (substitution image)
-                if key == "STE_LOGO":
-                    continue
-                body_html = body_html.replace(key, str(val))
-        except Exception:
-            return None
-
-    # Compatibilite : convertit les <font color="..."> legacy (produit par
-    # certains execCommand) en <span style="color:..."> (WeasyPrint).
-    # Capture aussi face/size en supplement.
+    # 2. Conversion legacy <font color="..." face="..." size="..."> ->
+    # <span style="color:...; font-family:...; font-size:..."> (WeasyPrint).
     def _font_to_span(m: "_re.Match[str]") -> str:
         attrs = m.group(1) or ""
         styles = []
@@ -604,30 +604,11 @@ def publipostage_test_pdf(
         if not styles:
             return "<span>"
         return f'<span style="{"; ".join(styles)}">'
-    body_html = _re.sub(
-        r"<font\b([^>]*)>",
-        _font_to_span,
-        body_html,
-        flags=_re.IGNORECASE,
-    )
+    body_html = _re.sub(r"<font\b([^>]*)>", _font_to_span, body_html,
+                        flags=_re.IGNORECASE)
     body_html = _re.sub(r"</font>", "</span>", body_html, flags=_re.IGNORECASE)
 
-    # DEBUG (a virer plus tard) : log les styles color trouves
-    import sys
-    if "color:" in body_html:
-        print(
-            f"[publipostage_test_pdf] {body_html.count('color:')} 'color:' "
-            f"trouve(s) dans le HTML.",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            f"[publipostage_test_pdf] AUCUN 'color:' dans le HTML "
-            f"(len={len(body_html)}).",
-            file=sys.stderr,
-        )
-
-    # 1b. STE_LOGO -> <img> avec guimmick base64 si dispo, sinon vide.
+    # 3. STE_LOGO -> guimmick base64 (si dispo).
     if logo_b64:
         body_html = _re.sub(
             r"STE_LOGO",
@@ -639,14 +620,28 @@ def publipostage_test_pdf(
     else:
         body_html = body_html.replace("STE_LOGO", "")
 
-    # 2. Transforme 'SAUTDEPAGE' en saut de page CSS
+    # 3b. Tokens images supplementaires (GER_SIGN, STE_CACHET, ...).
+    if extra_images:
+        for token, data_url in extra_images.items():
+            if data_url:
+                body_html = body_html.replace(
+                    token,
+                    f'<img src="{data_url}" '
+                    f'style="max-height:30mm;max-width:60mm;'
+                    f'vertical-align:middle;" alt=""/>',
+                )
+            else:
+                body_html = body_html.replace(token, "")
+
+    # 4. SAUTDEPAGE -> page-break.
     body_html = _re.sub(
         r"(<[^>]+>)?\s*SAUTDEPAGE\s*(</[^>]+>)?",
         '<div style="page-break-before: always;"></div>',
         body_html,
         flags=_re.IGNORECASE,
     )
-    # 3. Footer (ste + logo_b64 deja recuperes en haut)
+
+    # 5. Footer center (RS / adresse / SIRET).
     rs = ste.get("raison_sociale", "")
     adresse = " ".join(
         x for x in [ste.get("adresse", ""),
@@ -654,17 +649,17 @@ def publipostage_test_pdf(
         if x
     ).strip()
     siret = ste.get("siret", "")
-    footer_center_html = (
-        f"<strong>{rs}</strong>" if rs else ""
-    )
+    footer_center_html = f"<strong>{rs}</strong>" if rs else ""
     if adresse:
-        footer_center_html += (f"<br/>{adresse}" if footer_center_html else adresse)
+        footer_center_html += (
+            f"<br/>{adresse}" if footer_center_html else adresse
+        )
     if siret:
         footer_center_html += (
             f"<br/>SIRET : {siret}" if footer_center_html else f"SIRET : {siret}"
         )
 
-    # 4. Assemble le HTML complet avec CSS @page footer
+    # 6. Assemble HTML + CSS @page footer + WeasyPrint.
     html_doc = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 @page {{
@@ -706,9 +701,45 @@ table {{ border-collapse: collapse; }}
 {body_html}
 </body></html>"""
 
-    # 5. WeasyPrint -> PDF
     try:
         from weasyprint import HTML
         return HTML(string=html_doc).write_pdf()
     except Exception:
         return None
+
+
+def publipostage_test_pdf(
+    id_doc_rh: int, id_ste: int, titre_doc: str = "",
+) -> bytes | None:
+    """Btn 'Tester Mise en page' Fen_EditionDocRH : PDF avec donnees
+    fictives + footer auto. Delegue a generer_pdf_publiposte."""
+    content = download_doc_content(id_doc_rh)
+    if not content:
+        return None
+
+    variables = dict(_FAKE_SALARIE)
+    if id_ste:
+        ste_vars = _societe_variables(id_ste)
+        if titre_doc:
+            ste_vars["DOCTITRE"] = titre_doc
+        variables.update(ste_vars)
+
+    # Convertit DOCX -> HTML si necessaire + substitue les variables.
+    if is_docx(content):
+        try:
+            filled = _replace_in_docx(content, variables)
+            body_html = _docx_to_html(filled)
+        except Exception:
+            return None
+    else:
+        try:
+            body_html = content.decode("utf-8")
+            for key, val in variables.items():
+                # STE_LOGO est traite par generer_pdf_publiposte.
+                if key == "STE_LOGO":
+                    continue
+                body_html = body_html.replace(key, str(val))
+        except Exception:
+            return None
+
+    return generer_pdf_publiposte(body_html, id_ste=id_ste)

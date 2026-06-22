@@ -577,19 +577,41 @@ def preview_cttw_pdf(
 ) -> dict:
     """Genere le PDF pour aperçu/export, SANS rien ecrire en base.
 
-    Bouton 'Export PDF' de la popup WinDev. Reutilise tout le publipostage
-    de generate_cttw (variables + images) et convertit en PDF via
-    soffice headless.
+    Bouton 'Export PDF' Fen_SalarieDocRH. Pipeline aligne sur
+    publipostage_test_pdf (Fen_EditionDocRH) :
+      1. Publipostage DOCX (variables texte + insertion images via
+         python-docx) - reutilise _build_publiposted_docx existant.
+      2. Conversion DOCX -> HTML via mammoth (images embedded -> data:).
+      3. WeasyPrint genere le PDF avec footer auto + SAUTDEPAGE +
+         conversion <font> -> <span>.
 
     Retourne {pdf_bytes, filename}.
     """
-    built = _build_publiposted_docx(
-        id_salarie=id_salarie, id_doc_rh=id_doc_rh, date_avenant=date_avenant
+    from app.intranets.adm.services.ctt_travail import (
+        _docx_to_html,
+        generer_pdf_publiposte,
     )
-    pdf_bytes = _docx_to_pdf(built["docx_bytes"])
+
+    built = _build_publiposted_docx(
+        id_salarie=id_salarie, id_doc_rh=id_doc_rh, date_avenant=date_avenant,
+    )
+    # Recupere id_ste de la societe du salarie pour le footer.
+    data = _load_salarie(int(id_salarie))
+    id_ste = _int((data.get("embauche") or {}).get("id_ste"))
+
+    # DOCX publiposte (avec images insérées) -> HTML (mammoth gere les
+    # images embarquees en data: URL).
+    body_html = _docx_to_html(built["docx_bytes"])
+
+    pdf_bytes = generer_pdf_publiposte(body_html, id_ste=id_ste)
+    if not pdf_bytes:
+        raise RuntimeError("Generation PDF (WeasyPrint) a echoue.")
+
     safe_nom = built["nom_salarie"].replace(" ", "_") or str(id_salarie)
     safe_titre = built["titre_doc"].replace("/", "-").replace("\\", "-")[:80]
-    filename = f"{safe_nom}_{safe_titre}.pdf" if safe_titre else f"{safe_nom}.pdf"
+    filename = (
+        f"{safe_nom}_{safe_titre}.pdf" if safe_titre else f"{safe_nom}.pdf"
+    )
     return {"pdf_bytes": pdf_bytes, "filename": filename}
 
 
