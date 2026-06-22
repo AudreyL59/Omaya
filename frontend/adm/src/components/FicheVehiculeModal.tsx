@@ -27,6 +27,7 @@ import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import SalarieDocUleaseModal from '@/components/fiche/ulease/SalarieDocUleaseModal'
+import AttributionModal from '@/components/AttributionModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -1083,6 +1084,11 @@ function ConducteursTab({
     idSalarie: string
     idVehiculePC: string
   } | null>(null)
+  // Fen_Attribution (ajout/modif)
+  const [attribModal, setAttribModal] = useState<{
+    mode: 'create' | 'edit'
+    idVehiculePc?: string
+  } | null>(null)
 
   const reloadList = useCallback(() => {
     setLoading(true)
@@ -1291,14 +1297,14 @@ function ConducteursTab({
       </h3>
       <div className="flex items-center justify-start gap-2 mb-3 flex-wrap">
         <IconBtn
-          onClick={() => showToast('Fen_Attribution : à venir.', 'info')}
+          onClick={() => setAttribModal({ mode: 'create' })}
           title="Ajouter une attribution"
         >
           <Plus className="w-4 h-4" />
         </IconBtn>
         <IconBtn
           onClick={() =>
-            showToast('Fen_Attribution (modifier) : à venir.', 'info')
+            setAttribModal({ mode: 'edit', idVehiculePc: selected })
           }
           title="Modifier"
           disabled={!selected}
@@ -1588,6 +1594,20 @@ function ConducteursTab({
           }}
         />
       )}
+
+      {/* Fen_Attribution : ajout / modif */}
+      <AttributionModal
+        open={attribModal !== null}
+        mode={attribModal?.mode || 'create'}
+        idVehicule={idVehicule}
+        idVehiculePc={attribModal?.idVehiculePc}
+        societes={lookups.societes}
+        onClose={() => setAttribModal(null)}
+        onSaved={() => {
+          setAttribModal(null)
+          reloadList()
+        }}
+      />
     </div>
   )
 }

@@ -7,9 +7,11 @@ liste docs Ulease edites lies a une attribution.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+from app.intranets.adm.services import vehicule_documents as doc_svc
 
 
 def _str(v: Any) -> str:
@@ -234,6 +236,248 @@ def list_doc_ulease_for_pc(id_vehicule_pc: int) -> list[dict]:
 def _new_id() -> int:
     """idEntierDateHeureSys (cf. WinDev)."""
     return int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
+
+
+# ---------------------------------------------------------------------------
+# Fen_Attribution (ajout/modif d'une attribution conducteur)
+# ---------------------------------------------------------------------------
+
+
+def search_salaries(query: str, limit: int = 50) -> list[dict]:
+    """Liste de salaries pour le btn 'Choisir le conducteur' (Fen_
+    RechercheNomSalarie). Match case-insensitive sur nom + prenom +
+    nom_marital. Renvoie un mini-payload {id, nom_complet, prenom}."""
+    q = (query or "").strip()
+    db = get_pg_connection("rh")
+    if not q:
+        rows = db.query(
+            """SELECT id_salarie, nom, nom_marital, prenom
+                 FROM rh.pgt_salarie
+                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+             ORDER BY nom ASC, prenom ASC LIMIT ?""",
+            (int(limit),),
+        ) or []
+    else:
+        pat = f"%{q.lower()}%"
+        rows = db.query(
+            """SELECT id_salarie, nom, nom_marital, prenom
+                 FROM rh.pgt_salarie
+                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                  AND (LOWER(nom) LIKE ? OR LOWER(prenom) LIKE ?
+                       OR LOWER(COALESCE(nom_marital, '')) LIKE ?)
+             ORDER BY nom ASC, prenom ASC LIMIT ?""",
+            (pat, pat, pat, int(limit)),
+        ) or []
+    out = []
+    for r in rows:
+        nom = _str(r.get("nom"))
+        marital = _str(r.get("nom_marital"))
+        prenom = _str(r.get("prenom")).strip().capitalize()
+        nom_complet = f"{nom} {marital}".strip() if marital else nom
+        out.append({
+            "id_salarie": str(_int(r.get("id_salarie"))),
+            "nom_complet": nom_complet,
+            "prenom": prenom,
+            "lib": f"{nom_complet} {prenom}".strip(),
+        })
+    return out
+
+
+def ensure_conducteur_from_salarie(id_salarie: int, op_id: int) -> dict:
+    """Btn 'Choisir le conducteur' apres selection : cree la fiche
+    conducteur depuis le salarie si elle n'existe pas, sinon renvoie
+    l'id_conducteur existant. Cf. WinDev (HExecuteRequete reqInfoCond +
+    HAjoute(conducteur))."""
+    if not id_salarie:
+        return {"ok": False, "error": "id_salarie manquant"}
+    db_ul = get_pg_connection("ulease")
+    # 1. Existe ?
+    r = db_ul.query_one(
+        """SELECT id_conducteur FROM ulease.pgt_conducteur
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    )
+    if r and _int(r.get("id_conducteur")):
+        id_cnd = _int(r.get("id_conducteur"))
+        return _conducteur_info(id_cnd)
+
+    # 2. Charger les infos depuis le salarie + adresse + tel
+    db_rh = get_pg_connection("rh")
+    s = db_rh.query_one(
+        """SELECT id_salarie, nom, nom_marital, prenom, sexe,
+                  date_naiss, lieu_naiss, dep_naiss, nationalite, photo
+             FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    )
+    if not s:
+        return {"ok": False, "error": "Salarie introuvable"}
+
+    # Adresse + tel : table unique pgt_salarie_coordonnees
+    coord = db_rh.query_one(
+        """SELECT adresse1, adresse2, cp, ville, tel_fixe, tel_mob
+             FROM rh.pgt_salarie_coordonnees
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    ) or {}
+    adr = coord
+    tel = coord
+
+    # 3. INSERT conducteur
+    db_ul.query(
+        """INSERT INTO ulease.pgt_conducteur
+             (id_conducteur, id_salarie, nom_conducteur, nom_marital,
+              prenom_conducteur, sexe_conducteur, date_naiss, lieu_naiss,
+              dep_naiss, pays, photo_conducteur,
+              tel, mobile, adresse1, adresse2, cp, ville,
+              num_permis, type_permis, login, mdp_user,
+              modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   '', '', '', '', NOW(), ?, 'new')""",
+        (
+            int(id_salarie),  # id_conducteur = id_salarie (cf. WinDev)
+            int(id_salarie),
+            _str(s.get("nom")),
+            _str(s.get("nom_marital")),
+            _str(s.get("prenom")),
+            _int(s.get("sexe")),
+            s.get("date_naiss") or None,
+            _str(s.get("lieu_naiss")),
+            _int(s.get("dep_naiss")),
+            _str(s.get("nationalite")),
+            s.get("photo"),
+            _str(tel.get("tel_fixe")),
+            _str(tel.get("tel_mob")),
+            _str(adr.get("adresse1")),
+            _str(adr.get("adresse2")),
+            _str(adr.get("cp")),
+            _str(adr.get("ville")),
+            int(op_id),
+        ),
+    )
+    return _conducteur_info(int(id_salarie))
+
+
+def _conducteur_info(id_conducteur: int) -> dict:
+    db = get_pg_connection("ulease")
+    r = db.query_one(
+        """SELECT id_conducteur, id_salarie, nom_conducteur, nom_marital,
+                  prenom_conducteur
+             FROM ulease.pgt_conducteur WHERE id_conducteur = ? LIMIT 1""",
+        (int(id_conducteur),),
+    )
+    if not r:
+        return {"ok": False, "error": "Conducteur introuvable"}
+    nom = _str(r.get("nom_conducteur"))
+    prenom = _str(r.get("prenom_conducteur")).strip().capitalize()
+    marital = _str(r.get("nom_marital"))
+    nom_complet = f"{nom} {marital}".strip() if marital else nom
+    return {
+        "ok": True,
+        "id_conducteur": str(_int(r.get("id_conducteur"))),
+        "id_salarie": str(_int(r.get("id_salarie"))),
+        "lib": f"{nom_complet} {prenom}".strip(),
+    }
+
+
+def save_attribution(payload: dict, op_id: int) -> dict:
+    """Fen_Attribution btn Valider : create (id_vehicule_pc=0) ou update
+    complet (toutes les colonnes du form, dates incluses).
+
+    Cree aussi le dossier FTP /OMAYA/Vehicules/{id_vehicule}/{id_pc}/
+    a la creation (cf. WinDev FTPRepCree)."""
+    id_pc = _int(payload.get("id_vehicule_pc"))
+    id_vehicule = _int(payload.get("id_vehicule"))
+    id_conducteur = _int(payload.get("id_conducteur"))
+    if not id_vehicule or not id_conducteur:
+        return {"ok": False, "error": "id_vehicule et id_conducteur requis"}
+
+    perception_date = payload.get("perception_date") or None
+    perception_heure = payload.get("perception_heure") or None
+    restitution_date = payload.get("restitution_date") or None
+    restitution_heure = payload.get("restitution_heure") or None
+    if perception_date == "":
+        perception_date = None
+    if perception_heure == "":
+        perception_heure = None
+    if restitution_date == "":
+        restitution_date = None
+    if restitution_heure == "":
+        restitution_heure = None
+
+    db = get_pg_connection("ulease")
+    if id_pc == 0:
+        new_id = _new_id()
+        db.query(
+            """INSERT INTO ulease.pgt_vehicule_conducteur
+                 (id_vehicule_pc, id_vehicule, id_conducteur, id_ste,
+                  perception_date, perception_heure,
+                  restitution_date, restitution_heure,
+                  k_mdepart, temporaire,
+                  conv_dispo, cg_originale_dossier, cg_conducteur,
+                  fiche_rest, c_vet_vignette, permis_cnd,
+                  fiche_enlev, info_vehicule,
+                  modif_op, modif_date, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       FALSE, '', ?, NOW(), 'new')""",
+            (
+                new_id, id_vehicule, id_conducteur,
+                _int(payload.get("id_ste")),
+                perception_date, perception_heure,
+                restitution_date, restitution_heure,
+                _int(payload.get("k_mdepart")),
+                bool(payload.get("temporaire")),
+                bool(payload.get("conv_dispo")),
+                bool(payload.get("cg_originale_dossier")),
+                bool(payload.get("cg_conducteur")),
+                bool(payload.get("fiche_rest")),
+                bool(payload.get("c_vet_vignette")),
+                bool(payload.get("permis_cnd")),
+                int(op_id),
+            ),
+        )
+        # Creer le dossier FTP /OMAYA/Vehicules/{id}/{new_id}/
+        ftp = doc_svc._ftp_connect()
+        if ftp:
+            try:
+                rep = doc_svc._rep_ftp(id_vehicule, str(new_id))
+                doc_svc._ftp_makedirs(ftp, rep)
+            finally:
+                try:
+                    ftp.quit()
+                except Exception:
+                    pass
+        return {"ok": True, "id_vehicule_pc": str(new_id)}
+
+    # Update existant
+    db.query(
+        """UPDATE ulease.pgt_vehicule_conducteur
+              SET id_conducteur = ?, id_ste = ?,
+                  perception_date = ?, perception_heure = ?,
+                  restitution_date = ?, restitution_heure = ?,
+                  k_mdepart = ?, temporaire = ?,
+                  conv_dispo = ?, cg_originale_dossier = ?,
+                  cg_conducteur = ?, fiche_rest = ?,
+                  c_vet_vignette = ?, permis_cnd = ?,
+                  modif_op = ?, modif_date = NOW(),
+                  modif_elem = 'modif'
+            WHERE id_vehicule_pc = ?""",
+        (
+            id_conducteur,
+            _int(payload.get("id_ste")),
+            perception_date, perception_heure,
+            restitution_date, restitution_heure,
+            _int(payload.get("k_mdepart")),
+            bool(payload.get("temporaire")),
+            bool(payload.get("conv_dispo")),
+            bool(payload.get("cg_originale_dossier")),
+            bool(payload.get("cg_conducteur")),
+            bool(payload.get("fiche_rest")),
+            bool(payload.get("c_vet_vignette")),
+            bool(payload.get("permis_cnd")),
+            int(op_id), id_pc,
+        ),
+    )
+    return {"ok": True, "id_vehicule_pc": str(id_pc)}
 
 
 def generer_pv(id_vehicule_pc: int, type_pv: str, suivi_edition: bool,

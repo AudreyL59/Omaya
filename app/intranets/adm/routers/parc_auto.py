@@ -236,6 +236,65 @@ def delete_attribution(
     return cond_svc.delete_attribution(id_vehicule_pc, user.id_salarie)
 
 
+# ---------------------------------------------------------------------------
+# Fen_Attribution (ajout/modif d'une attribution conducteur)
+# ---------------------------------------------------------------------------
+
+
+class AttributionFullPayload(BaseModel):
+    id_vehicule_pc: str = "0"  # "0" = create, sinon update
+    id_vehicule: str
+    id_conducteur: str
+    id_ste: int = 0
+    perception_date: str = ""
+    perception_heure: str = ""
+    restitution_date: str = ""
+    restitution_heure: str = ""
+    k_mdepart: int = 0
+    temporaire: bool = False
+    conv_dispo: bool = False
+    cg_originale_dossier: bool = False
+    cg_conducteur: bool = False
+    fiche_rest: bool = False
+    c_vet_vignette: bool = False
+    permis_cnd: bool = False
+
+
+@router.post("/conducteurs/save")
+def post_save_attribution(
+    payload: AttributionFullPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Fen_Attribution btn Valider : create (id=0) ou update complet."""
+    res = cond_svc.save_attribution(payload.model_dump(), user.id_salarie)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
+@router.get("/salaries/search")
+def get_salaries_search(
+    q: str = "",
+    limit: int = 50,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Choisir le conducteur' (Fen_RechercheNomSalarie)."""
+    return cond_svc.search_salaries(q, limit)
+
+
+@router.post("/conducteurs/from-salarie/{id_salarie}")
+def post_ensure_conducteur(
+    id_salarie: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Choisir le conducteur' apres selection : cree la fiche
+    conducteur depuis le salarie si pas exist, sinon renvoie l'existant."""
+    res = cond_svc.ensure_conducteur_from_salarie(id_salarie, user.id_salarie)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec")
+    return res
+
+
 @router.get("/conducteurs/{id_vehicule_pc}/doc-ulease")
 def get_doc_ulease(
     id_vehicule_pc: int,
