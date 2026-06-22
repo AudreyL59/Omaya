@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
 
 // --- Types ---------------------------------------------------------------
@@ -152,6 +153,7 @@ function colorForName(name: string): string {
 // --- Page ----------------------------------------------------------------
 
 export default function OrganigrammePage() {
+  useDocumentTitle('Organigramme')
   const { user } = useAuth()
   const droits = user?.droits || []
   const [search, setSearch] = useState('')

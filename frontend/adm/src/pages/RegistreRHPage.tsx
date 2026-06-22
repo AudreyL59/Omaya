@@ -4,6 +4,7 @@ import { AnimatePresence } from 'framer-motion'
 import { Loader2, AlertCircle, ExternalLink, FileText, FileSpreadsheet } from 'lucide-react'
 import { getToken } from '@/api'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 // --- Types ---------------------------------------------------------------
 
@@ -84,6 +85,7 @@ function refLabel(refs: RefOption[], id: number): string {
 // --- Page ----------------------------------------------------------------
 
 export default function RegistreRHPage() {
+  useDocumentTitle('Registre du personnel')
   const [searchParams] = useSearchParams()
   const [ficheOpen, setFicheOpen] = useState<{ id: string; nom: string; prenom: string } | null>(null)
   const autoOpenedRef = useRef(false)

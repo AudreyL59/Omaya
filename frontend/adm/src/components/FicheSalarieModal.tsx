@@ -19,6 +19,7 @@ import {
   ArrowDownUp,
 } from 'lucide-react'
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import EmbaucheTab, {
   AdmCheckbox,
   COLOR_PRIMARY,
@@ -184,6 +185,7 @@ export default function FicheSalarieModal({
   onClose: () => void
 }) {
   const [header, setHeader] = useState<FicheHeader | null>(null)
+  useDocumentTitle(header ? `Fiche ${header.nom} ${header.prenom}` : 'Fiche salarié')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>('')
   const [activeTab, setActiveTab] = useState<TabKey>('identite')

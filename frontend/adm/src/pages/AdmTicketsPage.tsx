@@ -14,6 +14,7 @@ import { AnimatePresence } from 'framer-motion'
 import TicketsPage from '@shared/tickets/TicketsPage'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 const ADM_API = '/api/adm'
 
@@ -24,6 +25,7 @@ interface OpenFiche {
 }
 
 export default function AdmTicketsPage() {
+  useDocumentTitle('Tickets')
   const [searchParams] = useSearchParams()
   const [fiche, setFiche] = useState<OpenFiche | null>(null)
   const autoOpenedRef = useRef(false)

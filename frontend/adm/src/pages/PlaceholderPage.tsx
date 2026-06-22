@@ -1,8 +1,10 @@
 import { useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Construction } from 'lucide-react'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 export default function PlaceholderPage() {
+  useDocumentTitle('À venir')
   const location = useLocation()
   const pageName = location.pathname.split('/').pop() || ''
   const title = pageName.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())

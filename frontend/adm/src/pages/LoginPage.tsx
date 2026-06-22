@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { LogIn, Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react'
 import { login, setToken, setStoredUser } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import logoOmaya from '@/assets/logo-omaya.png'
 
 export default function LoginPage() {
+  useDocumentTitle('Connexion')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)

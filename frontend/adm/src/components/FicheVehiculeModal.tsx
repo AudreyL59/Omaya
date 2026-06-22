@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import SalarieDocUleaseModal from '@/components/fiche/ulease/SalarieDocUleaseModal'
 
@@ -107,6 +108,14 @@ export default function FicheVehiculeModal({
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<TabKey>('info')
 
+  useDocumentTitle(
+    meta
+      ? [meta.marque_nom, meta.modele, meta.immat].filter(Boolean).join(' ')
+          ? `Fiche ${[meta.marque_nom, meta.modele, meta.immat].filter(Boolean).join(' ')}`
+          : 'Fiche véhicule'
+      : null,
+  )
+
   const update = (patch: Partial<VehiculeMeta>) =>
     setMeta((m) => (m ? { ...m, ...patch } : m))
 
@@ -145,21 +154,6 @@ export default function FicheVehiculeModal({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  // Titre onglet navigateur : ajoute nom de la fiche en cours.
-  useEffect(() => {
-    if (!meta) return
-    const original = document.title
-    const lib = [meta.marque_nom, meta.modele, meta.immat]
-      .filter(Boolean)
-      .join(' ')
-    document.title = lib
-      ? `OMAYA Adm — Fiche ${lib}`
-      : 'OMAYA Adm — Fiche véhicule'
-    return () => {
-      document.title = original
-    }
-  }, [meta])
 
   const handleSave = async () => {
     if (!meta) return

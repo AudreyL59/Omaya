@@ -18,6 +18,7 @@ import { getToken } from '@/api'
 import ExportButton from '@/components/ExportButton'
 import PdfExportButton from '@/components/PdfExportButton'
 import { exportToCSV, csvDate } from '@/utils/csvExport'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 type TabKey = 'resume' | 'saisis'
 
@@ -73,6 +74,7 @@ function pct(n: number, d: number): string {
 }
 
 export default function StatRHAnnonceursPage() {
+  useDocumentTitle('Stat RH — Annonceurs')
   const navigate = useNavigate()
 
   const today = toYmd(new Date())

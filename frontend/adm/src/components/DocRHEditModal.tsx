@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 
 const COL_BRUN = '#4E1D17'
@@ -88,6 +89,7 @@ export default function DocRHEditModal({
 }: Props) {
   const [docId, setDocId] = useState(initialId)
   const [meta, setMeta] = useState<DocMeta>(EMPTY)
+  useDocumentTitle(meta.titre ? `Doc RH — ${meta.titre}` : 'Doc RH')
   // Detection des modifications non sauvegardees (champs meta + contenu HTML).
   const [isDirty, setIsDirty] = useState(false)
   const [lookups, setLookups] = useState<Lookups | null>(null)

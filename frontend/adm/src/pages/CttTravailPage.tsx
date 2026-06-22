@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import DocRHEditModal from '@/components/DocRHEditModal'
 
@@ -48,6 +49,7 @@ function fmtDate(iso: string): string {
 }
 
 export default function CttTravailPage() {
+  useDocumentTitle('Contrats de travail')
   const [actif, setActif] = useState(true)
   const [rows, setRows] = useState<DocRH[]>([])
   const [selected, setSelected] = useState<string>('')

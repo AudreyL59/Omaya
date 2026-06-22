@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
 import ExportButton from '@/components/ExportButton'
 import StatSaisieCvDetailModal from '@/components/StatSaisieCvDetailModal'
@@ -75,6 +76,7 @@ function capitalize(s: string): string {
 }
 
 export default function StatRHSaisieCvPage() {
+  useDocumentTitle('Stat RH — Saisie CV')
   const navigate = useNavigate()
   const { user } = useAuth()
   const hasDroitGr = (user?.droits || []).includes('StatsRHGr')

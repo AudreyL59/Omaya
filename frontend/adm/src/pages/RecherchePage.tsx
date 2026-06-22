@@ -30,6 +30,7 @@ import {
 
 import { getToken } from '@/api'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showToast } from '@shared/ui/dialog'
 
 type Mode = 'client' | 'contrat' | 'salarie' | 'cv'
@@ -125,6 +126,7 @@ const COLS_BY_MODE: Record<
 }
 
 export default function RecherchePage() {
+  useDocumentTitle('Recherche')
   const [mode, setMode] = useState<Mode>('client')
   const [criteres, setCriteres] = useState<Criteres>(EMPTY_CRITERES)
   const [results, setResults] = useState<SearchRow[]>([])

@@ -20,6 +20,7 @@ import { getToken, getStoredUser } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import AgendaDetailModal from '@/components/agenda/AgendaDetailModal'
 import RecruteurPicker from '@/components/agenda/RecruteurPicker'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 interface AgendaRDV {
   id_evenement: string
@@ -184,6 +185,7 @@ function hexToSoftStyle(hex: string): React.CSSProperties {
 // --- Page -----------------------------------------------------------------
 
 export default function AgendaRecrutementPage() {
+  useDocumentTitle('Agenda recrutement')
   const stored = getStoredUser()
   const today = new Date()
   const [mode, setMode] = useState<'day' | 'week' | 'range'>('week')

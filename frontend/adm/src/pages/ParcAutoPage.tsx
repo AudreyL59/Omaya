@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showToast } from '@shared/ui/dialog'
 import FicheVehiculeModal from '@/components/FicheVehiculeModal'
 import { AnimatePresence } from 'framer-motion'
@@ -51,6 +52,7 @@ const COL_BORDER = '#E5DDDC'
 const COL_BG_SOFT = '#FAF6F2'
 
 export default function ParcAutoPage() {
+  useDocumentTitle('Parc Auto')
   const [rows, setRows] = useState<Vehicule[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')

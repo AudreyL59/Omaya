@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useMenu, type MenuSection } from '@/hooks/useMenu'
 import MenuIcon from '@/components/MenuIcon'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 export default function DashboardPage() {
+  useDocumentTitle('Tableau de bord')
   const { user } = useAuth()
   const { sections, loading } = useMenu()
 

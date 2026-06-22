@@ -7,6 +7,7 @@ import {
   Megaphone,
   ChevronRight,
 } from 'lucide-react'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 interface HubItem {
   key: string
@@ -53,6 +54,7 @@ const ITEMS: HubItem[] = [
 ]
 
 export default function StatRHPage() {
+  useDocumentTitle('Stat RH')
   const navigate = useNavigate()
 
   return (

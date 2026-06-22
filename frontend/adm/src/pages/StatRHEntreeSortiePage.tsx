@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import OrgaPicker, { type OrgaItem } from '@/components/OrgaPicker'
 import ExportButton from '@/components/ExportButton'
 import StatDetailModal from '@/components/StatDetailModal'
@@ -100,6 +101,7 @@ function capitalize(s: string): string {
 }
 
 export default function StatRHEntreeSortiePage() {
+  useDocumentTitle('Stat RH — DPAE / Sortie')
   const navigate = useNavigate()
   const { user } = useAuth()
   const hasDroitGr = (user?.droits || []).includes('StatsRHGr')

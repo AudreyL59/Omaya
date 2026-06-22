@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import SearchPicker, {
   type PickerItem,
@@ -163,6 +164,7 @@ const EMPTY_PAYLOAD: DpaePayload = {
 }
 
 export default function DpaeNouvellePage() {
+  useDocumentTitle('DPAE — Nouvelle')
   const navigate = useNavigate()
   const [params] = useSearchParams()
 

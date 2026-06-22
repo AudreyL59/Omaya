@@ -23,6 +23,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Eraser, Loader2, Play, Search, UserPlus } from 'lucide-react'
 
 import { getToken } from '@/api'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showToast } from '@shared/ui/dialog'
 
 interface DpaeRow {
@@ -49,6 +50,7 @@ function isoToFr(s: string): string {
 }
 
 export default function DpaeRecherchePage() {
+  useDocumentTitle('DPAE — Recherche')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const idTicket = searchParams.get('id_ticket') || '0'
