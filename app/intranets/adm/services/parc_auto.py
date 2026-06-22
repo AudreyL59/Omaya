@@ -108,7 +108,10 @@ def list_vehicules_actifs() -> list[dict]:
     db_ul = get_pg_connection("ulease")
     db_rh = get_pg_connection("rh")
 
-    # 1. Vehicules + etat + marque + type capacite (meme schema ulease)
+    # 1. Vehicules + etat + marque + type capacite (meme schema ulease).
+    # INNER JOIN strict (cf. WinDev) : un vehicule sans marque, etat ou
+    # type capacite est exclu. La societe (proprio) est en LEFT pour
+    # garder les vehicules sans proprio defini.
     vehs = db_ul.query(
         """SELECT vf.id_vehicule, vf.modele, vf.immat, vf.carte_grise,
                   vf.date_mise_circulation, vf.id_vehicule_etat,
@@ -118,15 +121,14 @@ def list_vehicules_actifs() -> list[dict]:
                   vm.nom AS marque_nom, vm.logo AS marque_logo,
                   vtc.lib_type
              FROM ulease.pgt_vehicule_fiche vf
-        LEFT JOIN ulease.pgt_vehicule_etat ve
+       INNER JOIN ulease.pgt_vehicule_etat ve
                ON ve.id_vehicule_etat = vf.id_vehicule_etat
-        LEFT JOIN ulease.pgt_vehicule_marque vm
+       INNER JOIN ulease.pgt_vehicule_marque vm
                ON vm.id_vehicule_marque = vf.id_vehicule_marque
-        LEFT JOIN ulease.pgt_vehicule_typecapacite vtc
+       INNER JOIN ulease.pgt_vehicule_typecapacite vtc
                ON vtc.id_vehicule_type_capacite = vf.id_vehicule_type_capacite
             WHERE (vf.modif_elem IS NULL OR vf.modif_elem NOT LIKE '%suppr%')
-              AND (vf.id_vehicule_etat IS NULL
-                   OR vf.id_vehicule_etat NOT BETWEEN 4 AND 5)
+              AND vf.id_vehicule_etat NOT BETWEEN 4 AND 5
          ORDER BY vf.immat ASC""",
     ) or []
     if not vehs:
