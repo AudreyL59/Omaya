@@ -235,7 +235,7 @@ export default function FIUlease({ apiBase, getToken, idTicket, onClose }: FIPro
           <iframe
             src={data.pdf_non_signe_url}
             title="Document ULEASE (à signer)"
-            className="w-full h-[560px]"
+            className="w-full h-full border-0"
           />
         ) : (
           <div className="h-full flex items-center justify-center text-c-ink-faint text-sm">

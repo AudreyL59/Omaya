@@ -220,7 +220,7 @@ export default function FICttW({ apiBase, getToken, idTicket, onClose }: FIProps
           <iframe
             src={data.pdf_non_signe_url}
             title="Contrat (non signé)"
-            className="w-full h-[560px]"
+            className="w-full h-full border-0"
           />
         ) : (
           <div className="h-full flex items-center justify-center text-c-ink-faint text-sm">
