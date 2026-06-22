@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showConfirm, showToast } from '@shared/ui/dialog'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
