@@ -17,6 +17,7 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   ArrowUpToLine,
+  MoveHorizontal,
   Palette,
   Table as TableIcon,
   Trash2,
@@ -44,6 +45,7 @@ interface Props {
 export default function TableContextMenu({ editorRef, onChange }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [borderState, setBorderState] = useState<MenuState | null>(null)
+  const [widthState, setWidthState] = useState<MenuState | null>(null)
 
   // Listener contextmenu sur le document (phase capture). On filtre via
   // editorRef.current.contains(target) : 1) le ref peut etre null au
@@ -171,6 +173,12 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
     setMenu(null)
   }
 
+  const openWidthEditor = () => {
+    if (!menu) return
+    setWidthState(menu)
+    setMenu(null)
+  }
+
   const finish = () => {
     setMenu(null)
     onChange?.()
@@ -188,6 +196,23 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
         onClose={() => setBorderState(null)}
         onApplied={() => {
           setBorderState(null)
+          onChange?.()
+        }}
+      />
+    )
+  }
+
+  if (widthState) {
+    return (
+      <ColumnWidthEditor
+        x={widthState.x}
+        y={widthState.y}
+        td={widthState.td}
+        findTable={findTable}
+        cellIndex={cellIndex}
+        onClose={() => setWidthState(null)}
+        onApplied={() => {
+          setWidthState(null)
           onChange?.()
         }}
       />
@@ -227,6 +252,9 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
       <Sep />
       <Item icon={<Palette className="w-3.5 h-3.5" />} onClick={openBorderEditor}>
         Bordures…
+      </Item>
+      <Item icon={<MoveHorizontal className="w-3.5 h-3.5" />} onClick={openWidthEditor}>
+        Largeur de la colonne…
       </Item>
       <Sep />
       <Item icon={<Trash2 className="w-3.5 h-3.5" />} onClick={deleteRow} danger>
@@ -407,6 +435,158 @@ function BorderEditor({
           >
             Appliquer
           </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ============================================================================
+// ColumnWidthEditor : largeur de la colonne (auto / % / px).
+// Applique la largeur a TOUTES les cellules de la colonne (memes index)
+// pour eviter les conflits CSS quand plusieurs lignes ont des largeurs
+// differentes sur la meme colonne.
+// ============================================================================
+
+type WidthUnit = '%' | 'px' | 'auto'
+
+function ColumnWidthEditor({
+  x, y, td, findTable, cellIndex, onClose, onApplied,
+}: {
+  x: number
+  y: number
+  td: HTMLTableCellElement
+  findTable: (td: HTMLTableCellElement) => HTMLTableElement | null
+  cellIndex: (td: HTMLTableCellElement) => number
+  onClose: () => void
+  onApplied: () => void
+}) {
+  // Initialise depuis la valeur courante de la cellule.
+  const [unit, setUnit] = useState<WidthUnit>(() => {
+    const w = td.style.width
+    if (!w || w === 'auto') return 'auto'
+    if (w.endsWith('%')) return '%'
+    return 'px'
+  })
+  const [value, setValue] = useState<number>(() => {
+    const w = td.style.width
+    if (!w || w === 'auto') return 20
+    const n = parseFloat(w)
+    return isNaN(n) ? 20 : n
+  })
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const apply = () => {
+    const table = findTable(td)
+    if (!table) return
+    const idx = cellIndex(td)
+    const cssValue =
+      unit === 'auto' ? '' :
+      unit === '%' ? `${value}%` : `${value}px`
+    Array.from(table.querySelectorAll('tr')).forEach((tr) => {
+      const cell = tr.children[idx] as HTMLTableCellElement | undefined
+      if (!cell) return
+      cell.style.width = cssValue
+    })
+    // S'assure que la table a width:100% si on utilise des %
+    if (unit === '%' && !table.style.width) {
+      table.style.width = '100%'
+    }
+    onApplied()
+  }
+
+  const reset = () => {
+    const table = findTable(td)
+    if (!table) return
+    const idx = cellIndex(td)
+    Array.from(table.querySelectorAll('tr')).forEach((tr) => {
+      const cell = tr.children[idx] as HTMLTableCellElement | undefined
+      if (!cell) return
+      cell.style.width = ''
+    })
+    onApplied()
+  }
+
+  const W = 320
+  const H = 200
+  const xc = Math.min(x, window.innerWidth - W - 4)
+  const yc = Math.min(y, window.innerHeight - H - 4)
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[100]" onMouseDown={onClose} />
+      <div
+        className="fixed z-[101] bg-white border rounded-md shadow-lg p-3 text-sm space-y-2"
+        style={{ left: xc, top: yc, borderColor: COL_BORDER, color: COL_BRUN, width: W }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="font-semibold mb-1">Largeur de la colonne</div>
+        <div className="flex items-center gap-2">
+          <label className="w-16 text-xs">Unité :</label>
+          <select
+            value={unit}
+            onChange={(e) => setUnit(e.target.value as WidthUnit)}
+            className="flex-1 px-2 py-1 rounded border text-xs"
+            style={{ borderColor: COL_BORDER }}
+          >
+            <option value="auto">Auto (laisser le navigateur décider)</option>
+            <option value="%">Pourcentage de la table (%)</option>
+            <option value="px">Pixels (px)</option>
+          </select>
+        </div>
+        {unit !== 'auto' && (
+          <div className="flex items-center gap-2">
+            <label className="w-16 text-xs">Valeur :</label>
+            <input
+              type="number"
+              min={1}
+              max={unit === '%' ? 100 : 2000}
+              value={value}
+              onChange={(e) => setValue(Number(e.target.value) || 0)}
+              className="w-20 px-2 py-1 rounded border text-xs"
+              style={{ borderColor: COL_BORDER }}
+            />
+            <span className="text-xs">{unit}</span>
+          </div>
+        )}
+        <div className="text-xs italic" style={{ color: '#A68D8A' }}>
+          Appliqué à toutes les cellules de cette colonne.
+        </div>
+        <div className="flex justify-between gap-2 pt-1">
+          <button
+            type="button"
+            onClick={reset}
+            className="px-3 py-1 rounded border text-xs"
+            style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+            title="Reinitialise (largeur auto)"
+          >
+            Réinitialiser
+          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1 rounded border text-xs"
+              style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={apply}
+              className="px-3 py-1 rounded text-white text-xs"
+              style={{ backgroundColor: COL_PRIMARY }}
+            >
+              Appliquer
+            </button>
+          </div>
         </div>
       </div>
     </>

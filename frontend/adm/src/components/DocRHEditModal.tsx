@@ -392,6 +392,15 @@ export default function DocRHEditModal({
     ed.focus()
   }
 
+  // Liste a puces/numerotee : un simple insertUnorderedList ne marche
+  // pas sur des selections multi-paragraphes provenant d'un import DOCX
+  // (mammoth produit parfois des structures imbriquees). On force d'abord
+  // un formatBlock <p> pour normaliser puis on applique la liste.
+  const insertList = (kind: 'ul' | 'ol') => {
+    exec('formatBlock', '<P>')
+    exec(kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList')
+  }
+
   // Insertion d'un tableau (HTML brut via execCommand insertHTML).
   // Une fois inseré, le user peut editer les cellules en cliquant dedans
   // (contentEditable est recursif). Bords visibles et restitues a
@@ -998,10 +1007,10 @@ export default function DocRHEditModal({
                     ¶
                   </ToolBtn>
                   <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
-                  <ToolBtn onClick={() => exec('insertUnorderedList')} title="Liste">
+                  <ToolBtn onClick={() => insertList('ul')} title="Liste">
                     <List className="w-3.5 h-3.5" />
                   </ToolBtn>
-                  <ToolBtn onClick={() => exec('insertOrderedList')} title="Liste num">
+                  <ToolBtn onClick={() => insertList('ol')} title="Liste num">
                     <ListOrdered className="w-3.5 h-3.5" />
                   </ToolBtn>
                   <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
