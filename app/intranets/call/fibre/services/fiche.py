@@ -743,6 +743,23 @@ def _envoyer_sms_vendeur_renvoi_complement(
     return envoi_sms(texte, gsm, emetteur="Omaya-Call")
 
 
+def _envoyer_sms_vendeur_renvoi_lettre_resil(
+    db_rh, id_vendeur: int,
+    nom_client: str, nom_marital: str, prenom_client: str,
+) -> str:
+    from app.shared.notifications.sms import envoi_sms
+    rows_v = db_rh.query(
+        "SELECT TélMob FROM Salarie_Coordonnees WHERE IDSalarie = ?",
+        (id_vendeur,),
+    )
+    gsm = "".join(c for c in (rows_v[0].get("TélMob") or "") if c.isdigit() or c == "+") if rows_v else ""
+    if not gsm:
+        return "Pas de GSM vendeur"
+    nom_clt = _format_nom_client_sms(nom_client, nom_marital, prenom_client)
+    texte = f"Attention, votre panier pour le client {nom_clt} est renvoye car il manque la lettre de resiliation."
+    return envoi_sms(texte, gsm, emetteur="Omaya-Call")
+
+
 def _envoyer_sms_vendeur_validation_degroupage(
     db_rh, id_vendeur: int,
     nom_client: str, nom_marital: str, prenom_client: str,
@@ -804,14 +821,16 @@ def _action_vente_finale(
     new_statut: int,
     send_sms_renvoi: bool = False,
     send_sms_si_degroupage: bool = False,
+    send_sms_lettre_resil: bool = False,
+    extra_info_vente: str = "",
 ) -> dict:
-    """Logique commune AnnulVente / ValideVente / RenvoiPanier.
+    """Logique commune AnnulVente / ValideVente / RenvoiPanier / RenvoiLettreResil.
 
     1. save_vente_infos (UPDATE TK_CallSFR) si payload fourni
     2. UPDATE TK_Liste IDTK_Statut = new_statut
+    2b. Append `extra_info_vente` a TK_CallSFR.InfoVente si fourni (note de renvoi)
     3. Si verrou actif : libere (AppelEnCours=0, DateFin_PriseEnCharge=now)
-    4. SMS si demande (renvoi: toujours ; validation: uniquement si idStatutSFR
-       avant = 34 = panier degroupe)
+    4. SMS si demande (renvoi complement / validation degroupage / renvoi lettre resil)
     """
     db_bo = get_connection("ticket_bo")
     db_ticket = get_connection("ticket")
@@ -824,7 +843,7 @@ def _action_vente_finale(
 
     # Recupere infos pour le SMS et le statut anterieur
     rows_call = db_bo.query(
-        """SELECT IDtk_CallSFR, IDSalarie, AppelEnCours,
+        """SELECT IDtk_CallSFR, IDSalarie, AppelEnCours, InfoVente,
             NomClient, NomMaritalClient, PrenomClient
         FROM TK_CallSFR WHERE IDTK_Liste = ?""",
         (id_tk_liste,),
@@ -854,6 +873,17 @@ def _action_vente_finale(
         WHERE IDTK_Liste = {_to_int(id_tk_liste)}"""
     )
 
+    # 2b. Append d'une note dans InfoVente (ex: renvoi lettre de resil)
+    if extra_info_vente:
+        cur_info = (r_call.get("InfoVente") or "").strip()
+        new_info = f"{cur_info}\n{extra_info_vente}".strip() if cur_info else extra_info_vente
+        db_bo.query(
+            f"""UPDATE TK_CallSFR SET
+                InfoVente = '{_sql_str(new_info)}',
+                ModifDate = '{now_wd}'
+            WHERE IDtk_CallSFR = {id_call_sfr}"""
+        )
+
     # 3. Libere le verrou si actif
     if appel_en_cours:
         db_bo.query(
@@ -868,6 +898,10 @@ def _action_vente_finale(
     sms_result = ""
     if send_sms_renvoi:
         sms_result = _envoyer_sms_vendeur_renvoi_complement(
+            db_rh, id_salarie, nom_client, nom_marital, prenom_client,
+        )
+    elif send_sms_lettre_resil:
+        sms_result = _envoyer_sms_vendeur_renvoi_lettre_resil(
             db_rh, id_salarie, nom_client, nom_marital, prenom_client,
         )
     elif send_sms_si_degroupage and statut_avant == 34:
@@ -905,6 +939,23 @@ def renvoyer_complement(id_tk_liste: int) -> dict:
     """
     return _action_vente_finale(
         id_tk_liste, payload={}, new_statut=28, send_sms_renvoi=True,
+    )
+
+
+def renvoyer_lettre_resil(id_tk_liste: int, user_nom: str, user_prenom: str) -> dict:
+    """Bouton 'Renvoyer pour lettre de resil' (FIBRE, offres sans portabilite).
+
+    Append InfoVente "Ticket renvoye pour lettre de resil le {now} par {user}",
+    TK_Liste statut=28, lacher verrou, SMS specifique au vendeur.
+    """
+    note = (
+        f"Ticket renvoye pour lettre de resil le "
+        f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')} "
+        f"par {user_nom} {_capitalize(user_prenom)}"
+    )
+    return _action_vente_finale(
+        id_tk_liste, payload={}, new_statut=28,
+        send_sms_lettre_resil=True, extra_info_vente=note,
     )
 
 

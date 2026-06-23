@@ -251,6 +251,20 @@ def post_renvoyer_complement(id_ticket: str, user: UserToken = Depends(get_curre
     return data
 
 
+@router.post("/tickets/{id_ticket}/renvoyer-lettre-resil", response_model=ActionVenteResponse)
+def post_renvoyer_lettre_resil(id_ticket: str, user: UserToken = Depends(get_current_user)):
+    """Renvoie le panier car il manque la lettre de resiliation (FIBRE).
+
+    Note dans InfoVente + TK_Liste IDTK_Statut=28 + lacher verrou + SMS specifique.
+    """
+    try:
+        data = fiche_svc.renvoyer_lettre_resil(int(id_ticket), user.nom or "", user.prenom or "")
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    return data
+
+
 @router.post("/tickets/{id_ticket}/save-vente", response_model=SaveResponse)
 def post_save_vente(
     id_ticket: str,

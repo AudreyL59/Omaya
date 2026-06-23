@@ -235,7 +235,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
   // Phase 3 : verrou ope + sous-popups d'action
   const [verrouLoading, setVerrouLoading] = useState(false)
   const [verrouConfirm, setVerrouConfirm] = useState<VerrouPeek | null>(null)
-  const [actionDialog, setActionDialog] = useState<null | 'valider' | 'annulVente' | 'renvoi'>(null)
+  const [actionDialog, setActionDialog] = useState<null | 'valider' | 'annulVente' | 'renvoi' | 'renvoiResil'>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [annulLigneOpen, setAnnulLigneOpen] = useState(false)
   // Alerte "un autre ope est en appel sur ce ticket" (nom de l'ope, ou null)
@@ -599,7 +599,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
     try {
       // Pour valider/annuler : on envoie aussi les champs vente courants
       const body =
-        actionDialog === 'renvoi'
+        actionDialog === 'renvoi' || actionDialog === 'renvoiResil'
           ? {}
           : {
               client: editClient
@@ -639,7 +639,9 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
           ? 'valider-vente'
           : actionDialog === 'annulVente'
             ? 'annuler-vente'
-            : 'renvoyer-complement'
+            : actionDialog === 'renvoiResil'
+              ? 'renvoyer-lettre-resil'
+              : 'renvoyer-complement'
       const r = await fetch(`${API_BASE}/tickets/${idTicket}/${path}`, {
         method: 'POST',
         headers: {
@@ -658,10 +660,12 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
           ? 'Panier validé'
           : actionDialog === 'annulVente'
             ? 'Vente annulée'
-            : 'Panier renvoyé pour complément'
+            : actionDialog === 'renvoiResil'
+              ? 'Panier renvoyé (lettre de résiliation)'
+              : 'Panier renvoyé pour complément'
       setToast({ kind: 'ok', msg })
       // valider/annuler envoient la Réf Appel -> on la mémorise
-      if (actionDialog !== 'renvoi' && editVente?.ref_appel) {
+      if ((actionDialog === 'valider' || actionDialog === 'annulVente') && editVente?.ref_appel) {
         pushRefAppelHistory(editVente.ref_appel)
       }
       setActionDialog(null)
@@ -795,6 +799,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 }
                 lettreAvailable={!!docLettre.url}
                 onOpenLettre={() => setViewerOpen('lettre')}
+                onAskRenvoiResil={() => setActionDialog('renvoiResil')}
                 onSaveVente={handleSaveVente}
                 onSaveOffre={handleSaveOffre}
                 savingVente={savingVente}
@@ -864,6 +869,17 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
           title="Voulez-vous vraiment renvoyer le panier ?"
           confirmLabel="Renvoyer le panier pour complément"
           confirmColor="orange"
+          loading={actionLoading}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setActionDialog(null)}
+        />
+
+        {/* Confirmation : Renvoyer pour lettre de résiliation */}
+        <ConfirmDialog
+          open={actionDialog === 'renvoiResil'}
+          title="Renvoyer le panier car il manque la lettre de résiliation ?"
+          confirmLabel="Renvoyer pour lettre de résil"
+          confirmColor="red"
           loading={actionLoading}
           onConfirm={handleConfirmAction}
           onCancel={() => setActionDialog(null)}
@@ -1284,6 +1300,7 @@ function ColonneDroite({
   onAnomalieChange,
   lettreAvailable,
   onOpenLettre,
+  onAskRenvoiResil,
   onSaveVente,
   onSaveOffre,
   savingVente,
@@ -1300,6 +1317,7 @@ function ColonneDroite({
   onAnomalieChange: (patch: Partial<FicheAnomalie>) => void
   lettreAvailable: boolean
   onOpenLettre: () => void
+  onAskRenvoiResil: () => void
   onSaveVente: () => void
   onSaveOffre: () => void
   savingVente: boolean
@@ -1425,6 +1443,18 @@ function ColonneDroite({
               {savingOffre && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Enregistrer les modifs Offre
             </button>
+
+            {/* Renvoi panier pour lettre de resil : meme condition que le bouton
+                "Lettre de resil" (FIBRE sans portabilite) */}
+            {offre.type === 'FIBRE' && !offre.portabilite && (
+              <button
+                onClick={onAskRenvoiResil}
+                className="mt-2 w-full py-2 rounded bg-red-600 text-white text-xs font-semibold hover:brightness-110"
+                title="Renvoyer le panier au vendeur car il manque la lettre de résiliation (statut 28 + SMS)"
+              >
+                Renvoyer le panier pour la lettre de résil
+              </button>
+            )}
           </>
         ) : (
           <div className="text-xs text-c-ink-faint italic py-8 text-center">
