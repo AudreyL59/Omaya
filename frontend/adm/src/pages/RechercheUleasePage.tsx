@@ -22,6 +22,7 @@ import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showToast } from '@shared/ui/dialog'
 import FicheVehiculeModal from '@/components/FicheVehiculeModal'
+import FicheSalarieModal from '@/components/FicheSalarieModal'
 
 interface EtatVehicule { id_vehicule_etat: number; lib: string }
 interface MarqueVehicule { id_vehicule_marque: string; nom: string }
@@ -70,6 +71,9 @@ export default function RechercheUleasePage() {
   useDocumentTitle('Recherche Ulease')
   const [lookups, setLookups] = useState<Lookups | null>(null)
   const [ficheOpen, setFicheOpen] = useState<string | null>(null)
+  const [ficheSalarie, setFicheSalarie] = useState<{
+    idSalarie: string; nom: string; prenom: string
+  } | null>(null)
 
   useEffect(() => {
     fetch('/api/adm/recherche-ulease/lookups', {
@@ -93,7 +97,14 @@ export default function RechercheUleasePage() {
         onOpenFiche={(id) => setFicheOpen(id)}
       />
 
-      <RechercheConducteurSection lookups={lookups} />
+      <RechercheConducteurSection
+        lookups={lookups}
+        onOpenFiche={(c) => setFicheSalarie({
+          idSalarie: c.id_salarie,
+          nom: c.nom,
+          prenom: c.prenom,
+        })}
+      />
 
       <AnimatePresence>
         {ficheOpen && (
@@ -101,6 +112,14 @@ export default function RechercheUleasePage() {
             idVehicule={ficheOpen}
             onClose={() => setFicheOpen(null)}
             onChanged={() => { /* recherche n'a pas besoin d'auto-refresh */ }}
+          />
+        )}
+        {ficheSalarie && (
+          <FicheSalarieModal
+            idSalarie={ficheSalarie.idSalarie}
+            nom={ficheSalarie.nom}
+            prenom={ficheSalarie.prenom}
+            onClose={() => setFicheSalarie(null)}
           />
         )}
       </AnimatePresence>
@@ -282,7 +301,13 @@ function RechercheVehiculeSection({
 // Section Recherche Conducteur
 // ============================================================================
 
-function RechercheConducteurSection({ lookups }: { lookups: Lookups | null }) {
+function RechercheConducteurSection({
+  lookups,
+  onOpenFiche,
+}: {
+  lookups: Lookups | null
+  onOpenFiche: (c: Conducteur) => void
+}) {
   const [nom, setNom] = useState('')
   const [prenom, setPrenom] = useState('')
   const [numPermis, setNumPermis] = useState('')
@@ -377,7 +402,7 @@ function RechercheConducteurSection({ lookups }: { lookups: Lookups | null }) {
             Rechercher
           </button>
           <p className="text-xs italic" style={{ color: COL_BRUN }}>
-            {rows.length} conducteur(s)
+            {rows.length} conducteur(s) — double-clic = ouvrir
           </p>
         </div>
 
@@ -405,6 +430,7 @@ function RechercheConducteurSection({ lookups }: { lookups: Lookups | null }) {
                   return (
                     <tr key={c.id_conducteur}
                         onClick={() => setSelected(c.id_conducteur)}
+                        onDoubleClick={() => onOpenFiche(c)}
                         className="cursor-pointer border-b"
                         style={{
                           backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
