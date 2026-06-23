@@ -382,3 +382,149 @@ def delete_type_releve(id_type_releve_fournisseur: int, op_id: int) -> dict:
         (int(op_id), int(id_type_releve_fournisseur)),
     )
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Fen_RechercheRelev - Recherche releves
+# ---------------------------------------------------------------------------
+
+
+def list_categories() -> list[str]:
+    """DISTINCT TypeReleveFournisseur.Categorie."""
+    db = get_pg_connection("ulease")
+    rows = db.query(
+        """SELECT DISTINCT categorie FROM ulease.pgt_typerelevefournisseur
+            WHERE (modif_elem IS NULL OR modif_elem <> 'suppr')
+              AND categorie IS NOT NULL AND categorie <> ''
+         ORDER BY categorie ASC""",
+    ) or []
+    return [_str(r.get("categorie")) for r in rows]
+
+
+def list_cartes_combo() -> list[dict]:
+    """Combo 'Carte carburant' : NomFournisseur - NumCarte."""
+    db = get_pg_connection("ulease")
+    rows = db.query(
+        """SELECT cc.id_carte_carburant,
+                  cf.nom_fournisseur || ' - ' || cc.num_carte AS nom_carte
+             FROM ulease.pgt_cartecarburant cc
+        LEFT JOIN ulease.pgt_cartefournisseur cf
+               ON cf.id_carte_fournisseur = cc.id_carte_fournisseur
+            WHERE (cc.modif_elem IS NULL OR cc.modif_elem <> 'suppr')
+         ORDER BY nom_carte ASC""",
+    ) or []
+    return [{
+        "id_carte_carburant": str(_int(r.get("id_carte_carburant"))),
+        "nom_carte": _str(r.get("nom_carte")),
+    } for r in rows]
+
+
+def search_releves(
+    du: str, au: str, id_carte_carburant: int, categorie: str,
+) -> dict:
+    """Btn Loupe : retourne {lignes:[...], total_ttc}.
+
+    Filtres :
+      - DATE BETWEEN du AND au
+      - Si id_carte_carburant > 0 : filtre carte, sinon toutes
+      - Si categorie non vide : filtre, sinon toutes
+    """
+    db = get_pg_connection("ulease")
+
+    where_extra = []
+    params: list = [du, au]
+    if id_carte_carburant:
+        where_extra.append("ccrf.id_carte_carburant = ?")
+        params.append(int(id_carte_carburant))
+    if categorie and categorie != "":
+        where_extra.append("trf.categorie = ?")
+        params.append(categorie)
+
+    extra_sql = (" AND " + " AND ".join(where_extra)) if where_extra else ""
+
+    rows = db.query(
+        f"""SELECT ccrf.id_carte_carb_releve_fournisseur,
+                   ccrf.date, ccrf.heure,
+                   cf.nom_fournisseur, cc.num_carte,
+                   trf.categorie, trf.lib_type,
+                   ccrf.montant_ttc,
+                   ccrf.id_carte_carburant
+              FROM ulease.pgt_cartecarbrelevefournisseur ccrf
+        INNER JOIN ulease.pgt_cartefournisseur cf
+                ON cf.id_carte_fournisseur = ccrf.id_carte_fournisseur
+        INNER JOIN ulease.pgt_typerelevefournisseur trf
+                ON trf.id_type_releve_fournisseur = ccrf.id_type_releve_fournisseur
+        INNER JOIN ulease.pgt_cartecarburant cc
+                ON cc.id_carte_carburant = ccrf.id_carte_carburant
+             WHERE (ccrf.modif_elem IS NULL OR ccrf.modif_elem NOT LIKE '%suppr%')
+               AND ccrf.date BETWEEN ? AND ?{extra_sql}
+          ORDER BY ccrf.date ASC, ccrf.heure ASC""",
+        tuple(params),
+    ) or []
+
+    # Pour chaque ligne : conducteur attribue a la date (CarteAttribution
+    # active du <= date <= au). Cache par (id_carte, date) pour eviter
+    # N requetes si meme attribution.
+    cache: dict[tuple[int, str], str] = {}
+    out = []
+    total = 0.0
+    for r in rows:
+        id_c = _int(r.get("id_carte_carburant"))
+        d = r.get("date")
+        d_str = _iso_date(d) if d else ""
+        key = (id_c, d_str)
+        if key in cache:
+            attrib = cache[key]
+        else:
+            attrib = _find_attribue(id_c, d) if d else ""
+            cache[key] = attrib
+        montant = _float(r.get("montant_ttc"))
+        total += montant
+        # Heure : peut etre time ou string
+        h = r.get("heure")
+        h_str = ""
+        if h is not None:
+            if hasattr(h, "strftime"):
+                h_str = h.strftime("%H:%M")
+            else:
+                s = str(h)
+                h_str = s[:5] if len(s) >= 5 else s
+        out.append({
+            "id_carte_carb_releve_fournisseur": str(_int(r.get("id_carte_carb_releve_fournisseur"))),
+            "date": d_str,
+            "heure": h_str,
+            "nom_fournisseur": _str(r.get("nom_fournisseur")),
+            "num_carte": _str(r.get("num_carte")),
+            "categorie": _str(r.get("categorie")),
+            "lib_type": _str(r.get("lib_type")),
+            "montant_ttc": montant,
+            "attribue_a": attrib,
+        })
+    return {"lignes": out, "total_ttc": total}
+
+
+def _find_attribue(id_carte: int, d) -> str:
+    """Cherche le conducteur attribue a la carte a la date d.
+    Renvoie 'NOM Prenom' ou ''."""
+    db = get_pg_connection("ulease")
+    r = db.query_one(
+        """SELECT c.nom_conducteur, c.prenom_conducteur, c.nom_marital
+             FROM ulease.pgt_carteattribution ca
+       INNER JOIN ulease.pgt_conducteur c
+               ON c.id_conducteur = ca.id_conducteur
+            WHERE (ca.modif_elem IS NULL OR ca.modif_elem <> 'suppr')
+              AND ca.id_carte_carburant = ?
+              AND ca.du <= ?
+              AND (ca.au IS NULL OR ca.au >= ?)
+         ORDER BY ca.du DESC LIMIT 1""",
+        (int(id_carte), d, d),
+    )
+    if not r:
+        return ""
+    nom = _str(r.get("nom_conducteur"))
+    marital = _str(r.get("nom_marital"))
+    prenom = _str(r.get("prenom_conducteur")).strip()
+    if prenom:
+        prenom = prenom[:1].upper() + prenom[1:].lower()
+    nom_complet = f"{nom} {marital}".strip() if marital else nom
+    return f"{nom_complet} {prenom}".strip()

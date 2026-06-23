@@ -279,3 +279,32 @@ def put_calcul_attribue(
     return calcul_svc.update_montant_attribue(
         id_calc, payload.montant_attribue, user.id_salarie,
     )
+
+
+# ---------------------------------------------------------------------------
+# Recherche releves (Fen_RechercheRelev)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/categories")
+def get_categories(_user: UserToken = Depends(get_current_user)):
+    """DISTINCT TypeReleveFournisseur.Categorie pour le combo de filtre."""
+    return svc.list_categories()
+
+
+@router.get("/cartes-combo")
+def get_cartes_combo(_user: UserToken = Depends(get_current_user)):
+    """Combo 'Carte carburant' (NomFournisseur - NumCarte)."""
+    return svc.list_cartes_combo()
+
+
+@router.get("/releves/search")
+def get_releves_search(
+    du: str,
+    au: str,
+    id_carte_carburant: int = 0,
+    categorie: str = "",
+    _user: UserToken = Depends(get_current_user),
+):
+    """Btn Loupe : retourne {lignes, total_ttc}."""
+    return svc.search_releves(du, au, id_carte_carburant, categorie)

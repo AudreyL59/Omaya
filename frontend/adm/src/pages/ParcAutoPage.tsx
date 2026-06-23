@@ -33,6 +33,7 @@ import FicheVehiculeModal from '@/components/FicheVehiculeModal'
 import GestionCarteCarbModal from '@/components/GestionCarteCarbModal'
 import ImportFournisseurModal from '@/components/ImportFournisseurModal'
 import CalculCartModal from '@/components/CalculCartModal'
+import RechercheRelevModal from '@/components/RechercheRelevModal'
 import { AnimatePresence } from 'framer-motion'
 
 interface Vehicule {
@@ -63,6 +64,7 @@ export default function ParcAutoPage() {
   const [carteCarbOpen, setCarteCarbOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [calculOpen, setCalculOpen] = useState(false)
+  const [rechRelevOpen, setRechRelevOpen] = useState(false)
 
   const reload = () => {
     setLoading(true)
@@ -129,7 +131,7 @@ export default function ParcAutoPage() {
         <ToolbarBtn
           icon={<Search className="w-4 h-4" />}
           label="Recherche relève"
-          onClick={() => showToast('Recherche relève : à venir.', 'info')}
+          onClick={() => setRechRelevOpen(true)}
         />
         <ToolbarBtn
           icon={<AlertCircle className="w-4 h-4" />}
@@ -195,6 +197,10 @@ export default function ParcAutoPage() {
       <CalculCartModal
         open={calculOpen}
         onClose={() => setCalculOpen(false)}
+      />
+      <RechercheRelevModal
+        open={rechRelevOpen}
+        onClose={() => setRechRelevOpen(false)}
       />
     </div>
   )
