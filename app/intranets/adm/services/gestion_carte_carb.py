@@ -64,6 +64,15 @@ def _new_id() -> int:
     return int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
 
 
+def _next_auto(db, schema: str, table: str, col: str) -> int:
+    """Cf. calcul_carte_carb._next_auto. Tables HFSQL migrees sans
+    sequence PG : on calcule MAX(_auto)+1 a la main."""
+    r = db.query_one(
+        f"SELECT COALESCE(MAX({col}),0)+1 AS n FROM {schema}.{table}",
+    )
+    return _int(r.get("n")) if r else 1
+
+
 # ---------------------------------------------------------------------------
 # Onglet 1 - Cartes carburant
 # ---------------------------------------------------------------------------
@@ -101,13 +110,16 @@ def save_carte(payload: dict, op_id: int) -> dict:
     actif = bool(payload.get("is_actif"))
     if id_c == 0:
         new_id = _new_id()
+        next_auto = _next_auto(db, "ulease", "pgt_cartecarburant",
+                               "id_carte_carburant_auto")
         db.query(
             """INSERT INTO ulease.pgt_cartecarburant
-                 (id_carte_carburant, code_carte, num_carte,
+                 (id_carte_carburant_auto, id_carte_carburant,
+                  code_carte, num_carte,
                   id_carte_fournisseur, is_actif,
                   modif_op, modif_date, modif_elem)
-               VALUES (?, ?, ?, ?, ?, ?, NOW(), 'new')""",
-            (new_id, code, num, id_four, actif, int(op_id)),
+               VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'new')""",
+            (next_auto, new_id, code, num, id_four, actif, int(op_id)),
         )
         return {"ok": True, "id_carte_carburant": str(new_id)}
     db.query(
@@ -204,12 +216,15 @@ def save_attribution(payload: dict, op_id: int) -> dict:
         au = None
     if id_att == 0:
         new_id = _new_id()
+        next_auto = _next_auto(db, "ulease", "pgt_carteattribution",
+                               "id_carte_attribution_auto")
         db.query(
             """INSERT INTO ulease.pgt_carteattribution
-                 (id_carte_attribution, id_carte_carburant, id_conducteur,
+                 (id_carte_attribution_auto, id_carte_attribution,
+                  id_carte_carburant, id_conducteur,
                   du, au, modif_op, modif_date, modif_elem)
-               VALUES (?, ?, ?, ?, ?, ?, NOW(), 'new')""",
-            (new_id, id_carte, id_cond, du, au, int(op_id)),
+               VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'new')""",
+            (next_auto, new_id, id_carte, id_cond, du, au, int(op_id)),
         )
         return {"ok": True, "id_carte_attribution": str(new_id)}
     db.query(
@@ -260,12 +275,15 @@ def save_fournisseur(payload: dict, op_id: int) -> dict:
     nom = _str(payload.get("nom_fournisseur"))
     if id_f == 0:
         new_id = _new_id()
+        next_auto = _next_auto(db, "ulease", "pgt_cartefournisseur",
+                               "id_carte_fournisseur_auto")
         db.query(
             """INSERT INTO ulease.pgt_cartefournisseur
-                 (id_carte_fournisseur, nom_fournisseur,
+                 (id_carte_fournisseur_auto, id_carte_fournisseur,
+                  nom_fournisseur,
                   modif_op, modif_date, modif_elem)
-               VALUES (?, ?, ?, NOW(), 'new')""",
-            (new_id, nom, int(op_id)),
+               VALUES (?, ?, ?, ?, NOW(), 'new')""",
+            (next_auto, new_id, nom, int(op_id)),
         )
         return {"ok": True, "id_carte_fournisseur": str(new_id)}
     db.query(
@@ -334,12 +352,15 @@ def save_type_releve(payload: dict, op_id: int) -> dict:
     cat = _str(payload.get("categorie"))
     if id_t == 0:
         new_id = _new_id()
+        next_auto = _next_auto(db, "ulease", "pgt_typerelevefournisseur",
+                               "id_type_releve_fournisseur_auto")
         db.query(
             """INSERT INTO ulease.pgt_typerelevefournisseur
-                 (id_type_releve_fournisseur, lib_type, categorie,
+                 (id_type_releve_fournisseur_auto, id_type_releve_fournisseur,
+                  lib_type, categorie,
                   modif_op, modif_date, modif_elem)
-               VALUES (?, ?, ?, ?, NOW(), 'new')""",
-            (new_id, lib, cat, int(op_id)),
+               VALUES (?, ?, ?, ?, ?, NOW(), 'new')""",
+            (next_auto, new_id, lib, cat, int(op_id)),
         )
         return {"ok": True, "id_type_releve_fournisseur": str(new_id)}
     db.query(

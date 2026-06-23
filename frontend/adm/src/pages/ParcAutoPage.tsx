@@ -32,6 +32,7 @@ import { showToast } from '@shared/ui/dialog'
 import FicheVehiculeModal from '@/components/FicheVehiculeModal'
 import GestionCarteCarbModal from '@/components/GestionCarteCarbModal'
 import ImportFournisseurModal from '@/components/ImportFournisseurModal'
+import CalculCartModal from '@/components/CalculCartModal'
 import { AnimatePresence } from 'framer-motion'
 
 interface Vehicule {
@@ -61,6 +62,7 @@ export default function ParcAutoPage() {
   const [ficheOpen, setFicheOpen] = useState<string | null>(null)
   const [carteCarbOpen, setCarteCarbOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [calculOpen, setCalculOpen] = useState(false)
 
   const reload = () => {
     setLoading(true)
@@ -122,7 +124,7 @@ export default function ParcAutoPage() {
         <ToolbarBtn
           icon={<Sigma className="w-4 h-4" />}
           label="Calcul montant carte carburant"
-          onClick={() => showToast('Calcul carburant : à venir.', 'info')}
+          onClick={() => setCalculOpen(true)}
         />
         <ToolbarBtn
           icon={<Search className="w-4 h-4" />}
@@ -189,6 +191,10 @@ export default function ParcAutoPage() {
       <ImportFournisseurModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
+      />
+      <CalculCartModal
+        open={calculOpen}
+        onClose={() => setCalculOpen(false)}
       />
     </div>
   )

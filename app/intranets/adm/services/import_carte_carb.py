@@ -51,6 +51,14 @@ def _new_id() -> int:
     return int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
 
 
+def _next_auto(db, schema: str, table: str, col: str) -> int:
+    """Tables HFSQL migrees sans sequence PG : MAX(_auto)+1."""
+    r = db.query_one(
+        f"SELECT COALESCE(MAX({col}),0)+1 AS n FROM {schema}.{table}",
+    )
+    return _int(r.get("n")) if r else 1
+
+
 def _col_letter_to_idx(letter: str) -> int:
     """'A'->0, 'B'->1, ..., 'Z'->25, 'AA'->26."""
     s = (letter or "").strip().upper()
@@ -223,12 +231,15 @@ def import_total_energies(
                 resume.append(f"Ligne {r_idx} : type '{lib_type_raw}' inconnu")
             else:
                 id_type = _new_id()
+                next_auto = _next_auto(db, "ulease", "pgt_typerelevefournisseur",
+                                       "id_type_releve_fournisseur_auto")
                 db.query(
                     """INSERT INTO ulease.pgt_typerelevefournisseur
-                         (id_type_releve_fournisseur, lib_type, categorie,
+                         (id_type_releve_fournisseur_auto,
+                          id_type_releve_fournisseur, lib_type, categorie,
                           modif_op, modif_date, modif_elem)
-                       VALUES (?, ?, 'Non déterminée', ?, NOW(), 'new')""",
-                    (id_type, lib_type, int(op_id)),
+                       VALUES (?, ?, ?, 'Non déterminée', ?, NOW(), 'new')""",
+                    (next_auto, id_type, lib_type, int(op_id)),
                 )
                 types_known[lib_type] = id_type
                 resume.append(f"Type '{lib_type_raw}' ajouté")
@@ -252,16 +263,19 @@ def import_total_energies(
 
         # 4. INSERT releve (si pas simulation)
         if not simulation:
+            next_auto = _next_auto(db, "ulease", "pgt_cartecarbrelevefournisseur",
+                                   "id_carte_carb_releve_fournisseur_auto")
             db.query(
                 """INSERT INTO ulease.pgt_cartecarbrelevefournisseur
-                     (id_carte_carb_releve_fournisseur, id_facturation,
+                     (id_carte_carb_releve_fournisseur_auto,
+                      id_carte_carb_releve_fournisseur, id_facturation,
                       id_carte_fournisseur, id_carte_carburant,
                       id_type_releve_fournisseur, date, heure, lieu,
                       montant_ht, montant_ttc,
                       modif_op, modif_date, modif_elem)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'new')""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'new')""",
                 (
-                    _new_id(), id_facture, int(id_carte_fournisseur),
+                    next_auto, _new_id(), id_facture, int(id_carte_fournisseur),
                     id_carte, id_type, date_v, heure_v, lieu,
                     montant_ht, montant_ttc, int(op_id),
                 ),

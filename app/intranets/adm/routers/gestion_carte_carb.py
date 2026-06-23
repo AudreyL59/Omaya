@@ -30,6 +30,7 @@ from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
+from app.intranets.adm.services import calcul_carte_carb as calcul_svc
 from app.intranets.adm.services import gestion_carte_carb as svc
 from app.intranets.adm.services import import_carte_carb as import_svc
 
@@ -228,3 +229,53 @@ async def post_import_fournisseur(
     if not res.get("ok"):
         raise HTTPException(400, res.get("error") or "Echec import")
     return res
+
+
+# ---------------------------------------------------------------------------
+# Calcul montant carte carburant (Fen_CalculCart)
+# ---------------------------------------------------------------------------
+
+
+class CalculPayload(BaseModel):
+    mois: int
+    annee: int
+
+
+@router.post("/calcul")
+def post_calcul(
+    payload: CalculPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Démarrer Calcul' : recalcule et persiste."""
+    res = calcul_svc.calcul_montant_cartes(
+        payload.mois, payload.annee, user.id_salarie,
+    )
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec calcul")
+    return res
+
+
+@router.get("/calcul")
+def get_calcul(
+    mois: int,
+    annee: int,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Relit le tableau de calcul deja persiste (pas de recalcul)."""
+    return calcul_svc.list_calcul(mois, annee)
+
+
+class CalculAttribuePayload(BaseModel):
+    montant_attribue: float
+
+
+@router.put("/calcul/{id_calc}/attribue")
+def put_calcul_attribue(
+    id_calc: int,
+    payload: CalculAttribuePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Ajustement manuel du MontantAttribue."""
+    return calcul_svc.update_montant_attribue(
+        id_calc, payload.montant_attribue, user.id_salarie,
+    )
