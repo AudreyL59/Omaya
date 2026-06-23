@@ -43,16 +43,16 @@ interface TotalCols {
 }
 
 const TOTAL_DEFAULTS: TotalCols = {
-  id_facture: 'A',
-  compte_client: 'B',
-  num_carte: 'C',
-  code_carte: 'D',
-  date: 'E',
-  heure: 'F',
-  lieu: 'G',
-  lib_type: 'H',
-  montant_ht: 'I',
-  montant_ttc: 'J',
+  id_facture: 'P',
+  compte_client: 'A',
+  num_carte: 'I',
+  code_carte: 'F',
+  date: 'Q',
+  heure: 'R',
+  lieu: 'V',
+  lib_type: 'X',
+  montant_ht: 'AF',
+  montant_ttc: 'AH',
 }
 
 const TOTAL_LABELS: Record<keyof TotalCols, string> = {
