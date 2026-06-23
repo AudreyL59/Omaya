@@ -31,6 +31,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showToast } from '@shared/ui/dialog'
 import FicheVehiculeModal from '@/components/FicheVehiculeModal'
 import GestionCarteCarbModal from '@/components/GestionCarteCarbModal'
+import ImportFournisseurModal from '@/components/ImportFournisseurModal'
 import { AnimatePresence } from 'framer-motion'
 
 interface Vehicule {
@@ -59,6 +60,7 @@ export default function ParcAutoPage() {
   const [search, setSearch] = useState('')
   const [ficheOpen, setFicheOpen] = useState<string | null>(null)
   const [carteCarbOpen, setCarteCarbOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const reload = () => {
     setLoading(true)
@@ -115,7 +117,7 @@ export default function ParcAutoPage() {
         <ToolbarBtn
           icon={<Database className="w-4 h-4" />}
           label="Importation Base Fournisseur"
-          onClick={() => showToast('Importation : à venir.', 'info')}
+          onClick={() => setImportOpen(true)}
         />
         <ToolbarBtn
           icon={<Sigma className="w-4 h-4" />}
@@ -183,6 +185,10 @@ export default function ParcAutoPage() {
       <GestionCarteCarbModal
         open={carteCarbOpen}
         onClose={() => setCarteCarbOpen(false)}
+      />
+      <ImportFournisseurModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
       />
     </div>
   )

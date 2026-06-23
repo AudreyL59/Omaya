@@ -23,12 +23,15 @@ Endpoints :
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import json
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import gestion_carte_carb as svc
+from app.intranets.adm.services import import_carte_carb as import_svc
 
 
 router = APIRouter(prefix="/carte-carb", tags=["adm-carte-carb"])
@@ -190,3 +193,38 @@ def delete_type(
     user: UserToken = Depends(get_current_user),
 ):
     return svc.delete_type_releve(id_type, user.id_salarie)
+
+
+# ---------------------------------------------------------------------------
+# Import Excel fournisseur (Fen_ImportFournisseurCarte)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/import-fournisseur")
+async def post_import_fournisseur(
+    file: UploadFile = File(...),
+    type_import: str = Form(...),  # 'total_energies' ...
+    id_carte_fournisseur: int = Form(...),
+    ligne_depart: int = Form(2),
+    simulation: bool = Form(False),
+    cols: str = Form(""),  # JSON dict {id_facture:'A', compte_client:'B', ...}
+    user: UserToken = Depends(get_current_user),
+):
+    """Import releves Excel. type_import = 'total_energies' pour l'instant."""
+    content = await file.read()
+    try:
+        cols_dict = json.loads(cols) if cols else {}
+    except Exception:
+        raise HTTPException(400, "cols invalide (JSON attendu)")
+
+    if type_import == "total_energies":
+        res = import_svc.import_total_energies(
+            content, id_carte_fournisseur, ligne_depart,
+            cols_dict, simulation, user.id_salarie,
+        )
+    else:
+        raise HTTPException(400, f"type_import non supporte : {type_import}")
+
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Echec import")
+    return res
