@@ -41,12 +41,24 @@ SELECT s.id_salarie, s.nom, s.prenom,
        sm.mutuelle_dossier, sm.mutuelle_att_ss, sm.mutuelle_rib,
        sm.mutuelle_doc_envoyes, sm.mutuelle_recep_certif,
        so.id_type_orga, so.rs_interne, so.raison_sociale,
-       tp.lib_poste
+       tp.lib_poste,
+       orga.lib_orga AS orga_lib, parent.lib_orga AS parent_lib
   FROM rh.pgt_salarie s
  INNER JOIN rh.pgt_salarie_embauche e ON e.id_salarie = s.id_salarie
  INNER JOIN rh.pgt_salarie_mutuelle sm ON sm.id_salarie = s.id_salarie
  INNER JOIN rh.pgt_societe so ON so.id_ste = e.id_ste
  INNER JOIN rh.pgt_type_poste tp ON tp.id_type_poste = e.id_type_poste
+  LEFT JOIN LATERAL (
+     SELECT idorganigramme FROM rh.pgt_salarie_organigramme so2
+      WHERE so2.id_salarie = s.id_salarie
+        AND (so2.modif_elem IS NULL
+             OR so2.modif_elem NOT LIKE '%suppr%')
+      ORDER BY so2.date_debut DESC LIMIT 1
+  ) cur ON TRUE
+  LEFT JOIN rh.pgt_organigramme orga
+        ON orga.idorganigramme = cur.idorganigramme
+  LEFT JOIN rh.pgt_organigramme parent
+        ON parent.idorganigramme = orga.id_parent
  WHERE (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
    AND COALESCE(e.en_activite, FALSE) = ?
    AND COALESCE(sm.mutuelle_doc_envoyes, FALSE) = FALSE
@@ -63,6 +75,18 @@ def _row_to_dict(r: dict) -> dict:
     prenom = _str(r.get("prenom")).strip()
     if prenom:
         prenom = prenom[:1].upper() + prenom[1:].lower()
+    rs = _str(r.get("rs_interne")) or _str(r.get("raison_sociale"))
+    # Agence : cf. WinDev - si l'orga courante contient 'equipe' on
+    # prend le parent (= l'agence), sinon on prend l'orga elle-meme.
+    # Fallback societe (RS) si rien.
+    orga_lib = _str(r.get("orga_lib"))
+    parent_lib = _str(r.get("parent_lib"))
+    if "equipe" in orga_lib.lower():
+        agence = parent_lib
+    else:
+        agence = orga_lib
+    if not agence:
+        agence = rs
     return {
         "id_salarie": str(_int(r.get("id_salarie"))),
         "id_salarie_mutuelle": str(_int(r.get("id_salarie_mutuelle"))),
@@ -70,7 +94,8 @@ def _row_to_dict(r: dict) -> dict:
         "prenom": prenom,
         "date_debut": _str(r.get("date_debut"))[:10],
         "id_ste": _int(r.get("id_ste")),
-        "rs_interne": _str(r.get("rs_interne")) or _str(r.get("raison_sociale")),
+        "rs_interne": rs,
+        "agence": agence,
         "lib_poste": _str(r.get("lib_poste")),
         "en_pause": bool(r.get("en_pause")),
         "mutuelle_dossier": bool(r.get("mutuelle_dossier")),

@@ -21,6 +21,7 @@ interface MutuelleRow {
   date_debut: string
   id_ste: number
   rs_interne: string
+  agence: string
   lib_poste: string
   en_pause: boolean
   mutuelle_dossier: boolean
@@ -142,6 +143,7 @@ export default function SuiviMutuellePage() {
                   <th className="px-2 py-2 text-left">Nom Prénom</th>
                   <th className="px-2 py-2 text-left w-28">Date début</th>
                   <th className="px-2 py-2 text-left">Société</th>
+                  <th className="px-2 py-2 text-left">Agence</th>
                   <th className="px-2 py-2 text-left">Emploi</th>
                   <th className="px-2 py-2 text-center w-16">Dossier</th>
                   <th className="px-2 py-2 text-center w-16">Att SS</th>
@@ -169,6 +171,7 @@ export default function SuiviMutuellePage() {
                       </td>
                       <td className="px-2 py-1">{fmtDate(r.date_debut)}</td>
                       <td className="px-2 py-1">{r.rs_interne}</td>
+                      <td className="px-2 py-1">{r.agence}</td>
                       <td className="px-2 py-1">{r.lib_poste}</td>
                       <td className="px-2 py-1 text-center">
                         <input type="checkbox" checked={r.mutuelle_dossier}
