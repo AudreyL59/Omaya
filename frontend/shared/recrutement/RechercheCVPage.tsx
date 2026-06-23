@@ -533,12 +533,10 @@ function FiltresCP({ filtres, setFiltres, communesSel, setCommunesSel, apiBase }
   }, [query, apiBase])
 
   const ajouter = (c: CommuneItem) => {
-    if (!communesSel.some(x => x.id_communes_france === c.id_communes_france)) {
-      setCommunesSel([...communesSel, c])
-      // si 1ere commune : centre = sa coord (pour rayon)
-      if (communesSel.length === 0 && c.latitude_deg && c.longitude_deg) {
-        setFiltres({ ...filtres, centre_lat: c.latitude_deg, centre_lon: c.longitude_deg })
-      }
+    // 1 seule commune : remplace la precedente
+    setCommunesSel([c])
+    if (c.latitude_deg && c.longitude_deg) {
+      setFiltres({ ...filtres, centre_lat: c.latitude_deg, centre_lon: c.longitude_deg })
     }
     setQuery('')
     setPropositions([])
