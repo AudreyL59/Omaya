@@ -352,7 +352,12 @@ def upload_doc_content(id_doc_rh: int, content: bytes, op_id: int) -> dict:
 
 
 def download_doc_content(id_doc_rh: int) -> bytes | None:
-    """RETR du bytea 'contenu'."""
+    """RETR du bytea 'contenu'.
+
+    Conversion lazy DOCX -> HTML : si le contenu est un DOCX (magic
+    PK\\x03\\x04), on le convertit en HTML via mammoth, on persiste le
+    HTML en BDD (write-back), puis on retourne le HTML. Cf.
+    ctt_ulease.download_doc_content pour la motivation."""
     db = get_pg_connection("rh")
     r = db.query_one(
         "SELECT contenu FROM rh.pgt_doc_rh WHERE id_doc_rh = ? LIMIT 1",
@@ -363,7 +368,24 @@ def download_doc_content(id_doc_rh: int) -> bytes | None:
     c = r.get("contenu")
     if c is None:
         return None
-    return bytes(c) if isinstance(c, memoryview) else c
+    content = bytes(c) if isinstance(c, memoryview) else c
+    if content[:4] == b"PK\x03\x04":
+        try:
+            import io
+            import mammoth
+            import psycopg2
+            html = mammoth.convert_to_html(io.BytesIO(content)).value
+            html_bytes = html.encode("utf-8")
+            db.query(
+                """UPDATE rh.pgt_doc_rh
+                      SET contenu = ?
+                    WHERE id_doc_rh = ?""",
+                (psycopg2.Binary(html_bytes), int(id_doc_rh)),
+            )
+            return html_bytes
+        except Exception:
+            return content
+    return content
 
 
 # Donnees fictives pour Publipostage_TESTSalarie (cf. WinDev)

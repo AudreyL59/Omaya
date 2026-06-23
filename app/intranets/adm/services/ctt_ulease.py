@@ -307,6 +307,17 @@ def upload_doc_content(id_doc_ulease: int, content: bytes, op_id: int) -> dict:
 
 
 def download_doc_content(id_doc_ulease: int) -> bytes | None:
+    """RETR du bytea 'contenu'.
+
+    Conversion lazy DOCX -> HTML : si le contenu est un DOCX (magic
+    PK\\x03\\x04), on le convertit en HTML via mammoth, on persiste le
+    HTML en BDD (write-back), puis on retourne le HTML. Les lectures
+    suivantes ne re-convertissent pas.
+
+    Motivation : l'editeur React WYSIWYG (contentEditable) souffre de
+    bugs (insertUnorderedList, etc.) sur le HTML genere par mammoth a
+    la volee. Stocker du HTML 'clean' une bonne fois pour toutes
+    elimine ces bugs."""
     db = get_pg_connection("ulease")
     r = db.query_one(
         "SELECT contenu FROM ulease.pgt_doc_ulease WHERE id_doc_ulease = ? LIMIT 1",
@@ -317,7 +328,26 @@ def download_doc_content(id_doc_ulease: int) -> bytes | None:
     c = r.get("contenu")
     if c is None:
         return None
-    return bytes(c) if isinstance(c, memoryview) else c
+    content = bytes(c) if isinstance(c, memoryview) else c
+    if content[:4] == b"PK\x03\x04":
+        try:
+            import io
+            import mammoth
+            import psycopg2
+            html = mammoth.convert_to_html(io.BytesIO(content)).value
+            html_bytes = html.encode("utf-8")
+            db.query(
+                """UPDATE ulease.pgt_doc_ulease
+                      SET contenu = ?
+                    WHERE id_doc_ulease = ?""",
+                (psycopg2.Binary(html_bytes), int(id_doc_ulease)),
+            )
+            return html_bytes
+        except Exception:
+            # Conversion echoue : on retourne le DOCX brut (fallback
+            # cote frontend).
+            return content
+    return content
 
 
 # ---------------------------------------------------------------------------
