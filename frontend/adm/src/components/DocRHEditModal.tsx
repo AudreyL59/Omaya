@@ -392,13 +392,99 @@ export default function DocRHEditModal({
     ed.focus()
   }
 
-  // Liste a puces/numerotee : un simple insertUnorderedList ne marche
-  // pas sur des selections multi-paragraphes provenant d'un import DOCX
-  // (mammoth produit parfois des structures imbriquees). On force d'abord
-  // un formatBlock <p> pour normaliser puis on applique la liste.
+  // Liste a puces/numerotee : implementation custom (cf. DocUleaseEditModal
+  // pour le rationale). On evite execCommand qui est capricieux avec
+  // les HTML imbriques ou non-standards.
   const insertList = (kind: 'ul' | 'ol') => {
-    exec('formatBlock', '<P>')
-    exec(kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList')
+    const ed = editorRef.current
+    if (!ed) return
+    if (document.activeElement !== ed) {
+      const s = window.getSelection()
+      if (
+        savedRange.current &&
+        ed.contains(savedRange.current.commonAncestorContainer)
+      ) {
+        if (s) {
+          s.removeAllRanges()
+          s.addRange(savedRange.current)
+        }
+      } else {
+        ed.focus()
+      }
+    }
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+
+    const BLOCK = new Set([
+      'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'blockquote', 'pre',
+    ])
+    const findBlock = (node: Node | null): HTMLElement | null => {
+      let el: HTMLElement | null =
+        node?.nodeType === Node.TEXT_NODE
+          ? (node.parentElement as HTMLElement | null)
+          : (node as HTMLElement | null)
+      while (el && ed.contains(el)) {
+        if (BLOCK.has(el.tagName.toLowerCase())) return el
+        el = el.parentElement
+      }
+      return null
+    }
+
+    const startBlock = findBlock(range.startContainer)
+    const endBlock = findBlock(range.endContainer)
+    if (!startBlock) {
+      document.execCommand(
+        kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList',
+      )
+      setIsDirty(true)
+      return
+    }
+
+    const blocks: HTMLElement[] = []
+    if (startBlock === endBlock || !endBlock) {
+      blocks.push(startBlock)
+    } else {
+      const walker = document.createTreeWalker(ed, NodeFilter.SHOW_ELEMENT)
+      let inRange = false
+      let n: Node | null = walker.currentNode
+      while (n) {
+        if (n === startBlock) inRange = true
+        if (inRange && n instanceof HTMLElement) {
+          const t = n.tagName.toLowerCase()
+          if (BLOCK.has(t)) blocks.push(n)
+        }
+        if (n === endBlock) break
+        n = walker.nextNode()
+      }
+      const filtered: HTMLElement[] = []
+      for (const b of blocks) {
+        if (!filtered.some((p) => p.contains(b))) filtered.push(b)
+      }
+      blocks.splice(0, blocks.length, ...filtered)
+    }
+    if (blocks.length === 0) return
+
+    const list = document.createElement(kind)
+    blocks.forEach((b) => {
+      const li = document.createElement('li')
+      li.innerHTML = b.innerHTML || '&nbsp;'
+      list.appendChild(li)
+    })
+    blocks[0].parentNode!.insertBefore(list, blocks[0])
+    blocks.forEach((b) => b.remove())
+
+    const newSel = window.getSelection()
+    if (newSel && list.firstChild) {
+      const r = document.createRange()
+      r.selectNodeContents(list.firstChild)
+      r.collapse(false)
+      newSel.removeAllRanges()
+      newSel.addRange(r)
+    }
+    setIsDirty(true)
+    ed.focus()
   }
 
   // Insertion d'un tableau (HTML brut via execCommand insertHTML).

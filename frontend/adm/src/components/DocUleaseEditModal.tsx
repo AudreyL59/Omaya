@@ -452,13 +452,111 @@ export default function DocUleaseEditModal({
     ed.focus()
   }
 
-  // Liste a puces/numerotee : un simple insertUnorderedList ne marche
-  // pas sur des selections multi-paragraphes provenant d'un import DOCX
-  // (mammoth produit parfois des structures imbriquees). On force d'abord
-  // un formatBlock <p> pour normaliser puis on applique la liste.
+  // Liste a puces/numerotee : implementation custom (sans execCommand
+  // qui est capricieux avec des HTML imbriques ou non-standards).
+  // 1) Restaure la selection si l'editeur a perdu le focus.
+  // 2) Trouve tous les blocs touches par la selection (p/div/h*/li/etc.).
+  // 3) Construit un <ul>/<ol> contenant un <li> par bloc + le 'inner HTML'.
+  // 4) Insere la liste avant le 1er bloc et supprime les blocs originaux.
   const insertList = (kind: 'ul' | 'ol') => {
-    exec('formatBlock', '<P>')
-    exec(kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList')
+    const ed = editorRef.current
+    if (!ed) return
+    // Restaure selection si necessaire
+    if (document.activeElement !== ed) {
+      const s = window.getSelection()
+      if (
+        savedRange.current &&
+        ed.contains(savedRange.current.commonAncestorContainer)
+      ) {
+        if (s) {
+          s.removeAllRanges()
+          s.addRange(savedRange.current)
+        }
+      } else {
+        ed.focus()
+      }
+    }
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+
+    const BLOCK = new Set([
+      'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'blockquote', 'pre',
+    ])
+    const findBlock = (node: Node | null): HTMLElement | null => {
+      let el: HTMLElement | null =
+        node?.nodeType === Node.TEXT_NODE
+          ? (node.parentElement as HTMLElement | null)
+          : (node as HTMLElement | null)
+      while (el && ed.contains(el)) {
+        if (BLOCK.has(el.tagName.toLowerCase())) return el
+        el = el.parentElement
+      }
+      return null
+    }
+
+    const startBlock = findBlock(range.startContainer)
+    const endBlock = findBlock(range.endContainer)
+    if (!startBlock) {
+      // Pas de bloc trouve : fallback execCommand (cas vide ou texte
+      // brut sans paragraphe).
+      document.execCommand(
+        kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList',
+      )
+      setIsDirty(true)
+      return
+    }
+
+    // Collecte tous les blocs touches (entre startBlock et endBlock).
+    const blocks: HTMLElement[] = []
+    if (startBlock === endBlock || !endBlock) {
+      blocks.push(startBlock)
+    } else {
+      const walker = document.createTreeWalker(ed, NodeFilter.SHOW_ELEMENT)
+      let inRange = false
+      let n: Node | null = walker.currentNode
+      while (n) {
+        if (n === startBlock) inRange = true
+        if (inRange && n instanceof HTMLElement) {
+          const t = n.tagName.toLowerCase()
+          if (BLOCK.has(t)) blocks.push(n)
+        }
+        if (n === endBlock) break
+        n = walker.nextNode()
+      }
+      // Filtre : on enleve les blocs dont un ancetre est deja dans la
+      // liste (pour eviter de wrapper p>span>p deux fois si bizarre).
+      const filtered: HTMLElement[] = []
+      for (const b of blocks) {
+        if (!filtered.some((p) => p.contains(b))) filtered.push(b)
+      }
+      blocks.splice(0, blocks.length, ...filtered)
+    }
+    if (blocks.length === 0) return
+
+    // Construit la liste
+    const list = document.createElement(kind)
+    blocks.forEach((b) => {
+      const li = document.createElement('li')
+      li.innerHTML = b.innerHTML || '&nbsp;'
+      list.appendChild(li)
+    })
+    // Insertion : avant le 1er bloc, puis suppression des blocs sources.
+    blocks[0].parentNode!.insertBefore(list, blocks[0])
+    blocks.forEach((b) => b.remove())
+
+    // Replace la selection sur le 1er <li> de la nouvelle liste.
+    const newSel = window.getSelection()
+    if (newSel && list.firstChild) {
+      const r = document.createRange()
+      r.selectNodeContents(list.firstChild)
+      r.collapse(false)
+      newSel.removeAllRanges()
+      newSel.addRange(r)
+    }
+    setIsDirty(true)
+    ed.focus()
   }
 
   // Insertion d'un tableau (HTML brut via execCommand insertHTML).
