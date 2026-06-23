@@ -12,6 +12,7 @@ propre router via :
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
@@ -67,6 +68,25 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             filtres.id_cvsource = "1"
             filtres.id_elem_source = str(user.id_salarie)
         return svc.search_cv(filtres)
+
+    class ExportPayload(BaseModel):
+        rows: list[dict] = []
+
+    @router.post("/export.xlsx")
+    def post_export_xlsx(
+        payload: ExportPayload,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        """Rendu XLSX des lignes deja filtrees/triees cote frontend."""
+        data = svc.export_to_xlsx(payload.rows)
+        from datetime import datetime
+        fname = f"RechercheCV_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        return Response(
+            content=data,
+            media_type=("application/vnd.openxmlformats-officedocument"
+                        ".spreadsheetml.sheet"),
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        )
 
     # -- Organigramme (mode Agence) -----------------------------------------
 

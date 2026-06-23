@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  ArrowDown, ArrowUp, ArrowUpDown,
   Building2, Calendar, ChevronDown, ChevronLeft, ChevronRight, Folder,
   Loader2, MapPin, Phone, Search,
   User as UserIcon, X,
@@ -111,6 +112,52 @@ const PROFILS = [
   { key: 4, label: 'Autre' },
 ]
 
+interface ColDef {
+  key: string
+  label: string
+  align?: 'left' | 'right' | 'center'
+  nowrap?: boolean
+}
+
+const COLS: ColDef[] = [
+  { key: 'identite',      label: 'Identité',           nowrap: true },
+  { key: 'op_traitement', label: 'Op. Traitement',     nowrap: true },
+  { key: 'statut',        label: 'Statut Actuel',      nowrap: true },
+  { key: 'source',        label: 'Source',             nowrap: true },
+  { key: 'detail_source', label: 'Détail Source',      nowrap: true },
+  { key: 'age',           label: 'Age',                align: 'center' },
+  { key: 'tel',           label: 'Tél',                nowrap: true },
+  { key: 'localisation',  label: 'Localisation',       nowrap: true },
+  { key: 'date_saisie',   label: 'Date Saisie',        nowrap: true },
+  { key: 'date_rappel',   label: 'Rappel',             nowrap: true },
+  { key: 'agence',        label: 'Agence',             nowrap: true },
+  { key: 'equipe',        label: 'Équipe',             nowrap: true },
+  { key: 'commentaire',   label: 'Dernier commentaire' },
+]
+
+function ThSortable({ col, sortKey, sortDir, onClick }: {
+  col: ColDef
+  sortKey: string
+  sortDir: 'asc' | 'desc'
+  onClick: () => void
+}) {
+  const active = sortKey === col.key
+  return (
+    <th onClick={onClick}
+        className={`px-2 pt-2 pb-1 cursor-pointer select-none hover:bg-black/10 ${
+          col.align === 'center' ? 'text-center' : 'text-left'
+        } ${col.nowrap ? 'whitespace-nowrap' : ''}`}>
+      <span className="inline-flex items-center gap-1">
+        {col.label}
+        {active
+          ? (sortDir === 'asc' ? <ArrowUp className="w-3 h-3" />
+                               : <ArrowDown className="w-3 h-3" />)
+          : <ArrowUpDown className="w-3 h-3 opacity-40" />}
+      </span>
+    </th>
+  )
+}
+
 export default function RechercheCVPage({
   apiBase, filtresForces = {}, myUserId = '', onOpenFiche,
 }: RechercheCVPageProps) {
@@ -141,6 +188,11 @@ export default function RechercheCVPage({
   const [statutSnapshot, setStatutSnapshot] = useState<Record<string, string>>({})
   // ids des CV dont le statut a change depuis la recherche
   const [changedIds, setChangedIds] = useState<Set<string>>(new Set())
+  // Tri + filtres par colonne
+  const [sortKey, setSortKey] = useState<string>('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [filters, setFilters] = useState<Record<string, string>>({})
+  const [exporting, setExporting] = useState(false)
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
@@ -210,6 +262,101 @@ export default function RechercheCVPage({
     sources.forEach(s => m.set(s.id, s.label))
     return m
   }, [sources])
+
+  // Filtre + tri client-side appliques sur les resultats
+  const displayedRows = useMemo(() => {
+    const valueFor = (r: CVRow, key: string): string => {
+      const pres = presence[r.id_cvtheque]
+      switch (key) {
+        case 'identite':       return r.identite
+        case 'op_traitement':  return pres?.op_nom || r.op_traitement
+        case 'statut':         return statutsById.get(pres?.statut_actuel || r.statut_actuel) || ''
+        case 'source':         return sourcesById.get(r.source) || ''
+        case 'detail_source':  return r.detail_source
+        case 'age':            return String(r.age || '')
+        case 'tel':            return r.tel
+        case 'localisation':   return r.localisation
+        case 'date_saisie':    return r.date_saisie
+        case 'date_rappel':    return r.date_rappel
+        case 'agence':         return r.agence
+        case 'equipe':         return r.equipe
+        case 'commentaire':    return r.commentaire
+        default: return ''
+      }
+    }
+    let arr = resultats
+    // Filtre par colonne
+    const activeFilters = Object.entries(filters).filter(([, v]) => v.trim())
+    if (activeFilters.length > 0) {
+      arr = arr.filter(r =>
+        activeFilters.every(([k, v]) =>
+          valueFor(r, k).toLowerCase().includes(v.toLowerCase())
+        )
+      )
+    }
+    // Tri
+    if (sortKey) {
+      const isNumeric = sortKey === 'age'
+      const isDate = sortKey === 'date_saisie' || sortKey === 'date_rappel'
+      arr = [...arr].sort((a, b) => {
+        const va = valueFor(a, sortKey)
+        const vb = valueFor(b, sortKey)
+        let cmp = 0
+        if (isNumeric) {
+          cmp = (parseInt(va, 10) || 0) - (parseInt(vb, 10) || 0)
+        } else if (isDate) {
+          cmp = (va || '').localeCompare(vb || '')
+        } else {
+          cmp = va.localeCompare(vb, 'fr', { sensitivity: 'base' })
+        }
+        return sortDir === 'asc' ? cmp : -cmp
+      })
+    }
+    return arr
+  }, [resultats, filters, sortKey, sortDir, presence, statutsById, sourcesById])
+
+  const toggleSort = (k: string) => {
+    if (sortKey !== k) { setSortKey(k); setSortDir('asc'); return }
+    if (sortDir === 'asc') { setSortDir('desc'); return }
+    setSortKey(''); setSortDir('asc')
+  }
+
+  const exportXlsx = async () => {
+    if (displayedRows.length === 0) {
+      showToast('Aucune ligne à exporter.', 'info')
+      return
+    }
+    setExporting(true)
+    try {
+      const enriched = displayedRows.map(r => {
+        const pres = presence[r.id_cvtheque]
+        return {
+          ...r,
+          op_traitement: pres?.op_nom || r.op_traitement,
+          statut_actuel_lib: statutsById.get(pres?.statut_actuel || r.statut_actuel) || '',
+          source_lib: sourcesById.get(r.source) || '',
+        }
+      })
+      const r = await fetch(`${apiBase}/recrutement/cv/export.xlsx`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
+        },
+        body: JSON.stringify({ rows: enriched }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const blob = await r.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `RechercheCV_${new Date().toISOString().slice(0, 10)}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      showToast(`Erreur export : ${(e as Error).message}`, 'error')
+    } finally { setExporting(false) }
+  }
 
   const setMode = (mode: number) => {
     setFiltres(f => ({ ...f, mode }))
@@ -433,6 +580,13 @@ export default function RechercheCVPage({
                     title="Disponible bientôt">
               Statuer la sélection
             </button>
+            <button type="button" onClick={exportXlsx} disabled={exporting}
+                    className="px-3 py-1.5 rounded text-white text-sm disabled:opacity-50"
+                    style={{ backgroundColor: COL_PRIMARY }}
+                    title="Exporter au format Excel (.xlsx)">
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin inline" />
+                         : 'Exporter Excel'}
+            </button>
           </div>
         </div>
 
@@ -443,32 +597,37 @@ export default function RechercheCVPage({
             <thead className="sticky top-0 z-10"
                    style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
               <tr>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Identité</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Op. Traitement</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Statut Actuel</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Source</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Détail Source</th>
-                <th className="px-2 py-2 text-center whitespace-nowrap">Age</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Tél</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Localisation</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Date Saisie</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Rappel</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Agence</th>
-                <th className="px-2 py-2 text-left whitespace-nowrap">Équipe</th>
-                <th className="px-2 py-2 text-left">Dernier commentaire</th>
+                {COLS.map(c => (
+                  <ThSortable key={c.key} col={c}
+                              sortKey={sortKey} sortDir={sortDir}
+                              onClick={() => toggleSort(c.key)} />
+                ))}
+              </tr>
+              <tr style={{ backgroundColor: '#0F3336' }}>
+                {COLS.map(c => (
+                  <th key={c.key} className="px-1 pb-1">
+                    <input type="text" value={filters[c.key] || ''}
+                           onChange={e => setFilters(f => ({ ...f, [c.key]: e.target.value }))}
+                           placeholder="filtrer..."
+                           className="w-full px-1 py-0.5 text-xs rounded text-gray-900"
+                           style={{ backgroundColor: 'white' }} />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={13} className="p-6 text-center">
+                <tr><td colSpan={COLS.length} className="p-6 text-center">
                   <Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
-              ) : resultats.length === 0 ? (
-                <tr><td colSpan={13} className="p-6 text-center italic"
+              ) : displayedRows.length === 0 ? (
+                <tr><td colSpan={COLS.length} className="p-6 text-center italic"
                         style={{ color: '#A68D8A' }}>
-                  Lance une recherche depuis le panneau de gauche.
+                  {resultats.length === 0
+                    ? 'Lance une recherche depuis le panneau de gauche.'
+                    : 'Aucune ligne ne correspond aux filtres.'}
                 </td></tr>
               ) : (
-                resultats.map(r => {
+                displayedRows.map(r => {
                   const pres = presence[r.id_cvtheque]
                   const statutLive = pres?.statut_actuel || r.statut_actuel
                   const opNom = pres?.op_nom || r.op_traitement

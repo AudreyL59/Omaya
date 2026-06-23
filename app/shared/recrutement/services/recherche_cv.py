@@ -419,6 +419,59 @@ def get_presence(ids: list[int]) -> dict[str, dict]:
     return out
 
 
+def export_to_xlsx(rows: list[dict]) -> bytes:
+    """Genere un .xlsx a partir des lignes fournies (deja filtrees/triees
+    cote frontend). Les lignes sont des dicts avec les memes cles que CVRow
+    + champs 'enriched' (statut_actuel_lib, source_lib)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Recherche CV"
+
+    headers = [
+        ("identite", "Identité", 30),
+        ("op_traitement", "Op. Traitement", 18),
+        ("statut_actuel_lib", "Statut Actuel", 22),
+        ("source_lib", "Source", 18),
+        ("detail_source", "Détail Source", 28),
+        ("age", "Age", 6),
+        ("tel", "Tél", 14),
+        ("localisation", "Localisation", 28),
+        ("date_saisie", "Date Saisie", 12),
+        ("date_rappel", "Rappel", 12),
+        ("agence", "Agence", 22),
+        ("equipe", "Équipe", 22),
+        ("commentaire", "Dernier commentaire", 50),
+    ]
+
+    # En-tete
+    hdr_font = Font(bold=True, color="FFFFFF")
+    hdr_fill = PatternFill("solid", fgColor="17494E")
+    for col_i, (_, label, width) in enumerate(headers, start=1):
+        c = ws.cell(row=1, column=col_i, value=label)
+        c.font = hdr_font
+        c.fill = hdr_fill
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.column_dimensions[get_column_letter(col_i)].width = width
+    ws.row_dimensions[1].height = 20
+    ws.freeze_panes = "A2"
+
+    # Lignes
+    for row_i, r in enumerate(rows, start=2):
+        for col_i, (key, _, _) in enumerate(headers, start=1):
+            v = r.get(key, "")
+            ws.cell(row=row_i, column=col_i, value=v)
+
+    # Export bytes
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def search_cv(f: SearchCVFiltres) -> list[CVRow]:
     """Construit la query dynamique selon le mode et execute."""
     where: list[str] = ["(cv.modif_elem IS NULL OR cv.modif_elem NOT LIKE '%suppr%')"]
