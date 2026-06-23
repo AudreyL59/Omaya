@@ -83,6 +83,7 @@ interface Filtres {
   rayon_km?: number
   centre_lat?: number
   centre_lon?: number
+  id_organigrammes?: string[]
   tel?: string
   nom?: string
   prenom?: string
@@ -327,15 +328,15 @@ export default function RechercheCVPage({
               const Icon = m.icon
               const active = filtres.mode === m.key
               return (
-                <button key={m.key} type="button" disabled={m.disabled}
+                <button key={m.key} type="button"
                         onClick={() => setMode(m.key)}
-                        className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-xs rounded-t transition-colors disabled:opacity-40"
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-2 text-xs rounded-t transition-colors"
                         style={{
                           backgroundColor: active ? COL_PRIMARY : 'transparent',
                           color: active ? 'white' : COL_BRUN,
                           borderBottom: active ? `2px solid ${COL_PRIMARY}` : 'none',
                         }}
-                        title={m.disabled ? 'Disponible bientôt' : m.label}>
+                        title={m.label}>
                   <Icon className="w-3.5 h-3.5" />
                   {m.label}
                 </button>
