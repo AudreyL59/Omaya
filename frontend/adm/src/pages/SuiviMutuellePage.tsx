@@ -10,9 +10,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { HeartPulse, Loader2 } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showToast } from '@shared/ui/dialog'
+import FicheSalarieModal from '@/components/FicheSalarieModal'
 
 interface MutuelleRow {
   id_salarie: string
@@ -50,6 +52,9 @@ export default function SuiviMutuellePage() {
   const [rows, setRows] = useState<MutuelleRow[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState('')
+  const [ficheSalarie, setFicheSalarie] = useState<{
+    idSalarie: string; nom: string; prenom: string
+  } | null>(null)
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -158,6 +163,11 @@ export default function SuiviMutuellePage() {
                   return (
                     <tr key={r.id_salarie}
                         onClick={() => setSelected(r.id_salarie)}
+                        onDoubleClick={() => setFicheSalarie({
+                          idSalarie: r.id_salarie,
+                          nom: r.nom,
+                          prenom: r.prenom,
+                        })}
                         className="cursor-pointer border-b"
                         style={{
                           backgroundColor: isSel ? COL_PRIMARY_LIGHT
@@ -208,8 +218,19 @@ export default function SuiviMutuellePage() {
       </div>
 
       <div className="text-xs italic" style={{ color: COL_BRUN }}>
-        {rows.length} salarié(s) · Cocher 'Doc envoyés' fait sortir le salarié de la liste.
+        {rows.length} salarié(s) · Cocher 'Doc envoyés' fait sortir le salarié de la liste · Double-clic = ouvrir la fiche
       </div>
+
+      <AnimatePresence>
+        {ficheSalarie && (
+          <FicheSalarieModal
+            idSalarie={ficheSalarie.idSalarie}
+            nom={ficheSalarie.nom}
+            prenom={ficheSalarie.prenom}
+            onClose={() => setFicheSalarie(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
