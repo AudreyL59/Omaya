@@ -34,6 +34,7 @@ import GestionCarteCarbModal from '@/components/GestionCarteCarbModal'
 import ImportFournisseurModal from '@/components/ImportFournisseurModal'
 import CalculCartModal from '@/components/CalculCartModal'
 import RechercheRelevModal from '@/components/RechercheRelevModal'
+import AnalyseCarbModal from '@/components/AnalyseCarbModal'
 import { AnimatePresence } from 'framer-motion'
 
 interface Vehicule {
@@ -65,6 +66,7 @@ export default function ParcAutoPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [calculOpen, setCalculOpen] = useState(false)
   const [rechRelevOpen, setRechRelevOpen] = useState(false)
+  const [alerteOpen, setAlerteOpen] = useState(false)
 
   const reload = () => {
     setLoading(true)
@@ -136,7 +138,7 @@ export default function ParcAutoPage() {
         <ToolbarBtn
           icon={<AlertCircle className="w-4 h-4" />}
           label="Détecter Alerte Carb"
-          onClick={() => showToast('Détection alerte : à venir.', 'info')}
+          onClick={() => setAlerteOpen(true)}
         />
         <span className="flex-1" />
         <div className="relative">
@@ -201,6 +203,10 @@ export default function ParcAutoPage() {
       <RechercheRelevModal
         open={rechRelevOpen}
         onClose={() => setRechRelevOpen(false)}
+      />
+      <AnalyseCarbModal
+        open={alerteOpen}
+        onClose={() => setAlerteOpen(false)}
       />
     </div>
   )

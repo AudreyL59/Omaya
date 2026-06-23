@@ -540,3 +540,129 @@ def _find_attribue(id_carte: int, d) -> str:
         prenom = prenom[:1].upper() + prenom[1:].lower()
     nom_complet = f"{nom} {marital}".strip() if marital else nom
     return f"{nom_complet} {prenom}".strip()
+
+
+# ---------------------------------------------------------------------------
+# Fen_AnalyseCarb - Detection alerte Carb (plein Vendredi + Lundi)
+# ---------------------------------------------------------------------------
+
+
+def detect_alertes(du: str, au: str) -> list[dict]:
+    """Detecte les cas suspects : plein de Carburant le Vendredi suivi
+    d'un plein le Lundi suivant (= +3 jours) sur la meme carte.
+
+    PG : EXTRACT(DOW FROM date) -> 0=dim, 1=lun, ... 5=ven, 6=sam.
+    WinDev/MySQL DAYOFWEEK : 1=dim, 2=lun, ... 6=ven (decalage +1).
+    Ici on filtre DOW=5 pour vendredi et DOW=1 pour lundi.
+
+    Retourne une ligne par alerte avec :
+      - num_carte
+      - date_vendredi (ISO)
+      - nom_conducteur (a la date du vendredi)
+      - detail_alerte (texte multi-ligne : 'Carb <date> a <h> de <m>€'
+        + idem pour le lundi).
+    """
+    db = get_pg_connection("ulease")
+
+    # 1. Tous les pleins Carburant Vendredi entre Du et Au
+    ven_rows = db.query(
+        """SELECT ccrf.id_carte_carburant, ccrf.date, ccrf.heure,
+                  ccrf.montant_ttc, cc.num_carte
+             FROM ulease.pgt_cartecarbrelevefournisseur ccrf
+       INNER JOIN ulease.pgt_typerelevefournisseur trf
+               ON trf.id_type_releve_fournisseur = ccrf.id_type_releve_fournisseur
+       INNER JOIN ulease.pgt_cartecarburant cc
+               ON cc.id_carte_carburant = ccrf.id_carte_carburant
+            WHERE EXTRACT(DOW FROM ccrf.date) = 5
+              AND trf.categorie = 'Carburant'
+              AND (ccrf.modif_elem IS NULL OR ccrf.modif_elem <> 'suppr')
+              AND ccrf.date BETWEEN ? AND ?
+         ORDER BY ccrf.id_carte_carburant ASC, ccrf.date ASC, ccrf.heure ASC""",
+        (du, au),
+    ) or []
+    # Regroupement par (id_carte, date) -> liste de pleins
+    groups_ven: dict[tuple[int, str], list] = {}
+    num_by_id: dict[int, str] = {}
+    for r in ven_rows:
+        id_c = _int(r.get("id_carte_carburant"))
+        d_iso = _iso_date(r.get("date"))
+        num_by_id[id_c] = _str(r.get("num_carte"))
+        groups_ven.setdefault((id_c, d_iso), []).append(r)
+
+    out: list[dict] = []
+    from datetime import timedelta as _td
+
+    for (id_c, d_iso), pleins_ven in groups_ven.items():
+        d_ven = _try_parse_date(d_iso)
+        if not d_ven:
+            continue
+        d_lun = d_ven + _td(days=3)
+        # 2. Pleins Carburant lundi suivant pour la meme carte
+        lun_rows = db.query(
+            """SELECT date, heure, montant_ttc, lieu
+                 FROM ulease.pgt_cartecarbrelevefournisseur ccrf
+           INNER JOIN ulease.pgt_typerelevefournisseur trf
+                   ON trf.id_type_releve_fournisseur = ccrf.id_type_releve_fournisseur
+                WHERE EXTRACT(DOW FROM ccrf.date) = 1
+                  AND trf.categorie = 'Carburant'
+                  AND (ccrf.modif_elem IS NULL OR ccrf.modif_elem <> 'suppr')
+                  AND ccrf.date = ?
+                  AND ccrf.id_carte_carburant = ?
+             ORDER BY ccrf.date ASC, ccrf.heure ASC""",
+            (d_lun, id_c),
+        ) or []
+        if not lun_rows:
+            continue
+
+        # 3. Construction du detail_alerte
+        detail = _format_pleins(pleins_ven) + "\n" + _format_pleins(lun_rows)
+
+        out.append({
+            "num_carte": num_by_id.get(id_c, ""),
+            "date_vendredi": d_iso,
+            "nom_conducteur": _find_attribue(id_c, d_ven),
+            "detail_alerte": detail,
+        })
+
+    out.sort(key=lambda x: (x["date_vendredi"], x["num_carte"]))
+    return out
+
+
+_JOURS_FR = {0: "Dim", 1: "Lun", 2: "Mar", 3: "Mer", 4: "Jeu", 5: "Ven", 6: "Sam"}
+
+
+def _format_pleins(rows: list) -> str:
+    """Concatene les pleins d'un meme jour en un seul texte :
+    'Carb Ven 15/05/26 a 18:32 de 65.20€ et a 19:01 de 12.30€'."""
+    if not rows:
+        return ""
+    # On suppose que tous les rows ont la meme date (regroupement amont)
+    first = rows[0]
+    d_str = _iso_date(first.get("date"))
+    d_parsed = _try_parse_date(d_str)
+    jour = _JOURS_FR.get(d_parsed.weekday() if d_parsed else 0, "")
+    jj = f"{d_str[8:10]}/{d_str[5:7]}/{d_str[2:4]}" if d_str else ""
+    parts = []
+    for r in rows:
+        h = r.get("heure")
+        m = _float(r.get("montant_ttc"))
+        h_str = ""
+        if h is not None:
+            if hasattr(h, "strftime"):
+                h_str = h.strftime("%H:%M")
+            else:
+                s = str(h)
+                h_str = s[:5] if len(s) >= 5 else s
+        parts.append(f"à {h_str} de {m:.2f}€")
+    body = " et ".join(parts)
+    return f"Carb {jour} {jj} {body}"
+
+
+def _try_parse_date(s: str):
+    if not s or len(s) < 10:
+        return None
+    try:
+        from datetime import date as _d
+        return _d(int(s[:4]), int(s[5:7]), int(s[8:10]))
+    except Exception:
+        return None

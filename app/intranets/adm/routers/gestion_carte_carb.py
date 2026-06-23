@@ -308,3 +308,14 @@ def get_releves_search(
 ):
     """Btn Loupe : retourne {lignes, total_ttc}."""
     return svc.search_releves(du, au, id_carte_carburant, categorie)
+
+
+@router.get("/alertes/detect")
+def get_alertes(
+    du: str,
+    au: str,
+    _user: UserToken = Depends(get_current_user),
+):
+    """Fen_AnalyseCarb btn 'Detecter alerte'. Detecte les pleins
+    Vendredi + Lundi sur la meme carte (= soupcon d'usage perso)."""
+    return svc.detect_alertes(du, au)
