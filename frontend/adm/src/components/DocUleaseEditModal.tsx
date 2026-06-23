@@ -112,6 +112,10 @@ export default function DocUleaseEditModal({
   const [vehiculesAttrib, setVehiculesAttrib] = useState<VehiculeAttribution[]>([])
   const [testing, setTesting] = useState(false)
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null)
+  // True des qu'un Enregistrer a reussi : a la fermeture, on remonte
+  // onSaved() au parent (qui recharge la liste) au lieu d'un onClose
+  // simple. Sinon onClose suffit.
+  const [hasSaved, setHasSaved] = useState(false)
   const editorRef = useRef<HTMLDivElement | null>(null)
   // Memorise la selection courante avant qu'un controle de la toolbar
   // (color picker natif, combo) ne fasse perdre le focus du contentEditable.
@@ -408,7 +412,10 @@ export default function DocUleaseEditModal({
   // ---- Fermeture avec detection modifications -------------------------
   const handleClose = async () => {
     if (!isDirty) {
-      onClose()
+      // Au moins un save reussi pendant la session -> remonter
+      // au parent pour recharger la liste (titre / dates a jour).
+      if (hasSaved) onSaved()
+      else onClose()
       return
     }
     const yes = await showConfirm({
@@ -421,8 +428,14 @@ export default function DocUleaseEditModal({
     })
     if (yes) {
       await saveMeta(true)
+      onSaved()
+    } else {
+      // Fermer sans enregistrer : si on a saved avant, on reload quand
+      // meme la liste parente (sinon le titre/dates affichees sont
+      // potentiellement obsoletes).
+      if (hasSaved) onSaved()
+      else onClose()
     }
-    onClose()
   }
 
   // ---- Toolbar contenteditable -----------------------------------------
@@ -761,9 +774,12 @@ export default function DocUleaseEditModal({
       }
 
       setIsDirty(false)
+      setHasSaved(true)
       if (!silent) {
         showToast('Doc Ulease enregistré.', 'success')
-        onSaved()
+        // NB : on NE ferme PAS la fenetre - le user peut continuer
+        // a editer. Le reload du parent se fera a la fermeture
+        // (handleClose -> onSaved si hasSaved).
       }
     } catch (e) {
       showToast(`Échec : ${(e as Error).message}`, 'error')

@@ -98,6 +98,10 @@ export default function DocRHEditModal({
   useDocumentTitle(meta.titre ? `Doc RH — ${meta.titre}` : 'Doc RH')
   // Detection des modifications non sauvegardees (champs meta + contenu HTML).
   const [isDirty, setIsDirty] = useState(false)
+  // True des qu'un Enregistrer a reussi : a la fermeture, on remonte
+  // onSaved() au parent (qui recharge la liste) au lieu d'un onClose
+  // simple.
+  const [hasSaved, setHasSaved] = useState(false)
   const [lookups, setLookups] = useState<Lookups | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -350,7 +354,8 @@ export default function DocRHEditModal({
   // ---- Fermeture avec detection modifications -------------------------
   const handleClose = async () => {
     if (!isDirty) {
-      onClose()
+      if (hasSaved) onSaved()
+      else onClose()
       return
     }
     const yes = await showConfirm({
@@ -363,8 +368,11 @@ export default function DocRHEditModal({
     })
     if (yes) {
       await saveMeta(true)
+      onSaved()
+    } else {
+      if (hasSaved) onSaved()
+      else onClose()
     }
-    onClose()
   }
 
   // ---- Toolbar contenteditable -----------------------------------------
@@ -683,9 +691,11 @@ export default function DocRHEditModal({
       }
 
       setIsDirty(false)
+      setHasSaved(true)
       if (!silent) {
         showToast('Doc RH enregistré.', 'success')
-        onSaved()
+        // NB : on NE ferme PAS la fenetre. Reload du parent a la
+        // fermeture (handleClose -> onSaved si hasSaved).
       }
     } catch (e) {
       showToast(`Échec : ${(e as Error).message}`, 'error')
