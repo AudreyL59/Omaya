@@ -638,7 +638,22 @@ function FiltresCommuns({
         <label className="text-xs font-semibold flex items-center gap-1" style={{ color: COL_BRUN }}>
           <Calendar className="w-3 h-3" /> Période
         </label>
-        <div className="flex gap-1 items-center text-xs">
+        <select value="" onChange={e => {
+                  const v = e.target.value
+                  if (!v) return
+                  const [deb, fin] = computePeriode(v)
+                  setFiltres({ ...filtres, date_debut: deb, date_fin: fin })
+                  e.target.value = ''
+                }}
+                className="w-full px-2 py-1.5 rounded border bg-white text-xs"
+                style={{ borderColor: COL_BORDER }}>
+          <option value="">— Ancienneté —</option>
+          <option value="7j">- de 7 jours</option>
+          <option value="15j">- de 15 jours</option>
+          <option value="-1mois">- d&apos;1 mois</option>
+          <option value="+1mois">+ d&apos;1 mois</option>
+        </select>
+        <div className="flex gap-1 items-center text-xs mt-1">
           <input type="date" value={filtres.date_debut || ''}
                  onChange={e => setFiltres({ ...filtres, date_debut: e.target.value })}
                  className="flex-1 px-2 py-1.5 rounded border bg-white"
@@ -748,6 +763,30 @@ function FiltresCommuns({
       </div>
     </div>
   )
+}
+
+/** Calcule [date_debut, date_fin] (YYYY-MM-DD) selon le preset. */
+function computePeriode(preset: string): [string, string] {
+  const today = new Date()
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const d = new Date(today)
+  if (preset === '7j') {
+    d.setDate(d.getDate() - 7)
+    return [fmt(d), fmt(today)]
+  }
+  if (preset === '15j') {
+    d.setDate(d.getDate() - 15)
+    return [fmt(d), fmt(today)]
+  }
+  if (preset === '-1mois') {
+    d.setMonth(d.getMonth() - 1)
+    return [fmt(d), fmt(today)]
+  }
+  if (preset === '+1mois') {
+    d.setMonth(d.getMonth() - 1)
+    return ['1970-01-01', fmt(d)]
+  }
+  return [fmt(d), fmt(today)]
 }
 
 function ToggleBtn({ active, onClick, children }: {
