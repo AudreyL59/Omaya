@@ -34,6 +34,7 @@ import {
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { showConfirm, showPrompt, showToast } from '@shared/ui/dialog'
+import TableContextMenu from '@shared/ui/TableContextMenu'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -1078,6 +1079,10 @@ export default function DocRHEditModal({
             </div>
           )}
         </motion.div>
+        <TableContextMenu
+          editorRef={editorRef}
+          onChange={() => setIsDirty(true)}
+        />
       </motion.div>
     </AnimatePresence>
   )
