@@ -17,9 +17,14 @@ from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
+from app.shared.recrutement.schemas.cv_fiche import (
+    CVFicheDetail, CVFichePayload, CVObservationPayload,
+    CVStatutQuickPayload, CVSuiviRow,
+)
 from app.shared.recrutement.schemas.recherche_cv import (
     CommuneItem, ComboItem, CVRow, SearchCVFiltres,
 )
+from app.shared.recrutement.services import cv_fiche as fiche_svc
 from app.shared.recrutement.services import recherche_cv as svc
 
 
@@ -141,5 +146,62 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         Appele par le frontend au mount de la page de recherche.
         """
         return svc.release_my_orphans(user.id_salarie)
+
+    # -- Fiche CV (Fen_CVFiche) --------------------------------------------
+
+    @router.get("/{id_cv}", response_model=CVFicheDetail)
+    def get_fiche(
+        id_cv: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        f = fiche_svc.get_fiche(id_cv)
+        if not f:
+            raise HTTPException(404, "CV introuvable")
+        return f
+
+    @router.get("/{id_cv}/cvsuivi", response_model=list[CVSuiviRow])
+    def get_cvsuivi(
+        id_cv: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.list_cvsuivi(id_cv)
+
+    @router.put("/{id_cv}")
+    def put_fiche(
+        id_cv: int,
+        payload: CVFichePayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.save_fiche(id_cv, payload, user.id_salarie)
+
+    @router.post("/{id_cv}/restatuer")
+    def post_restatuer(
+        id_cv: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.restatuer(id_cv, user.id_salarie)
+
+    @router.post("/{id_cv}/statut-quick")
+    def post_statut_quick(
+        id_cv: int,
+        payload: CVStatutQuickPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.statut_quick(id_cv, payload, user.id_salarie)
+
+    @router.post("/{id_cv}/reactualiser")
+    def post_reactualiser(
+        id_cv: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.reactualiser(id_cv, user.id_salarie)
+
+    @router.post("/{id_cv}/observation")
+    def post_observation(
+        id_cv: int,
+        payload: CVObservationPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.add_observation(id_cv, payload, user.id_salarie)
 
     return router
