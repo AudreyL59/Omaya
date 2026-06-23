@@ -504,11 +504,14 @@ def search_releves(
 
 
 def _find_attribue(id_carte: int, d) -> str:
-    """Cherche le conducteur attribue a la carte a la date d.
-    Renvoie 'NOM Prenom' ou ''."""
-    db = get_pg_connection("ulease")
-    r = db.query_one(
-        """SELECT c.nom_conducteur, c.prenom_conducteur, c.nom_marital
+    """Cherche le conducteur attribue a la carte a la date d. Renvoie
+    'NOM Prenom' depuis pgt_salarie (cf. WinDev DonneInfoSalarié, qui
+    prend le nom courant du salarie - pas le snapshot conducteur)."""
+    # 2 etapes : ulease.pgt_carteattribution -> pgt_conducteur, puis
+    # rh.pgt_salarie. Cross-schema mais meme connexion PG, OK.
+    db_ul = get_pg_connection("ulease")
+    r = db_ul.query_one(
+        """SELECT c.id_salarie
              FROM ulease.pgt_carteattribution ca
        INNER JOIN ulease.pgt_conducteur c
                ON c.id_conducteur = ca.id_conducteur
@@ -519,11 +522,20 @@ def _find_attribue(id_carte: int, d) -> str:
          ORDER BY ca.du DESC LIMIT 1""",
         (int(id_carte), d, d),
     )
-    if not r:
+    id_sal = _int(r.get("id_salarie")) if r else 0
+    if not id_sal:
         return ""
-    nom = _str(r.get("nom_conducteur"))
-    marital = _str(r.get("nom_marital"))
-    prenom = _str(r.get("prenom_conducteur")).strip()
+    db_rh = get_pg_connection("rh")
+    s = db_rh.query_one(
+        """SELECT nom, prenom, nom_marital FROM rh.pgt_salarie
+            WHERE id_salarie = ? LIMIT 1""",
+        (id_sal,),
+    )
+    if not s:
+        return ""
+    nom = _str(s.get("nom"))
+    marital = _str(s.get("nom_marital"))
+    prenom = _str(s.get("prenom")).strip()
     if prenom:
         prenom = prenom[:1].upper() + prenom[1:].lower()
     nom_complet = f"{nom} {marital}".strip() if marital else nom
