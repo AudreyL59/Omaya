@@ -633,6 +633,8 @@ def _enrich_cv_rows(rows: list[dict], f: SearchCVFiltres) -> list[CVRow]:
                     for r in rows if _int(r["id_cvsource"]) == 1
                     and _int(r["id_elem_source"])}
     coopteurs: dict[int, dict] = {}
+    affectations_by_sal: dict[int, list[dict]] = {}
+    parents_lib: dict[int, str] = {}
     if coopteur_ids:
         db_rh = get_pg_connection("rh")
         ph = ",".join(["?"] * len(coopteur_ids))
@@ -642,6 +644,34 @@ def _enrich_cv_rows(rows: list[dict], f: SearchCVFiltres) -> list[CVRow]:
             tuple(coopteur_ids),
         ) or []
         coopteurs = {_int(r["id_salarie"]): r for r in cr}
+
+        # Affectations historiques en batch : 1 SELECT pour tous les coopteurs
+        affs = db_rh.query(
+            f"""SELECT so.id_salarie, so.idorganigramme, so.date_debut,
+                       so.date_fin, o.lib_orga AS equipe, o.id_parent
+                  FROM rh.pgt_salarie_organigramme so
+                  JOIN rh.pgt_organigramme o
+                       ON o.idorganigramme = so.idorganigramme
+                 WHERE so.id_salarie IN ({ph})
+                   AND so.modif_elem NOT LIKE '%suppr%'
+              ORDER BY so.id_salarie, so.date_debut DESC""",
+            tuple(coopteur_ids),
+        ) or []
+        for a in affs:
+            affectations_by_sal.setdefault(
+                _int(a["id_salarie"]), []
+            ).append(a)
+        # Pre-fetch des parents (Agence)
+        parent_ids = {_int(a["id_parent"]) for a in affs if _int(a["id_parent"])}
+        if parent_ids:
+            ph_p = ",".join(["?"] * len(parent_ids))
+            pr = db_rh.query(
+                f"""SELECT idorganigramme, lib_orga FROM rh.pgt_organigramme
+                     WHERE idorganigramme IN ({ph_p})""",
+                tuple(parent_ids),
+            ) or []
+            parents_lib = {_int(x["idorganigramme"]): _str(x["lib_orga"])
+                           for x in pr}
 
     # Resolveur annonceurs (id_elem_source -> lib) pour source = 2
     annonceur_ids = {_int(r["id_elem_source"])
@@ -706,13 +736,37 @@ def _enrich_cv_rows(rows: list[dict], f: SearchCVFiltres) -> list[CVRow]:
         if r.get("code_postal") or r.get("nom_ville"):
             loc = f"{_str(r['code_postal'])} {_str(r['nom_ville'])}".strip()
 
-        # Detail source
+        # Detail source + agence/equipe (si cooptation)
         detail = ""
+        agence = ""
+        equipe = ""
         id_src = _int(r["id_cvsource"])
         id_elem = _int(r["id_elem_source"])
         if id_src == 1 and id_elem and id_elem in coopteurs:
             c = coopteurs[id_elem]
             detail = f"{_str(c['nom']).upper()} {_str(c['prenom']).strip().title()}"
+            # Affectation a la date de saisie
+            date_sai = r.get("date_saisie")
+            date_sai_d = date_sai.date() if hasattr(date_sai, 'date') else None
+            for a in affectations_by_sal.get(id_elem, []):
+                d_deb = a.get("date_debut")
+                d_fin = a.get("date_fin")
+                if date_sai_d:
+                    if d_deb and d_deb > date_sai_d:
+                        continue
+                    if d_fin and d_fin < date_sai_d:
+                        continue
+                equipe = _str(a.get("equipe"))
+                agence = parents_lib.get(_int(a.get("id_parent")), "")
+                break
+            # Fallback (pas d'affectation matching) : derniere
+            if not equipe and affectations_by_sal.get(id_elem):
+                a = affectations_by_sal[id_elem][0]
+                equipe = _str(a.get("equipe"))
+                agence = parents_lib.get(_int(a.get("id_parent")), "")
+            # Si l'equipe contient "Agence" -> on inverse (cf. WinDev)
+            if equipe and "agence" in equipe.lower():
+                agence = equipe
         elif id_src == 2 and id_elem in annonceurs:
             detail = annonceurs[id_elem]
 
@@ -743,6 +797,8 @@ def _enrich_cv_rows(rows: list[dict], f: SearchCVFiltres) -> list[CVRow]:
             localisation=loc,
             date_saisie=str(r.get("date_saisie") or "")[:10],
             date_rappel=str(r.get("date_rappel") or "")[:10] if statut_actuel == 2 else "",
+            agence=agence,
+            equipe=equipe,
             commentaire=commentaire,
         ))
     return out

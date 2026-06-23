@@ -453,15 +453,17 @@ export default function RechercheCVPage({
                 <th className="px-2 py-2 text-left whitespace-nowrap">Localisation</th>
                 <th className="px-2 py-2 text-left whitespace-nowrap">Date Saisie</th>
                 <th className="px-2 py-2 text-left whitespace-nowrap">Rappel</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap">Agence</th>
+                <th className="px-2 py-2 text-left whitespace-nowrap">Équipe</th>
                 <th className="px-2 py-2 text-left">Dernier commentaire</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} className="p-6 text-center">
+                <tr><td colSpan={13} className="p-6 text-center">
                   <Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
               ) : resultats.length === 0 ? (
-                <tr><td colSpan={11} className="p-6 text-center italic"
+                <tr><td colSpan={13} className="p-6 text-center italic"
                         style={{ color: '#A68D8A' }}>
                   Lance une recherche depuis le panneau de gauche.
                 </td></tr>
@@ -491,6 +493,8 @@ export default function RechercheCVPage({
                     <td className="px-2 py-1.5">{r.localisation}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{r.date_saisie}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{r.date_rappel}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{r.agence}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{r.equipe}</td>
                     <td className="px-2 py-1.5 truncate max-w-xs" title={r.commentaire}>
                       {r.commentaire}
                     </td>
