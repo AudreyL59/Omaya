@@ -23,6 +23,7 @@ from app.intranets.adm.routers.gestion_carte_carb import router as carte_carb_ro
 from app.intranets.adm.routers.recherche_ulease import router as recherche_ulease_router
 from app.intranets.adm.routers.formations_iag import router as formations_iag_router
 from app.intranets.adm.routers.suivi_mutuelle import router as suivi_mutuelle_router
+from app.intranets.adm.routers.params_rh import router as params_rh_router
 from app.shared.production.router import router as production_router
 from app.shared.tickets.router import get_tickets_router
 
@@ -54,6 +55,7 @@ router.include_router(carte_carb_router)
 router.include_router(recherche_ulease_router)
 router.include_router(formations_iag_router)
 router.include_router(suivi_mutuelle_router)
+router.include_router(params_rh_router)
 router.include_router(production_router)
 # Module tickets shared : filtre par DroitAccès pour ADM
 router.include_router(get_tickets_router("DroitAccès"))
