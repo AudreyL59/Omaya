@@ -535,6 +535,61 @@ export default function DocUleaseEditModal({
     }
     if (blocks.length === 0) return
 
+    // ----- Toggle off / switch kind ---------------------------------
+    // Si tous les blocs collectes sont des <li> d'une meme liste :
+    //   - meme tag (kind) -> on enleve la liste (transforme en <p>)
+    //   - tag different    -> on switche le tag de la liste
+    const allLi = blocks.every((b) => b.tagName.toLowerCase() === 'li')
+    if (allLi) {
+      const parentList = blocks[0].parentElement
+      const parentTag = parentList?.tagName.toLowerCase() || ''
+      const sameParent = blocks.every((b) => b.parentElement === parentList)
+      if (sameParent && (parentTag === 'ul' || parentTag === 'ol') && parentList) {
+        if (parentTag === kind) {
+          // Toggle off : unwrap chaque <li> en <p>
+          const fragments: HTMLElement[] = []
+          blocks.forEach((li) => {
+            const p = document.createElement('p')
+            p.innerHTML = li.innerHTML || '&nbsp;'
+            fragments.push(p)
+          })
+          // Insertion avant la liste, suppression des li
+          fragments.forEach((p) =>
+            parentList.parentNode!.insertBefore(p, parentList),
+          )
+          blocks.forEach((li) => li.remove())
+          // Si la liste est vide -> on l'enleve
+          if (parentList.children.length === 0) parentList.remove()
+          // Replace le curseur sur le 1er fragment
+          const newSel = window.getSelection()
+          if (newSel && fragments[0]) {
+            const r = document.createRange()
+            r.selectNodeContents(fragments[0])
+            r.collapse(false)
+            newSel.removeAllRanges()
+            newSel.addRange(r)
+          }
+          setIsDirty(true)
+          ed.focus()
+          return
+        }
+        // Switch kind : on remplace le tag de la liste entiere
+        // (cas typique : user a une <ul> et clique 'liste num' ou
+        // l'inverse).
+        const newList = document.createElement(kind)
+        newList.style.listStyle = kind === 'ul' ? 'disc' : 'decimal'
+        newList.style.paddingLeft = '40px'
+        newList.style.margin = '8px 0'
+        while (parentList.firstChild) {
+          newList.appendChild(parentList.firstChild)
+        }
+        parentList.parentNode!.replaceChild(newList, parentList)
+        setIsDirty(true)
+        ed.focus()
+        return
+      }
+    }
+
     // Construit la liste. Style inline obligatoire pour overrider le
     // reset Tailwind (preflight) qui met list-style:none + padding:0.
     const list = document.createElement(kind)
