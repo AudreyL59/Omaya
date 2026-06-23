@@ -208,6 +208,133 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Presence : claim / release / poll
+# ---------------------------------------------------------------------------
+
+
+def claim_cv(id_cv: int, op_id: int) -> dict:
+    """Marque le CV comme 'en cours de traitement' par cet operateur."""
+    db = get_pg_connection("recrutement")
+    # Verifie qu'il n'est pas deja claim par un autre aujourd'hui
+    row = db.query(
+        """SELECT op_traite, date_traite FROM recrutement.pgt_cvtheque
+            WHERE id_cvtheque = ?""",
+        (int(id_cv),),
+    )
+    if row:
+        cur_op = _int(row[0].get("op_traite"))
+        cur_dt = row[0].get("date_traite")
+        if cur_op and cur_op != int(op_id) and cur_dt:
+            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            if cur_dt >= today:
+                return {"ok": False, "error": "deja_claim", "op_traite": str(cur_op)}
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque
+              SET traite_en_cours = true, op_traite = ?, date_traite = NOW(),
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_cvtheque = ?""",
+        (int(op_id), int(op_id), int(id_cv)),
+    )
+    return {"ok": True}
+
+
+def release_cv(id_cv: int, op_id: int) -> dict:
+    """Libere le CV (uniquement si c'est nous qui le possedons)."""
+    db = get_pg_connection("recrutement")
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque
+              SET traite_en_cours = false, op_traite = 0,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_cvtheque = ? AND op_traite = ?""",
+        (int(op_id), int(id_cv), int(op_id)),
+    )
+    return {"ok": True}
+
+
+def release_my_orphans(op_id: int) -> dict:
+    """Libere tous les claims de cet operateur datant d'avant aujourd'hui.
+
+    Appele par le frontend au mount de la page (cleanup des sessions
+    interrompues : crash navigateur, fermeture sans clean, etc.).
+    """
+    db = get_pg_connection("recrutement")
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque
+              SET traite_en_cours = false, op_traite = 0,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE op_traite = ? AND date_traite < ?""",
+        (int(op_id), int(op_id), today),
+    )
+    return {"ok": True}
+
+
+def get_presence(ids: list[int]) -> dict[str, dict]:
+    """Retourne pour chaque id_cvtheque : {op_traite, op_nom, statut_actuel}.
+
+    Filtre presences expirees (date_traite < aujourd'hui).
+    """
+    if not ids:
+        return {}
+    db = get_pg_connection("recrutement")
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    ph = ",".join(["?"] * len(ids))
+    rows = db.query(
+        f"""SELECT id_cvtheque, op_traite, date_traite, traite_en_cours
+              FROM recrutement.pgt_cvtheque
+             WHERE id_cvtheque IN ({ph})""",
+        tuple(int(x) for x in ids),
+    ) or []
+
+    # Dernier statut par CV
+    sr = db.query(
+        f"""SELECT DISTINCT ON (s.id_cvtheque)
+                   s.id_cvtheque, s.id_cv_statut
+              FROM recrutement.pgt_cvsuivi s
+             WHERE s.id_cvtheque IN ({ph})
+               AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
+          ORDER BY s.id_cvtheque, s.datecrea DESC""",
+        tuple(int(x) for x in ids),
+    ) or []
+    statut_by_cv = {_int(r["id_cvtheque"]): _int(r["id_cv_statut"]) for r in sr}
+
+    # Resolveur op_traite -> nom prenom
+    op_ids = {_int(r["op_traite"]) for r in rows if _int(r.get("op_traite"))
+              and r.get("date_traite") and r["date_traite"] >= today}
+    ops: dict[int, str] = {}
+    if op_ids:
+        db_rh = get_pg_connection("rh")
+        ph2 = ",".join(["?"] * len(op_ids))
+        opr = db_rh.query(
+            f"SELECT id_salarie, nom, prenom FROM rh.pgt_salarie "
+            f"WHERE id_salarie IN ({ph2})",
+            tuple(op_ids),
+        ) or []
+        ops = {_int(r["id_salarie"]):
+               f"{_str(r['nom']).upper()} {_str(r['prenom']).strip().title()}".strip()
+               for r in opr}
+
+    out: dict[str, dict] = {}
+    for r in rows:
+        id_cv = _int(r["id_cvtheque"])
+        op = _int(r.get("op_traite"))
+        dt = r.get("date_traite")
+        if r.get("traite_en_cours") and op and dt and dt >= today:
+            out[str(id_cv)] = {
+                "op_traite": str(op),
+                "op_nom": ops.get(op, ""),
+                "statut_actuel": str(statut_by_cv.get(id_cv, "")),
+            }
+        else:
+            out[str(id_cv)] = {
+                "op_traite": "",
+                "op_nom": "",
+                "statut_actuel": str(statut_by_cv.get(id_cv, "")),
+            }
+    return out
+
+
 def search_cv(f: SearchCVFiltres) -> list[CVRow]:
     """Construit la query dynamique selon le mode et execute."""
     where: list[str] = ["(cv.modif_elem IS NULL OR cv.modif_elem NOT LIKE '%suppr%')"]

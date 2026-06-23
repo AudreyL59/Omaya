@@ -11,7 +11,8 @@ propre router via :
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -66,5 +67,49 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             filtres.id_cvsource = "1"
             filtres.id_elem_source = str(user.id_salarie)
         return svc.search_cv(filtres)
+
+    # -- Presence -----------------------------------------------------------
+
+    class IdsPayload(BaseModel):
+        ids: list[str] = []
+
+    @router.post("/presence")
+    def post_presence(
+        payload: IdsPayload,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        """Polling : retourne l'etat de presence + statut courant pour
+        les IDs fournis. Appele toutes les ~1.5s par le frontend."""
+        ids_int = [int(x) for x in payload.ids if str(x).isdigit()]
+        return svc.get_presence(ids_int)
+
+    @router.post("/{id_cv}/claim")
+    def post_claim(
+        id_cv: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Pose une presence (ouverture de fiche CV)."""
+        res = svc.claim_cv(id_cv, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(409, res.get("error") or "claim_failed")
+        return res
+
+    @router.post("/{id_cv}/release")
+    def post_release(
+        id_cv: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Retire ma presence (fermeture de fiche CV)."""
+        return svc.release_cv(id_cv, user.id_salarie)
+
+    @router.post("/orphans/release")
+    def post_release_orphans(
+        user: UserToken = Depends(get_current_user),
+    ):
+        """Nettoie mes claims abandonnes (date_traite < aujourd'hui).
+
+        Appele par le frontend au mount de la page de recherche.
+        """
+        return svc.release_my_orphans(user.id_salarie)
 
     return router

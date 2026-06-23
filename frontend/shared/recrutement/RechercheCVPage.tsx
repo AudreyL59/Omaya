@@ -58,10 +58,17 @@ interface CVRow {
   commentaire: string
 }
 
+interface PresenceEntry {
+  op_traite: string
+  op_nom: string
+  statut_actuel: string
+}
+
 interface RechercheCVPageProps {
   apiBase: string                  // ex: '/api/adm'
   filtresForces?: Partial<Filtres> // ex: Vendeur force id_cvsource+id_elem_source
-  ficheCvBase?: string             // ex: '/recrutement/cv' pour le double-click
+  myUserId?: string                // id_salarie du user connecte (pour couleurs)
+  onOpenFiche?: (id_cvtheque: string) => void   // double-click ouvre Fen_CVFiche
 }
 
 interface Filtres {
@@ -103,7 +110,7 @@ const PROFILS = [
 ]
 
 export default function RechercheCVPage({
-  apiBase, filtresForces = {},
+  apiBase, filtresForces = {}, myUserId = '', onOpenFiche,
 }: RechercheCVPageProps) {
   const today = new Date().toISOString().slice(0, 10)
   const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)
@@ -126,10 +133,15 @@ export default function RechercheCVPage({
   const [loading, setLoading] = useState(false)
   const [selectedId, setSelectedId] = useState('')
   const [statuerVal, setStatuerVal] = useState('')
+  const [presence, setPresence] = useState<Record<string, PresenceEntry>>({})
+  // statut au moment de la recherche initiale (pour detecter les changements)
+  const [statutSnapshot, setStatutSnapshot] = useState<Record<string, string>>({})
+  // ids des CV dont le statut a change depuis la recherche
+  const [changedIds, setChangedIds] = useState<Set<string>>(new Set())
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  // Charger combos une fois
+  // Charger combos une fois + cleanup orphans
   useEffect(() => {
     const h = { Authorization: `Bearer ${getToken()}` }
     fetch(`${apiBase}/recrutement/cv/sources`, { headers: h })
@@ -142,7 +154,47 @@ export default function RechercheCVPage({
       .then(r => r.json()).then(setAnnonceurs)
     fetch(`${apiBase}/recrutement/cv/societes`, { headers: h })
       .then(r => r.json()).then(setSocietes)
+    // Libere mes claims orphelins (sessions interrompues)
+    fetch(`${apiBase}/recrutement/cv/orphans/release`, {
+      method: 'POST', headers: h,
+    }).catch(() => {})
   }, [apiBase])
+
+  // Polling presence + statut tous les 1.5s tant qu'on a des resultats
+  useEffect(() => {
+    if (resultats.length === 0) return
+    const ids = resultats.map(r => r.id_cvtheque)
+    let stopped = false
+
+    const poll = async () => {
+      try {
+        const r = await fetch(`${apiBase}/recrutement/cv/presence`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ ids }),
+        })
+        if (r.ok && !stopped) {
+          const d: Record<string, PresenceEntry> = await r.json()
+          setPresence(d)
+          // Detecte les changements de statut vs snapshot
+          const newChanges = new Set<string>()
+          Object.entries(d).forEach(([id, p]) => {
+            const snap = statutSnapshot[id]
+            if (snap && p.statut_actuel && snap !== p.statut_actuel) {
+              newChanges.add(id)
+            }
+          })
+          setChangedIds(newChanges)
+        }
+      } catch { /* silent */ }
+    }
+    poll()
+    const interval = setInterval(poll, 1500)
+    return () => { stopped = true; clearInterval(interval) }
+  }, [apiBase, resultats, statutSnapshot])
 
   const statutsById = useMemo(() => {
     const m = new Map<string, string>()
@@ -193,6 +245,11 @@ export default function RechercheCVPage({
       if (!r.ok) throw new Error(String(r.status))
       const d: CVRow[] = await r.json()
       setResultats(d)
+      // Snapshot des statuts pour detecter les changements ulterieurs
+      const snap: Record<string, string> = {}
+      d.forEach(row => { snap[row.id_cvtheque] = row.statut_actuel })
+      setStatutSnapshot(snap)
+      setChangedIds(new Set())
       if (d.length === 0) showToast('Aucun résultat.', 'info')
     } catch (e) {
       showToast(`Erreur : ${(e as Error).message}`, 'error')
@@ -201,13 +258,54 @@ export default function RechercheCVPage({
     }
   }
 
-  // Couleur ligne selon presence
+  // Couleur ligne selon presence + selection + changement de statut
   const rowStyle = (r: CVRow): React.CSSProperties => {
-    if (selectedId === r.id_cvtheque) {
+    const isSel = selectedId === r.id_cvtheque
+    const pres = presence[r.id_cvtheque]
+    const opTraite = pres?.op_traite || ''
+    const changed = changedIds.has(r.id_cvtheque)
+
+    // Selection (priorite max)
+    if (isSel) {
       return { backgroundColor: COL_PRIMARY_LIGHT, color: 'white' }
     }
-    // Presence sera ajoutee au commit 3
+    // Statut change : jaune si par moi, orange si par autre
+    if (changed) {
+      if (opTraite && opTraite === myUserId) {
+        return { backgroundColor: '#FEF08A', color: COL_BRUN }  // jaune
+      }
+      return { backgroundColor: '#FED7AA', color: COL_BRUN }    // orange
+    }
+    // Presence sans changement : teinte plus claire
+    if (opTraite) {
+      if (opTraite === myUserId) {
+        return { backgroundColor: '#FEF9C3', color: COL_BRUN }  // jaune clair
+      }
+      return { backgroundColor: '#FFEDD5', color: COL_BRUN }    // orange clair
+    }
     return { backgroundColor: 'white', color: COL_BRUN }
+  }
+
+  // Ouvre Fen_CVFiche : claim cote serveur puis appelle le callback
+  const handleOpenFiche = async (idCv: string) => {
+    try {
+      const r = await fetch(`${apiBase}/recrutement/cv/${idCv}/claim`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (r.status === 409) {
+        const d = await r.json().catch(() => ({}))
+        showToast(`Déjà ouvert (op ${d?.detail?.op_traite || '?'}).`, 'info')
+        return
+      }
+      if (!r.ok) {
+        showToast('Impossible d\'ouvrir cette fiche.', 'error')
+        return
+      }
+      onOpenFiche?.(idCv)
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    }
   }
 
   return (
@@ -354,16 +452,21 @@ export default function RechercheCVPage({
                   Lance une recherche depuis le panneau de gauche.
                 </td></tr>
               ) : (
-                resultats.map(r => (
+                resultats.map(r => {
+                  const pres = presence[r.id_cvtheque]
+                  const statutLive = pres?.statut_actuel || r.statut_actuel
+                  const opNom = pres?.op_nom || r.op_traitement
+                  return (
                   <tr key={r.id_cvtheque} onClick={() => setSelectedId(r.id_cvtheque)}
+                      onDoubleClick={() => handleOpenFiche(r.id_cvtheque)}
                       className="cursor-pointer border-b"
                       style={{ ...rowStyle(r), borderColor: COL_BORDER }}>
                     <td className="px-2 py-1.5 font-semibold whitespace-nowrap">
                       {r.identite}
                     </td>
-                    <td className="px-2 py-1.5">{r.op_traitement}</td>
+                    <td className="px-2 py-1.5">{opNom}</td>
                     <td className="px-2 py-1.5">
-                      {statutsById.get(r.statut_actuel) || ''}
+                      {statutsById.get(statutLive) || ''}
                     </td>
                     <td className="px-2 py-1.5">{sourcesById.get(r.source) || ''}</td>
                     <td className="px-2 py-1.5">{r.detail_source}</td>
@@ -375,7 +478,8 @@ export default function RechercheCVPage({
                     <td className="px-2 py-1.5 whitespace-nowrap">{r.date_saisie}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{r.date_rappel}</td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>
