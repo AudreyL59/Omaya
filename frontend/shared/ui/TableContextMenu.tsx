@@ -40,24 +40,29 @@ interface Props {
 export default function TableContextMenu({ editorRef, onChange }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null)
 
-  // Listener contextmenu sur l'editeur : si le clic est dans une cellule,
-  // on ouvre notre menu (preventDefault sinon menu navigateur).
+  // Listener contextmenu sur le document (phase capture). On filtre via
+  // editorRef.current.contains(target) : 1) le ref peut etre null au
+  // mount initial (editor pas encore rendu si parent en loading), 2) on
+  // veut intercepter avant que le menu natif ne s'affiche.
   useEffect(() => {
-    const ed = editorRef.current
-    if (!ed) return
     const handler = (e: MouseEvent) => {
-      let el = e.target as HTMLElement | null
+      const ed = editorRef.current
+      if (!ed) return
+      const target = e.target as HTMLElement | null
+      if (!target || !ed.contains(target)) return
+      let el: HTMLElement | null = target
       while (el && el !== ed) {
         if (el.tagName === 'TD' || el.tagName === 'TH') {
           e.preventDefault()
+          e.stopPropagation()
           setMenu({ x: e.clientX, y: e.clientY, td: el as HTMLTableCellElement })
           return
         }
         el = el.parentElement
       }
     }
-    ed.addEventListener('contextmenu', handler)
-    return () => ed.removeEventListener('contextmenu', handler)
+    document.addEventListener('contextmenu', handler, true)
+    return () => document.removeEventListener('contextmenu', handler, true)
   }, [editorRef])
 
   // Fermeture du menu au clic ailleurs / Escape.
