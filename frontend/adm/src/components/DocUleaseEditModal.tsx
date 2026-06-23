@@ -27,6 +27,7 @@ import {
   Loader2,
   RotateCcw,
   Save,
+  Search as SearchIcon,
   Underline as UnderlineIcon,
   Upload,
   X,
@@ -99,6 +100,8 @@ export default function DocUleaseEditModal({
   const [saving, setSaving] = useState(false)
   const [steTest, setSteTest] = useState('')
   const [idSalarieTest, setIdSalarieTest] = useState('')
+  const [salarieTestLib, setSalarieTestLib] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [idVehiculePc, setIdVehiculePc] = useState('')
   const [vehiculesAttrib, setVehiculesAttrib] = useState<VehiculeAttribution[]>([])
   const [testing, setTesting] = useState(false)
@@ -762,18 +765,33 @@ export default function DocUleaseEditModal({
                     </select>
                   </Field>
                   <Field label="Test avec" wide>
-                    <select
-                      value={idSalarieTest}
-                      onChange={(e) => setIdSalarieTest(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">- Salarié fictif -</option>
-                      {lookups.salaries.map((s) => (
-                        <option key={s.id_salarie} value={s.id_salarie}>
-                          {s.lib}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex gap-1.5 items-stretch">
+                      <button
+                        type="button"
+                        onClick={() => setPickerOpen(true)}
+                        className="flex-1 flex items-center gap-2 px-3 py-2 rounded border text-sm text-left"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN, backgroundColor: 'white' }}
+                      >
+                        <SearchIcon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{salarieTestLib || '— Salarié fictif —'}</span>
+                      </button>
+                      {idSalarieTest && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIdSalarieTest('')
+                            setSalarieTestLib('')
+                            setIdVehiculePc('')
+                            setVehiculesAttrib([])
+                          }}
+                          title="Réinitialiser"
+                          className="px-2 rounded border text-sm"
+                          style={{ borderColor: COL_BORDER, color: COL_BRUN, backgroundColor: 'white' }}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </Field>
                   {idSalarieTest && (
                     <Field label="Avec véhicule" wide>
@@ -1099,8 +1117,117 @@ export default function DocUleaseEditModal({
             </div>
           )}
         </motion.div>
+
+        {pickerOpen && (
+          <SalariePicker
+            onClose={() => setPickerOpen(false)}
+            onPicked={(s) => {
+              setIdSalarieTest(s.id_salarie)
+              setSalarieTestLib(s.lib)
+              setIdVehiculePc('')
+              setPickerOpen(false)
+            }}
+          />
+        )}
       </motion.div>
     </AnimatePresence>
+  )
+}
+
+// ============================================================================
+// SalariePicker (Fen_RechercheNomSalarie) - meme pattern que AttributionModal
+// ============================================================================
+
+interface SalarieMatch {
+  id_salarie: string
+  lib: string
+}
+
+function SalariePicker({
+  onClose,
+  onPicked,
+}: {
+  onClose: () => void
+  onPicked: (s: SalarieMatch) => void
+}) {
+  const [q, setQ] = useState('')
+  const [list, setList] = useState<SalarieMatch[]>([])
+  const [loading, setLoading] = useState(false)
+  const debounceRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    debounceRef.current = window.setTimeout(() => {
+      setLoading(true)
+      fetch(`/api/adm/parc-auto/salaries/search?q=${encodeURIComponent(q)}&limit=100`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((d) => setList(Array.isArray(d) ? d : []))
+        .finally(() => setLoading(false))
+    }, 200)
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    }
+  }, [q])
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between px-4 py-2 border-b"
+          style={{ borderColor: COL_BORDER, color: 'white', backgroundColor: COL_PRIMARY }}
+        >
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <SearchIcon className="w-4 h-4" />
+            Rechercher un salarié
+          </h3>
+          <button onClick={onClose} className="text-white/80 hover:text-white">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-3">
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Nom ou prénom..."
+            autoFocus
+            className="w-full px-3 py-2 rounded border text-sm"
+            style={{ borderColor: COL_BORDER }}
+          />
+        </div>
+        <div className="flex-1 overflow-auto border-t" style={{ borderColor: COL_BORDER }}>
+          {loading ? (
+            <div className="p-4 text-center">
+              <Loader2 className="w-5 h-5 animate-spin inline" style={{ color: COL_PRIMARY }} />
+            </div>
+          ) : list.length === 0 ? (
+            <div className="p-4 text-center text-sm italic" style={{ color: '#A68D8A' }}>
+              Aucun résultat
+            </div>
+          ) : (
+            list.map((s) => (
+              <button
+                key={s.id_salarie}
+                type="button"
+                onClick={() => onPicked(s)}
+                className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b"
+                style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+              >
+                {s.lib}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
