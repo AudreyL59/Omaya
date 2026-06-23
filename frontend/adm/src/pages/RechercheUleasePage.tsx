@@ -62,7 +62,6 @@ const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
 const COL_PRIMARY_LIGHT = '#6a8d91'
 const COL_BORDER = '#E5DDDC'
-const COL_BG_SOFT = '#F8F5F4'
 
 const inputCls =
   'w-full px-2.5 py-1.5 rounded border bg-white text-sm focus:outline-none focus:ring-1'
