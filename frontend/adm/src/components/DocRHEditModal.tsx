@@ -466,11 +466,31 @@ export default function DocRHEditModal({
     }
     if (blocks.length === 0) return
 
+    // Style inline obligatoire pour overrider le reset Tailwind
+    // (preflight) qui met list-style:none + padding:0.
     const list = document.createElement(kind)
+    list.style.listStyle = kind === 'ul' ? 'disc' : 'decimal'
+    list.style.paddingLeft = '40px'
+    list.style.margin = '8px 0'
+    // 1 <li> par 'ligne' : on splitte chaque bloc par <br> (mammoth
+    // produit parfois un seul <p> avec des <br/> entre les lignes).
     blocks.forEach((b) => {
-      const li = document.createElement('li')
-      li.innerHTML = b.innerHTML || '&nbsp;'
-      list.appendChild(li)
+      const html = b.innerHTML || ''
+      const parts = html
+        .split(/<br\s*\/?>/i)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+      if (parts.length <= 1) {
+        const li = document.createElement('li')
+        li.innerHTML = html || '&nbsp;'
+        list.appendChild(li)
+      } else {
+        parts.forEach((line) => {
+          const li = document.createElement('li')
+          li.innerHTML = line
+          list.appendChild(li)
+        })
+      }
     })
     blocks[0].parentNode!.insertBefore(list, blocks[0])
     blocks.forEach((b) => b.remove())

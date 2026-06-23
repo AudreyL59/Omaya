@@ -209,11 +209,16 @@ def list_types_produit() -> list[dict]:
 
 
 def list_societes_actives() -> list[dict]:
-    """Combo Societe (Fen_EditionDocRH combo ListeSTE + meta du doc)."""
+    """Combo Societe (Fen_EditionDocRH combo ListeSTE + meta du doc).
+
+    Filtre id_type_orga = 1 (FDV Interne) : exclut les distributeurs
+    (id_type_orga = 3 FDV Distrib) et autres types (Indep, STAFF,
+    S'Cool). Cf. WinDev rubrique 'Distributeur' = 0."""
     db = get_pg_connection("rh")
     rows = db.query(
         """SELECT id_ste, raison_sociale, rs_interne FROM rh.pgt_societe
             WHERE COALESCE(is_actif, FALSE) = TRUE
+              AND id_type_orga = 1
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
          ORDER BY raison_sociale""",
     ) or []
