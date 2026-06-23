@@ -32,6 +32,7 @@ import {
   RotateCcw,
   Save,
   Search as SearchIcon,
+  Table as TableIcon,
   Underline as UnderlineIcon,
   Upload,
   X,
@@ -39,7 +40,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
-import { showConfirm, showToast } from '@shared/ui/dialog'
+import { showConfirm, showPrompt, showToast } from '@shared/ui/dialog'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -424,6 +425,50 @@ export default function DocUleaseEditModal({
   const exec = (cmd: string, value?: string) => {
     document.execCommand(cmd, false, value)
     editorRef.current?.focus()
+  }
+
+  // Insertion d'un tableau (HTML brut via execCommand insertHTML).
+  // Une fois inseré, le user peut editer les cellules en cliquant dedans
+  // (contentEditable est recursif). Bords visibles et restitues a
+  // l'identique dans WeasyPrint (CSS inline).
+  const insertTable = async () => {
+    memorizeSelection()
+    const v = await showPrompt({
+      title: 'Insérer un tableau',
+      message: 'Dimensions (lignes × colonnes) :',
+      defaultValue: '3x3',
+      placeholder: 'ex: 3x4',
+      validator: (s) =>
+        /^\s*\d+\s*[xX×]\s*\d+\s*$/.test(s) ? null : 'Format : NxM (ex 3x4)',
+    })
+    if (!v) return
+    const m = v.match(/^\s*(\d+)\s*[xX×]\s*(\d+)\s*$/)
+    if (!m) return
+    const rows = Math.min(50, Math.max(1, parseInt(m[1], 10)))
+    const cols = Math.min(20, Math.max(1, parseInt(m[2], 10)))
+    let html =
+      '<table style="border-collapse:collapse;border:1px solid #888;' +
+      'width:100%;margin:8px 0;">'
+    for (let r = 0; r < rows; r++) {
+      html += '<tr>'
+      for (let c = 0; c < cols; c++) {
+        html += '<td style="border:1px solid #888;padding:6px;' +
+          'min-width:40px;">&nbsp;</td>'
+      }
+      html += '</tr>'
+    }
+    html += '</table><p>&nbsp;</p>'
+
+    editorRef.current?.focus()
+    if (savedRange.current) {
+      const sel = window.getSelection()
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(savedRange.current)
+      }
+    }
+    document.execCommand('insertHTML', false, html)
+    setIsDirty(true)
   }
 
   // Applique font-family / font-size / color sur la selection via span style.
@@ -1032,6 +1077,10 @@ export default function DocUleaseEditModal({
                   </ToolBtn>
                   <ToolBtn onClick={() => exec('justifyFull')} title="Justifier">
                     <AlignJustify className="w-4 h-4" />
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn onClick={insertTable} title="Insérer un tableau">
+                    <TableIcon className="w-4 h-4" />
                   </ToolBtn>
                 </div>
                 {/* Zone d'edition : container gris + 'feuille A4' centree
