@@ -209,6 +209,90 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Organigramme (mode Agence)
+# ---------------------------------------------------------------------------
+
+
+def list_orga_children(id_parent: int) -> list[dict]:
+    """Enfants directs d'un noeud (id_parent=0 = racine 'Reseau')."""
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT o.idorganigramme, o.lib_orga,
+                  EXISTS (
+                    SELECT 1 FROM rh.pgt_organigramme c
+                     WHERE c.id_parent = o.idorganigramme
+                       AND c.modif_elem NOT LIKE '%suppr%'
+                       AND c.idorganigramme <> 0
+                  ) AS has_children
+             FROM rh.pgt_organigramme o
+            WHERE o.id_parent = ?
+              AND o.idorganigramme <> 0
+              AND o.modif_elem NOT LIKE '%suppr%'
+         ORDER BY o.lib_orga ASC""",
+        (int(id_parent),),
+    ) or []
+    return [{
+        "idorganigramme": str(r["idorganigramme"]),
+        "lib_orga": _str(r["lib_orga"]),
+        "has_children": bool(r["has_children"]),
+    } for r in rows]
+
+
+def get_orga_descendants(ids_orga: list[int]) -> list[int]:
+    """Recursive CTE : retourne tous les descendants inclus."""
+    if not ids_orga:
+        return []
+    db = get_pg_connection("rh")
+    ph = ",".join(["?"] * len(ids_orga))
+    rows = db.query(
+        f"""WITH RECURSIVE sub AS (
+                SELECT idorganigramme FROM rh.pgt_organigramme
+                 WHERE idorganigramme IN ({ph})
+                   AND modif_elem NOT LIKE '%suppr%'
+                UNION
+                SELECT o.idorganigramme
+                  FROM rh.pgt_organigramme o
+                  JOIN sub s ON o.id_parent = s.idorganigramme
+                 WHERE o.modif_elem NOT LIKE '%suppr%'
+                   AND o.idorganigramme <> 0
+            )
+            SELECT idorganigramme FROM sub""",
+        tuple(int(x) for x in ids_orga),
+    ) or []
+    return [_int(r["idorganigramme"]) for r in rows]
+
+
+def get_salaries_dans_orgas(
+    ids_orga: list[int],
+    date_debut: Optional[str] = None,
+    date_fin: Optional[str] = None,
+) -> list[int]:
+    """Salaries rattaches a au moins un des orgas pendant la periode.
+
+    Retourne la liste des id_salarie distincts.
+    """
+    if not ids_orga:
+        return []
+    db = get_pg_connection("rh")
+    ph = ",".join(["?"] * len(ids_orga))
+    params: list = list(int(x) for x in ids_orga)
+    where_extra = ""
+    if date_debut and date_fin:
+        where_extra = (" AND so.date_debut <= ?"
+                       " AND (so.date_fin IS NULL OR so.date_fin >= ?)")
+        params.extend([date_fin[:10], date_debut[:10]])
+    rows = db.query(
+        f"""SELECT DISTINCT so.id_salarie
+              FROM rh.pgt_salarie_organigramme so
+             WHERE so.idorganigramme IN ({ph})
+               AND so.modif_elem NOT LIKE '%suppr%'
+               {where_extra}""",
+        tuple(params),
+    ) or []
+    return [_int(r["id_salarie"]) for r in rows if _int(r["id_salarie"])]
+
+
+# ---------------------------------------------------------------------------
 # Presence : claim / release / poll
 # ---------------------------------------------------------------------------
 
@@ -387,8 +471,37 @@ def search_cv(f: SearchCVFiltres) -> list[CVRow]:
                 params.extend([date_deb, date_fin])
 
     elif f.mode == 2:
-        # Mode agence (V2)
-        return []
+        # Mode agence : resoudre orgas -> descendants -> salaries -> CV cooptes
+        ids_orga = [_int(x) for x in (f.id_organigrammes or []) if _int(x)]
+        if not ids_orga:
+            return []
+        all_orgas = get_orga_descendants(ids_orga)
+        if not all_orgas:
+            return []
+        ids_sal = get_salaries_dans_orgas(
+            all_orgas,
+            date_debut=date_deb, date_fin=date_fin,
+        )
+        if not ids_sal:
+            return []
+        ph_sal = ",".join(["?"] * len(ids_sal))
+        where.append(f"cv.id_cvsource = 1 AND cv.id_elem_source IN ({ph_sal})")
+        params.extend(ids_sal)
+        # date filtre
+        if date_deb and date_fin:
+            if f.select_type_date == 1:
+                where.append(
+                    "(cv.date_saisie BETWEEN ? AND ? "
+                    "OR cv.date_reac BETWEEN ? AND ?)"
+                )
+                params.extend([date_deb, date_fin, date_deb, date_fin])
+            else:
+                where.append(
+                    "EXISTS (SELECT 1 FROM recrutement.pgt_cvsuivi s "
+                    "WHERE s.id_cvtheque = cv.id_cvtheque "
+                    "AND s.datecrea BETWEEN ? AND ?)"
+                )
+                params.extend([date_deb, date_fin])
 
     elif f.mode == 3:
         # Mode tel

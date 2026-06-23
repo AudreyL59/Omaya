@@ -68,6 +68,16 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             filtres.id_elem_source = str(user.id_salarie)
         return svc.search_cv(filtres)
 
+    # -- Organigramme (mode Agence) -----------------------------------------
+
+    @router.get("/organigramme/children")
+    def get_orga_children(
+        id_parent: int = Query(0),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        """Enfants directs d'un noeud (id_parent=0 = racine 'Reseau')."""
+        return svc.list_orga_children(id_parent)
+
     # -- Presence -----------------------------------------------------------
 
     class IdsPayload(BaseModel):

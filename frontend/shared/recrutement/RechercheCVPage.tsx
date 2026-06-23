@@ -17,7 +17,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Calendar, ChevronLeft, ChevronRight, Loader2, MapPin, Phone, Search,
+  Building2, Calendar, ChevronDown, ChevronLeft, ChevronRight, Folder,
+  Loader2, MapPin, Phone, Search,
   User as UserIcon, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
@@ -97,7 +98,7 @@ interface Filtres {
 
 const MODES = [
   { key: 1, label: 'CP', icon: MapPin },
-  { key: 2, label: 'Agence', icon: UserIcon, disabled: true },
+  { key: 2, label: 'Agence', icon: Building2 },
   { key: 3, label: 'Tél', icon: Phone },
   { key: 4, label: 'Nom', icon: UserIcon },
 ]
@@ -129,6 +130,7 @@ export default function RechercheCVPage({
   const [societes, setSocietes] = useState<ComboItem[]>([])
 
   const [communesSel, setCommunesSel] = useState<CommuneItem[]>([])
+  const [orgasSel, setOrgasSel] = useState<{ id: string; lib: string }[]>([])
   const [resultats, setResultats] = useState<CVRow[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedId, setSelectedId] = useState('')
@@ -219,6 +221,10 @@ export default function RechercheCVPage({
       showToast('Sélectionne au moins une commune ou un rayon.', 'info')
       return
     }
+    if (filtres.mode === 2 && orgasSel.length === 0) {
+      showToast('Sélectionne au moins une agence / équipe.', 'info')
+      return
+    }
     if (filtres.mode === 3 && !filtres.tel) {
       showToast('Saisis un numéro de téléphone.', 'info')
       return
@@ -233,6 +239,7 @@ export default function RechercheCVPage({
         ...filtres,
         ...filtresForces,
         id_communes_france: communesSel.map(c => c.id_communes_france),
+        id_organigrammes: orgasSel.map(o => o.id),
       }
       const r = await fetch(`${apiBase}/recrutement/cv/search`, {
         method: 'POST',
@@ -341,6 +348,11 @@ export default function RechercheCVPage({
             <FiltresCP filtres={filtres} setFiltres={setFiltres}
                        communesSel={communesSel} setCommunesSel={setCommunesSel}
                        apiBase={apiBase} />
+          )}
+          {/* MODE AGENCE */}
+          {filtres.mode === 2 && (
+            <FiltresAgence orgasSel={orgasSel} setOrgasSel={setOrgasSel}
+                           apiBase={apiBase} />
           )}
           {/* MODE TEL */}
           {filtres.mode === 3 && (
@@ -761,6 +773,162 @@ function FiltresCommuns({
                  style={{ borderColor: COL_BORDER }} />
         </div>
       </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Filtres Agence : arbre orga lazy load (Reseau > Agences > Equipes)
+// ============================================================================
+
+interface OrgaNode {
+  idorganigramme: string
+  lib_orga: string
+  has_children: boolean
+}
+
+function FiltresAgence({ orgasSel, setOrgasSel, apiBase }: {
+  orgasSel: { id: string; lib: string }[]
+  setOrgasSel: (v: { id: string; lib: string }[]) => void
+  apiBase: string
+}) {
+  const [racine, setRacine] = useState<OrgaNode[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`${apiBase}/recrutement/cv/organigramme/children?id_parent=0`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then(setRacine)
+      .finally(() => setLoading(false))
+  }, [apiBase])
+
+  const toggleSel = (n: OrgaNode) => {
+    const exist = orgasSel.some(s => s.id === n.idorganigramme)
+    if (exist) {
+      setOrgasSel(orgasSel.filter(s => s.id !== n.idorganigramme))
+    } else {
+      setOrgasSel([...orgasSel, { id: n.idorganigramme, lib: n.lib_orga }])
+    }
+  }
+
+  const isSelected = (id: string) => orgasSel.some(s => s.id === id)
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold" style={{ color: COL_BRUN }}>
+        Agences / Équipes
+        {orgasSel.length > 0 && (
+          <span className="ml-1 font-normal" style={{ color: COL_PRIMARY }}>
+            ({orgasSel.length})
+          </span>
+        )}
+      </div>
+
+      {/* Selection courante */}
+      {orgasSel.length > 0 && (
+        <div className="space-y-0.5 max-h-24 overflow-y-auto">
+          {orgasSel.map(s => (
+            <div key={s.id}
+                 className="flex items-center justify-between text-xs px-2 py-1 rounded"
+                 style={{ backgroundColor: COL_BG_SOFT, color: COL_BRUN }}>
+              <span className="truncate">{s.lib}</span>
+              <button type="button"
+                      onClick={() => setOrgasSel(orgasSel.filter(o => o.id !== s.id))}
+                      className="text-red-500 hover:text-red-700 shrink-0 ml-1">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Arbre */}
+      <div className="border rounded max-h-80 overflow-y-auto"
+           style={{ borderColor: COL_BORDER, backgroundColor: 'white' }}>
+        {loading ? (
+          <div className="p-3 text-center">
+            <Loader2 className="w-4 h-4 animate-spin inline" />
+          </div>
+        ) : (
+          <div className="text-xs">
+            {/* Racine "Reseau" virtuelle */}
+            <div className="px-2 py-1 font-semibold flex items-center gap-1"
+                 style={{ color: COL_BRUN, backgroundColor: COL_BG_SOFT }}>
+              <Folder className="w-3 h-3" /> Réseau
+            </div>
+            {racine.map(n => (
+              <TreeNode key={n.idorganigramme} node={n} level={1}
+                        apiBase={apiBase}
+                        isSelected={isSelected}
+                        onToggle={toggleSel} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TreeNode({ node, level, apiBase, isSelected, onToggle }: {
+  node: OrgaNode
+  level: number
+  apiBase: string
+  isSelected: (id: string) => boolean
+  onToggle: (n: OrgaNode) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [children, setChildren] = useState<OrgaNode[] | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const handleOpen = async () => {
+    if (open) { setOpen(false); return }
+    if (children === null && node.has_children) {
+      setLoading(true)
+      try {
+        const r = await fetch(
+          `${apiBase}/recrutement/cv/organigramme/children?id_parent=${node.idorganigramme}`,
+          { headers: { Authorization: `Bearer ${getToken()}` } },
+        )
+        if (r.ok) setChildren(await r.json())
+        else setChildren([])
+      } finally { setLoading(false) }
+    }
+    setOpen(true)
+  }
+
+  const sel = isSelected(node.idorganigramme)
+  return (
+    <div>
+      <div className="flex items-center gap-1 px-1 py-0.5 hover:bg-gray-50 cursor-pointer"
+           style={{ paddingLeft: 8 + level * 12 }}>
+        <button type="button" onClick={handleOpen}
+                className="w-4 h-4 flex items-center justify-center"
+                style={{ visibility: node.has_children ? 'visible' : 'hidden' }}>
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" />
+                   : open ? <ChevronDown className="w-3 h-3" />
+                          : <ChevronRight className="w-3 h-3" />}
+        </button>
+        <input type="checkbox" checked={sel}
+               onChange={() => onToggle(node)}
+               className="cursor-pointer" />
+        <button type="button" onClick={() => onToggle(node)}
+                className="flex-1 text-left truncate"
+                style={{ color: COL_BRUN }}>
+          {node.lib_orga}
+        </button>
+      </div>
+      {open && children && children.length > 0 && (
+        <div>
+          {children.map(c => (
+            <TreeNode key={c.idorganigramme} node={c} level={level + 1}
+                      apiBase={apiBase}
+                      isSelected={isSelected} onToggle={onToggle} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
