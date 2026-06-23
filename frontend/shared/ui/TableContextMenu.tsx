@@ -1,7 +1,7 @@
 /**
  * Menu contextuel (clic-droit) pour les tableaux d'un editeur
- * contentEditable. Gere l'insertion/suppression de lignes/colonnes et
- * la suppression du tableau entier.
+ * contentEditable. Gere l'insertion/suppression de lignes/colonnes,
+ * la suppression du tableau et la mise en forme des bordures.
  *
  * Usage :
  *   <TableContextMenu editorRef={editorRef} onChange={() => setIsDirty(true)} />
@@ -17,14 +17,18 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   ArrowUpToLine,
+  Palette,
   Table as TableIcon,
   Trash2,
 } from 'lucide-react'
 
 const COL_BRUN = '#4E1D17'
+const COL_PRIMARY = '#17494E'
 const COL_BORDER = '#E5DDDC'
 
 const NEW_CELL_STYLE = 'border:1px solid #888;padding:6px;min-width:40px;'
+
+type BorderTarget = 'cell' | 'row' | 'col' | 'table'
 
 interface MenuState {
   x: number
@@ -39,6 +43,7 @@ interface Props {
 
 export default function TableContextMenu({ editorRef, onChange }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const [borderState, setBorderState] = useState<MenuState | null>(null)
 
   // Listener contextmenu sur le document (phase capture). On filtre via
   // editorRef.current.contains(target) : 1) le ref peut etre null au
@@ -78,8 +83,6 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
     }
   }, [menu])
 
-  if (!menu) return null
-
   const findTable = (td: HTMLTableCellElement): HTMLTableElement | null => {
     let el: HTMLElement | null = td
     while (el) {
@@ -103,6 +106,7 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
   }
 
   const insertRow = (above: boolean) => {
+    if (!menu) return
     const tr = menu.td.parentElement as HTMLTableRowElement | null
     if (!tr) return
     const nbCols = tr.children.length
@@ -113,6 +117,7 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
   }
 
   const insertCol = (left: boolean) => {
+    if (!menu) return
     const table = findTable(menu.td)
     if (!table) return
     const idx = cellIndex(menu.td) + (left ? 0 : 1)
@@ -123,6 +128,7 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
   }
 
   const deleteRow = () => {
+    if (!menu) return
     const table = findTable(menu.td)
     if (!table) return
     const tr = menu.td.parentElement
@@ -136,6 +142,7 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
   }
 
   const deleteCol = () => {
+    if (!menu) return
     const table = findTable(menu.td)
     if (!table) return
     const idx = cellIndex(menu.td)
@@ -152,9 +159,16 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
   }
 
   const deleteTable = () => {
+    if (!menu) return
     const table = findTable(menu.td)
     table?.remove()
     finish()
+  }
+
+  const openBorderEditor = () => {
+    if (!menu) return
+    setBorderState(menu)
+    setMenu(null)
   }
 
   const finish = () => {
@@ -162,9 +176,28 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
     onChange?.()
   }
 
-  // Position : on clamp pour eviter de sortir du viewport.
+  // Si l'editeur de bordures est ouvert, on ne render que lui.
+  if (borderState) {
+    return (
+      <BorderEditor
+        x={borderState.x}
+        y={borderState.y}
+        td={borderState.td}
+        findTable={findTable}
+        cellIndex={cellIndex}
+        onClose={() => setBorderState(null)}
+        onApplied={() => {
+          setBorderState(null)
+          onChange?.()
+        }}
+      />
+    )
+  }
+
+  if (!menu) return null
+
   const W = 240
-  const H = 296
+  const H = 340
   const x = Math.min(menu.x, window.innerWidth - W - 4)
   const y = Math.min(menu.y, window.innerHeight - H - 4)
 
@@ -192,6 +225,10 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
         Insérer colonne à droite
       </Item>
       <Sep />
+      <Item icon={<Palette className="w-3.5 h-3.5" />} onClick={openBorderEditor}>
+        Bordures…
+      </Item>
+      <Sep />
       <Item icon={<Trash2 className="w-3.5 h-3.5" />} onClick={deleteRow} danger>
         Supprimer la ligne
       </Item>
@@ -203,6 +240,187 @@ export default function TableContextMenu({ editorRef, onChange }: Props) {
         Supprimer le tableau
       </Item>
     </div>
+  )
+}
+
+// ============================================================================
+// BorderEditor : mini popup pour appliquer une bordure (couleur + epaisseur)
+// sur une cible (cellule / ligne / colonne / tableau entier).
+// ============================================================================
+
+function BorderEditor({
+  x, y, td, findTable, cellIndex, onClose, onApplied,
+}: {
+  x: number
+  y: number
+  td: HTMLTableCellElement
+  findTable: (td: HTMLTableCellElement) => HTMLTableElement | null
+  cellIndex: (td: HTMLTableCellElement) => number
+  onClose: () => void
+  onApplied: () => void
+}) {
+  const [width, setWidth] = useState<number>(() => {
+    const cs = window.getComputedStyle(td)
+    const w = parseFloat(cs.borderTopWidth || '1')
+    return isNaN(w) ? 1 : Math.round(w)
+  })
+  const [color, setColor] = useState<string>(() => {
+    const cs = window.getComputedStyle(td)
+    return rgbToHex(cs.borderTopColor || '#888888')
+  })
+  const [target, setTarget] = useState<BorderTarget>('cell')
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const collectCells = (): HTMLTableCellElement[] => {
+    const table = findTable(td)
+    if (!table) return [td]
+    if (target === 'cell') return [td]
+    if (target === 'row') {
+      const tr = td.parentElement
+      if (!tr) return [td]
+      return Array.from(tr.querySelectorAll('td, th')) as HTMLTableCellElement[]
+    }
+    if (target === 'col') {
+      const idx = cellIndex(td)
+      return Array.from(table.querySelectorAll('tr'))
+        .map((tr) => tr.children[idx] as HTMLTableCellElement | undefined)
+        .filter(Boolean) as HTMLTableCellElement[]
+    }
+    // table
+    return Array.from(table.querySelectorAll('td, th')) as HTMLTableCellElement[]
+  }
+
+  const apply = () => {
+    const cells = collectCells()
+    const value = width === 0 ? 'none' : `${width}px solid ${color}`
+    cells.forEach((c) => {
+      c.style.border = value
+      c.style.padding = c.style.padding || '6px'
+      c.style.minWidth = c.style.minWidth || '40px'
+    })
+    // Si la cible est table, on met aussi le border-collapse pour eviter
+    // les double bordures internes (cf. style inline d'origine).
+    if (target === 'table') {
+      const table = findTable(td)
+      if (table) table.style.borderCollapse = 'collapse'
+    }
+    onApplied()
+  }
+
+  const W = 280
+  const H = 220
+  const xc = Math.min(x, window.innerWidth - W - 4)
+  const yc = Math.min(y, window.innerHeight - H - 4)
+
+  return (
+    <>
+      {/* Overlay pour absorber les clics ailleurs */}
+      <div
+        className="fixed inset-0 z-[100]"
+        onMouseDown={onClose}
+      />
+      <div
+        className="fixed z-[101] bg-white border rounded-md shadow-lg p-3 text-sm space-y-2"
+        style={{ left: xc, top: yc, borderColor: COL_BORDER, color: COL_BRUN, width: W }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className="font-semibold mb-1">Bordures du tableau</div>
+        <div className="flex items-center gap-2">
+          <label className="w-20 text-xs">Appliquer :</label>
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value as BorderTarget)}
+            className="flex-1 px-2 py-1 rounded border text-xs"
+            style={{ borderColor: COL_BORDER }}
+          >
+            <option value="cell">à la cellule</option>
+            <option value="row">à la ligne</option>
+            <option value="col">à la colonne</option>
+            <option value="table">à tout le tableau</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="w-20 text-xs">Épaisseur :</label>
+          <input
+            type="number"
+            min={0}
+            max={10}
+            value={width}
+            onChange={(e) =>
+              setWidth(Math.max(0, Math.min(10, Number(e.target.value) || 0)))
+            }
+            className="w-16 px-2 py-1 rounded border text-xs"
+            style={{ borderColor: COL_BORDER }}
+          />
+          <span className="text-xs italic" style={{ color: '#A68D8A' }}>
+            (0 = pas de bordure)
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="w-20 text-xs">Couleur :</label>
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="w-10 h-6 rounded border cursor-pointer"
+            style={{ borderColor: COL_BORDER }}
+          />
+          <input
+            type="text"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="flex-1 px-2 py-1 rounded border text-xs font-mono"
+            style={{ borderColor: COL_BORDER }}
+          />
+        </div>
+        {/* Apercu */}
+        <div
+          className="text-xs px-2 py-3 text-center"
+          style={{
+            border: width === 0 ? '1px dashed #ccc' : `${width}px solid ${color}`,
+            color: '#999',
+          }}
+        >
+          Aperçu
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1 rounded border text-xs"
+            style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+          >
+            Annuler
+          </button>
+          <button
+            type="button"
+            onClick={apply}
+            className="px-3 py-1 rounded text-white text-xs"
+            style={{ backgroundColor: COL_PRIMARY }}
+          >
+            Appliquer
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function rgbToHex(rgb: string): string {
+  if (rgb.startsWith('#')) return rgb
+  const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+  if (!m) return '#888888'
+  const [, r, g, b] = m
+  return (
+    '#' +
+    [r, g, b].map((x) => parseInt(x, 10).toString(16).padStart(2, '0')).join('')
   )
 }
 

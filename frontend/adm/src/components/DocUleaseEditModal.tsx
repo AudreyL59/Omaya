@@ -218,6 +218,9 @@ export default function DocUleaseEditModal({
       if (!sel || sel.rangeCount === 0) return
       const node = sel.anchorNode
       if (!node || !editorRef.current?.contains(node)) return
+      // Memorise la range courante : utilise par exec() comme fallback
+      // si l'editeur perd le focus (clic sur un bouton de la toolbar).
+      savedRange.current = sel.getRangeAt(0).cloneRange()
       const el =
         node.nodeType === 3
           ? (node.parentElement as HTMLElement | null)
@@ -423,9 +426,30 @@ export default function DocUleaseEditModal({
   }
 
   // ---- Toolbar contenteditable -----------------------------------------
+  // Restaure d'abord la selection memorisee (si elle est toujours dans
+  // l'editeur) ou focus l'editeur, puis exec la commande. Sinon
+  // execCommand est ignoree si activeElement n'est pas dans le
+  // contentEditable (cas typique : on clique 'souligner' sans avoir
+  // d'abord clique dans le texte).
   const exec = (cmd: string, value?: string) => {
+    const ed = editorRef.current
+    if (!ed) return
+    if (document.activeElement !== ed) {
+      const sel = window.getSelection()
+      if (
+        savedRange.current &&
+        ed.contains(savedRange.current.commonAncestorContainer)
+      ) {
+        if (sel) {
+          sel.removeAllRanges()
+          sel.addRange(savedRange.current)
+        }
+      } else {
+        ed.focus()
+      }
+    }
     document.execCommand(cmd, false, value)
-    editorRef.current?.focus()
+    ed.focus()
   }
 
   // Insertion d'un tableau (HTML brut via execCommand insertHTML).
@@ -1360,16 +1384,22 @@ function ToolBtn({
   onClick,
   title,
   children,
+  onPreClick,
 }: {
   onClick: () => void
   title: string
   children: React.ReactNode
+  /** Appele au mousedown AVANT preventDefault (memorize selection, etc.) */
+  onPreClick?: () => void
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      onMouseDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => {
+        onPreClick?.()
+        e.preventDefault()
+      }}
       title={title}
       className="px-2 py-1 rounded hover:bg-white text-xs"
       style={{ color: COL_BRUN }}

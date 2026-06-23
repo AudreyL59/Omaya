@@ -209,6 +209,9 @@ export default function DocRHEditModal({
       if (!sel || sel.rangeCount === 0) return
       const node = sel.anchorNode
       if (!node || !editorRef.current?.contains(node)) return
+      // Memorise la range courante : utilise par exec() comme fallback
+      // si l'editeur perd le focus (clic sur un bouton de la toolbar).
+      savedRange.current = sel.getRangeAt(0).cloneRange()
       const el =
         node.nodeType === 3
           ? (node.parentElement as HTMLElement | null)
@@ -365,9 +368,28 @@ export default function DocRHEditModal({
   }
 
   // ---- Toolbar contenteditable -----------------------------------------
+  // Restaure la selection memorisee si elle est dans l'editeur, sinon
+  // focus l'editeur, puis exec la commande. Sinon execCommand est
+  // ignoree si l'activeElement n'est pas dans le contentEditable.
   const exec = (cmd: string, value?: string) => {
+    const ed = editorRef.current
+    if (!ed) return
+    if (document.activeElement !== ed) {
+      const sel = window.getSelection()
+      if (
+        savedRange.current &&
+        ed.contains(savedRange.current.commonAncestorContainer)
+      ) {
+        if (sel) {
+          sel.removeAllRanges()
+          sel.addRange(savedRange.current)
+        }
+      } else {
+        ed.focus()
+      }
+    }
     document.execCommand(cmd, false, value)
-    editorRef.current?.focus()
+    ed.focus()
   }
 
   // Insertion d'un tableau (HTML brut via execCommand insertHTML).
