@@ -12,6 +12,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
   Bold,
   Download,
   Eye,
@@ -949,16 +953,19 @@ export default function DocRHEditModal({
                     onClick={() => exec('justifyLeft')}
                     title="Aligner à gauche"
                   >
-                    ⇤
+                    <AlignLeft className="w-4 h-4" />
                   </ToolBtn>
                   <ToolBtn onClick={() => exec('justifyCenter')} title="Centrer">
-                    ↔
+                    <AlignCenter className="w-4 h-4" />
                   </ToolBtn>
                   <ToolBtn
                     onClick={() => exec('justifyRight')}
                     title="Aligner à droite"
                   >
-                    ⇥
+                    <AlignRight className="w-4 h-4" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('justifyFull')} title="Justifier">
+                    <AlignJustify className="w-4 h-4" />
                   </ToolBtn>
                 </div>
                 {/* Zone d'edition : container gris + 'feuille A4' centree
