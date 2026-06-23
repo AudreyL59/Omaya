@@ -17,6 +17,7 @@ import CttTravailPage from '@/pages/CttTravailPage'
 import ParcAutoPage from '@/pages/ParcAutoPage'
 import DocUleasePage from '@/pages/DocUleasePage'
 import RechercheUleasePage from '@/pages/RechercheUleasePage'
+import FormationsIAGPage from '@/pages/FormationsIAGPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -62,6 +63,7 @@ function App() {
           <Route path="ulease/parc-auto" element={<ParcAutoPage />} />
           <Route path="ulease/documents" element={<DocUleasePage />} />
           <Route path="ulease/recherche" element={<RechercheUleasePage />} />
+          <Route path="salaries/formations-iag" element={<FormationsIAGPage />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />
