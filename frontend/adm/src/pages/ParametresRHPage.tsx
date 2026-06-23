@@ -791,7 +791,7 @@ function PortailsEditor() {
   }
 
   return (
-    <div className="grid grid-cols-[1fr_320px] gap-4">
+    <div className="space-y-4">
       <div>
         <Toolbar onNew={handleNew} onDelete={handleDelete} onReload={reload}
                  deleteDisabled={!selected || saving} />
@@ -839,9 +839,9 @@ function PortailsEditor() {
         </div>
       </div>
 
-      <div className="bg-white border rounded-lg p-4 space-y-2 h-fit"
+      <div className="bg-white border rounded-lg p-4 grid grid-cols-2 gap-x-6 gap-y-2 max-w-3xl"
            style={{ borderColor: COL_BORDER }}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 col-span-2">
           <label className="text-xs w-24" style={{ color: COL_BRUN }}>ID</label>
           <input value={form.id} disabled
                  className="flex-1 px-2 py-1.5 rounded border bg-gray-50 text-sm"
@@ -889,13 +889,13 @@ function PortailsEditor() {
                  className="w-full px-2 py-1.5 rounded border bg-white text-sm"
                  style={{ borderColor: COL_BORDER }} />
         </PortailField>
-        <label className="flex items-center gap-2 text-sm" style={{ color: COL_BRUN }}>
+        <label className="flex items-center gap-2 text-sm col-span-2" style={{ color: COL_BRUN }}>
           <input type="checkbox" checked={form.is_actif}
                  onChange={(e) => setForm({ ...form, is_actif: e.target.checked })} />
           Visible / Actif
         </label>
         <button type="button" onClick={handleSave} disabled={saving}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-white text-sm disabled:opacity-50"
+                className="col-span-2 flex items-center justify-center gap-2 px-3 py-2 rounded text-white text-sm disabled:opacity-50"
                 style={{ backgroundColor: COL_PRIMARY }}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
           {form.id && form.id !== '0' ? 'Enregistrer' : 'Créer'}
