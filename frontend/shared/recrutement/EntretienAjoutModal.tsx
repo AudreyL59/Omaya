@@ -202,11 +202,15 @@ export default function EntretienAjoutModal({
       if (!r.ok) throw new Error(String(r.status))
       const d = await r.json().catch(() => ({}))
       const smsRes = d?.sms?.statut
-      if (sendSms && smsRes) {
-        showToast(`RDV planifié. SMS : ${smsRes}`, 'success')
-      } else {
-        showToast('RDV planifié avec succès.', 'success')
+      const anim = d?.animation
+      const messages: string[] = ['RDV planifié']
+      if (sendSms && smsRes) messages.push(`SMS : ${smsRes}`)
+      if (anim?.ok) {
+        messages.push(
+          `Animation coopt : +${anim.credit_livret} EC, ${anim.nb_sms_envoyes} SMS staff`,
+        )
       }
+      showToast(messages.join(' — '), 'success')
       onClose(true)
     } catch (e) {
       showToast(`Erreur : ${(e as Error).message}`, 'error')

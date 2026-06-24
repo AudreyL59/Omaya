@@ -336,10 +336,12 @@ def create_rdv(id_cv: int, p: CreateRdvPayload, op_id: int) -> dict:
         f"{_str(rec['nom']).upper()} {_str(rec['prenom']).strip().title()}"
     )
 
-    # Resolve nom + gsm candidat (gsm pour le SMS de confirmation)
+    # Resolve nom + gsm candidat (gsm pour le SMS de confirmation) + source
+    # cooptation (id_cvsource=1 -> animation cooptation a declencher)
     cv = db.query_one(
-        "SELECT nom, prenom, id_cvposte, gsm FROM recrutement.pgt_cvtheque "
-        "WHERE id_cvtheque = ?",
+        """SELECT nom, prenom, id_cvposte, gsm, id_cvsource, id_elem_source
+             FROM recrutement.pgt_cvtheque
+            WHERE id_cvtheque = ?""",
         (int(id_cv),),
     )
     if not cv:
@@ -347,6 +349,8 @@ def create_rdv(id_cv: int, p: CreateRdvPayload, op_id: int) -> dict:
     cand_nom = _str(cv["nom"]).upper()
     cand_prenom = _str(cv["prenom"]).strip().title()
     cand_gsm = _str(cv.get("gsm"))
+    id_src = _int(cv.get("id_cvsource"))
+    id_coopteur = _int(cv.get("id_elem_source")) if id_src == 1 else 0
 
     # Parse date_debut + 30 min pour date_fin
     try:
@@ -412,12 +416,21 @@ def create_rdv(id_cv: int, p: CreateRdvPayload, op_id: int) -> dict:
             op_id=op_id,
         )
 
-    # TODO V_later : animation cooptation
+    # Animation cooptation (SMSCOOPTRH) : si CV via cooptation, credit
+    # 500 EC au coopteur + SMS si toutes conditions OK (best-effort).
+    anim_res: dict = {}
+    if id_coopteur:
+        try:
+            anim_res = _trigger_animation_cooptation(id_cv, id_coopteur, op_id)
+        except Exception as e:
+            anim_res = {"ok": False, "reason": f"exception: {type(e).__name__}"}
+
     return {
         "ok": True,
         "id_rdv": str(id_rdv),
         "id_cv_suivi": str(id_cv_suivi),
         "sms": sms_res,
+        "animation": anim_res,
     }
 
 
@@ -425,6 +438,186 @@ def _next_auto(db, schema: str, table: str, auto_col: str) -> int:
     """COALESCE(MAX(auto_col),0)+1. Helper pour HFSQL-migrated sans sequence."""
     r = db.query(f"SELECT COALESCE(MAX({auto_col}),0)+1 AS n FROM {schema}.{table}")
     return _int(r[0]["n"]) if r else 1
+
+
+# ---------------------------------------------------------------------------
+# Animation cooptation (SMSCOOPTRH)
+# ---------------------------------------------------------------------------
+
+
+_ANIM_CODE = "SMSCOOPTRH"
+_TYPE_OPE_LIVRET_COOPT_ENTRETIEN = 4  # cf. rh.pgt_type_operation_livret
+_MONTANT_CREDIT_COOPT = 500
+
+
+def _trigger_animation_cooptation(id_cv: int, id_coopteur: int, op_id: int) -> dict:
+    """Si la regle SMSCOOPTRH est active ET pas deja declenchee aujourd'hui
+    pour ce CV ET le coopteur est dans une orga participante ET pas
+    directeur :
+      - Credit 500 EC sur le livret du coopteur
+      - SMS a tous les destinataires (orgadest -> salaries -> GSM)
+      - Insert histo_animation pour bloquer re-declenchement aujourd'hui
+
+    Fail silencieux (retourne {ok: False, reason}) si une condition manque.
+    """
+    if not id_coopteur:
+        return {"ok": False, "reason": "no_coopteur"}
+
+    db_div = get_pg_connection("divers")
+    today = date.today()
+    code_animation = f"{_ANIM_CODE}_1_{int(id_cv)}"
+
+    # 1) Regle active ?
+    regle = db_div.query_one(
+        """SELECT is_actif FROM divers.pgt_smsanimation_regleenvoi
+            WHERE code_animation = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (_ANIM_CODE,),
+    )
+    if not regle or not regle.get("is_actif"):
+        return {"ok": False, "reason": "regle_inactive"}
+
+    # 2) Pas deja declenche aujourd'hui pour ce CV ?
+    deja = db_div.query_one(
+        """SELECT 1 FROM divers.pgt_histo_animation
+            WHERE code_animation = ?
+              AND date_envoi_sms = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (code_animation, today),
+    )
+    if deja:
+        return {"ok": False, "reason": "deja_declenche_aujourdhui"}
+
+    # 3) Charge l'orga du coopteur (affectation la plus recente avant today)
+    db_rh = get_pg_connection("rh")
+    aff = db_rh.query_one(
+        """SELECT so.idorganigramme,
+                  o.lib_orga,
+                  e.prof_poste
+             FROM rh.pgt_salarie_organigramme so
+             LEFT JOIN rh.pgt_organigramme o
+                    ON o.idorganigramme = so.idorganigramme
+             LEFT JOIN rh.pgt_salarie_embauche e
+                    ON e.id_salarie = so.id_salarie AND e.en_activite = true
+            WHERE so.id_salarie = ?
+              AND so.modif_elem NOT LIKE '%suppr%'
+              AND so.date_debut <= ?
+              AND (so.date_fin IS NULL OR so.date_fin >= ?)
+         ORDER BY so.date_debut DESC LIMIT 1""",
+        (int(id_coopteur), today, today),
+    )
+    if not aff:
+        return {"ok": False, "reason": "no_affectation_coopteur"}
+    id_orga_coopt = _int(aff.get("idorganigramme"))
+    poste_coopt = _str(aff.get("prof_poste"))
+
+    # 4) Coopteur est-il directeur ? (poste contient "Dir.")
+    if "dir." in poste_coopt.lower():
+        return {"ok": False, "reason": "coopteur_est_directeur"}
+
+    # 5) L'orga du coopteur participe-t-elle a l'animation ?
+    orga_in = db_div.query_one(
+        """SELECT 1 FROM divers.pgt_sms_animation_orga_periode
+            WHERE code_animation = ?
+              AND is_actif = true
+              AND idorganigramme = ?
+              AND du <= ? AND au >= ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (_ANIM_CODE, id_orga_coopt, today, today),
+    )
+    if not orga_in:
+        return {"ok": False, "reason": "orga_coopteur_pas_dans_animation"}
+
+    # 6) Credit 500 EC sur le livret
+    livret_auto = _next_auto(
+        db_rh, "rh", "pgt_salarie_livret", "id_salarie_livret",
+    )
+    db_rh.query(
+        """INSERT INTO rh.pgt_salarie_livret
+             (id_salarie_livret, id_salarie, id_type_operation_livret,
+              id_challenge, id_tk_liste,
+              montant_credit, montant_debit, date_operation, operateur,
+              modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, 0, 0, ?, 0, NOW(), ?, NOW(), ?, 'new')""",
+        (livret_auto, int(id_coopteur), _TYPE_OPE_LIVRET_COOPT_ENTRETIEN,
+         _MONTANT_CREDIT_COOPT, int(op_id), int(op_id)),
+    )
+
+    # 7) Destinataires SMS : orgadest -> salaries actifs avec GSM
+    dest = db_div.query(
+        """SELECT idorganigramme FROM divers.pgt_smsanimation_orgadest
+            WHERE anim_code = ?
+              AND is_actif = true
+              AND du <= ? AND au >= ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (_ANIM_CODE, today, today),
+    ) or []
+    orga_dest_ids = [_int(d["idorganigramme"]) for d in dest if _int(d["idorganigramme"])]
+
+    gsms_envoyes: list[str] = []
+    if orga_dest_ids:
+        # Trouve les GSM des salaries actifs rattaches a au moins une orga dest
+        ph = ",".join(["?"] * len(orga_dest_ids))
+        sals = db_rh.query(
+            f"""SELECT DISTINCT s.gsm
+                  FROM rh.pgt_salarie s
+                  JOIN rh.pgt_salarie_organigramme so
+                       ON so.id_salarie = s.id_salarie
+                  JOIN rh.pgt_salarie_embauche e
+                       ON e.id_salarie = s.id_salarie AND e.en_activite = true
+                 WHERE so.idorganigramme IN ({ph})
+                   AND so.modif_elem NOT LIKE '%suppr%'
+                   AND so.date_debut <= ?
+                   AND (so.date_fin IS NULL OR so.date_fin >= ?)
+                   AND s.gsm IS NOT NULL AND s.gsm <> ''
+                   AND s.modif_elem NOT LIKE '%suppr%'""",
+            (*orga_dest_ids, today, today),
+        ) or []
+        # Construit le message
+        coopt = db_rh.query_one(
+            "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ?",
+            (int(id_coopteur),),
+        )
+        if coopt:
+            cn = _str(coopt["nom"]).upper()
+            cp = _str(coopt["prenom"]).strip().title()
+            initial = cn[:1]
+            lib_orga = _str(aff.get("lib_orga"))
+            msg = (
+                f"{cp} {initial}({lib_orga}) vient de gagner "
+                f"{_MONTANT_CREDIT_COOPT} EC avec une coopt convoquee en entretien."
+            )
+            for s in sals:
+                gsm = _str(s.get("gsm")).strip()
+                if not gsm:
+                    continue
+                try:
+                    envoi_sms(msg, gsm, emetteur="Perf-Exo")
+                    gsms_envoyes.append(gsm)
+                except Exception:
+                    pass
+
+    # 8) Insert histo_animation (bloque re-declenchement aujourd'hui)
+    histo_id = _next_auto(
+        db_div, "divers", "pgt_histo_animation", "id_histo_animation",
+    )
+    db_div.query(
+        """INSERT INTO divers.pgt_histo_animation
+             (id_histo_animation, code_animation, date_envoi_sms,
+              datecrea, modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, NOW(), NOW(), ?, 'new')""",
+        (histo_id, code_animation, today, int(op_id)),
+    )
+
+    return {
+        "ok": True,
+        "credit_livret": _MONTANT_CREDIT_COOPT,
+        "id_coopteur": str(id_coopteur),
+        "nb_sms_envoyes": len(gsms_envoyes),
+    }
 
 
 def _send_sms_confirmation(
