@@ -638,8 +638,11 @@ export default function RechercheCVPage({
               ) : (
                 displayedRows.map(r => {
                   const pres = presence[r.id_cvtheque]
-                  const statutLive = pres?.statut_actuel || r.statut_actuel
-                  const opNom = pres?.op_nom || r.op_traitement
+                  // Priorite a la donnee live du polling (meme si vide).
+                  // Fallback sur le snapshot initial uniquement si pas
+                  // encore polle.
+                  const statutLive = pres ? pres.statut_actuel : r.statut_actuel
+                  const opNom = pres ? pres.op_nom : r.op_traitement
                   return (
                   <tr key={r.id_cvtheque}
                       onClick={() => handleRowClick(r.id_cvtheque)}

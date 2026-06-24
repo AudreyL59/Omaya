@@ -167,13 +167,26 @@ export default function CVFicheModal({
       .finally(() => setLoading(false))
   }, [apiBase, idCv])
 
-  // Au unmount : release la presence
+  // Au unmount (close modal) ET avant unload (fermeture onglet/refresh)
+  // : release la presence. sendBeacon est best-effort meme apres unload.
   useEffect(() => {
+    const release = () => {
+      const url = `${apiBase}/recrutement/cv/${idCv}/release`
+      const token = getToken()
+      // 1) Tentative fetch keepalive (passe meme apres unload sur browsers
+      // modernes ; sendBeacon ne supporte pas les headers Authorization).
+      try {
+        fetch(url, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          keepalive: true,
+        }).catch(() => {})
+      } catch { /* silent */ }
+    }
+    window.addEventListener('beforeunload', release)
     return () => {
-      fetch(`${apiBase}/recrutement/cv/${idCv}/release`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }).catch(() => {})
+      window.removeEventListener('beforeunload', release)
+      release()
     }
   }, [apiBase, idCv])
 
