@@ -80,13 +80,20 @@ interface CVFicheModalProps {
   onOpenMotsCles?: (idCv: string) => void  // Fen_CVEditMotsCles (autre module)
 }
 
+// Couleurs reprises du WinDev (cf. Fen_CVFiche)
 const QUICK_STATUTS = [
-  { id: 4,  label: 'Refus Cand',   icon: UserX,            obs: '' },
-  { id: 5,  label: 'Refus RH',     icon: UserX,            obs: '' },
-  { id: 3,  label: 'Msg Rép',      icon: MessageSquareOff, obs: 'MESSAGE REP' },
-  { id: 7,  label: 'Hors Cible',   icon: PhoneOff,         obs: '' },
-  { id: 9,  label: 'Etudiant',     icon: GraduationCap,    obs: '' },
-  { id: 2,  label: 'À recontacter', icon: Calendar,        obs: '', needsDate: true },
+  { id: 4,  label: 'Refus Cand',   icon: UserX,            obs: '',
+    color: '#D98873' },                                              // saumon
+  { id: 5,  label: 'Refus RH',     icon: UserX,            obs: '',
+    color: '#DC2626' },                                              // rouge vif
+  { id: 3,  label: 'Msg Rép',      icon: MessageSquareOff, obs: 'MESSAGE REP',
+    color: '#6B7280' },                                              // gris
+  { id: 7,  label: 'Hors Cible',   icon: PhoneOff,         obs: '',
+    color: '#DC2626' },                                              // rouge
+  { id: 9,  label: 'Etudiant',     icon: GraduationCap,    obs: '',
+    color: '#2563EB' },                                              // bleu
+  { id: 2,  label: 'À recontacter', icon: Calendar,        obs: '',
+    needsDate: true, color: '#F97316' },                             // orange
 ]
 
 export default function CVFicheModal({
@@ -643,7 +650,7 @@ export default function CVFicheModal({
                     <button key={st.id} type="button" onClick={() => quickStatut(st)}
                             className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs"
                             style={{ borderColor: COL_BORDER, color: COL_BRUN, backgroundColor: 'white' }}>
-                      <Icon className="w-3.5 h-3.5" />
+                      <Icon className="w-3.5 h-3.5" style={{ color: st.color }} />
                       {st.label}
                     </button>
                   )
