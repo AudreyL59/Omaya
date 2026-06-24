@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation, NavLink, Link } from 'react-router-dom'
-import { ChevronDown, LogOut } from 'lucide-react'
+import { ChevronDown, ExternalLink, LogOut } from 'lucide-react'
 import { useMenu, type HeaderAction, type MenuSection } from '@/hooks/useMenu'
 import { useAuth } from '@/hooks/useAuth'
 import { getToken } from '@/api'
@@ -77,29 +77,39 @@ export default function Header() {
     <header className="bg-[#17494E] text-white shrink-0">
       <div className="px-4 py-3 flex items-center gap-4">
         {/* Logo + identité user (cliquable → home) */}
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center gap-3 px-2 py-1 rounded-lg hover:bg-white/10 transition-colors min-w-0"
-          title="Retour à l'accueil"
-        >
-          <div className="w-11 h-11 rounded-full bg-white/15 ring-2 ring-white/20 flex items-center justify-center overflow-hidden shrink-0">
-            {photo ? (
-              <img
-                src={photoDataUrl(photo)}
-                alt={`${user?.prenom ?? ''} ${user?.nom ?? ''}`}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <img src={logoOmaya} alt="Omaya" className="w-7 h-7" />
-            )}
-          </div>
-          <div className="text-left min-w-0">
-            <div className="text-xs leading-tight text-white/70">{user?.prenom}</div>
-            <div className="text-sm font-semibold leading-tight truncate max-w-[160px]">
-              {(user?.nom || '').toUpperCase()}
+        <div className="flex items-center gap-1 min-w-0">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-3 px-2 py-1 rounded-lg hover:bg-white/10 transition-colors min-w-0"
+            title="Retour à l'accueil"
+          >
+            <div className="w-11 h-11 rounded-full bg-white/15 ring-2 ring-white/20 flex items-center justify-center overflow-hidden shrink-0">
+              {photo ? (
+                <img
+                  src={photoDataUrl(photo)}
+                  alt={`${user?.prenom ?? ''} ${user?.nom ?? ''}`}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img src={logoOmaya} alt="Omaya" className="w-7 h-7" />
+              )}
             </div>
-          </div>
-        </button>
+            <div className="text-left min-w-0">
+              <div className="text-xs leading-tight text-white/70">{user?.prenom}</div>
+              <div className="text-sm font-semibold leading-tight truncate max-w-[160px]">
+                {(user?.nom || '').toUpperCase()}
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => window.open(window.location.href, '_blank', 'noopener')}
+            className="p-1.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+            title="Ouvrir la page courante dans un nouvel onglet"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Barre d'icônes (centrée, plein largeur disponible) */}
         <nav className="flex-1 flex items-center justify-center gap-1 overflow-x-auto">
