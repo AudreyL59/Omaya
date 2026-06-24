@@ -22,6 +22,7 @@ import SuiviMutuellePage from '@/pages/SuiviMutuellePage'
 import ParametresRHPage from '@/pages/ParametresRHPage'
 import RechercheCVPageAdm from '@/pages/RechercheCVPage'
 import RechercheCvMotsClesPageAdm from '@/pages/RechercheCvMotsClesPage'
+import LieuxRDVPageAdm from '@/pages/LieuxRDVPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -72,6 +73,7 @@ function App() {
           <Route path="salaries/parametres" element={<ParametresRHPage />} />
           <Route path="recrutement/recherche-cv" element={<RechercheCVPageAdm />} />
           <Route path="recrutement/recherche-cv-kw" element={<RechercheCvMotsClesPageAdm />} />
+          <Route path="recrutement/lieu-rdv" element={<LieuxRDVPageAdm />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />

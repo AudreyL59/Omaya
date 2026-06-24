@@ -11,7 +11,7 @@ propre router via :
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -29,6 +29,7 @@ from app.shared.recrutement.schemas.recherche_cv import (
 )
 from app.shared.recrutement.services import cv_fiche as fiche_svc
 from app.shared.recrutement.services import entretien as ent_svc
+from app.shared.recrutement.services import lieux_rdv as lieux_svc
 from app.shared.recrutement.services import recherche_cv as svc
 
 
@@ -270,6 +271,56 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         return fiche_svc.upload_cv_file(
             id_cv, nom, content, file.filename or "", user.id_salarie,
         )
+
+    # -- Fen_LieuRDV : gestion des lieux de RDV ----------------------------
+
+    @router.get("/lieux-rdv", response_model=list[lieux_svc.LieuRDV])
+    def get_lieux(
+        is_actif: Optional[bool] = Query(None),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.list_lieux(is_actif)
+
+    @router.get("/lieux-rdv/{id_lieu}", response_model=lieux_svc.LieuRDV)
+    def get_lieu(
+        id_lieu: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        f = lieux_svc.get_lieu(id_lieu)
+        if not f:
+            raise HTTPException(404, "Lieu introuvable")
+        return f
+
+    @router.post("/lieux-rdv")
+    def post_lieu(
+        payload: lieux_svc.LieuRdvPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.save_lieu(payload, user.id_salarie)
+
+    @router.delete("/lieux-rdv/{id_lieu}")
+    def del_lieu(
+        id_lieu: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.delete_lieu(id_lieu, user.id_salarie)
+
+    @router.post("/lieux-rdv/{id_lieu}/duplicate")
+    def post_dup_lieu(
+        id_lieu: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        res = lieux_svc.duplicate_lieu(id_lieu, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "fail")
+        return res
+
+    @router.post("/lieux-rdv/geocode", response_model=lieux_svc.GeocodeResponse)
+    def post_geocode(
+        payload: lieux_svc.GeocodePayload,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.geocode_adresse(payload)
 
     # -- Fen_EntretienAjout (Planifier un RDV) -----------------------------
 
