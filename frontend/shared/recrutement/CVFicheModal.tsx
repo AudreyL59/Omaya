@@ -602,22 +602,34 @@ export default function CVFicheModal({
                   </select>
                 </FieldRow>
                 <FieldRow label="Statut du CV">
-                  <div className="flex gap-2">
-                    <select value={fiche.id_cv_statut}
-                            onChange={e => setF({ id_cv_statut: e.target.value })}
-                            className="flex-1 px-2 py-1.5 rounded border text-sm"
-                            style={{ borderColor: COL_BORDER }}>
-                      <option value="">—</option>
-                      {statuts.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                    </select>
-                    <button type="button" onClick={restatuer}
-                            className="px-2 py-1 rounded border text-xs"
-                            style={{ borderColor: COL_PRIMARY, color: COL_PRIMARY }}
-                            title="Restatuer le CV">
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <select value={fiche.id_cv_statut}
+                          onChange={e => setF({ id_cv_statut: e.target.value })}
+                          className="w-full px-2 py-1.5 rounded border text-sm"
+                          style={{ borderColor: COL_BORDER }}>
+                    <option value="">—</option>
+                    {statuts.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
                 </FieldRow>
+                {/* Btn Restatuer : actif uniquement si statut < 100 et != 6 */}
+                {(() => {
+                  const st = Number(fiche.id_cv_statut) || 0
+                  const peutRestatuer = st > 0 && st < 100 && st !== 6
+                  return (
+                    <div className="pl-32">
+                      <button type="button" onClick={restatuer}
+                              disabled={!peutRestatuer}
+                              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{
+                                borderColor: COL_BORDER,
+                                color: peutRestatuer ? COL_PRIMARY : COL_BRUN,
+                                backgroundColor: 'white',
+                              }}>
+                        <RefreshCw className="w-4 h-4" />
+                        Restatuer le CV
+                      </button>
+                    </div>
+                  )
+                })()}
                 {fiche.id_cv_statut === '2' && (
                   <FieldRow label="Date de rappel">
                     <input type="date" value={fiche.date_rappel}
@@ -655,16 +667,16 @@ export default function CVFicheModal({
               </div>
 
               {/* Statuts rapides */}
-              <div className="col-span-2 flex items-center gap-2 flex-wrap pt-2 border-t"
+              <div className="col-span-2 flex items-stretch gap-2 pt-2 border-t"
                    style={{ borderColor: COL_BORDER }}>
                 {QUICK_STATUTS.map(st => {
                   const Icon = st.icon
                   return (
                     <button key={st.id} type="button" onClick={() => quickStatut(st)}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs"
+                            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded border text-xs"
                             style={{ borderColor: COL_BORDER, color: COL_BRUN, backgroundColor: 'white' }}>
-                      <Icon className="w-3.5 h-3.5" style={{ color: st.color }} />
-                      {st.label}
+                      <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: st.color }} />
+                      <span className="truncate">{st.label}</span>
                     </button>
                   )
                 })}
