@@ -72,6 +72,7 @@ interface RechercheCVPageProps {
   filtresForces?: Partial<Filtres> // ex: Vendeur force id_cvsource+id_elem_source
   myUserId?: string                // id_salarie du user connecte (pour couleurs)
   onOpenFiche?: (id_cvtheque: string) => void   // double-click ouvre Fen_CVFiche
+  removedIds?: string[]            // ids a filtrer (suppression depuis le modal)
 }
 
 interface Filtres {
@@ -161,6 +162,7 @@ function ThSortable({ col, sortKey, sortDir, onClick }: {
 
 export default function RechercheCVPage({
   apiBase, filtresForces = {}, myUserId = '', onOpenFiche,
+  removedIds = [],
 }: RechercheCVPageProps) {
   const today = new Date().toISOString().slice(0, 10)
   const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)
@@ -286,6 +288,11 @@ export default function RechercheCVPage({
       }
     }
     let arr = resultats
+    // Filtre 'supprime' (suppression depuis le modal fiche CV)
+    if (removedIds.length > 0) {
+      const rem = new Set(removedIds)
+      arr = arr.filter(r => !rem.has(r.id_cvtheque))
+    }
     // Filtre par colonne
     const activeFilters = Object.entries(filters).filter(([, v]) => v.trim())
     if (activeFilters.length > 0) {
@@ -314,7 +321,7 @@ export default function RechercheCVPage({
       })
     }
     return arr
-  }, [resultats, filters, sortKey, sortDir, presence, statutsById, sourcesById])
+  }, [resultats, filters, sortKey, sortDir, presence, statutsById, sourcesById, removedIds])
 
   const toggleSort = (k: string) => {
     if (sortKey !== k) { setSortKey(k); setSortDir('asc'); return }

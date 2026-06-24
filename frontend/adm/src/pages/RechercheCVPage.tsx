@@ -14,6 +14,7 @@ export default function RechercheCVPageAdm() {
   const user = getStoredUser()
   const myUserId = user ? String(user.id_salarie) : ''
   const [openId, setOpenId] = useState<string>('')
+  const [removedIds, setRemovedIds] = useState<string[]>([])
 
   return (
     <>
@@ -21,12 +22,14 @@ export default function RechercheCVPageAdm() {
         apiBase="/api/adm"
         myUserId={myUserId}
         onOpenFiche={setOpenId}
+        removedIds={removedIds}
       />
       {openId && (
         <CVFicheModal
           apiBase="/api/adm"
           idCv={openId}
           userDroits={user?.droits || []}
+          onDeleted={(id) => setRemovedIds((prev) => [...prev, id])}
           onClose={() => setOpenId('')}
         />
       )}

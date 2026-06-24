@@ -77,6 +77,7 @@ interface CVFicheModalProps {
   docsBaseUrl?: string         // ex: 'https://interne.omaya.fr'
   userDroits?: string[]        // pour gerer la visibilite du bouton Supprimer
   onClose: (modified?: boolean) => void
+  onDeleted?: (idCv: string) => void       // CV soft-delete : retirer de la liste
   onOpenMotsCles?: (idCv: string) => void  // Fen_CVEditMotsCles (autre module)
 }
 
@@ -98,7 +99,7 @@ const QUICK_STATUTS = [
 
 export default function CVFicheModal({
   apiBase, idCv, docsBaseUrl = 'https://interne.omaya.fr',
-  userDroits = [], onClose, onOpenMotsCles,
+  userDroits = [], onClose, onDeleted, onOpenMotsCles,
 }: CVFicheModalProps) {
   const [fiche, setFiche] = useState<CVFicheDetail | null>(null)
   const [suivi, setSuivi] = useState<CVSuiviRow[]>([])
@@ -371,6 +372,7 @@ export default function CVFicheModal({
         return
       }
       showToast('Fiche supprimée.', 'success')
+      onDeleted?.(idCv)
       onClose(true)
     } catch (e) {
       showToast(`Erreur : ${(e as Error).message}`, 'error')
