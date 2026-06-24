@@ -358,15 +358,16 @@ def upload_cv_file(
     id_cv: int, nom: str, file_bytes: bytes, original_filename: str,
     op_id: int,
 ) -> dict:
-    """Btn 'Joindre un CV' : sauvegarde le fichier et met a jour fic_cv.
+    """Btn 'Joindre un CV' : upload FTP vers /OMAYA/cvtheque/ + maj fic_cv.
 
     Naming WinDev : <IdCV>-CV-<NOM_clean><ext>, fallback <IdCV>_<uuid><ext>.
+    Le fichier est servi par IIS via DOCS_URL/cvtheque/<nom>.
     """
-    import os
+    import ftplib
+    import io
     import re
     import uuid as uuid_mod
-    from pathlib import Path
-    from app.core.config import REP_CV
+    from app.core.config import FTP_HOST, FTP_PASSWORD, FTP_USER
 
     if not file_bytes:
         return {"ok": False, "error": "empty"}
@@ -376,20 +377,48 @@ def upload_cv_file(
     if "." in original_filename:
         ext = "." + original_filename.rsplit(".", 1)[-1].lower()
 
-    # Nom propre
+    # Nom propre (style WinDev : ccSansPonctuationNiEspace + ccSansAccent)
     nom_clean = re.sub(r"[^a-zA-Z0-9]", "", nom or "")
     new_name = f"{int(id_cv)}-CV-{nom_clean}{ext}"
     new_name = new_name.replace(" ", "_")
     if not nom_clean:
         new_name = f"{int(id_cv)}_{uuid_mod.uuid4().hex}{ext}"
 
-    # Cree le dossier si besoin
-    REP_CV.mkdir(parents=True, exist_ok=True)
-    target = REP_CV / new_name
-    with open(target, "wb") as f:
-        f.write(file_bytes)
+    # Upload FTP vers /OMAYA/cvtheque/
+    rep_ftp = "/OMAYA/cvtheque"
+    try:
+        ftp = ftplib.FTP(timeout=15)
+        ftp.encoding = "latin-1"
+        ftp.connect(FTP_HOST, 21)
+        ftp.login(FTP_USER, FTP_PASSWORD)
+    except Exception as e:
+        return {"ok": False, "error": f"FTP connect: {e}"}
 
-    # Update cvtheque.fic_cv
+    try:
+        try:
+            ftp.cwd(rep_ftp)
+        except ftplib.error_perm:
+            # Cree le dossier si absent
+            for part in rep_ftp.strip("/").split("/"):
+                try:
+                    ftp.cwd(part)
+                except ftplib.error_perm:
+                    try:
+                        ftp.mkd(part)
+                        ftp.cwd(part)
+                    except ftplib.error_perm:
+                        return {"ok": False,
+                                "error": f"Impossible de créer {rep_ftp}"}
+        ftp.storbinary(f"STOR {new_name}", io.BytesIO(file_bytes))
+    except Exception as e:
+        return {"ok": False, "error": f"FTP STOR: {e}"}
+    finally:
+        try:
+            ftp.quit()
+        except Exception:
+            pass
+
+    # Update cvtheque.fic_cv (seulement si upload OK)
     db = get_pg_connection("recrutement")
     db.query(
         """UPDATE recrutement.pgt_cvtheque
