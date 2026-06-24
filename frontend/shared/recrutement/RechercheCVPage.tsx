@@ -19,11 +19,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown, ArrowUp, ArrowUpDown,
   Building2, Calendar, ChevronDown, ChevronLeft, ChevronRight, Folder,
-  Loader2, MapPin, Phone, Search,
+  Loader2, MapPin, Phone, Plus, Search,
   User as UserIcon, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '../ui/dialog'
+import CVSaisieModal from './CVSaisieModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -196,6 +197,7 @@ export default function RechercheCVPage({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [filters, setFilters] = useState<Record<string, string>>({})
   const [exporting, setExporting] = useState(false)
+  const [showSaisie, setShowSaisie] = useState(false)
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
@@ -603,6 +605,12 @@ export default function RechercheCVPage({
               {exporting ? <Loader2 className="w-4 h-4 animate-spin inline" />
                          : 'Exporter Excel'}
             </button>
+            <button type="button" onClick={() => setShowSaisie(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded text-white text-sm"
+                    style={{ backgroundColor: COL_PRIMARY }}>
+              <Plus className="w-4 h-4" />
+              Saisie de CV
+            </button>
           </div>
         </div>
 
@@ -684,6 +692,17 @@ export default function RechercheCVPage({
           </table>
         </div>
       </main>
+
+      {/* Modal Fen_CVSaisie */}
+      {showSaisie && (
+        <CVSaisieModal apiBase={apiBase}
+                       onClose={(createdId, goToFiche) => {
+                         setShowSaisie(false)
+                         if (createdId && goToFiche) {
+                           onOpenFiche?.(createdId)
+                         }
+                       }} />
+      )}
     </div>
   )
 }

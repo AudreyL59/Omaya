@@ -81,3 +81,54 @@ class CVStatutQuickPayload(BaseModel):
 class CVObservationPayload(BaseModel):
     """Payload pour bouton 'disquette' (ajoute juste une obs datee)."""
     observation: str
+
+
+# ---------------------------------------------------------------------------
+# Fen_CVSaisie : creation d'un nouveau CV
+# ---------------------------------------------------------------------------
+
+
+class CheckDoublonPayload(BaseModel):
+    mail: str = ""
+    gsm: str = ""
+    nom: str = ""
+    prenom: str = ""
+
+
+class DoublonCandidat(BaseModel):
+    id_cvtheque: str
+    identite: str
+    mail: str = ""
+    gsm: str = ""
+    date_saisie: str = ""
+
+
+class CheckDoublonResponse(BaseModel):
+    found: bool
+    candidats: list[DoublonCandidat] = []
+
+
+class CreateCVPayload(BaseModel):
+    nom: str = ""
+    prenom: str = ""
+    adresse: str = ""
+    id_communes_france: str = ""
+    pays: str = "FRANCE"
+    date_naissance: str = ""
+    permis_b: bool = False
+    vehicule: bool = False
+    mail: str = ""
+    gsm: str = ""
+    id_cvposte: str = ""
+    id_cvsource: str = ""
+    id_elem_source: str = ""    # IdSalarie coopteur OU IDCvAnnonceur
+    id_ste: str = ""
+    id_cv_statut: str = "1"     # statut initial (par defaut 'Non Traite')
+    force_doublon: bool = False  # si True : force creation + statut=8
+
+
+class CreateCVResponse(BaseModel):
+    ok: bool
+    id_cvtheque: str = ""
+    id_cv_suivi: str = ""
+    statut_applique: str = ""

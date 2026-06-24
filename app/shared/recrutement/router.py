@@ -20,7 +20,8 @@ from pydantic import BaseModel
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.shared.recrutement.schemas.cv_fiche import (
-    CVFicheDetail, CVFichePayload, CVObservationPayload,
+    CheckDoublonPayload, CheckDoublonResponse, CreateCVPayload,
+    CreateCVResponse, CVFicheDetail, CVFichePayload, CVObservationPayload,
     CVStatutQuickPayload, CVSuiviRow,
 )
 from app.shared.recrutement.schemas.recherche_cv import (
@@ -158,6 +159,22 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
     ):
         """Retire ma presence (fermeture de fiche CV)."""
         return svc.release_cv(id_cv, user.id_salarie)
+
+    # -- Fen_CVSaisie : creation d'un nouveau CV ---------------------------
+
+    @router.post("/check-doublon", response_model=CheckDoublonResponse)
+    def post_check_doublon(
+        payload: CheckDoublonPayload,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.check_doublon(payload)
+
+    @router.post("", response_model=CreateCVResponse)
+    def post_create_cv(
+        payload: CreateCVPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return fiche_svc.create_cv(payload, user.id_salarie)
 
     # -- Fiche CV (Fen_CVFiche) --------------------------------------------
 

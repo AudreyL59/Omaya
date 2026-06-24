@@ -20,8 +20,9 @@ from typing import Optional
 
 from app.core.database.pg import get_pg_connection
 from app.shared.recrutement.schemas.cv_fiche import (
-    CVFicheDetail, CVFichePayload, CVObservationPayload,
-    CVStatutQuickPayload, CVSuiviRow,
+    CheckDoublonPayload, CheckDoublonResponse, CreateCVPayload,
+    CreateCVResponse, CVFicheDetail, CVFichePayload, CVObservationPayload,
+    CVStatutQuickPayload, CVSuiviRow, DoublonCandidat,
 )
 from app.shared.recrutement.services.recherche_cv import (
     _calc_age, _int, _norm_date, _str,
@@ -394,6 +395,121 @@ def save_mots_cles(id_cv: int, mots_cles: str, op_id: int) -> dict:
         (mots_cles, int(op_id), int(id_cv)),
     )
     return {"ok": True, "mots_cles": mots_cles}
+
+
+def check_doublon(p: CheckDoublonPayload) -> CheckDoublonResponse:
+    """Verifie si un CV avec ce mail/gsm/nom-prenom existe deja.
+
+    Match :
+      - mail (egalite stricte, lowercase trim)
+      - gsm (normalise : que des chiffres)
+      - nom + prenom (LIKE insensible casse)
+    Retourne tous les candidats trouves (max 10).
+    """
+    db = get_pg_connection("recrutement")
+    where: list[str] = []
+    params: list = []
+
+    mail = (p.mail or "").strip().lower().replace(" ", "")
+    if mail:
+        where.append("LOWER(mail) = ?")
+        params.append(mail)
+    gsm_clean = "".join(c for c in (p.gsm or "") if c.isdigit())
+    if gsm_clean and len(gsm_clean) >= 8:
+        # Normalise le GSM stocke aussi pour comparer (regexp_replace)
+        where.append("REGEXP_REPLACE(gsm, '[^0-9]', '', 'g') = ?")
+        params.append(gsm_clean)
+    nom = (p.nom or "").strip()
+    prenom = (p.prenom or "").strip()
+    if nom and prenom:
+        where.append("(UPPER(nom) = ? AND UPPER(prenom) = ?)")
+        params.extend([nom.upper(), prenom.upper()])
+
+    if not where:
+        return CheckDoublonResponse(found=False, candidats=[])
+
+    sql = f"""
+        SELECT id_cvtheque, nom, prenom, mail, gsm, date_saisie
+          FROM recrutement.pgt_cvtheque
+         WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+           AND ({" OR ".join(where)})
+      ORDER BY date_saisie DESC LIMIT 10
+    """
+    rows = db.query(sql, tuple(params)) or []
+    candidats = [DoublonCandidat(
+        id_cvtheque=str(_int(r["id_cvtheque"])),
+        identite=(
+            f"{_str(r['nom']).upper()} "
+            f"{_str(r['prenom']).strip().title()}"
+        ).strip(),
+        mail=_str(r.get("mail")),
+        gsm=_str(r.get("gsm")),
+        date_saisie=str(r.get("date_saisie") or "")[:10],
+    ) for r in rows]
+    return CheckDoublonResponse(found=bool(candidats), candidats=candidats)
+
+
+def create_cv(p: CreateCVPayload, op_id: int) -> CreateCVResponse:
+    """Btn 'Enregistrer' de Fen_CVSaisie : INSERT cvtheque + cvsuivi initial.
+
+    Si force_doublon=True, le statut initial est force a 8 (CV Doublon),
+    sinon on prend p.id_cv_statut (defaut '1' = Non Traite).
+    """
+    db = get_pg_connection("recrutement")
+
+    id_new = _new_id()
+    statut = 8 if p.force_doublon else (_int(p.id_cv_statut) or 1)
+
+    # Normalisation
+    gsm = "".join(c for c in (p.gsm or "") if c.isdigit() or c == "+")
+    mail = (p.mail or "").strip().lower().replace(" ", "")
+    nom = (p.nom or "").strip().upper()
+    prenom = (p.prenom or "").strip()
+    pays = (p.pays or "FRANCE").strip().upper()
+
+    # id_elem_source selon source (=salarie coopteur OU annonceur)
+    id_src = _int(p.id_cvsource)
+    id_elem = _int(p.id_elem_source) if id_src in (1, 2) else 0
+
+    # INSERT cvtheque (Origine=1 cf. WinDev hardcode)
+    db.query(
+        """INSERT INTO recrutement.pgt_cvtheque (
+              id_cvtheque, origine, nom, prenom, adresse,
+              id_communes_france, id_elem_source, date_naissance, pays,
+              permis_b, vehicule, mail, gsm, id_cvposte, id_cvsource,
+              id_ste, fic_cv, date_saisie, ope_saisie,
+              modif_op, modif_date, modif_elem,
+              date_reac, ope_reac, observ, date_rappel)
+           VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?,
+                   '', NOW(), ?, ?, NOW(), 'new',
+                   NULL, 0, '', NULL)""",
+        (id_new, nom, prenom, (p.adresse or "").strip(),
+         _int(p.id_communes_france), id_elem,
+         p.date_naissance or None, pays,
+         bool(p.permis_b), bool(p.vehicule), mail, gsm,
+         _int(p.id_cvposte), id_src, _int(p.id_ste),
+         int(op_id), int(op_id)),
+    )
+
+    # INSERT cvsuivi initial avec le statut applique
+    id_suivi = _new_id() + 1
+    db.query(
+        """INSERT INTO recrutement.pgt_cvsuivi
+             (id_cv_suivi, id_cvtheque, datecrea, op_crea, id_cv_statut,
+              type_elem, id_elem, observation,
+              modif_date, modif_op, modif_elem)
+           VALUES (?, ?, NOW(), ?, ?, '', 0, '',
+                   NOW(), ?, 'new')""",
+        (id_suivi, id_new, int(op_id), statut, int(op_id)),
+    )
+
+    return CreateCVResponse(
+        ok=True,
+        id_cvtheque=str(id_new),
+        id_cv_suivi=str(id_suivi),
+        statut_applique=str(statut),
+    )
 
 
 def delete_fiche(id_cv: int, op_id: int) -> dict:
