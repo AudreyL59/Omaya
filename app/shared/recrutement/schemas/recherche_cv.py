@@ -85,3 +85,12 @@ class CVRow(BaseModel):
     agence: str = ""
     equipe: str = ""
     commentaire: str = ""
+    mots_cles: str = ""           # contenu cvtheque.mots_cles (rempli si demande)
+
+
+class SearchMotsClesFiltres(BaseModel):
+    """Filtres pour Fen_RechercheCvMotsCle (recherche par tokens mots-cles)."""
+    mots_cles: list[str] = []          # tokens : tous doivent matcher (AND)
+    date_debut: Optional[str] = None
+    date_fin: Optional[str] = None
+    limit: int = 1000

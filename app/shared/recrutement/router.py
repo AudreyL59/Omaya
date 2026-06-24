@@ -24,7 +24,7 @@ from app.shared.recrutement.schemas.cv_fiche import (
     CVStatutQuickPayload, CVSuiviRow,
 )
 from app.shared.recrutement.schemas.recherche_cv import (
-    CommuneItem, ComboItem, CVRow, SearchCVFiltres,
+    CommuneItem, ComboItem, CVRow, SearchCVFiltres, SearchMotsClesFiltres,
 )
 from app.shared.recrutement.services import cv_fiche as fiche_svc
 from app.shared.recrutement.services import entretien as ent_svc
@@ -76,6 +76,13 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             filtres.id_cvsource = "1"
             filtres.id_elem_source = str(user.id_salarie)
         return svc.search_cv(filtres)
+
+    @router.post("/search-mots-cles", response_model=list[CVRow])
+    def post_search_mots_cles(
+        filtres: SearchMotsClesFiltres,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return svc.search_cv_mots_cles(filtres)
 
     @router.post("/export.xlsx")
     def post_export_xlsx(

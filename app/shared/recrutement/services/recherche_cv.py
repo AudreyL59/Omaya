@@ -18,7 +18,7 @@ from typing import Optional
 
 from app.core.database.pg import get_pg_connection
 from app.shared.recrutement.schemas.recherche_cv import (
-    CommuneItem, ComboItem, CVRow, SearchCVFiltres,
+    CommuneItem, ComboItem, CVRow, SearchCVFiltres, SearchMotsClesFiltres,
 )
 
 # ---------------------------------------------------------------------------
@@ -638,6 +638,60 @@ def search_cv(f: SearchCVFiltres) -> list[CVRow]:
     db = get_pg_connection("recrutement")
     rows = db.query(sql, tuple(params)) or []
     return _enrich_cv_rows(rows, f)
+
+
+def search_cv_mots_cles(f: SearchMotsClesFiltres) -> list[CVRow]:
+    """Recherche CV par tokens mots-cles (AND entre les tokens).
+
+    Filtres : mots_cles + periode (date_saisie OR date_reac).
+    Retourne CVRow + champ mots_cles peuple.
+    """
+    tokens = [t.strip() for t in (f.mots_cles or []) if t and t.strip()]
+    if not tokens:
+        return []
+
+    date_deb = _norm_date(f.date_debut, end_of_day=False)
+    date_fin = _norm_date(f.date_fin, end_of_day=True)
+
+    where = ["(cv.modif_elem IS NULL OR cv.modif_elem NOT LIKE '%suppr%')"]
+    params: list = []
+    if date_deb and date_fin:
+        where.append(
+            "(cv.date_saisie BETWEEN ? AND ? OR cv.date_reac BETWEEN ? AND ?)"
+        )
+        params.extend([date_deb, date_fin, date_deb, date_fin])
+    for tok in tokens:
+        where.append("cv.mots_cles ILIKE ?")
+        params.append(f"%{tok}%")
+
+    where_sql = " AND ".join(where)
+    sql = f"""
+        SELECT
+          cv.id_cvtheque, cv.nom, cv.prenom,
+          cv.date_naissance, cv.date_saisie, cv.date_reac,
+          cv.date_rappel, cv.observ, cv.mots_cles,
+          cv.gsm, cv.id_cvsource, cv.id_elem_source, cv.id_cvposte,
+          cv.id_communes_france, cv.traite_en_cours, cv.op_traite,
+          cv.date_traite,
+          c.code_postal, c.nom_ville
+        FROM recrutement.pgt_cvtheque cv
+        LEFT JOIN divers.pgt_communes_france c
+               ON c.id_communes_france = cv.id_communes_france
+        WHERE {where_sql}
+        ORDER BY cv.date_saisie DESC
+        LIMIT {int(f.limit)}
+    """
+    db = get_pg_connection("recrutement")
+    rows = db.query(sql, tuple(params)) or []
+    # Adapte au format SearchCVFiltres pour reutiliser _enrich (qui ne lit
+    # que select_type_date + date_fin + cv_statut_appel — defauts OK).
+    pseudo_f = SearchCVFiltres(date_debut=f.date_debut, date_fin=f.date_fin)
+    enriched = _enrich_cv_rows(rows, pseudo_f)
+    # Populate mots_cles depuis les rows (memoire commune par id)
+    mots_by_id = {_int(r["id_cvtheque"]): _str(r.get("mots_cles")) for r in rows}
+    for row in enriched:
+        row.mots_cles = mots_by_id.get(_int(row.id_cvtheque), "")
+    return enriched
 
 
 def _enrich_cv_rows(rows: list[dict], f: SearchCVFiltres) -> list[CVRow]:
