@@ -441,7 +441,9 @@ export default function RechercheCVPage({
     return { backgroundColor: 'white', color: COL_BRUN }
   }
 
-  // Ouvre Fen_CVFiche : claim cote serveur puis appelle le callback
+  // Ouvre Fen_CVFiche : tente de claim cote serveur puis ouvre toujours
+  // (si claim refuse parce qu'un autre op a deja la fiche, on ouvre
+  // quand même comme WinDev mais on alerte l'utilisateur).
   const handleOpenFiche = async (idCv: string) => {
     try {
       const r = await fetch(`${apiBase}/recrutement/cv/${idCv}/claim`, {
@@ -449,14 +451,25 @@ export default function RechercheCVPage({
         headers: { Authorization: `Bearer ${getToken()}` },
       })
       if (r.status === 409) {
-        const d = await r.json().catch(() => ({}))
-        showToast(`Déjà ouvert (op ${d?.detail?.op_traite || '?'}).`, 'info')
-        return
+        // Recupere le nom de l'op qui a deja la fiche
+        const presR = await fetch(`${apiBase}/recrutement/cv/presence`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ ids: [idCv] }),
+        })
+        if (presR.ok) {
+          const d = await presR.json()
+          const opNom = d[idCv]?.op_nom || ''
+          showToast(
+            `Cette fiche est déjà ouverte par ${opNom || 'un autre opérateur'}.`,
+            'info',
+          )
+        }
       }
-      if (!r.ok) {
-        showToast('Impossible d\'ouvrir cette fiche.', 'error')
-        return
-      }
+      // Dans tous les cas on ouvre la fiche (lecture seule si claim KO).
       onOpenFiche?.(idCv)
     } catch (e) {
       showToast(`Erreur : ${(e as Error).message}`, 'error')

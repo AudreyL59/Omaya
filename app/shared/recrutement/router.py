@@ -11,7 +11,9 @@ propre router via :
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -74,16 +76,16 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             filtres.id_elem_source = str(user.id_salarie)
         return svc.search_cv(filtres)
 
-    class ExportPayload(BaseModel):
-        rows: list[dict] = []
-
     @router.post("/export.xlsx")
     def post_export_xlsx(
-        payload: ExportPayload,
+        payload: dict[str, Any] = Body(...),
         _user: UserToken = Depends(get_current_user),
     ):
         """Rendu XLSX des lignes deja filtrees/triees cote frontend."""
-        data = svc.export_to_xlsx(payload.rows)
+        rows = payload.get("rows") or []
+        if not isinstance(rows, list):
+            raise HTTPException(400, "payload.rows must be a list")
+        data = svc.export_to_xlsx(rows)
         from datetime import datetime
         fname = f"RechercheCV_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
         return Response(
