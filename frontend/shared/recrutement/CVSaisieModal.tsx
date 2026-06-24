@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
-  AlertCircle, ArrowRight, FileSearch, FilePlus, Loader2, Plus,
+  AlertCircle, ArrowRight, FileSearch, Loader2, Plus,
   Save, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
