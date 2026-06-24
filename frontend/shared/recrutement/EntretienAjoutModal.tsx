@@ -424,11 +424,10 @@ export default function EntretienAjoutModal({
           <div className="flex-1 min-w-0 flex flex-col">
             {idRecruteur ? (
               <RecruteurAgenda apiBase={apiBase} idRecruteur={idRecruteur}
-                               semaineDu={date}
-                               highlightDate={date}
+                               jour={date}
                                highlightHeure={heure}
                                onSelectSlot={(d, h) => { setDate(d); setHeure(h) }}
-                               onChangeSemaine={(lundi) => setDate(lundi)} />
+                               onChangeJour={(d) => setDate(d)} />
             ) : (
               <div className="flex-1 flex items-center justify-center text-sm italic"
                    style={{ color: '#A68D8A' }}>
