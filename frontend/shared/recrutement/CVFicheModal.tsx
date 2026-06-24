@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
+import EntretienAjoutModal from './EntretienAjoutModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -113,6 +114,7 @@ export default function CVFicheModal({
   const [nouvelleObs, setNouvelleObs] = useState('')
   const [viewerUrl, setViewerUrl] = useState('')   // panneau Voir le CV
   const [uploading, setUploading] = useState(false)
+  const [showRdv, setShowRdv] = useState(false)    // Fen_EntretienAjout
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Au mount : claim (silencieux si 409 = deja ouvert par un autre)
@@ -330,7 +332,8 @@ export default function CVFicheModal({
   }
 
   const planifierRdv = () => {
-    showToast('Planification RDV : à venir (Fen_EntretienAjout)', 'info')
+    if (!fiche) return
+    setShowRdv(true)
   }
 
   const voirCV = () => {
@@ -753,6 +756,27 @@ export default function CVFicheModal({
           </>
         )}
       </div>
+
+      {/* Sous-modal Planifier un RDV (Fen_EntretienAjout) */}
+      {showRdv && fiche && (
+        <EntretienAjoutModal
+          apiBase={apiBase}
+          idCv={idCv}
+          candidat={{
+            nom: fiche.nom,
+            prenom: fiche.prenom,
+            gsm: fiche.gsm,
+            mail: fiche.mail,
+          }}
+          onClose={(rdvCreated) => {
+            setShowRdv(false)
+            if (rdvCreated) {
+              // WinDev : si RDV cree, RetourFiche=true -> ferme la fiche CV
+              onClose(true)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
