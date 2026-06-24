@@ -423,6 +423,7 @@ export default function CVFicheModal({
   }
 
   const canDelete = userDroits.includes('CVSuppr')
+  const canUpload = userDroits.includes('SaisieCV')
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
@@ -469,8 +470,10 @@ export default function CVFicheModal({
                 <ActionBtn onClick={supprimerFiche} icon={Trash2} variant="danger"
                            title="Supprimer cette fiche" />
               )}
-              <ActionBtn onClick={joindreCv} icon={FilePlus} disabled={uploading}
-                         title="Joindre un CV (fichier)" />
+              {canUpload && (
+                <ActionBtn onClick={joindreCv} icon={FilePlus} disabled={uploading}
+                           title="Joindre un CV (fichier)" />
+              )}
               <ActionBtn onClick={voirCV} icon={Play} disabled={!fiche.fic_cv}
                          title="Voir le CV à droite">
                 Voir le CV
