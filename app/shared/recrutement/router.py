@@ -27,6 +27,7 @@ from app.shared.recrutement.schemas.recherche_cv import (
     CommuneItem, ComboItem, CVRow, SearchCVFiltres,
 )
 from app.shared.recrutement.services import cv_fiche as fiche_svc
+from app.shared.recrutement.services import entretien as ent_svc
 from app.shared.recrutement.services import recherche_cv as svc
 
 
@@ -229,5 +230,55 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         return fiche_svc.upload_cv_file(
             id_cv, nom, content, file.filename or "", user.id_salarie,
         )
+
+    # -- Fen_EntretienAjout (Planifier un RDV) -----------------------------
+
+    @router.get("/entretien/recruteurs")
+    def get_recruteurs(_user: UserToken = Depends(get_current_user)):
+        return ent_svc.list_recruteurs()
+
+    @router.get("/entretien/sessions")
+    def get_sessions(_user: UserToken = Depends(get_current_user)):
+        return ent_svc.list_sessions_recrut()
+
+    @router.get("/entretien/lieux")
+    def get_lieux(_user: UserToken = Depends(get_current_user)):
+        return ent_svc.list_lieux_rdv()
+
+    @router.get("/entretien/salons-visio/{id_recruteur}")
+    def get_salons_visio(
+        id_recruteur: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return ent_svc.list_salons_visio(id_recruteur)
+
+    @router.get("/entretien/agenda/{id_recruteur}")
+    def get_agenda(
+        id_recruteur: int,
+        semaine_du: str = Query(...),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return ent_svc.list_agenda_recruteur(id_recruteur, semaine_du)
+
+    @router.put("/{id_cv}/coordonnees")
+    def put_coords(
+        id_cv: int,
+        payload: ent_svc.UpdateCoordsPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return ent_svc.update_coordonnees_candidat(
+            id_cv, payload, user.id_salarie,
+        )
+
+    @router.post("/{id_cv}/rdv")
+    def post_rdv(
+        id_cv: int,
+        payload: ent_svc.CreateRdvPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        res = ent_svc.create_rdv(id_cv, payload, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "rdv_failed")
+        return res
 
     return router
