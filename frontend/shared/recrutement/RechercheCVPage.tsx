@@ -441,39 +441,10 @@ export default function RechercheCVPage({
     return { backgroundColor: 'white', color: COL_BRUN }
   }
 
-  // Ouvre Fen_CVFiche : tente de claim cote serveur puis ouvre toujours
-  // (si claim refuse parce qu'un autre op a deja la fiche, on ouvre
-  // quand même comme WinDev mais on alerte l'utilisateur).
-  const handleOpenFiche = async (idCv: string) => {
-    try {
-      const r = await fetch(`${apiBase}/recrutement/cv/${idCv}/claim`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-      })
-      if (r.status === 409) {
-        // Recupere le nom de l'op qui a deja la fiche
-        const presR = await fetch(`${apiBase}/recrutement/cv/presence`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${getToken()}`,
-          },
-          body: JSON.stringify({ ids: [idCv] }),
-        })
-        if (presR.ok) {
-          const d = await presR.json()
-          const opNom = d[idCv]?.op_nom || ''
-          showToast(
-            `Cette fiche est déjà ouverte par ${opNom || 'un autre opérateur'}.`,
-            'info',
-          )
-        }
-      }
-      // Dans tous les cas on ouvre la fiche (lecture seule si claim KO).
-      onOpenFiche?.(idCv)
-    } catch (e) {
-      showToast(`Erreur : ${(e as Error).message}`, 'error')
-    }
+  // Ouvre Fen_CVFiche : appelle juste le callback. Le claim est fait
+  // par le modal au mount (et l'alerte 'deja ouvert' aussi).
+  const handleOpenFiche = (idCv: string) => {
+    onOpenFiche?.(idCv)
   }
 
   return (

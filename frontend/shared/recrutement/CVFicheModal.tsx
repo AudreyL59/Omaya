@@ -107,6 +107,35 @@ export default function CVFicheModal({
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Au mount : claim (silencieux si 409 = deja ouvert par un autre)
+  useEffect(() => {
+    fetch(`${apiBase}/recrutement/cv/${idCv}/claim`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).then(async r => {
+      if (r.status === 409) {
+        try {
+          const presR = await fetch(`${apiBase}/recrutement/cv/presence`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${getToken()}`,
+            },
+            body: JSON.stringify({ ids: [idCv] }),
+          })
+          if (presR.ok) {
+            const d = await presR.json()
+            const opNom = d[idCv]?.op_nom || ''
+            showToast(
+              `Cette fiche est déjà ouverte par ${opNom || 'un autre opérateur'}.`,
+              'info',
+            )
+          }
+        } catch { /* silent */ }
+      }
+    }).catch(() => {})
+  }, [apiBase, idCv])
+
   // Charge tout au mount
   useEffect(() => {
     const h = { Authorization: `Bearer ${getToken()}` }
