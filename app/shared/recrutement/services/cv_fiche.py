@@ -108,7 +108,12 @@ def get_fiche(id_cv: int) -> Optional[CVFicheDetail]:
 
 
 def list_cvsuivi(id_cv: int) -> list[CVSuiviRow]:
-    """Historique CvSuivi avec op_nom + statut_lib resolus."""
+    """Historique CvSuivi avec op_nom + statut_lib resolus.
+
+    Si une ligne a une datecrea vide/NULL (cas typique du suivi initial
+    'Non Traite' cree a la saisie sans timestamp), on remplace par la
+    date_saisie de la cvtheque.
+    """
     db = get_pg_connection("recrutement")
     rows = db.query(
         """SELECT id_cv_suivi, datecrea, op_crea, id_cv_statut,
@@ -121,6 +126,32 @@ def list_cvsuivi(id_cv: int) -> list[CVSuiviRow]:
     ) or []
     if not rows:
         return []
+
+    # Fallback date : si une ligne a datecrea vide, on charge la
+    # date_saisie de la cvtheque + on PATCH l'enregistrement pour ne plus
+    # refaire le fallback aux prochaines lectures.
+    has_empty = any(not r.get("datecrea") for r in rows)
+    if has_empty:
+        fr = db.query_one(
+            "SELECT date_saisie FROM recrutement.pgt_cvtheque "
+            "WHERE id_cvtheque = ?",
+            (int(id_cv),),
+        )
+        if fr and fr.get("date_saisie"):
+            empty_ids = [_int(r["id_cv_suivi"]) for r in rows
+                         if not r.get("datecrea") and _int(r.get("id_cv_suivi"))]
+            if empty_ids:
+                ph = ",".join(["?"] * len(empty_ids))
+                db.query(
+                    f"""UPDATE recrutement.pgt_cvsuivi
+                           SET datecrea = ?, modif_date = NOW()
+                         WHERE id_cv_suivi IN ({ph})""",
+                    (fr["date_saisie"], *empty_ids),
+                )
+                # Mets a jour les rows en memoire pour le rendu actuel
+                for r in rows:
+                    if not r.get("datecrea"):
+                        r["datecrea"] = fr["date_saisie"]
 
     # Resolveur op_crea -> nom_prenom
     op_ids = {_int(r["op_crea"]) for r in rows if _int(r.get("op_crea"))}
