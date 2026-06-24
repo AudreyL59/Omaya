@@ -342,6 +342,64 @@ def reactualiser(id_cv: int, op_id: int) -> dict:
     return {"ok": True}
 
 
+def delete_fiche(id_cv: int, op_id: int) -> dict:
+    """Btn 'Supprimer' : soft-delete via modif_elem = 'suppr'."""
+    db = get_pg_connection("recrutement")
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque
+              SET modif_op = ?, modif_date = NOW(), modif_elem = 'suppr'
+            WHERE id_cvtheque = ?""",
+        (int(op_id), int(id_cv)),
+    )
+    return {"ok": True}
+
+
+def upload_cv_file(
+    id_cv: int, nom: str, file_bytes: bytes, original_filename: str,
+    op_id: int,
+) -> dict:
+    """Btn 'Joindre un CV' : sauvegarde le fichier et met a jour fic_cv.
+
+    Naming WinDev : <IdCV>-CV-<NOM_clean><ext>, fallback <IdCV>_<uuid><ext>.
+    """
+    import os
+    import re
+    import uuid as uuid_mod
+    from pathlib import Path
+    from app.core.config import REP_CV
+
+    if not file_bytes:
+        return {"ok": False, "error": "empty"}
+
+    # Extension
+    ext = ""
+    if "." in original_filename:
+        ext = "." + original_filename.rsplit(".", 1)[-1].lower()
+
+    # Nom propre
+    nom_clean = re.sub(r"[^a-zA-Z0-9]", "", nom or "")
+    new_name = f"{int(id_cv)}-CV-{nom_clean}{ext}"
+    new_name = new_name.replace(" ", "_")
+    if not nom_clean:
+        new_name = f"{int(id_cv)}_{uuid_mod.uuid4().hex}{ext}"
+
+    # Cree le dossier si besoin
+    REP_CV.mkdir(parents=True, exist_ok=True)
+    target = REP_CV / new_name
+    with open(target, "wb") as f:
+        f.write(file_bytes)
+
+    # Update cvtheque.fic_cv
+    db = get_pg_connection("recrutement")
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque
+              SET fic_cv = ?, modif_date = NOW(), modif_op = ?, modif_elem = 'new'
+            WHERE id_cvtheque = ?""",
+        (new_name, int(op_id), int(id_cv)),
+    )
+    return {"ok": True, "fic_cv": new_name}
+
+
 def add_observation(id_cv: int, p: CVObservationPayload, op_id: int) -> dict:
     """Btn disquette : ajoute juste une ligne datee a observ.
 

@@ -26,6 +26,7 @@ export default function RechercheCVPageAdm() {
         <CVFicheModal
           apiBase="/api/adm"
           idCv={openId}
+          userDroits={user?.droits || []}
           onClose={() => setOpenId('')}
         />
       )}

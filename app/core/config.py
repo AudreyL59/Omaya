@@ -30,6 +30,7 @@ DOCS_URL = os.getenv("DOCS_URL", "https://interne.omaya.fr/")
 REP_BO = DOCS_BASE_PATH / "BO"
 REP_RH = DOCS_BASE_PATH / "RH"
 REP_DPAE = DOCS_BASE_PATH / "DPAE"
+REP_CV = DOCS_BASE_PATH / "cvtheque"
 
 # Extractions de production (fichiers Parquet générés par le worker)
 PRODUCTION_EXTRACTS_DIR = Path(

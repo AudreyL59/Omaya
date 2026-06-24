@@ -14,10 +14,11 @@
  *  - 6 statuts rapides : POST /cv/{id}/statut-quick
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertCircle, Calendar, FileSearch, FileText, GraduationCap,
-  Loader2, MessageSquareOff, PhoneOff, RefreshCw, Save, Trash2,
+  AlertCircle, ArrowLeft, Calendar, FileSearch, FilePlus, FileText,
+  GraduationCap, Loader2, MessageSquareOff, PhoneOff, Play,
+  RefreshCw, Save, ScanSearch, Trash2,
   UserX, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
@@ -74,7 +75,9 @@ interface CVFicheModalProps {
   apiBase: string
   idCv: string
   docsBaseUrl?: string         // ex: 'https://interne.omaya.fr'
+  userDroits?: string[]        // pour gerer la visibilite du bouton Supprimer
   onClose: (modified?: boolean) => void
+  onOpenMotsCles?: (idCv: string) => void  // Fen_CVEditMotsCles (autre module)
 }
 
 const QUICK_STATUTS = [
@@ -87,7 +90,8 @@ const QUICK_STATUTS = [
 ]
 
 export default function CVFicheModal({
-  apiBase, idCv, docsBaseUrl = 'https://interne.omaya.fr', onClose,
+  apiBase, idCv, docsBaseUrl = 'https://interne.omaya.fr',
+  userDroits = [], onClose, onOpenMotsCles,
 }: CVFicheModalProps) {
   const [fiche, setFiche] = useState<CVFicheDetail | null>(null)
   const [suivi, setSuivi] = useState<CVSuiviRow[]>([])
@@ -99,6 +103,9 @@ export default function CVFicheModal({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [nouvelleObs, setNouvelleObs] = useState('')
+  const [viewerUrl, setViewerUrl] = useState('')   // panneau Voir le CV
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Charge tout au mount
   useEffect(() => {
@@ -279,19 +286,94 @@ export default function CVFicheModal({
   const voirCV = () => {
     if (!fiche?.fic_cv) return
     let url = fiche.fic_cv
-    if (!url.toLowerCase().startsWith('http')) {
-      url = `${docsBaseUrl}/CV/${fiche.id_cvtheque}/${url}`
-    } else {
-      // Si plusieurs URLs separees par ', ', prendre la 1ere
+    if (url.toLowerCase().startsWith('http')) {
       url = url.split(',')[0].trim()
+    } else {
+      url = `${docsBaseUrl}/cvtheque/${url}`
     }
-    window.open(url, '_blank', 'noopener')
+    setViewerUrl(url)
   }
+
+  // Btn loupe : ouvre Fen_CVEditMotsCles (autre module)
+  const ouvreMotsCles = () => {
+    if (onOpenMotsCles) onOpenMotsCles(idCv)
+    else showToast('Édition mots-clés : à venir', 'info')
+  }
+
+  // Btn poubelle : soft-delete si droit CVSuppr
+  const supprimerFiche = async () => {
+    const ok = await showConfirm({
+      title: 'Supprimer la fiche ?',
+      message: 'Vous êtes sur le point de supprimer cette fiche. Voulez-vous continuer ?',
+      confirmLabel: 'Supprimer',
+    })
+    if (!ok) return
+    try {
+      const r = await fetch(`${apiBase}/recrutement/cv/${idCv}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        if (r.status === 403) {
+          showToast('Droit CVSuppr requis.', 'error')
+        } else {
+          throw new Error(String(r.status))
+        }
+        return
+      }
+      showToast('Fiche supprimée.', 'success')
+      onClose(true)
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  // Btn + : joindre un CV (file picker + upload + auto Voir le CV)
+  const joindreCv = async () => {
+    const ok = await showConfirm({
+      title: 'Joindre un CV',
+      message: 'Voulez-vous joindre un CV à cette fiche ?',
+      confirmLabel: 'Choisir un fichier',
+    })
+    if (!ok) return
+    fileInputRef.current?.click()
+  }
+
+  const onFileChosen = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const f = ev.target.files?.[0]
+    if (!f || !fiche) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', f)
+      fd.append('nom', fiche.nom || '')
+      const r = await fetch(`${apiBase}/recrutement/cv/${idCv}/upload-cv`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: fd,
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      showToast('CV joint avec succès.', 'success')
+      await reloadFiche()
+      // Auto Voir le CV apres upload (comme WinDev)
+      if (d.fic_cv) {
+        setViewerUrl(`${docsBaseUrl}/cvtheque/${d.fic_cv}`)
+      }
+    } catch (e) {
+      showToast(`Erreur chargement : ${(e as Error).message}`, 'error')
+    } finally {
+      setUploading(false)
+      ev.target.value = ''
+    }
+  }
+
+  const canDelete = userDroits.includes('CVSuppr')
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
          onClick={() => onClose(false)}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col"
+      <div className={`bg-white rounded-xl shadow-2xl ${viewerUrl ? 'max-w-[95vw]' : 'max-w-5xl'} w-full max-h-[95vh] flex flex-col`}
            onClick={e => e.stopPropagation()}
            style={{ border: `1px solid ${COL_BORDER}` }}>
         {/* HEADER */}
@@ -320,23 +402,33 @@ export default function CVFicheModal({
                 Enregistrer
               </ActionBtn>
               <ActionBtn onClick={reactualiser} icon={RefreshCw}>
-                Réactualiser
+                Réactualiser la fiche
               </ActionBtn>
               <ActionBtn onClick={planifierRdv} icon={Calendar}>
                 Planifier un RDV
               </ActionBtn>
-              <ActionBtn onClick={voirCV} icon={FileSearch} disabled={!fiche.fic_cv}>
+              <div className="flex-1" />
+              {/* 4 boutons icone-only de droite */}
+              <ActionBtn onClick={ouvreMotsCles} icon={ScanSearch}
+                         title="Édition mots-clés (Fen_CVEditMotsClés)" />
+              {canDelete && (
+                <ActionBtn onClick={supprimerFiche} icon={Trash2} variant="danger"
+                           title="Supprimer cette fiche" />
+              )}
+              <ActionBtn onClick={joindreCv} icon={FilePlus} disabled={uploading}
+                         title="Joindre un CV (fichier)" />
+              <ActionBtn onClick={voirCV} icon={Play} disabled={!fiche.fic_cv}
+                         title="Voir le CV à droite">
                 Voir le CV
               </ActionBtn>
-              <div className="flex-1" />
-              <ActionBtn onClick={() => showToast('Suppression : V_later', 'info')}
-                         icon={Trash2} variant="danger">
-                Supprimer
-              </ActionBtn>
+              <input ref={fileInputRef} type="file" onChange={onFileChosen}
+                     className="hidden" />
             </div>
 
-            {/* BODY */}
-            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 gap-4">
+            {/* BODY - split avec viewer optionnel a droite */}
+            <div className="flex-1 flex min-h-0">
+            <div className={`${viewerUrl ? 'w-[700px] shrink-0 border-r' : 'flex-1'} overflow-y-auto p-4 grid grid-cols-2 gap-4`}
+                 style={{ borderColor: COL_BORDER }}>
               {/* Colonne gauche : identite + coordonnees */}
               <div className="space-y-2">
                 <FieldRow label="Nom">
@@ -569,6 +661,28 @@ export default function CVFicheModal({
                 </div>
               </div>
             </div>
+
+            {/* PANNEAU VIEWER (a droite) */}
+            {viewerUrl && (
+              <div className="flex-1 flex flex-col min-w-0">
+                <div className="px-3 py-1.5 border-b flex items-center gap-2"
+                     style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>
+                  <button type="button" onClick={() => setViewerUrl('')}
+                          className="flex items-center gap-1 px-2 py-1 rounded border text-xs"
+                          style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
+                    <ArrowLeft className="w-3.5 h-3.5" /> Retour
+                  </button>
+                  <a href={viewerUrl} target="_blank" rel="noopener noreferrer"
+                     className="text-xs truncate flex-1 hover:underline"
+                     style={{ color: COL_PRIMARY }} title={viewerUrl}>
+                    {viewerUrl}
+                  </a>
+                </div>
+                <iframe src={viewerUrl} className="flex-1 border-0 bg-white"
+                        title="Aperçu du CV" />
+              </div>
+            )}
+            </div>
           </>
         )}
       </div>
@@ -589,18 +703,19 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
   )
 }
 
-function ActionBtn({ onClick, icon: Icon, children, primary, disabled, variant }: {
+function ActionBtn({ onClick, icon: Icon, children, primary, disabled, variant, title }: {
   onClick: () => void
   icon: React.ComponentType<{ className?: string }>
-  children: React.ReactNode
+  children?: React.ReactNode
   primary?: boolean
   disabled?: boolean
   variant?: 'danger'
+  title?: string
 }) {
   const bg = variant === 'danger' ? '#B91C1C' : primary ? COL_PRIMARY : 'white'
   const fg = primary || variant === 'danger' ? 'white' : COL_BRUN
   return (
-    <button type="button" onClick={onClick} disabled={disabled}
+    <button type="button" onClick={onClick} disabled={disabled} title={title}
             className="flex items-center gap-1 px-3 py-1.5 rounded border text-sm disabled:opacity-50"
             style={{ borderColor: COL_BORDER, backgroundColor: bg, color: fg }}>
       <Icon className="w-3.5 h-3.5" />

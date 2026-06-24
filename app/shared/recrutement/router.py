@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -205,5 +205,27 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         user: UserToken = Depends(get_current_user),
     ):
         return fiche_svc.add_observation(id_cv, payload, user.id_salarie)
+
+    @router.delete("/{id_cv}")
+    def delete_fiche(
+        id_cv: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        # Droit WinDev : CVSuppr
+        if "CVSuppr" not in (user.droits or []):
+            raise HTTPException(403, "Droit CVSuppr requis")
+        return fiche_svc.delete_fiche(id_cv, user.id_salarie)
+
+    @router.post("/{id_cv}/upload-cv")
+    async def post_upload_cv(
+        id_cv: int,
+        nom: str = Form(""),
+        file: UploadFile = File(...),
+        user: UserToken = Depends(get_current_user),
+    ):
+        content = await file.read()
+        return fiche_svc.upload_cv_file(
+            id_cv, nom, content, file.filename or "", user.id_salarie,
+        )
 
     return router
