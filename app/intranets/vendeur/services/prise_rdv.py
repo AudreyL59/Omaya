@@ -396,7 +396,7 @@ def planifier_rdv(
                     lieu_texte += f"Code secret :{salon['mdp']}\n"
 
         date_disp = date_obj.strftime("%d/%m/%Y %H:%M")
-        conf_url = f"https://groupe-exo.omaya.fr/PAGESEXTERNES_WEB/FR/Page-ConfRDV.awp?P1={id_rdv}"
+        conf_url = f"https://groupe-exo.omaya.fr/vendeur/PageExterne/conf-rdv/{id_rdv}"
 
         texte_sms = (
             f"Bonjour,\n"

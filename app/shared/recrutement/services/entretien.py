@@ -434,11 +434,11 @@ def _send_sms_confirmation(
 ) -> dict:
     """Envoie le SMS de confirmation au candidat.
 
-    Template WinDev :
+    Template :
       Bonjour,
       Votre entretien aura lieu le <date_FR> avec <recruteur>.
 
-      Pour confirmer : https://<srv>groupe-exo.omaya.fr/PAGESEXTERNES_WEB/FR/Page-ConfRDV.awp?P1=<id_rdv>
+      Pour confirmer : https://<srv>groupe-exo.omaya.fr/vendeur/PageExterne/conf-rdv/<id_rdv>
 
       <lieu OU info visio>
 

@@ -574,7 +574,7 @@ def send_sms_rdv(id_rdv: int, op_id: int) -> dict:
         "Bonjour,\n"
         f"Votre entretien aura lieu le {date_rdv} avec {nom_recruteur}.\n"
         "\n"
-        f"Pour confirmer : https://groupe-exo.omaya.fr/PAGESEXTERNES_WEB/FR/Page-ConfRDV.awp?P1={id_rdv}\n"
+        f"Pour confirmer : https://groupe-exo.omaya.fr/vendeur/PageExterne/conf-rdv/{id_rdv}\n"
         "\n"
         f"{lieu_text}"
     )
