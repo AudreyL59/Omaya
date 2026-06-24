@@ -50,16 +50,21 @@ Copy-Item -Path $WebConfig -Destination (Join-Path $TargetDir "web.config") -For
 Write-Host ""
 Write-Host "Frontend ADM deploye dans : $TargetDir" -ForegroundColor Green
 
-# --- Rappel sur le web.config racine --------------------------------------
+# --- web.config racine ----------------------------------------------------
+# Idem build-frontend.ps1 : copie auto si absent (fresh install), alerte si
+# present sans 'OmayaAPI' (cas serveur interne avec WEBDEV/ASP.NET deja).
+$RootTemplate = "$ProjectRoot\deploy\web.config.ovh-root"
 if (-not (Test-Path $RootConfig)) {
     Write-Host ""
-    Write-Host "ATTENTION : $RootConfig n'existe pas." -ForegroundColor Yellow
-    Write-Host "Le reverse proxy /api ne fonctionnera PAS tant qu'il n'est pas en place." -ForegroundColor Yellow
+    Write-Host "$RootConfig absent -> copie automatique depuis $RootTemplate" -ForegroundColor Cyan
+    Copy-Item -Path $RootTemplate -Destination $RootConfig -Force
+    Write-Host "OK. Verifier que IIS URL Rewrite + ARR sont installes et ARR Proxy active." -ForegroundColor Green
 } else {
     $rootXml = Get-Content $RootConfig -Raw
     if ($rootXml -notmatch 'OmayaAPI') {
         Write-Host ""
         Write-Host "ATTENTION : regle 'OmayaAPI' non trouvee dans $RootConfig." -ForegroundColor Yellow
+        Write-Host "Fusionner le contenu de deploy\web.config.root.snippet dans ce fichier." -ForegroundColor Yellow
     }
 }
 
