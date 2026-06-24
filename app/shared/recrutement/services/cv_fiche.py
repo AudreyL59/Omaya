@@ -373,6 +373,29 @@ def reactualiser(id_cv: int, op_id: int) -> dict:
     return {"ok": True}
 
 
+def get_mots_cles(id_cv: int) -> str:
+    """Btn loupe Fen_CVEditMotsCles : recupere les mots cles du CV."""
+    db = get_pg_connection("recrutement")
+    r = db.query_one(
+        "SELECT mots_cles FROM recrutement.pgt_cvtheque WHERE id_cvtheque = ?",
+        (int(id_cv),),
+    )
+    return _str(r.get("mots_cles")) if r else ""
+
+
+def save_mots_cles(id_cv: int, mots_cles: str, op_id: int) -> dict:
+    """Btn 'Enregistrer' Fen_CVEditMotsCles : UPDATE des mots cles."""
+    db = get_pg_connection("recrutement")
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque
+              SET mots_cles = ?, modif_date = NOW(),
+                  modif_op = ?, modif_elem = 'new'
+            WHERE id_cvtheque = ?""",
+        (mots_cles, int(op_id), int(id_cv)),
+    )
+    return {"ok": True, "mots_cles": mots_cles}
+
+
 def delete_fiche(id_cv: int, op_id: int) -> dict:
     """Btn 'Supprimer' : soft-delete via modif_elem = 'suppr'."""
     db = get_pg_connection("recrutement")

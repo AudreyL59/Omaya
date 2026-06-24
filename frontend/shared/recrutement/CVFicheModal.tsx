@@ -24,6 +24,7 @@ import {
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
 import EntretienAjoutModal from './EntretienAjoutModal'
+import MotsClesCVModal from './MotsClesCVModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -115,6 +116,7 @@ export default function CVFicheModal({
   const [viewerUrl, setViewerUrl] = useState('')   // panneau Voir le CV
   const [uploading, setUploading] = useState(false)
   const [showRdv, setShowRdv] = useState(false)    // Fen_EntretienAjout
+  const [showMotsCles, setShowMotsCles] = useState(false)  // Fen_CVEditMotsCles
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Au mount : claim (silencieux si 409 = deja ouvert par un autre)
@@ -347,10 +349,10 @@ export default function CVFicheModal({
     setViewerUrl(url)
   }
 
-  // Btn loupe : ouvre Fen_CVEditMotsCles (autre module)
+  // Btn loupe : ouvre Fen_CVEditMotsCles (sous-modal)
   const ouvreMotsCles = () => {
     if (onOpenMotsCles) onOpenMotsCles(idCv)
-    else showToast('Édition mots-clés : à venir', 'info')
+    else setShowMotsCles(true)
   }
 
   // Btn poubelle : soft-delete si droit CVSuppr
@@ -778,6 +780,17 @@ export default function CVFicheModal({
               onClose(true)
             }
           }}
+        />
+      )}
+
+      {/* Sous-modal Edition mots-cles (Fen_CVEditMotsCles) */}
+      {showMotsCles && fiche && (
+        <MotsClesCVModal
+          apiBase={apiBase}
+          idCv={idCv}
+          candidatNom={fiche.nom}
+          candidatPrenom={fiche.prenom}
+          onClose={() => setShowMotsCles(false)}
         />
       )}
     </div>

@@ -219,6 +219,22 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             raise HTTPException(403, "Droit CVSuppr requis")
         return fiche_svc.delete_fiche(id_cv, user.id_salarie)
 
+    @router.get("/{id_cv}/mots-cles")
+    def get_mots_cles(
+        id_cv: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return {"mots_cles": fiche_svc.get_mots_cles(id_cv)}
+
+    @router.put("/{id_cv}/mots-cles")
+    def put_mots_cles(
+        id_cv: int,
+        payload: dict[str, Any] = Body(...),
+        user: UserToken = Depends(get_current_user),
+    ):
+        mots = str(payload.get("mots_cles") or "")
+        return fiche_svc.save_mots_cles(id_cv, mots, user.id_salarie)
+
     @router.post("/{id_cv}/upload-cv")
     async def post_upload_cv(
         id_cv: int,
