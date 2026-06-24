@@ -211,7 +211,7 @@ export default function EntretienAjoutModal({
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
          onClick={() => onClose(false)}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-[95vw] w-full max-h-[95vh] flex flex-col"
+      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col"
            onClick={e => e.stopPropagation()}
            style={{ border: `1px solid ${COL_BORDER}` }}>
         {/* HEADER */}
@@ -233,7 +233,7 @@ export default function EntretienAjoutModal({
           </div>
         ) : (
           <div className="flex-1 flex min-h-0">
-          <div className="w-[420px] shrink-0 overflow-y-auto p-4 space-y-3 border-r"
+          <div className="w-[380px] shrink-0 overflow-y-auto p-4 space-y-3 border-r"
                style={{ borderColor: COL_BORDER }}>
             {/* Session */}
             <Row label="Session">
