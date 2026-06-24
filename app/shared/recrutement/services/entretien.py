@@ -390,7 +390,7 @@ def create_rdv(id_cv: int, p: CreateRdvPayload, op_id: int) -> dict:
               op_crea, modif_date, modif_op, modif_elem)
            VALUES (?, ?, ?, ?, 1,
                    ?, '', ?, ?,
-                   ?, ?, ?, 0, 0, 0, 0, 0,
+                   ?, ?, ?, 0, FALSE, FALSE, FALSE, FALSE,
                    ?, NOW(), ?, 'new')""",
         (auto_id, id_rdv,
          int(p.id_recruteur), id_cv_suivi,
