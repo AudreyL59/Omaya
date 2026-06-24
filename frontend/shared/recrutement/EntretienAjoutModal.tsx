@@ -9,10 +9,10 @@
  * vue agenda du recruteur (commit ulterieur).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowLeft, Calendar, Check, Loader2, MapPin, Phone, Plus,
-  RefreshCw, Save, Video, X,
+  ArrowLeft, Check, Loader2, MapPin, Plus,
+  Save, Video, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
