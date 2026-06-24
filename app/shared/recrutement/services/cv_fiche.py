@@ -58,7 +58,7 @@ def get_fiche(id_cv: int) -> Optional[CVFicheDetail]:
         """SELECT id_cv_statut FROM recrutement.pgt_cvsuivi
             WHERE id_cvtheque = ?
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-         ORDER BY datecrea DESC LIMIT 1""",
+         ORDER BY datecrea DESC NULLS LAST LIMIT 1""",
         (int(id_cv),),
     )
     id_statut = _int(last["id_cv_statut"]) if last else 0
@@ -121,7 +121,7 @@ def list_cvsuivi(id_cv: int) -> list[CVSuiviRow]:
              FROM recrutement.pgt_cvsuivi
             WHERE id_cvtheque = ?
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-         ORDER BY datecrea DESC""",
+         ORDER BY datecrea DESC NULLS LAST""",
         (int(id_cv),),
     ) or []
     if not rows:
@@ -250,7 +250,7 @@ def save_fiche(id_cv: int, p: CVFichePayload, op_id: int) -> dict:
         """SELECT id_cv_statut FROM recrutement.pgt_cvsuivi
             WHERE id_cvtheque = ?
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-         ORDER BY datecrea DESC LIMIT 1""",
+         ORDER BY datecrea DESC NULLS LAST LIMIT 1""",
         (int(id_cv),),
     )
     old_statut = _int(cur["id_cv_statut"]) if cur else 0
@@ -315,7 +315,7 @@ def restatuer(id_cv: int, op_id: int) -> dict:
         """SELECT id_cv_statut FROM recrutement.pgt_cvsuivi
             WHERE id_cvtheque = ?
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-         ORDER BY datecrea DESC LIMIT 1""",
+         ORDER BY datecrea DESC NULLS LAST LIMIT 1""",
         (int(id_cv),),
     )
     if not cur:
@@ -335,7 +335,7 @@ def statut_quick(id_cv: int, p: CVStatutQuickPayload, op_id: int) -> dict:
         """SELECT id_cv_statut FROM recrutement.pgt_cvsuivi
             WHERE id_cvtheque = ?
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-         ORDER BY datecrea DESC LIMIT 1""",
+         ORDER BY datecrea DESC NULLS LAST LIMIT 1""",
         (int(id_cv),),
     )
     old_statut = _int(cur["id_cv_statut"]) if cur else 0

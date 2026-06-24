@@ -383,7 +383,7 @@ def get_presence(ids: list[int]) -> dict[str, dict]:
               FROM recrutement.pgt_cvsuivi s
              WHERE s.id_cvtheque IN ({ph})
                AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
-          ORDER BY s.id_cvtheque, s.datecrea DESC""",
+          ORDER BY s.id_cvtheque, s.datecrea DESC NULLS LAST""",
         tuple(int(x) for x in ids),
     ) or []
     statut_by_cv = {_int(r["id_cvtheque"]): _int(r["id_cv_statut"]) for r in sr}
@@ -658,7 +658,7 @@ def _enrich_cv_rows(rows: list[dict], f: SearchCVFiltres) -> list[CVRow]:
                   FROM recrutement.pgt_cvsuivi s
                  WHERE s.id_cvtheque IN ({ph})
                    AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
-              ORDER BY s.id_cvtheque, s.datecrea DESC""",
+              ORDER BY s.id_cvtheque, s.datecrea DESC NULLS LAST""",
             tuple(ids_cv),
         ) or []
         statut_by_cv = {_int(r["id_cvtheque"]): r for r in sr}
@@ -676,7 +676,7 @@ def _enrich_cv_rows(rows: list[dict], f: SearchCVFiltres) -> list[CVRow]:
                  WHERE s.id_cvtheque IN ({ph})
                    AND s.modif_date <= ?
                    AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
-              ORDER BY s.id_cvtheque, s.datecrea DESC""",
+              ORDER BY s.id_cvtheque, s.datecrea DESC NULLS LAST""",
             (*ids_cv, date_fin),
         ) or []
         statut_periode_by_cv = {
