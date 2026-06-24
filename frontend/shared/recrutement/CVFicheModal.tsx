@@ -527,17 +527,20 @@ export default function CVFicheModal({
                     )}
                   </div>
                 </FieldRow>
-                <div className="flex items-center gap-4 pl-32">
-                  <label className="text-xs flex items-center gap-1" style={{ color: COL_BRUN }}>
-                    <input type="checkbox" checked={fiche.permis_b}
-                           onChange={e => setF({ permis_b: e.target.checked })} />
-                    Permis B
-                  </label>
-                  <label className="text-xs flex items-center gap-1" style={{ color: COL_BRUN }}>
-                    <input type="checkbox" checked={fiche.vehicule}
-                           onChange={e => setF({ vehicule: e.target.checked })} />
-                    Véhicule
-                  </label>
+                <div className="grid grid-cols-[120px_1fr] items-center gap-3 min-h-9">
+                  <div />
+                  <div className="flex items-center gap-4">
+                    <label className="text-xs flex items-center gap-1" style={{ color: COL_BRUN }}>
+                      <input type="checkbox" checked={fiche.permis_b}
+                             onChange={e => setF({ permis_b: e.target.checked })} />
+                      Permis B
+                    </label>
+                    <label className="text-xs flex items-center gap-1" style={{ color: COL_BRUN }}>
+                      <input type="checkbox" checked={fiche.vehicule}
+                             onChange={e => setF({ vehicule: e.target.checked })} />
+                      Véhicule
+                    </label>
+                  </div>
                 </div>
                 <FieldRow label="Courriel">
                   <input type="email" value={fiche.mail}
@@ -615,7 +618,8 @@ export default function CVFicheModal({
                   const st = Number(fiche.id_cv_statut) || 0
                   const peutRestatuer = st > 0 && st < 100 && st !== 6
                   return (
-                    <div className="pl-32">
+                    <div className="grid grid-cols-[120px_1fr] items-center gap-3">
+                      <div />
                       <button type="button" onClick={restatuer}
                               disabled={!peutRestatuer}
                               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded border text-sm disabled:opacity-40 disabled:cursor-not-allowed"
@@ -757,9 +761,9 @@ export default function CVFicheModal({
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2">
-      <label className="text-xs w-32 shrink-0" style={{ color: COL_BRUN }}>{label}</label>
-      <div className="flex-1 min-w-0">{children}</div>
+    <div className="grid grid-cols-[120px_1fr] items-center gap-3 min-h-9">
+      <label className="text-xs text-right" style={{ color: COL_BRUN }}>{label}</label>
+      <div className="min-w-0">{children}</div>
     </div>
   )
 }
