@@ -15,7 +15,7 @@
  * Commit 4 (a venir) : mode Agence (arbre orga).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown, ArrowUp, ArrowUpDown,
   Building2, Calendar, ChevronDown, ChevronLeft, ChevronRight, Folder,
@@ -456,6 +456,22 @@ export default function RechercheCVPage({
     onOpenFiche?.(idCv)
   }
 
+  // Detection manuelle du double-click (onDoubleClick natif ne se
+  // declenche pas toujours quand onClick re-render le DOM entre les 2
+  // clicks). On considere double-click : 2 clicks <400ms sur la meme ligne.
+  const lastClickRef = useRef<{ id: string; t: number }>({ id: '', t: 0 })
+  const handleRowClick = (idCv: string) => {
+    const now = Date.now()
+    const prev = lastClickRef.current
+    if (prev.id === idCv && (now - prev.t) < 400) {
+      lastClickRef.current = { id: '', t: 0 }
+      handleOpenFiche(idCv)
+      return
+    }
+    lastClickRef.current = { id: idCv, t: now }
+    setSelectedId(idCv)
+  }
+
   return (
     <div className="flex h-full">
       {/* SIDEBAR FILTRES */}
@@ -625,8 +641,8 @@ export default function RechercheCVPage({
                   const statutLive = pres?.statut_actuel || r.statut_actuel
                   const opNom = pres?.op_nom || r.op_traitement
                   return (
-                  <tr key={r.id_cvtheque} onClick={() => setSelectedId(r.id_cvtheque)}
-                      onDoubleClick={() => handleOpenFiche(r.id_cvtheque)}
+                  <tr key={r.id_cvtheque}
+                      onClick={() => handleRowClick(r.id_cvtheque)}
                       className="cursor-pointer border-b"
                       style={{ ...rowStyle(r), borderColor: COL_BORDER }}>
                     <td className="px-2 py-1.5 font-semibold whitespace-nowrap">
