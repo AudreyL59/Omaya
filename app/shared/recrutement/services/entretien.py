@@ -19,6 +19,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.database.pg import get_pg_connection
+from app.shared.notifications.sms import envoi_sms
 from app.shared.recrutement.services.recherche_cv import _int, _str
 
 
@@ -335,9 +336,9 @@ def create_rdv(id_cv: int, p: CreateRdvPayload, op_id: int) -> dict:
         f"{_str(rec['nom']).upper()} {_str(rec['prenom']).strip().title()}"
     )
 
-    # Resolve nom candidat (pour le titre AgendaEvenement)
+    # Resolve nom + gsm candidat (gsm pour le SMS de confirmation)
     cv = db.query_one(
-        "SELECT nom, prenom, id_cvposte FROM recrutement.pgt_cvtheque "
+        "SELECT nom, prenom, id_cvposte, gsm FROM recrutement.pgt_cvtheque "
         "WHERE id_cvtheque = ?",
         (int(id_cv),),
     )
@@ -345,6 +346,7 @@ def create_rdv(id_cv: int, p: CreateRdvPayload, op_id: int) -> dict:
         return {"ok": False, "error": "cv_inconnu"}
     cand_nom = _str(cv["nom"]).upper()
     cand_prenom = _str(cv["prenom"]).strip().title()
+    cand_gsm = _str(cv.get("gsm"))
 
     # Parse date_debut + 30 min pour date_fin
     try:
@@ -397,12 +399,25 @@ def create_rdv(id_cv: int, p: CreateRdvPayload, op_id: int) -> dict:
          int(op_id), int(op_id)),
     )
 
-    # TODO V_later : envoi SMS de confirmation + animation cooptation
+    # Envoi SMS de confirmation (best-effort, ne bloque pas la creation
+    # du RDV si l'envoi echoue)
+    sms_res: dict = {}
+    if p.send_sms and cand_gsm:
+        sms_res = _send_sms_confirmation(
+            id_rdv=id_rdv, gsm=cand_gsm, date_debut=dt_deb,
+            recruteur_nom=recruteur_nom, type_entretien=p.type_entretien,
+            id_cv_lieu_rdv=int(p.id_cv_lieu_rdv or 0),
+            id_salon_visio=int(p.id_salon_visio or 0),
+            choix_serveur=int(p.choix_serveur or 1),
+            op_id=op_id,
+        )
+
+    # TODO V_later : animation cooptation
     return {
         "ok": True,
         "id_rdv": str(id_rdv),
         "id_cv_suivi": str(id_cv_suivi),
-        "send_sms_pending": bool(p.send_sms),
+        "sms": sms_res,
     }
 
 
@@ -410,3 +425,106 @@ def _next_auto(db, schema: str, table: str, auto_col: str) -> int:
     """COALESCE(MAX(auto_col),0)+1. Helper pour HFSQL-migrated sans sequence."""
     r = db.query(f"SELECT COALESCE(MAX({auto_col}),0)+1 AS n FROM {schema}.{table}")
     return _int(r[0]["n"]) if r else 1
+
+
+def _send_sms_confirmation(
+    id_rdv: int, gsm: str, date_debut: datetime, recruteur_nom: str,
+    type_entretien: str, id_cv_lieu_rdv: int, id_salon_visio: int,
+    choix_serveur: int, op_id: int,
+) -> dict:
+    """Envoie le SMS de confirmation au candidat.
+
+    Template WinDev :
+      Bonjour,
+      Votre entretien aura lieu le <date_FR> avec <recruteur>.
+
+      Pour confirmer : https://<srv>groupe-exo.omaya.fr/PAGESEXTERNES_WEB/FR/Page-ConfRDV.awp?P1=<id_rdv>
+
+      <lieu OU info visio>
+
+    Insert egalement dans divers.pgt_histo_sms.
+    """
+    if not gsm:
+        return {"ok": False, "error": "no_gsm"}
+
+    db_rec = get_pg_connection("recrutement")
+
+    # Construit la partie 'lieu' selon Physique/Visio
+    lieu_text = ""
+    if type_entretien == "Visio" and id_salon_visio:
+        salon = db_rec.query_one(
+            """SELECT sv.lien_salon, sv.id_salon, sv.mpd_salon,
+                      ts.lib_salon AS lib_type
+                 FROM recrutement.pgt_salon_visio sv
+                 LEFT JOIN recrutement.pgt_type_salon_visio ts
+                        ON ts.id_type_salon_visio = sv.id_type_salon_visio
+                WHERE sv.id_salon_visio = ?""",
+            (int(id_salon_visio),),
+        )
+        if salon:
+            lib_type = _str(salon.get("lib_type"))
+            lieu_text = (
+                f"Le jour J, cliquez sur le lien suivant pour démarrer "
+                f"votre entretien VISIO {lib_type} :\n"
+                f"Lien : {_str(salon.get('lien_salon'))}\n"
+            )
+            if salon.get("id_salon"):
+                lieu_text += f"ID Reunion : {_str(salon.get('id_salon'))}\n"
+            if salon.get("mpd_salon"):
+                lieu_text += f"Code secret : {_str(salon.get('mpd_salon'))}\n"
+    elif type_entretien == "Physique" and id_cv_lieu_rdv and id_cv_lieu_rdv != 1:
+        lieu = db_rec.query_one(
+            """SELECT l.lib_lieu, l.adresse1, l.latitude_deg, l.longitude_deg,
+                      c.code_postal, c.nom_ville
+                 FROM recrutement.pgt_cv_lieu_rdv l
+                 LEFT JOIN divers.pgt_communes_france c
+                        ON c.id_communes_france = l.id_communes_france
+                WHERE l.id_cv_lieu_rdv = ?""",
+            (int(id_cv_lieu_rdv),),
+        )
+        if lieu:
+            lib_lieu = _str(lieu.get("lib_lieu"))
+            adresse1 = _str(lieu.get("adresse1"))
+            cp = _str(lieu.get("code_postal"))
+            ville = _str(lieu.get("nom_ville"))
+            lat = lieu.get("latitude_deg") or 0
+            lon = lieu.get("longitude_deg") or 0
+            lieu_text = (
+                f"Adresse : {lib_lieu}\n{adresse1}\n{cp} {ville}\n"
+                f"Lien Maps : https://www.google.com/maps/?q={lat},{lon} ."
+            )
+
+    # Date FR : 'JJ/MM/AAAA'
+    date_fr = date_debut.strftime("%d/%m/%Y")
+    srv = "sos." if int(choix_serveur) == 2 else ""
+    texte_sms = (
+        "Bonjour,\n"
+        f"Votre entretien aura lieu le {date_fr} avec {recruteur_nom}.\n"
+        "\n"
+        f"Pour confirmer : https://{srv}groupe-exo.omaya.fr"
+        f"/PAGESEXTERNES_WEB/FR/Page-ConfRDV.awp?P1={id_rdv}\n"
+        "\n"
+        f"{lieu_text}"
+    )
+
+    # Envoi via smsmode
+    res = envoi_sms(texte_sms, gsm)
+
+    # INSERT dans divers.pgt_histo_sms (best-effort)
+    try:
+        db_div = get_pg_connection("divers")
+        db_div.query(
+            """INSERT INTO divers.pgt_histo_sms
+                 (id_histo_sms, destinataire, fichier, rubrique,
+                  id_elem, contenu_envoye, statut, ope_envoi,
+                  datecrea, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?,
+                       ?, ?, ?, ?,
+                       NOW(), NOW(), ?, 'new')""",
+            (_new_id(), gsm, "AgendaEvenement", "IDAgendaEvenement",
+             int(id_rdv), texte_sms, res, int(op_id), int(op_id)),
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "statut": res, "gsm": gsm}

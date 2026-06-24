@@ -200,7 +200,13 @@ export default function EntretienAjoutModal({
         }),
       })
       if (!r.ok) throw new Error(String(r.status))
-      showToast('RDV planifié avec succès.', 'success')
+      const d = await r.json().catch(() => ({}))
+      const smsRes = d?.sms?.statut
+      if (sendSms && smsRes) {
+        showToast(`RDV planifié. SMS : ${smsRes}`, 'success')
+      } else {
+        showToast('RDV planifié avec succès.', 'success')
+      }
       onClose(true)
     } catch (e) {
       showToast(`Erreur : ${(e as Error).message}`, 'error')
@@ -414,7 +420,7 @@ export default function EntretienAjoutModal({
                   </div>
                 </Row>
                 <p className="text-xs italic pl-32" style={{ color: '#A68D8A' }}>
-                  ⚠ Envoi SMS pas encore implémenté (V_later)
+                  Le SMS est envoyé via smsmode.com après validation du RDV.
                 </p>
               </>
             )}
