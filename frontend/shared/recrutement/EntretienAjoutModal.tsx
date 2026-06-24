@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
+import RecruteurAgenda from './RecruteurAgenda'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -210,7 +211,7 @@ export default function EntretienAjoutModal({
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
          onClick={() => onClose(false)}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[95vh] flex flex-col"
+      <div className="bg-white rounded-xl shadow-2xl max-w-[95vw] w-full max-h-[95vh] flex flex-col"
            onClick={e => e.stopPropagation()}
            style={{ border: `1px solid ${COL_BORDER}` }}>
         {/* HEADER */}
@@ -231,7 +232,9 @@ export default function EntretienAjoutModal({
             <Loader2 className="w-6 h-6 animate-spin" style={{ color: COL_PRIMARY }} />
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 flex min-h-0">
+          <div className="w-[420px] shrink-0 overflow-y-auto p-4 space-y-3 border-r"
+               style={{ borderColor: COL_BORDER }}>
             {/* Session */}
             <Row label="Session">
               <select value={idSession} onChange={e => handleSelectSession(e.target.value)}
@@ -415,6 +418,24 @@ export default function EntretienAjoutModal({
                 </p>
               </>
             )}
+          </div>
+
+          {/* PANNEAU AGENDA (a droite) */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            {idRecruteur ? (
+              <RecruteurAgenda apiBase={apiBase} idRecruteur={idRecruteur}
+                               semaineDu={date}
+                               highlightDate={date}
+                               highlightHeure={heure}
+                               onSelectSlot={(d, h) => { setDate(d); setHeure(h) }}
+                               onChangeSemaine={(lundi) => setDate(lundi)} />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-sm italic"
+                   style={{ color: '#A68D8A' }}>
+                Sélectionne un recruteur pour voir son agenda
+              </div>
+            )}
+          </div>
           </div>
         )}
 
