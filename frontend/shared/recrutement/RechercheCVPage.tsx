@@ -61,9 +61,10 @@ interface CVRow {
 }
 
 interface PresenceEntry {
-  op_traite: string
+  op_traite: string         // qui a la fiche ouverte
   op_nom: string
   statut_actuel: string
+  last_op_crea: string      // qui a fait le dernier changement de statut
 }
 
 interface RechercheCVPageProps {
@@ -413,25 +414,33 @@ export default function RechercheCVPage({
     }
   }
 
-  // Couleur ligne selon presence + selection + changement de statut
+  // Couleur ligne selon presence + selection + changement de statut.
+  // Regle WinDev :
+  //  - selection -> vert primary
+  //  - statut change depuis la recherche :
+  //      jaune si c'est MOI qui ai fait le dernier traitement (last_op_crea)
+  //      orange si c'est un AUTRE
+  //  - fiche actuellement ouverte (sans changement) : teinte tres claire
+  //  - sinon blanc
   const rowStyle = (r: CVRow): React.CSSProperties => {
     const isSel = selectedId === r.id_cvtheque
     const pres = presence[r.id_cvtheque]
     const opTraite = pres?.op_traite || ''
+    const lastOp = pres?.last_op_crea || ''
     const changed = changedIds.has(r.id_cvtheque)
 
-    // Selection (priorite max)
     if (isSel) {
       return { backgroundColor: COL_PRIMARY_LIGHT, color: 'white' }
     }
-    // Statut change : jaune si par moi, orange si par autre
+    // Statut change -> couleur selon QUI a traite (last_op_crea), pas
+    // selon qui a la fiche ouverte (op_traite).
     if (changed) {
-      if (opTraite && opTraite === myUserId) {
+      if (lastOp && lastOp === myUserId) {
         return { backgroundColor: '#FEF08A', color: COL_BRUN }  // jaune
       }
       return { backgroundColor: '#FED7AA', color: COL_BRUN }    // orange
     }
-    // Presence sans changement : teinte plus claire
+    // Fiche actuellement ouverte par qqun (sans changement de statut)
     if (opTraite) {
       if (opTraite === myUserId) {
         return { backgroundColor: '#FEF9C3', color: COL_BRUN }  // jaune clair

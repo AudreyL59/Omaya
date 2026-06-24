@@ -355,9 +355,14 @@ def release_my_orphans(op_id: int) -> dict:
 
 
 def get_presence(ids: list[int]) -> dict[str, dict]:
-    """Retourne pour chaque id_cvtheque : {op_traite, op_nom, statut_actuel}.
+    """Retourne pour chaque id_cvtheque :
+      {op_traite, op_nom, statut_actuel, last_op_crea}
 
-    Filtre presences expirees (date_traite < aujourd'hui).
+    - op_traite  : qui a la fiche ouverte (vide si libre)
+    - op_nom     : son nom
+    - statut_actuel : id_cv_statut courant (dernier cvsuivi)
+    - last_op_crea  : qui a fait le dernier cvsuivi (pour couleur
+                      jaune/orange persistante meme apres release)
     """
     if not ids:
         return {}
@@ -371,10 +376,10 @@ def get_presence(ids: list[int]) -> dict[str, dict]:
         tuple(int(x) for x in ids),
     ) or []
 
-    # Dernier statut par CV
+    # Dernier statut + dernier op_crea par CV (en 1 query)
     sr = db.query(
         f"""SELECT DISTINCT ON (s.id_cvtheque)
-                   s.id_cvtheque, s.id_cv_statut
+                   s.id_cvtheque, s.id_cv_statut, s.op_crea
               FROM recrutement.pgt_cvsuivi s
              WHERE s.id_cvtheque IN ({ph})
                AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
@@ -382,6 +387,7 @@ def get_presence(ids: list[int]) -> dict[str, dict]:
         tuple(int(x) for x in ids),
     ) or []
     statut_by_cv = {_int(r["id_cvtheque"]): _int(r["id_cv_statut"]) for r in sr}
+    last_op_by_cv = {_int(r["id_cvtheque"]): _int(r["op_crea"]) for r in sr}
 
     # Resolveur op_traite -> nom prenom
     op_ids = {_int(r["op_traite"]) for r in rows if _int(r.get("op_traite"))
@@ -404,18 +410,14 @@ def get_presence(ids: list[int]) -> dict[str, dict]:
         id_cv = _int(r["id_cvtheque"])
         op = _int(r.get("op_traite"))
         dt = r.get("date_traite")
-        if r.get("traite_en_cours") and op and dt and dt >= today:
-            out[str(id_cv)] = {
-                "op_traite": str(op),
-                "op_nom": ops.get(op, ""),
-                "statut_actuel": str(statut_by_cv.get(id_cv, "")),
-            }
-        else:
-            out[str(id_cv)] = {
-                "op_traite": "",
-                "op_nom": "",
-                "statut_actuel": str(statut_by_cv.get(id_cv, "")),
-            }
+        last_op = last_op_by_cv.get(id_cv, 0)
+        is_open = (r.get("traite_en_cours") and op and dt and dt >= today)
+        out[str(id_cv)] = {
+            "op_traite": str(op) if is_open else "",
+            "op_nom": ops.get(op, "") if is_open else "",
+            "statut_actuel": str(statut_by_cv.get(id_cv, "")),
+            "last_op_crea": str(last_op) if last_op else "",
+        }
     return out
 
 
