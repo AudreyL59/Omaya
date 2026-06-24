@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  web.config RACINE pour le serveur OVH.
+  Destination : D:\Sites\groupeOmaya\www\web.config
+
+  Heberge :
+    - L'intranet Vendeur sous /vendeur/ (avec son propre web.config SPA fallback)
+    - L'intranet ADM sous /adm/ (idem)
+    - La page externe publique de confirmation RDV : /vendeur/PageExterne/conf-rdv/<id>
+      (servie par le SPA Vendeur via React Router, accessible SANS login)
+    - Le reverse proxy /api/* -> uvicorn (FastAPI) sur 127.0.0.1:8000
+
+  Pre-requis IIS :
+    - Modules : URL Rewrite + Application Request Routing (ARR)
+    - ARR Proxy ACTIVE : IIS Manager > noeud serveur > ARR Cache >
+      Server Proxy Settings > Enable proxy
+
+  Service backend OVH :
+    - NSSM service nomme 'ERP-API' (cf. memory reference_services_nssm.md)
+    - Ecoute sur 127.0.0.1:8000
+
+  IMPORTANT pas de SSE en prod sur IIS/ARR : on garde
+  responseBufferLimit="0" et doDynamicCompression="false" par precaution
+  pour les futurs streams JSON et pour eviter tout buffering excessif.
+-->
+<configuration>
+  <system.webServer>
+    <!-- ARR : desactive le buffering cote reverse proxy. -->
+    <proxy enabled="true" responseBufferLimit="0" />
+
+    <!-- Pas de compression dynamique (statique OK pour les assets buildes). -->
+    <urlCompression doDynamicCompression="false" doStaticCompression="true" />
+
+    <rewrite>
+      <rules>
+        <!-- Reverse proxy /api/* -> uvicorn. Le backend n'a pas de prefixe
+             /api, on le retire au passage. -->
+        <rule name="OmayaAPI" stopProcessing="true">
+          <match url="^api/(.*)" />
+          <action type="Rewrite" url="http://127.0.0.1:8000/{R:1}" />
+          <serverVariables>
+            <set name="HTTP_X_FORWARDED_PROTO" value="https" />
+            <set name="HTTP_X_FORWARDED_HOST" value="{HTTP_HOST}" />
+          </serverVariables>
+        </rule>
+      </rules>
+    </rewrite>
+
+    <security>
+      <requestFiltering>
+        <!-- 50 Mo : suffisant pour upload CV, photo fiche salarie, etc. -->
+        <requestLimits maxAllowedContentLength="52428800" />
+      </requestFiltering>
+    </security>
+
+    <httpProtocol>
+      <customHeaders>
+        <add name="X-Content-Type-Options" value="nosniff" />
+        <add name="Referrer-Policy" value="strict-origin-when-cross-origin" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>
