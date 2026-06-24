@@ -6,6 +6,7 @@ import CooptationPage from '@/pages/CooptationPage'
 import AgendaRecrutementPage from '@/pages/AgendaRecrutementPage'
 import AgendaCialPage from '@/pages/AgendaCialPage'
 import CvthequePage from '@/pages/CvthequePage'
+import ConfRdvPage from '@/pages/PageExterne/ConfRdvPage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
 import ClustersPage from '@/pages/ClustersPage'
 import ProductionPage from '@shared/production/ProductionPage'
@@ -28,6 +29,9 @@ function App() {
       <DialogHost />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Pages externes publiques (sans login) */}
+        <Route path="/PageExterne/conf-rdv/:idRdv" element={<ConfRdvPage />} />
 
         {/* Routes protégées avec sidebar (servies sous BASENAME) */}
         <Route

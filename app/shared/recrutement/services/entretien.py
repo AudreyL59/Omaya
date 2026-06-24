@@ -502,7 +502,7 @@ def _send_sms_confirmation(
         f"Votre entretien aura lieu le {date_fr} avec {recruteur_nom}.\n"
         "\n"
         f"Pour confirmer : https://{srv}groupe-exo.omaya.fr"
-        f"/PAGESEXTERNES_WEB/FR/Page-ConfRDV.awp?P1={id_rdv}\n"
+        f"/vendeur/PageExterne/conf-rdv/{id_rdv}\n"
         "\n"
         f"{lieu_text}"
     )
