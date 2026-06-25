@@ -398,32 +398,29 @@ def save_mots_cles(id_cv: int, mots_cles: str, op_id: int) -> dict:
 
 
 def check_doublon(p: CheckDoublonPayload) -> CheckDoublonResponse:
-    """Verifie si un CV avec ce mail/gsm/nom-prenom existe deja.
+    """Verifie si un CV avec ce mobile (ou mail) existe deja.
+
+    Le nom+prenom n'est PAS utilise comme critere de doublon car
+    homonymes frequents (faux positifs trop nombreux).
 
     Match :
-      - mail (egalite stricte, lowercase trim)
-      - gsm (normalise : que des chiffres)
-      - nom + prenom (LIKE insensible casse)
+      - gsm normalise (que des chiffres) — discriminant principal
+      - mail (egalite stricte, lowercase trim) — discriminant secondaire
     Retourne tous les candidats trouves (max 10).
     """
     db = get_pg_connection("recrutement")
     where: list[str] = []
     params: list = []
 
-    mail = (p.mail or "").strip().lower().replace(" ", "")
-    if mail:
-        where.append("LOWER(mail) = ?")
-        params.append(mail)
     gsm_clean = "".join(c for c in (p.gsm or "") if c.isdigit())
     if gsm_clean and len(gsm_clean) >= 8:
         # Normalise le GSM stocke aussi pour comparer (regexp_replace)
         where.append("REGEXP_REPLACE(gsm, '[^0-9]', '', 'g') = ?")
         params.append(gsm_clean)
-    nom = (p.nom or "").strip()
-    prenom = (p.prenom or "").strip()
-    if nom and prenom:
-        where.append("(UPPER(nom) = ? AND UPPER(prenom) = ?)")
-        params.extend([nom.upper(), prenom.upper()])
+    mail = (p.mail or "").strip().lower().replace(" ", "")
+    if mail:
+        where.append("LOWER(mail) = ?")
+        params.append(mail)
 
     if not where:
         return CheckDoublonResponse(found=False, candidats=[])
