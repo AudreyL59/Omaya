@@ -25,6 +25,7 @@ import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
 import EntretienAjoutModal from './EntretienAjoutModal'
 import MotsClesCVModal from './MotsClesCVModal'
+import VilleAutocomplete from './VilleAutocomplete'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -509,14 +510,14 @@ export default function CVFicheModal({
                          style={{ borderColor: COL_BORDER }} />
                 </FieldRow>
                 <FieldRow label="Ville">
-                  <CommunePicker apiBase={apiBase}
-                                 value={fiche.id_communes_france}
-                                 label={`${fiche.code_postal} ${fiche.nom_ville}`.trim()}
-                                 onChange={(id, cp, ville) => setF({
-                                   id_communes_france: id,
-                                   code_postal: cp,
-                                   nom_ville: ville,
-                                 })} />
+                  <VilleAutocomplete apiBase={apiBase}
+                                     value={fiche.id_communes_france}
+                                     label={`${fiche.code_postal} ${fiche.nom_ville}`.trim()}
+                                     onChange={(id, cp, ville) => setF({
+                                       id_communes_france: id,
+                                       code_postal: cp,
+                                       nom_ville: ville,
+                                     })} />
                 </FieldRow>
                 <FieldRow label="Pays">
                   <input type="text" value={fiche.pays}
@@ -831,84 +832,3 @@ function ActionBtn({ onClick, icon: Icon, children, primary, disabled, variant, 
   )
 }
 
-// Picker simple : input texte + propositions + selection unique
-function CommunePicker({ apiBase, value, label, onChange }: {
-  apiBase: string
-  value: string
-  label: string
-  onChange: (id: string, cp: string, ville: string) => void
-}) {
-  const [query, setQuery] = useState('')
-  const [propositions, setPropositions] = useState<Array<{
-    id_communes_france: string; code_postal: string; nom_ville: string
-  }>>([])
-  const [searching, setSearching] = useState(false)
-
-  const search = async () => {
-    if (query.length < 2) return
-    setSearching(true)
-    try {
-      const r = await fetch(
-        `${apiBase}/recrutement/cv/communes?q=${encodeURIComponent(query)}`,
-        { headers: { Authorization: `Bearer ${getToken()}` } },
-      )
-      if (r.ok) setPropositions(await r.json())
-    } finally { setSearching(false) }
-  }
-
-  if (value && value !== '0') {
-    return (
-      <div className="flex items-center gap-1">
-        <div className="flex-1 px-2 py-1.5 rounded border bg-gray-50 text-sm"
-             style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
-          {label}
-        </div>
-        <button type="button" onClick={() => onChange('', '', '')}
-                className="p-1 text-red-600 hover:text-red-800">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-1">
-      <div className="flex gap-1">
-        <input type="text" value={query}
-               onChange={e => setQuery(e.target.value.toUpperCase())}
-               onKeyDown={e => { if (e.key === 'Enter') search() }}
-               placeholder="CP ou ville"
-               className="flex-1 px-2 py-1.5 rounded border text-sm"
-               style={{ borderColor: COL_BORDER }} />
-        <button type="button" onClick={search}
-                className="px-2 rounded border"
-                style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
-          {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                     : <FileSearch className="w-3.5 h-3.5" />}
-        </button>
-      </div>
-      {propositions.length > 0 && (
-        <div className="border rounded max-h-40 overflow-y-auto"
-             style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>
-          {propositions.map(p => (
-            <button key={p.id_communes_france} type="button"
-                    onClick={() => {
-                      onChange(p.id_communes_france, p.code_postal, p.nom_ville)
-                      setPropositions([])
-                      setQuery('')
-                    }}
-                    className="block w-full text-left px-2 py-1 text-xs hover:bg-white"
-                    style={{ color: COL_BRUN }}>
-              {p.code_postal} {p.nom_ville}
-            </button>
-          ))}
-        </div>
-      )}
-      {value === '0' && (
-        <div className="text-xs flex items-center gap-1" style={{ color: '#B91C1C' }}>
-          <AlertCircle className="w-3 h-3" /> Ville non renseignée
-        </div>
-      )}
-    </div>
-  )
-}
