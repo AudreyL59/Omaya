@@ -92,6 +92,17 @@ def list_entity(entity: str) -> list[dict]:
         if cfg.get("has_logo"):
             logo = r.get("logo")
             d["has_logo"] = bool(logo)
+            if logo:
+                # Magic bytes -> MIME
+                mime = "image/png"
+                b = bytes(logo)
+                if b[:3] == b"\xff\xd8\xff":
+                    mime = "image/jpeg"
+                elif b[:4] == b"GIF8":
+                    mime = "image/gif"
+                d["logo_b64"] = f"data:{mime};base64,{base64.b64encode(b).decode()}"
+            else:
+                d["logo_b64"] = ""
         out.append(d)
     return out
 

@@ -253,11 +253,9 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
                       )}
                       {cfg.hasLogo && (
                         <td className="px-2 py-1.5 text-center">
-                          {r.has_logo ? (
-                            <img
-                              src={`${API_BASE}/params-cv/cv-annonceur/${r.id}/logo?t=${Date.now()}`}
-                              alt="logo"
-                              className="h-6 inline" />
+                          {r.logo_b64 ? (
+                            <img src={String(r.logo_b64)} alt="logo"
+                                 className="h-6 inline" />
                           ) : <ImageIcon className="w-3 h-3 inline opacity-30" />}
                         </td>
                       )}
@@ -316,10 +314,18 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
               Logo de l'annonceur
             </label>
             <div className="flex items-center gap-2">
-              <img src={`${API_BASE}/params-cv/cv-annonceur/${selectedId}/logo?t=${Date.now()}`}
-                   alt="" className="h-10 border rounded p-1"
-                   style={{ borderColor: COL_BORDER }}
-                   onError={e => { e.currentTarget.style.display = 'none' }} />
+              {(() => {
+                const sel = rows.find(x => x.id === selectedId)
+                const src = sel?.logo_b64 ? String(sel.logo_b64) : ''
+                return src ? (
+                  <img src={src} alt="logo"
+                       className="h-10 border rounded p-1"
+                       style={{ borderColor: COL_BORDER }} />
+                ) : (
+                  <div className="h-10 px-2 flex items-center text-[10px] italic"
+                       style={{ color: '#A68D8A' }}>(aucun)</div>
+                )
+              })()}
               <input ref={el => { fileInputRef[0] = el }}
                      type="file" accept="image/*" className="hidden"
                      onChange={e => {
