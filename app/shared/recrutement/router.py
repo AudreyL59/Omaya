@@ -31,6 +31,7 @@ from app.shared.recrutement.services import cv_fiche as fiche_svc
 from app.shared.recrutement.services import entretien as ent_svc
 from app.shared.recrutement.services import lieux_rdv as lieux_svc
 from app.shared.recrutement.services import recherche_cv as svc
+from app.shared.recrutement.services import prev_rec as prev_svc
 from app.shared.recrutement.services import salons_visio as salons_svc
 
 
@@ -274,6 +275,42 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         if not res.get("ok"):
             raise HTTPException(400, res.get("error") or "fail")
         return res
+
+    # -- Fen_PrevRec : prevision de recrutement (orga tree + sessions) -----
+
+    @router.get("/prev-rec/orgas/racine",
+                response_model=list[prev_svc.OrgaNode])
+    def get_orgas_racine(
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return prev_svc.list_orgas_racine()
+
+    @router.get("/prev-rec/orgas/{id_parent}/enfants",
+                response_model=list[prev_svc.OrgaNode])
+    def get_orgas_enfants(
+        id_parent: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return prev_svc.list_orgas_enfants(id_parent)
+
+    @router.get("/prev-rec/etats", response_model=list[prev_svc.EtatItem])
+    def get_etats(_user: UserToken = Depends(get_current_user)):
+        return prev_svc.list_etats()
+
+    @router.get("/prev-rec", response_model=list[prev_svc.PrevRecRow])
+    def get_previsions(
+        id_orga: int = Query(0, description="0 = toutes orgas"),
+        date_ref: Optional[str] = Query(None, description="YYYY-MM-DD"),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        from datetime import date as _date
+        ref: Optional[_date] = None
+        if date_ref:
+            try:
+                ref = _date.fromisoformat(date_ref)
+            except ValueError:
+                pass
+        return prev_svc.list_previsions(id_orga, ref)
 
     # -- Fiche CV (Fen_CVFiche) --------------------------------------------
 
