@@ -25,6 +25,7 @@ import RechercheCvMotsClesPageAdm from '@/pages/RechercheCvMotsClesPage'
 import LieuxRDVPageAdm from '@/pages/LieuxRDVPage'
 import SaisieCVPage from '@/pages/SaisieCVPage'
 import PrevRecPageAdm from '@/pages/PrevRecPage'
+import CvPresaisisPageAdm from '@/pages/CvPresaisisPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -78,6 +79,7 @@ function App() {
           <Route path="recrutement/lieu-rdv" element={<LieuxRDVPageAdm />} />
           <Route path="recrutement/saisie-cv" element={<SaisieCVPage />} />
           <Route path="recrutement/prevision" element={<PrevRecPageAdm />} />
+          <Route path="recrutement/cv-presaisis" element={<CvPresaisisPageAdm />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />

@@ -28,6 +28,7 @@ from app.shared.recrutement.schemas.recherche_cv import (
     CommuneItem, ComboItem, CVRow, SearchCVFiltres, SearchMotsClesFiltres,
 )
 from app.shared.recrutement.services import cv_fiche as fiche_svc
+from app.shared.recrutement.services import cv_presaisis as presaisis_svc
 from app.shared.recrutement.services import entretien as ent_svc
 from app.shared.recrutement.services import lieux_rdv as lieux_svc
 from app.shared.recrutement.services import recherche_cv as svc
@@ -275,6 +276,68 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         if not res.get("ok"):
             raise HTTPException(400, res.get("error") or "fail")
         return res
+
+    # -- Fen_CVPresaisis : liste mails RH a traiter ------------------------
+
+    @router.get("/cv-presaisis/sources")
+    def get_presaisis_sources(
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return presaisis_svc.list_mail_sources()
+
+    @router.get("/cv-presaisis", response_model=presaisis_svc.ListResult)
+    def get_cv_presaisis(
+        saisis_deb: Optional[str] = Query(None),
+        saisis_fin: Optional[str] = Query(None),
+        id_ste: str = Query(""),
+        id_elem_source: str = Query(""),
+        id_cvposte: str = Query(""),
+        adr_mail_rh: str = Query(""),
+        mode: str = Query("a_traiter"),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        from datetime import date as _date
+
+        def _d(s: Optional[str]):
+            if not s:
+                return None
+            try:
+                return _date.fromisoformat(s)
+            except ValueError:
+                return None
+
+        return presaisis_svc.list_presaisis(
+            _d(saisis_deb), _d(saisis_fin),
+            id_ste, id_elem_source, id_cvposte, adr_mail_rh, mode,
+        )
+
+    @router.get("/cv-presaisis/{id_mail}/contenu")
+    def get_presaisi_contenu(
+        id_mail: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        d = presaisis_svc.get_mail_contenu(id_mail)
+        if not d:
+            raise HTTPException(404, "Mail introuvable")
+        return d
+
+    @router.delete("/cv-presaisis/{id_mail}")
+    def del_presaisi(
+        id_mail: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return presaisis_svc.soft_delete_mail(id_mail, user.id_salarie)
+
+    @router.post("/cv-presaisis/bulk-delete")
+    def post_bulk_delete_presaisis(
+        payload: dict[str, Any] = Body(...),
+        user: UserToken = Depends(get_current_user),
+    ):
+        ids = payload.get("ids") or []
+        return presaisis_svc.soft_delete_mails(
+            [int(i) for i in ids if str(i).isdigit()],
+            user.id_salarie,
+        )
 
     # -- Fen_PrevRec : prevision de recrutement (orga tree + sessions) -----
 
