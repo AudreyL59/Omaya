@@ -118,16 +118,21 @@ def list_annonceurs() -> list[ComboItem]:
 
 
 def list_societes() -> list[ComboItem]:
-    """Societes (RH) — id_type_orga = 1 (FDV Interne)."""
+    """Societes actives FDV Interne (rh.pgt_societe).
+    Affiche rs_interne en priorite (sinon raison_sociale)."""
     db = get_pg_connection("rh")
     rows = db.query(
-        """SELECT idorganigramme, lib_orga FROM rh.pgt_organigramme
-            WHERE id_type_orga = 1
-              AND modif_elem NOT LIKE '%suppr%'
-         ORDER BY lib_orga ASC"""
+        """SELECT id_ste, raison_sociale, rs_interne
+             FROM rh.pgt_societe
+            WHERE is_actif = true
+              AND id_type_orga = 1
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+         ORDER BY COALESCE(NULLIF(rs_interne, ''), raison_sociale) ASC"""
     ) or []
-    return [ComboItem(id=str(r["idorganigramme"]), label=_str(r["lib_orga"]))
-            for r in rows]
+    return [ComboItem(
+        id=str(r["id_ste"]),
+        label=_str(r["rs_interne"]) or _str(r["raison_sociale"]),
+    ) for r in rows]
 
 
 # ---------------------------------------------------------------------------
