@@ -237,8 +237,12 @@ export default function CvPresaisiContenuModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col"
-           style={{ border: `1px solid ${COL_BORDER}` }}>
+      <div className="bg-white rounded-xl shadow-2xl flex flex-col"
+           style={{
+             border: `1px solid ${COL_BORDER}`,
+             width: 'min(95vw, 1700px)',
+             height: 'min(95vh, 1100px)',
+           }}>
         <div className="px-4 py-3 border-b flex items-center gap-2"
              style={{ borderColor: COL_BORDER }}>
           <Mail className="w-5 h-5" style={{ color: COL_PRIMARY }} />
@@ -395,8 +399,9 @@ export default function CvPresaisiContenuModal({
                 </Row>
               </div>
 
-              {/* Onglet CV / Corps de mail droit */}
-              <div className="w-[480px] shrink-0 flex flex-col min-h-0 bg-white">
+              {/* Onglet CV / Corps de mail droit - largeur fixe ancree */}
+              <div className="shrink-0 flex flex-col min-h-0 bg-white"
+                   style={{ width: '720px' }}>
                 <div className="flex border-b" style={{ borderColor: COL_BORDER }}>
                   <TabBtn active={tab === 'cv'} onClick={() => setTab('cv')}
                           icon={FileText}>CV</TabBtn>
