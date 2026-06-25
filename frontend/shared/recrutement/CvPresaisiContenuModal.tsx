@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   AlertCircle, Calendar, FileText, Loader2, Mail, RotateCcw,
-  Save, Upload, X,
+  Save, Search, Upload, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
@@ -37,8 +37,9 @@ interface Mail {
 interface CvPresaisiContenuModalProps {
   apiBase: string
   idMail: string
+  docsBaseUrl?: string                  // base URL des fichiers (defaut interne)
   onClose: (cvCreatedId?: string, openFiche?: boolean) => void
-  onDeleted?: () => void  // appele si restauration ou conversion (recharge liste)
+  onDeleted?: () => void
 }
 
 const fmtDateTime = (iso: string): string => {
@@ -50,7 +51,9 @@ const fmtDateTime = (iso: string): string => {
 }
 
 export default function CvPresaisiContenuModal({
-  apiBase, idMail, onClose, onDeleted,
+  apiBase, idMail,
+  docsBaseUrl = 'https://interne.omaya.fr',
+  onClose, onDeleted,
 }: CvPresaisiContenuModalProps) {
   const [loading, setLoading] = useState(true)
   const [mail, setMail] = useState<Mail | null>(null)
@@ -342,10 +345,18 @@ export default function CvPresaisiContenuModal({
                          style={{ borderColor: COL_BORDER }} />
                 </Row>
                 <Row label="Mobile">
-                  <input type="tel" value={gsm}
-                         onChange={e => setGsm(e.target.value)}
-                         className="w-full px-2 py-1.5 rounded border text-sm"
-                         style={{ borderColor: COL_BORDER }} />
+                  <div className="flex gap-1">
+                    <input type="tel" value={gsm}
+                           onChange={e => setGsm(e.target.value)}
+                           className="flex-1 px-2 py-1.5 rounded border text-sm"
+                           style={{ borderColor: COL_BORDER }} />
+                    <button type="button" onClick={save} disabled={busy || loading}
+                            title="Enregistrer (raccourci)"
+                            className="px-2 rounded border disabled:opacity-40"
+                            style={{ borderColor: COL_BORDER, color: COL_PRIMARY }}>
+                      <Search className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </Row>
                 <Row2>
                   <Row label="Poste visé">
@@ -393,19 +404,31 @@ export default function CvPresaisiContenuModal({
                           icon={Mail}>Corps de mail</TabBtn>
                 </div>
                 {tab === 'cv' ? (
-                  <div className="flex-1 p-4 overflow-y-auto text-sm space-y-2"
-                       style={{ color: COL_BRUN }}>
+                  <div className="flex-1 flex flex-col min-h-0">
                     {mail.fic_cv ? (
-                      <p><strong>CV joint :</strong><br />{mail.fic_cv}</p>
-                    ) : (
-                      <p className="italic" style={{ color: '#A68D8A' }}>
-                        Aucun CV joint dans le mail.
-                      </p>
-                    )}
-                    {uploadedFile && (
-                      <p className="mt-3">
+                      <>
+                        <div className="px-3 py-1.5 text-[10px] border-b truncate"
+                             style={{ borderColor: COL_BORDER, color: COL_BRUN,
+                                      backgroundColor: COL_BG_SOFT }}
+                             title={mail.fic_cv}>
+                          <strong>CV joint : </strong>{mail.fic_cv}
+                        </div>
+                        <iframe src={`${docsBaseUrl}/cvtheque/${encodeURIComponent(mail.fic_cv)}`}
+                                title="Aperçu CV"
+                                className="flex-1 w-full"
+                                style={{ border: 0, minHeight: '300px' }} />
+                      </>
+                    ) : uploadedFile ? (
+                      <div className="p-4 text-sm" style={{ color: COL_BRUN }}>
                         <strong>Fichier choisi :</strong><br />
                         {uploadedFile.name} ({Math.round(uploadedFile.size / 1024)} ko)
+                        <p className="mt-2 italic text-xs" style={{ color: '#A68D8A' }}>
+                          (sera uploadé à l'enregistrement)
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="p-4 italic text-sm" style={{ color: '#A68D8A' }}>
+                        Aucun CV joint dans le mail.
                       </p>
                     )}
                   </div>
