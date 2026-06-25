@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '../ui/dialog'
+import PrevRecAjoutModal from './PrevRecAjoutModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -80,6 +81,7 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
   })
   const [previsions, setPrevisions] = useState<PrevRecRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [showAjout, setShowAjout] = useState(false)
 
   const loadPrevisions = useCallback(() => {
     setLoading(true)
@@ -138,7 +140,13 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
              style={{ borderColor: COL_BORDER }}>
           <div className="px-3 py-2 flex items-center gap-2 border-b"
                style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>
-            <BtnTb onClick={() => showToast('Nouvelle session : à venir', 'info')}
+            <BtnTb onClick={() => {
+                     if (selectedOrga.id === '0') {
+                       showToast('Sélectionne un organigramme.', 'info')
+                       return
+                     }
+                     setShowAjout(true)
+                   }}
                    icon={Plus} primary>Nouvelle session</BtnTb>
             <BtnTb onClick={() => showToast('Éditer : à venir', 'info')}
                    icon={Edit}>Éditer</BtnTb>
@@ -225,6 +233,14 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
           </div>
         </div>
       </div>
+
+      {showAjout && selectedOrga.id !== '0' && (
+        <PrevRecAjoutModal apiBase={apiBase} idOrga={selectedOrga.id}
+                           onClose={(createdId) => {
+                             setShowAjout(false)
+                             if (createdId) loadPrevisions()
+                           }} />
+      )}
     </div>
   )
 }

@@ -297,6 +297,37 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
     def get_etats(_user: UserToken = Depends(get_current_user)):
         return prev_svc.list_etats()
 
+    @router.get("/prev-rec/orga-info/{id_orga}",
+                response_model=prev_svc.OrgaInfo)
+    def get_orga_info(
+        id_orga: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return prev_svc.get_orga_info(id_orga)
+
+    @router.post("/prev-rec/cherche-coopt-sourcing",
+                 response_model=prev_svc.CooptSourcingStats)
+    def post_cherche_coopt(
+        payload: dict[str, Any] = Body(...),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return prev_svc.cherche_coopt_sourcing(
+            id_communes_france=int(payload.get("id_communes_france", 0) or 0),
+            rayon_km=int(payload.get("rayon_km", 30) or 30),
+            type_recherche=int(payload.get("type_recherche", 1) or 1),
+            date_crea_iso=str(payload.get("date_crea_iso", "")),
+        )
+
+    @router.post("/prev-rec")
+    def post_session(
+        payload: prev_svc.SessionPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        res = prev_svc.create_session(payload, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(400, "fail")
+        return res
+
     @router.get("/prev-rec", response_model=list[prev_svc.PrevRecRow])
     def get_previsions(
         id_orga: int = Query(0, description="0 = toutes orgas"),
