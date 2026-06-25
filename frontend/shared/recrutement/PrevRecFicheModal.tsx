@@ -16,6 +16,7 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '../ui/dialog'
 import VilleAutocomplete from './VilleAutocomplete'
+import SendEmailModal from '../email/SendEmailModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -119,6 +120,12 @@ export default function PrevRecFicheModal({
 
   const [busy, setBusy] = useState(false)
   const [searching, setSearching] = useState<null | 'S1' | 'J2'>(null)
+  const [printing, setPrinting] = useState(false)
+  const [emailOpen, setEmailOpen] = useState(false)
+  const [emailInit, setEmailInit] = useState<{
+    to: string[]; cc: string[]; subject: string; html: string
+    pj: { name: string; size: number; contentB64: string }[]
+  } | null>(null)
 
   // ---- Initial load : combos ----
   useEffect(() => {
@@ -221,6 +228,73 @@ export default function PrevRecFicheModal({
     } finally { setSearching(null) }
   }
 
+  // ---- Imprimer : telecharge PDF + ouvre SendEmailModal pre-rempli ----
+  const imprimer = async () => {
+    if (!sess) return
+    setPrinting(true)
+    try {
+      // 1) Fetch PDF
+      const pdfR = await fetch(`${apiBase}/recrutement/cv/prev-rec/session/${idPrev}/pdf`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!pdfR.ok) throw new Error('PDF KO')
+      const blob = await pdfR.blob()
+      const ts = new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 14)
+      const safeOrga = (sess.lib_orga || 'orga').replace(/[\s\/\\]/g, '_')
+      const fname = `${ts}_prevRecrutement_${safeOrga}.pdf`
+
+      // Ouvre dans nouvel onglet pour apercu
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+
+      // 2) Prepare le mail
+      const arr = await blob.arrayBuffer()
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(arr)))
+
+      // Mail recruteur
+      let recMail = ''
+      if (idRecruteur) {
+        try {
+          const mR = await fetch(`${apiBase}/recrutement/cv/salaries/${idRecruteur}/mail`, {
+            headers: { Authorization: `Bearer ${getToken()}` },
+          })
+          if (mR.ok) recMail = (await mR.json()).mail || ''
+        } catch { /* ignore */ }
+      }
+
+      // Contenu mail template etat + remplacements
+      let html = ''
+      if (idEtat) {
+        try {
+          const cR = await fetch(`${apiBase}/recrutement/cv/prev-rec/etats/${idEtat}/contenu-mail`, {
+            headers: { Authorization: `Bearer ${getToken()}` },
+          })
+          if (cR.ok) html = (await cR.json()).contenu_mail || ''
+        } catch { /* ignore */ }
+      }
+      const lieuLabel = lieux.find(l => l.id === idLieuRdv)?.label || ''
+      const dateSessFR = fmtFR(dateSession)
+      const dateSessLong = dateSession
+        ? new Date(dateSession).toLocaleDateString('fr-FR', {
+            weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+          })
+        : ''
+      html = html.replace(/NOMSESSION/g, lieuLabel).replace(/DATESESSION/g, dateSessLong)
+      const etatLabel = etats.find(e => e.id === idEtat)?.label || ''
+      const subject = `Session ${lieuLabel}-${dateSessFR}//${etatLabel}`
+
+      setEmailInit({
+        to: recMail ? [recMail] : [],
+        cc: ['marie@exosphere.fr', 'm.doineau@exosphere.fr', 'g.aubry@exosphere.fr'],
+        subject, html,
+        pj: [{ name: fname, size: blob.size, contentB64: b64 }],
+      })
+      setEmailOpen(true)
+    } catch (e) {
+      showToast(`Impression KO : ${(e as Error).message}`, 'error')
+    } finally { setPrinting(false) }
+  }
+
   const save = async () => {
     if (!idCommune) {
       showToast('Merci de choisir un lieu de PC valide.', 'info')
@@ -293,11 +367,12 @@ export default function PrevRecFicheModal({
                   style={{ borderColor: COL_BORDER, color: COL_PRIMARY }}>
             <RefreshCw className="w-3.5 h-3.5" />Recalculer Productifs
           </button>
-          <button type="button"
-                  onClick={() => showToast('Imprimer : à venir', 'info')}
-                  className="flex items-center gap-1 px-2 py-1 rounded border text-xs"
+          <button type="button" onClick={imprimer} disabled={printing}
+                  className="flex items-center gap-1 px-2 py-1 rounded border text-xs disabled:opacity-50"
                   style={{ borderColor: COL_BORDER, color: COL_PRIMARY }}>
-            <Printer className="w-3.5 h-3.5" />Imprimer
+            {printing ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Printer className="w-3.5 h-3.5" />}
+            Imprimer
           </button>
           <button type="button" onClick={() => onClose()}
                   className="p-1.5 rounded hover:bg-gray-100">
@@ -494,6 +569,15 @@ export default function PrevRecFicheModal({
           </button>
         </div>
       </div>
+
+      {emailInit && (
+        <SendEmailModal open={emailOpen}
+                        onClose={() => setEmailOpen(false)}
+                        getToken={getToken}
+                        to={emailInit.to} cc={emailInit.cc}
+                        subject={emailInit.subject} html={emailInit.html}
+                        initialAttachments={emailInit.pj} />
+      )}
     </div>
   )
 }

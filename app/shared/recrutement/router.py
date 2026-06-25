@@ -358,6 +358,39 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
     ):
         return prev_svc.list_vendeurs_orga(id_orga)
 
+    @router.get("/prev-rec/session/{id_prev}/pdf")
+    def get_session_pdf(
+        id_prev: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        from app.shared.recrutement.pdf_prev_rec import build_pdf_prev_rec
+        pdf = build_pdf_prev_rec(id_prev)
+        if not pdf:
+            raise HTTPException(404, "Prevision introuvable")
+        return Response(content=pdf, media_type="application/pdf")
+
+    @router.get("/salaries/{id_salarie}/mail")
+    def get_salarie_mail(
+        id_salarie: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        from app.core.database.pg import get_pg_connection
+        db = get_pg_connection("rh")
+        r = db.query_one(
+            """SELECT mail FROM rh.pgt_salarie_coordonnees
+                WHERE id_salarie = ? LIMIT 1""",
+            (int(id_salarie),),
+        )
+        return {"mail": (r.get("mail") if r else "") or ""}
+
+    @router.get("/prev-rec/etats/{id_etat}/contenu-mail")
+    def get_contenu_mail(
+        id_etat: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        from app.shared.recrutement.pdf_prev_rec import get_contenu_mail_etat
+        return {"contenu_mail": get_contenu_mail_etat(id_etat)}
+
     @router.get("/prev-rec", response_model=list[prev_svc.PrevRecRow])
     def get_previsions(
         id_orga: int = Query(0, description="0 = toutes orgas"),
