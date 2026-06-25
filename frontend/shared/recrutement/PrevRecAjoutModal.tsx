@@ -112,8 +112,8 @@ export default function PrevRecAjoutModal({
         ({ id: e.id_prev_recrut_etat, label: e.lib_etat })))
       setLieux((lieuxR || []).map((l: { id_cv_lieu_rdv: string; lib_lieu: string }) =>
         ({ id: l.id_cv_lieu_rdv, label: l.lib_lieu })))
-      setRecruteurs((recR || []).map((r: { id_salarie: string; nom: string; prenom: string }) =>
-        ({ id: r.id_salarie, label: `${r.nom?.toUpperCase()} ${r.prenom}` })))
+      // L'endpoint retourne ComboItem {id, label} (deja formate 'NOM Prenom')
+      setRecruteurs(recR || [])
     })
   }, [apiBase])
 
