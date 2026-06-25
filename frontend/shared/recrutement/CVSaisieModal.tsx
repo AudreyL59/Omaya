@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   AlertCircle, ArrowRight, FileSearch, Loader2, Plus,
-  Save, X,
+  Save, User, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
@@ -53,6 +53,8 @@ export default function CVSaisieModal({ apiBase, onClose }: CVSaisieModalProps) 
   const [idCvposte, setIdCvposte] = useState('')
   const [idCvsource, setIdCvsource] = useState('')
   const [idElemSource, setIdElemSource] = useState('')
+  const [coopteurLabel, setCoopteurLabel] = useState('')
+  const [showCoopteurPicker, setShowCoopteurPicker] = useState(false)
   const [idSte, setIdSte] = useState('')
   const [idCvStatut, setIdCvStatut] = useState('1')
 
@@ -207,10 +209,8 @@ export default function CVSaisieModal({ apiBase, onClose }: CVSaisieModalProps) 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-         onClick={() => onClose()}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[95vh] flex flex-col"
-           onClick={e => e.stopPropagation()}
            style={{ border: `1px solid ${COL_BORDER}` }}>
         {/* HEADER */}
         <div className="px-4 py-3 border-b flex items-center gap-2"
@@ -319,12 +319,27 @@ export default function CVSaisieModal({ apiBase, onClose }: CVSaisieModalProps) 
               </Row>
             )}
             {idCvsource === '1' && (
-              <Row label="Coopteur (ID)">
-                <input type="text" value={idElemSource}
-                       onChange={e => setIdElemSource(e.target.value)}
-                       placeholder="ID salarié coopteur"
-                       className="w-full px-2 py-1.5 rounded border text-sm"
-                       style={{ borderColor: COL_BORDER }} />
+              <Row label="Coopteur">
+                {idElemSource ? (
+                  <div className="flex items-center gap-1">
+                    <div className="flex-1 px-2 py-1.5 rounded border bg-gray-50 text-sm"
+                         style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
+                      {coopteurLabel || `#${idElemSource}`}
+                    </div>
+                    <button type="button"
+                            onClick={() => { setIdElemSource(''); setCoopteurLabel('') }}
+                            className="p-1 text-red-600 hover:text-red-800">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowCoopteurPicker(true)}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded border text-sm"
+                          style={{ borderColor: COL_BORDER, color: COL_PRIMARY }}>
+                    <User className="w-4 h-4" />
+                    Choisir le coopteur
+                  </button>
+                )}
               </Row>
             )}
             <Row label="Société">
@@ -401,6 +416,95 @@ export default function CVSaisieModal({ apiBase, onClose }: CVSaisieModalProps) 
         </div>
 
         <input ref={fileInputRef} type="file" className="hidden" onChange={onFileChosen} />
+      </div>
+
+      {/* Sous-modal picker coopteur */}
+      {showCoopteurPicker && (
+        <CoopteurPicker apiBase={apiBase}
+                        onClose={() => setShowCoopteurPicker(false)}
+                        onSelect={(s) => {
+                          setIdElemSource(s.id_salarie)
+                          setCoopteurLabel(`${s.nom.toUpperCase()} ${capitalize(s.prenom)}`)
+                          setShowCoopteurPicker(false)
+                        }} />
+      )}
+    </div>
+  )
+}
+
+function capitalize(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
+}
+
+// Picker simple : input + bouton search + liste resultats
+function CoopteurPicker({ apiBase, onClose, onSelect }: {
+  apiBase: string
+  onClose: () => void
+  onSelect: (s: { id_salarie: string; nom: string; prenom: string }) => void
+}) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<Array<{ id_salarie: string; nom: string; prenom: string }>>([])
+  const [searching, setSearching] = useState(false)
+
+  const doSearch = () => {
+    if (!q.trim()) return
+    setSearching(true)
+    fetch(`${apiBase}/salaries/search?q=${encodeURIComponent(q.trim())}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then(setResults)
+      .catch(() => setResults([]))
+      .finally(() => setSearching(false))
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] flex flex-col"
+           style={{ border: `1px solid ${COL_BORDER}` }}>
+        <div className="px-4 py-3 border-b flex items-center gap-2"
+             style={{ borderColor: COL_BORDER }}>
+          <User className="w-5 h-5" style={{ color: COL_PRIMARY }} />
+          <h3 className="text-sm font-bold flex-1" style={{ color: COL_BRUN }}>
+            Choisir un coopteur
+          </h3>
+          <button type="button" onClick={onClose}
+                  className="p-1 rounded hover:bg-gray-100">
+            <X className="w-4 h-4" style={{ color: COL_BRUN }} />
+          </button>
+        </div>
+        <div className="p-3 border-b flex gap-2" style={{ borderColor: COL_BORDER }}>
+          <input type="text" value={q} autoFocus
+                 onChange={e => setQ(e.target.value.toUpperCase())}
+                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); doSearch() } }}
+                 placeholder="Nom du salarié"
+                 className="flex-1 px-2 py-1.5 rounded border text-sm"
+                 style={{ borderColor: COL_BORDER }} />
+          <button type="button" onClick={doSearch} disabled={searching}
+                  className="px-3 rounded border"
+                  style={{ borderColor: COL_BORDER, color: COL_PRIMARY }}>
+            {searching ? <Loader2 className="w-4 h-4 animate-spin" />
+                       : <FileSearch className="w-4 h-4" />}
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-2">
+          {results.length === 0 ? (
+            <p className="text-xs italic text-center py-4" style={{ color: '#A68D8A' }}>
+              {searching ? '...' : 'Saisis un nom et lance la recherche.'}
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {results.map(s => (
+                <button key={s.id_salarie} type="button"
+                        onClick={() => onSelect(s)}
+                        className="w-full text-left px-3 py-2 rounded hover:bg-blue-50 border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
+                  <strong>{s.nom.toUpperCase()}</strong> {capitalize(s.prenom)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
