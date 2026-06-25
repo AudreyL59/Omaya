@@ -34,6 +34,7 @@ from app.shared.recrutement.services import lieux_rdv as lieux_svc
 from app.shared.recrutement.services import recherche_cv as svc
 from app.shared.recrutement.services import prev_rec as prev_svc
 from app.shared.recrutement.services import villes_favori as villes_svc
+from app.shared.recrutement.services import gestion_recruteurs as gestrec_svc
 from app.shared.recrutement.services import salons_visio as salons_svc
 
 
@@ -277,6 +278,27 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         if not res.get("ok"):
             raise HTTPException(400, res.get("error") or "fail")
         return res
+
+    # -- Fen_Agenda_GestionRecruteur : toggle agenda_actif des recruteurs --
+
+    @router.get("/gestion-recruteurs",
+                response_model=list[gestrec_svc.RecruteurRow])
+    def get_gestion_recruteurs(
+        salarie_actif: bool = Query(True),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return gestrec_svc.list_recruteurs_agenda(salarie_actif)
+
+    @router.post("/gestion-recruteurs/toggle")
+    def post_toggle_recruteurs(
+        payload: dict[str, Any] = Body(...),
+        user: UserToken = Depends(get_current_user),
+    ):
+        ids = payload.get("ids") or []
+        return gestrec_svc.toggle_agenda_actif(
+            [int(i) for i in ids if str(i).isdigit()],
+            user.id_salarie,
+        )
 
     # -- Fen_VillesFavorites : CRUD villes en favori -----------------------
 
