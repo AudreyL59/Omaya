@@ -17,6 +17,7 @@ import {
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
 import RecruteurAgenda from './RecruteurAgenda'
+import SalonsSalarieModal from './SalonsSalarieModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -90,6 +91,7 @@ export default function EntretienAjoutModal({
   const [sendSms, setSendSms] = useState(true)
   const [choixServeur, setChoixServeur] = useState<1 | 2>(1)
   const [gsm, setGsm] = useState(candidat.gsm)
+  const [showSalons, setShowSalons] = useState(false)
   const [mail, setMail] = useState(candidat.mail)
 
   // Charge combos
@@ -303,16 +305,26 @@ export default function EntretienAjoutModal({
             {typeEntretien === 'Visio' && (
               <>
                 <Row label="Visio">
-                  <select value={idSalon} onChange={e => setIdSalon(e.target.value)}
-                          className="w-full px-2 py-1.5 rounded border text-sm"
-                          style={{ borderColor: COL_BORDER }}>
-                    <option value="">— Choisir un salon visio —</option>
-                    {salonsVisio.map(s => (
-                      <option key={s.id_salon_visio} value={s.id_salon_visio}>
-                        {s.lib_salon}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex gap-1">
+                    <select value={idSalon} onChange={e => setIdSalon(e.target.value)}
+                            className="flex-1 px-2 py-1.5 rounded border text-sm"
+                            style={{ borderColor: COL_BORDER }}
+                            disabled={!idRecruteur}>
+                      <option value="">— Choisir un salon visio —</option>
+                      {salonsVisio.map(s => (
+                        <option key={s.id_salon_visio} value={s.id_salon_visio}>
+                          {s.lib_salon}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => setShowSalons(true)}
+                            disabled={!idRecruteur}
+                            title="Gérer les salons visio du recruteur"
+                            className="px-2 rounded border disabled:opacity-40"
+                            style={{ borderColor: COL_BORDER, color: COL_PRIMARY }}>
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </Row>
                 {salonSelectionne && (
                   <>
@@ -469,6 +481,21 @@ export default function EntretienAjoutModal({
           </div>
         )}
       </div>
+
+      {/* Sous-modal Fen_SalonSalarie (gestion salons visio du recruteur) */}
+      {showSalons && (
+        <SalonsSalarieModal apiBase={apiBase} idRecruteur={idRecruteur}
+                            onClose={(selId) => {
+                              setShowSalons(false)
+                              // Refresh la liste des salons puis pre-selectionne
+                              fetch(`${apiBase}/recrutement/cv/salons-visio?id_salarie=${idRecruteur}`, {
+                                headers: { Authorization: `Bearer ${getToken()}` },
+                              })
+                                .then(r => r.ok ? r.json() : [])
+                                .then(setSalonsVisio)
+                                .then(() => { if (selId) setIdSalon(selId) })
+                            }} />
+      )}
     </div>
   )
 }

@@ -31,6 +31,7 @@ from app.shared.recrutement.services import cv_fiche as fiche_svc
 from app.shared.recrutement.services import entretien as ent_svc
 from app.shared.recrutement.services import lieux_rdv as lieux_svc
 from app.shared.recrutement.services import recherche_cv as svc
+from app.shared.recrutement.services import salons_visio as salons_svc
 
 
 def get_recherche_cv_router(intranet_key: str) -> APIRouter:
@@ -177,6 +178,103 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
     ):
         return fiche_svc.create_cv(payload, user.id_salarie)
 
+    # IMPORTANT : les routes a path litteral (/salons-visio, /lieux-rdv,
+    # /entretien) DOIVENT etre declarees AVANT /{id_cv} sinon FastAPI
+    # matche d'abord la route a path-param et plante en 422 (id_cv='salons-visio').
+
+    # -- Fen_SalonSalarie : gestion des salons visio d'un recruteur --------
+
+    @router.get("/salons-visio/types", response_model=list[salons_svc.TypeSalonItem])
+    def get_types_salon(
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return salons_svc.list_types_salon()
+
+    @router.get("/salons-visio", response_model=list[salons_svc.SalonVisioRow])
+    def get_salons_by_salarie(
+        id_salarie: int = Query(...),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return salons_svc.list_salons_by_salarie(id_salarie)
+
+    @router.get("/salons-visio/{id_salon}", response_model=salons_svc.SalonVisioRow)
+    def get_salon_route(
+        id_salon: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        f = salons_svc.get_salon(id_salon)
+        if not f:
+            raise HTTPException(404, "Salon introuvable")
+        return f
+
+    @router.post("/salons-visio")
+    def post_salon(
+        payload: salons_svc.SalonVisioPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        res = salons_svc.save_salon(payload, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "fail")
+        return res
+
+    @router.delete("/salons-visio/{id_salon}")
+    def del_salon(
+        id_salon: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return salons_svc.delete_salon(id_salon, user.id_salarie)
+
+    # -- Fen_LieuRDV : gestion des lieux de RDV ----------------------------
+    # IMPORTANT : /lieux-rdv/geocode AVANT /lieux-rdv/{id_lieu}
+
+    @router.get("/lieux-rdv", response_model=list[lieux_svc.LieuRDV])
+    def get_lieux(
+        is_actif: Optional[bool] = Query(None),
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.list_lieux(is_actif)
+
+    @router.post("/lieux-rdv/geocode", response_model=lieux_svc.GeocodeResponse)
+    def post_geocode(
+        payload: lieux_svc.GeocodePayload,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.geocode_adresse(payload)
+
+    @router.post("/lieux-rdv")
+    def post_lieu(
+        payload: lieux_svc.LieuRdvPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.save_lieu(payload, user.id_salarie)
+
+    @router.get("/lieux-rdv/{id_lieu}", response_model=lieux_svc.LieuRDV)
+    def get_lieu_route(
+        id_lieu: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        f = lieux_svc.get_lieu(id_lieu)
+        if not f:
+            raise HTTPException(404, "Lieu introuvable")
+        return f
+
+    @router.delete("/lieux-rdv/{id_lieu}")
+    def del_lieu(
+        id_lieu: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return lieux_svc.delete_lieu(id_lieu, user.id_salarie)
+
+    @router.post("/lieux-rdv/{id_lieu}/duplicate")
+    def post_dup_lieu(
+        id_lieu: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        res = lieux_svc.duplicate_lieu(id_lieu, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "fail")
+        return res
+
     # -- Fiche CV (Fen_CVFiche) --------------------------------------------
 
     @router.get("/{id_cv}", response_model=CVFicheDetail)
@@ -271,56 +369,6 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         return fiche_svc.upload_cv_file(
             id_cv, nom, content, file.filename or "", user.id_salarie,
         )
-
-    # -- Fen_LieuRDV : gestion des lieux de RDV ----------------------------
-
-    @router.get("/lieux-rdv", response_model=list[lieux_svc.LieuRDV])
-    def get_lieux(
-        is_actif: Optional[bool] = Query(None),
-        _user: UserToken = Depends(get_current_user),
-    ):
-        return lieux_svc.list_lieux(is_actif)
-
-    @router.get("/lieux-rdv/{id_lieu}", response_model=lieux_svc.LieuRDV)
-    def get_lieu(
-        id_lieu: int,
-        _user: UserToken = Depends(get_current_user),
-    ):
-        f = lieux_svc.get_lieu(id_lieu)
-        if not f:
-            raise HTTPException(404, "Lieu introuvable")
-        return f
-
-    @router.post("/lieux-rdv")
-    def post_lieu(
-        payload: lieux_svc.LieuRdvPayload,
-        user: UserToken = Depends(get_current_user),
-    ):
-        return lieux_svc.save_lieu(payload, user.id_salarie)
-
-    @router.delete("/lieux-rdv/{id_lieu}")
-    def del_lieu(
-        id_lieu: int,
-        user: UserToken = Depends(get_current_user),
-    ):
-        return lieux_svc.delete_lieu(id_lieu, user.id_salarie)
-
-    @router.post("/lieux-rdv/{id_lieu}/duplicate")
-    def post_dup_lieu(
-        id_lieu: int,
-        user: UserToken = Depends(get_current_user),
-    ):
-        res = lieux_svc.duplicate_lieu(id_lieu, user.id_salarie)
-        if not res.get("ok"):
-            raise HTTPException(400, res.get("error") or "fail")
-        return res
-
-    @router.post("/lieux-rdv/geocode", response_model=lieux_svc.GeocodeResponse)
-    def post_geocode(
-        payload: lieux_svc.GeocodePayload,
-        _user: UserToken = Depends(get_current_user),
-    ):
-        return lieux_svc.geocode_adresse(payload)
 
     # -- Fen_EntretienAjout (Planifier un RDV) -----------------------------
 
