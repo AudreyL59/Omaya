@@ -281,9 +281,9 @@ export default function CvPresaisiContenuModal({
             </div>
 
             <div className="flex-1 flex min-h-0">
-              {/* Form gauche */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-2 border-r"
-                   style={{ borderColor: COL_BORDER }}>
+              {/* Form gauche - largeur fixe ancree */}
+              <div className="shrink-0 overflow-y-auto p-4 space-y-2 border-r"
+                   style={{ borderColor: COL_BORDER, width: '560px' }}>
                 <Row2>
                   <Row label="Nom*">
                     <input value={nom} onChange={e => setNom(e.target.value.toUpperCase())}
@@ -399,9 +399,8 @@ export default function CvPresaisiContenuModal({
                 </Row>
               </div>
 
-              {/* Onglet CV / Corps de mail droit - largeur fixe ancree */}
-              <div className="shrink-0 flex flex-col min-h-0 bg-white"
-                   style={{ width: '720px' }}>
+              {/* Onglet CV / Corps de mail droit - prend tout le reste */}
+              <div className="flex-1 flex flex-col min-h-0 bg-white min-w-0">
                 <div className="flex border-b" style={{ borderColor: COL_BORDER }}>
                   <TabBtn active={tab === 'cv'} onClick={() => setTab('cv')}
                           icon={FileText}>CV</TabBtn>
