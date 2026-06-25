@@ -328,6 +328,36 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             raise HTTPException(400, "fail")
         return res
 
+    @router.get("/prev-rec/session/{id_prev}",
+                response_model=prev_svc.PrevRecRow)
+    def get_session(
+        id_prev: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        f = prev_svc.get_session(id_prev)
+        if not f:
+            raise HTTPException(404, "Prevision introuvable")
+        return f
+
+    @router.put("/prev-rec/session/{id_prev}")
+    def put_session(
+        id_prev: int,
+        payload: prev_svc.SessionPayload,
+        user: UserToken = Depends(get_current_user),
+    ):
+        res = prev_svc.update_session(id_prev, payload, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "fail")
+        return res
+
+    @router.get("/prev-rec/vendeurs-orga/{id_orga}",
+                response_model=list[prev_svc.VendeurOrgaRow])
+    def get_vendeurs_orga(
+        id_orga: int,
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return prev_svc.list_vendeurs_orga(id_orga)
+
     @router.get("/prev-rec", response_model=list[prev_svc.PrevRecRow])
     def get_previsions(
         id_orga: int = Query(0, description="0 = toutes orgas"),

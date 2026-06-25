@@ -48,6 +48,16 @@ class CooptSourcingStats(BaseModel):
     nb_cv_analyses: int = 0
 
 
+class VendeurOrgaRow(BaseModel):
+    id_vendeur: str
+    nom_prenom: str
+    date_embauche: str = ""       # ISO
+    dernier_ctt: str = ""         # ISO ou '' si jamais
+    lib_equipe: str = ""
+    id_equipe: str = ""
+    has_ctt: bool = False         # False = ligne rouge foncee
+
+
 class SessionPayload(BaseModel):
     idorganigramme: str
     id_recruteur: str = ""
@@ -561,3 +571,179 @@ def create_session(p: SessionPayload, op_id: int) -> dict:
         ),
     )
     return {"ok": True, "id_prevision_recrut": str(id_new)}
+
+
+# ---------------------------------------------------------------------------
+# Edition (Fen_PrevRec_Fiche)
+# ---------------------------------------------------------------------------
+
+
+def get_session(id_prev: int) -> Optional[PrevRecRow]:
+    """Charge une prevision pour edition."""
+    rows = list_previsions(0)
+    # Reuse list_previsions sans filtre date_ref puis filtre id en Python
+    for r in rows:
+        if r.id_prevision_recrut == str(id_prev):
+            return r
+    # Fallback : si pas dans la liste (ex. butoire passee), requete directe
+    db = get_pg_connection("recrutement")
+    r = db.query_one(
+        """SELECT p.id_prevision_recrut, p.id_prev_recrut_etat, p.idorganigramme,
+                  p.id_cv_lieu_rdv, p.id_communes_france,
+                  p.date_session, p.date_butoire, p.date_debut, p.date_fin,
+                  p.commentaire, p.taille_session, p.potentiel_accueil, p.nb_prod,
+                  p.nb_coopt_mini, p.nb_sourcing_mini, p.obj_coopt, p.obj_sourcing,
+                  p.coopt_smoins1, p.coopt_jmoins2,
+                  p.sourcing_smoins1, p.sourcing_jmoins2,
+                  p.id_recruteur,
+                  o.lib_orga, e.lib_etat, l.lib_lieu,
+                  c.nom_ville, c.code_postal
+             FROM recrutement.pgt_prev_recrut p
+             LEFT JOIN rh.pgt_organigramme o ON o.idorganigramme = p.idorganigramme
+             LEFT JOIN recrutement.pgt_prev_recrut_etat e
+                    ON e.id_prev_recrut_etat = p.id_prev_recrut_etat
+             LEFT JOIN recrutement.pgt_cv_lieu_rdv l
+                    ON l.id_cv_lieu_rdv = p.id_cv_lieu_rdv
+             LEFT JOIN divers.pgt_communes_france c
+                    ON c.id_communes_france = p.id_communes_france
+            WHERE p.id_prevision_recrut = ?""",
+        (int(id_prev),),
+    )
+    if not r:
+        return None
+
+    def _iso(d) -> str:
+        return d.isoformat() if d else ""
+
+    ville = _str(r.get("nom_ville"))
+    cp = _str(r.get("code_postal"))
+    return PrevRecRow(
+        id_prevision_recrut=str(_int(r["id_prevision_recrut"])),
+        id_prev_recrut_etat=str(_int(r.get("id_prev_recrut_etat"))),
+        lib_etat=_str(r.get("lib_etat")),
+        idorganigramme=str(_int(r["idorganigramme"])),
+        lib_orga=_str(r.get("lib_orga")),
+        id_cv_lieu_rdv=str(_int(r.get("id_cv_lieu_rdv"))),
+        lib_lieu=_str(r.get("lib_lieu")),
+        id_communes_france=str(_int(r.get("id_communes_france"))),
+        localisation=f"{ville} ({cp})" if ville else "",
+        date_session=_iso(r.get("date_session")),
+        date_butoire=_iso(r.get("date_butoire")),
+        date_debut=_iso(r.get("date_debut")),
+        date_fin=_iso(r.get("date_fin")),
+        commentaire=_str(r.get("commentaire")),
+        taille_session=_int(r.get("taille_session")),
+        potentiel_accueil=_int(r.get("potentiel_accueil")),
+        nb_prod=_int(r.get("nb_prod")),
+        nb_coopt_mini=_int(r.get("nb_coopt_mini")),
+        nb_sourcing_mini=_int(r.get("nb_sourcing_mini")),
+        obj_coopt=_int(r.get("obj_coopt")),
+        obj_sourcing=_int(r.get("obj_sourcing")),
+        coopt_smoins1=_int(r.get("coopt_smoins1")),
+        coopt_jmoins2=_int(r.get("coopt_jmoins2")),
+        sourcing_smoins1=_int(r.get("sourcing_smoins1")),
+        sourcing_jmoins2=_int(r.get("sourcing_jmoins2")),
+    )
+
+
+def update_session(id_prev: int, p: SessionPayload, op_id: int) -> dict:
+    """UPDATE prevision_recrut. Logging des changements date_session /
+    date_butoire (cf WinDev creaLogOmaya)."""
+    db = get_pg_connection("recrutement")
+    if not id_prev:
+        return {"ok": False, "error": "id_required"}
+
+    def _d(s: str):
+        try:
+            return datetime.fromisoformat(s).date() if s else None
+        except ValueError:
+            return None
+
+    db.query(
+        """UPDATE recrutement.pgt_prev_recrut SET
+              id_recruteur = ?, id_prev_recrut_etat = ?,
+              id_cv_lieu_rdv = ?, id_communes_france = ?,
+              date_session = ?, date_butoire = ?,
+              date_debut = ?, date_fin = ?,
+              taille_session = ?, potentiel_accueil = ?, nb_prod = ?,
+              nb_coopt_mini = ?, nb_sourcing_mini = ?,
+              obj_coopt = ?, obj_sourcing = ?,
+              coopt_smoins1 = ?, coopt_jmoins2 = ?,
+              sourcing_smoins1 = ?, sourcing_jmoins2 = ?,
+              commentaire = ?,
+              modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_prevision_recrut = ?""",
+        (
+            _int(p.id_recruteur) or None,
+            _int(p.id_prev_recrut_etat) or 1,
+            _int(p.id_cv_lieu_rdv) or None,
+            _int(p.id_communes_france) or None,
+            _d(p.date_session), _d(p.date_butoire),
+            _d(p.date_debut), _d(p.date_fin),
+            p.taille_session, p.potentiel_accueil, p.nb_prod,
+            p.nb_coopt_mini, p.nb_sourcing_mini,
+            p.obj_coopt, p.obj_sourcing,
+            p.coopt_smoins1, p.coopt_jmoins2,
+            p.sourcing_smoins1, p.sourcing_jmoins2,
+            p.commentaire,
+            int(op_id), int(id_prev),
+        ),
+    )
+    return {"ok": True, "id_prevision_recrut": str(id_prev)}
+
+
+def list_vendeurs_orga(id_orga: int) -> list[VendeurOrgaRow]:
+    """Liste les vendeurs actifs d'un orga (et descendants) avec
+    date_embauche + dernier_ctt + lib_equipe.
+
+    Couleur rouge fonce = pas de contrat (has_ctt=False).
+    """
+    if not id_orga:
+        return []
+    db = get_pg_connection("rh")
+    ids = _descendants(id_orga)
+    if not ids:
+        return []
+    in_clause = ",".join(str(i) for i in ids)
+    rows = db.query(
+        f"""SELECT s.id_salarie, s.nom, s.prenom,
+                   e.date_debut,
+                   so.idorganigramme AS id_eq,
+                   o.lib_orga AS lib_eq
+              FROM rh.pgt_salarie s
+              JOIN rh.pgt_salarie_organigramme so ON so.id_salarie = s.id_salarie
+              LEFT JOIN rh.pgt_salarie_embauche e ON e.id_salarie = s.id_salarie
+              LEFT JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+             WHERE so.idorganigramme IN ({in_clause})
+               AND s.agenda_actif = TRUE
+               AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
+               AND (so.modif_elem IS NULL OR so.modif_elem NOT LIKE '%suppr%')
+          ORDER BY s.nom ASC, s.prenom ASC"""
+    ) or []
+
+    seen: set[int] = set()
+    out: list[VendeurOrgaRow] = []
+    for r in rows:
+        sid = _int(r["id_salarie"])
+        if sid in seen:
+            continue
+        seen.add(sid)
+        try:
+            dctt = _date_dernier_ctt(sid)
+        except Exception:
+            dctt = ""
+        has = bool(dctt) and dctt != "2007-01-01"
+        nom = _str(r.get("nom")).upper()
+        prenom = _str(r.get("prenom"))
+        prenom_cap = prenom[:1].upper() + prenom[1:].lower() if prenom else ""
+        de = r.get("date_debut")
+        out.append(VendeurOrgaRow(
+            id_vendeur=str(sid),
+            nom_prenom=f"{nom} {prenom_cap}".strip(),
+            date_embauche=de.isoformat() if de else "",
+            dernier_ctt=dctt if has else "",
+            lib_equipe=_str(r.get("lib_eq")),
+            id_equipe=str(_int(r.get("id_eq"))),
+            has_ctt=has,
+        ))
+    return out

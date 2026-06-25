@@ -16,6 +16,7 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '../ui/dialog'
 import PrevRecAjoutModal from './PrevRecAjoutModal'
+import PrevRecFicheModal from './PrevRecFicheModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -82,6 +83,8 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
   const [previsions, setPrevisions] = useState<PrevRecRow[]>([])
   const [loading, setLoading] = useState(false)
   const [showAjout, setShowAjout] = useState(false)
+  const [editId, setEditId] = useState('')
+  const [selectedRowId, setSelectedRowId] = useState('')
 
   const loadPrevisions = useCallback(() => {
     setLoading(true)
@@ -148,7 +151,13 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
                      setShowAjout(true)
                    }}
                    icon={Plus} primary>Nouvelle session</BtnTb>
-            <BtnTb onClick={() => showToast('Éditer : à venir', 'info')}
+            <BtnTb onClick={() => {
+                     if (!selectedRowId) {
+                       showToast('Sélectionne une session à éditer.', 'info')
+                       return
+                     }
+                     setEditId(selectedRowId)
+                   }}
                    icon={Edit}>Éditer</BtnTb>
             <BtnTb onClick={() => showToast('Imprimer : à venir', 'info')}
                    icon={Printer}>Imprimer</BtnTb>
@@ -191,9 +200,18 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {previsions.map(p => (
-                    <tr key={p.id_prevision_recrut} className="border-b hover:bg-gray-50"
-                        style={{ borderColor: COL_BORDER }}>
+                  {previsions.map(p => {
+                    const isSel = selectedRowId === p.id_prevision_recrut
+                    return (
+                    <tr key={p.id_prevision_recrut}
+                        className="border-b cursor-pointer"
+                        onClick={() => setSelectedRowId(p.id_prevision_recrut)}
+                        onDoubleClick={() => setEditId(p.id_prevision_recrut)}
+                        style={{
+                          borderColor: COL_BORDER,
+                          backgroundColor: isSel ? COL_PRIMARY_LIGHT : 'white',
+                          color: isSel ? 'white' : COL_BRUN,
+                        }}>
                       <td className="px-2 py-1.5">{fmtDate(p.date_debut)}</td>
                       <td className="px-2 py-1.5">{fmtDate(p.date_fin)}</td>
                       <td className="px-2 py-1.5 font-semibold">
@@ -226,7 +244,7 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
                         {p.taille_session || ''}
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             )}
@@ -239,6 +257,14 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
                            onClose={(createdId) => {
                              setShowAjout(false)
                              if (createdId) loadPrevisions()
+                           }} />
+      )}
+
+      {editId && (
+        <PrevRecFicheModal apiBase={apiBase} idPrev={editId}
+                           onClose={(modified) => {
+                             setEditId('')
+                             if (modified) loadPrevisions()
                            }} />
       )}
     </div>
