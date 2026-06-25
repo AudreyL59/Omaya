@@ -40,6 +40,7 @@ import UleaseTab from './fiche/UleaseTab'
 import SalarieAbsenceModal from './fiche/SalarieAbsenceModal'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import SDTCModal from '@shared/sdtc/SDTCModal'
+import SalonsSalarieModal from '@shared/recrutement/SalonsSalarieModal'
 import { ChevronDown } from 'lucide-react'
 
 // --- Types ---------------------------------------------------------------
@@ -386,6 +387,7 @@ function ActionBar({
   // mode = 'activation' (nouvelle absence) | 'desactivation' (modif existante)
   const [absenceMode, setAbsenceMode] = useState<'activation' | 'desactivation'>('activation')
   const [sdtcOpen, setSdtcOpen] = useState(false)
+  const [salonsOpen, setSalonsOpen] = useState(false)
   const [busyAgenda, setBusyAgenda] = useState(false)
   const [busyDup, setBusyDup] = useState(false)
 
@@ -556,12 +558,8 @@ function ActionBar({
       <HeaderAction
         icon={<Video className="w-4 h-4" />}
         label="Liens Visio"
-        onClick={() =>
-          showToast(
-            'Liens Visio : à implémenter (Fen_SalonSalarié – fenêtre partagée).',
-            'info',
-          )
-        }
+        onClick={() => setSalonsOpen(true)}
+        disabled={!header}
       />
       <HeaderAction
         icon={<Wallet className="w-4 h-4" />}
@@ -592,6 +590,12 @@ function ActionBar({
         getToken={getToken}
         idSalarie={idSalarie}
       />
+
+      {salonsOpen && (
+        <SalonsSalarieModal apiBase="/api/adm"
+                            idRecruteur={String(idSalarie)}
+                            onClose={() => setSalonsOpen(false)} />
+      )}
     </div>
   )
 }
