@@ -55,6 +55,7 @@ export default function CVSaisieModal({ apiBase, onClose }: CVSaisieModalProps) 
   const [idElemSource, setIdElemSource] = useState('')
   const [coopteurLabel, setCoopteurLabel] = useState('')
   const [showCoopteurPicker, setShowCoopteurPicker] = useState(false)
+  const [pendingChoice, setPendingChoice] = useState<string>('')  // id_cv si dialog choix actif
   const [idSte, setIdSte] = useState('')
   const [idCvStatut, setIdCvStatut] = useState('1')
 
@@ -179,33 +180,27 @@ export default function CVSaisieModal({ apiBase, onClose }: CVSaisieModalProps) 
     finChoisir(uploadingId)
   }
 
-  const finChoisir = async (idNew: string) => {
-    // Dialogue final : Nouveau / Aller fiche / Fermer
-    // showConfirm est binaire, on enchaine 2 confirms
-    const aller = await showConfirm({
-      title: 'CV enregistré',
-      message: `Que souhaitez-vous faire maintenant ?\n\nOK = Aller sur la fiche CV\nAnnuler = Fermer (ou créer un autre CV ensuite)`,
-      confirmLabel: 'Aller sur la fiche',
-    })
-    if (aller && idNew) {
-      onClose(idNew, true)
-      return
-    }
-    const encore = await showConfirm({
-      title: 'Continuer',
-      message: 'Voulez-vous saisir un autre CV ?',
-      confirmLabel: 'Nouveau CV',
-    })
-    if (encore) {
-      // Reset form
-      setNom(''); setPrenom(''); setAdresse(''); setIdCommunesFrance('')
-      setVilleLabel(''); setDateNaissance(''); setPermisB(false); setVehicule(false)
-      setMail(''); setGsm(''); setIdCvposte(''); setIdCvsource('')
-      setIdElemSource(''); setIdSte(''); setIdCvStatut('1')
-      setUploadingId(''); setSaving(false)
-      return
-    }
-    onClose()
+  const finChoisir = (idNew: string) => {
+    // Affiche un overlay 2-choix dans le modal :
+    //  - 'Saisir un nouveau CV' (reset form)
+    //  - 'Ouvrir la fiche CV' (onClose avec goToFiche=true)
+    setPendingChoice(idNew)
+  }
+
+  const choixNouveauCV = () => {
+    setNom(''); setPrenom(''); setAdresse(''); setIdCommunesFrance('')
+    setVilleLabel(''); setDateNaissance(''); setPermisB(false); setVehicule(false)
+    setMail(''); setGsm(''); setIdCvposte(''); setIdCvsource('')
+    setIdElemSource(''); setCoopteurLabel('')
+    setIdSte(''); setIdCvStatut('1')
+    setUploadingId(''); setSaving(false)
+    setPendingChoice('')
+  }
+
+  const choixOuvrirFiche = () => {
+    const id = pendingChoice
+    setPendingChoice('')
+    onClose(id, true)
   }
 
   return (
@@ -417,6 +412,35 @@ export default function CVSaisieModal({ apiBase, onClose }: CVSaisieModalProps) 
 
         <input ref={fileInputRef} type="file" className="hidden" onChange={onFileChosen} />
       </div>
+
+      {/* Overlay choix apres creation : Nouveau CV OU Ouvrir la fiche */}
+      {pendingChoice && (
+        <div className="fixed inset-0 bg-black/60 z-[55] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6"
+               style={{ border: `1px solid ${COL_BORDER}` }}>
+            <h3 className="text-lg font-bold mb-2" style={{ color: COL_BRUN }}>
+              CV enregistré
+            </h3>
+            <p className="text-sm mb-4" style={{ color: COL_BRUN }}>
+              Que souhaitez-vous faire maintenant ?
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={choixNouveauCV}
+                      className="flex flex-col items-center gap-2 p-4 rounded border hover:bg-gray-50"
+                      style={{ borderColor: COL_BORDER, color: COL_BRUN }}>
+                <Plus className="w-6 h-6" style={{ color: COL_PRIMARY }} />
+                <span className="text-sm font-semibold">Saisir un nouveau CV</span>
+              </button>
+              <button type="button" onClick={choixOuvrirFiche}
+                      className="flex flex-col items-center gap-2 p-4 rounded text-white hover:opacity-90"
+                      style={{ backgroundColor: COL_PRIMARY }}>
+                <ArrowRight className="w-6 h-6" />
+                <span className="text-sm font-semibold">Ouvrir la fiche CV</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sous-modal picker coopteur */}
       {showCoopteurPicker && (

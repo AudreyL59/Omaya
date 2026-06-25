@@ -14,9 +14,13 @@ export default function SaisieCVPage() {
       apiBase="/api/adm"
       onClose={(createdId, goToFiche) => {
         if (createdId && goToFiche) {
-          // 'Aller sur la fiche' : redirige vers Recherche CV + passe
+          // 'Ouvrir la fiche CV' : redirige vers Recherche CV + passe
           // l'id via le state du router pour ouvrir le modal fiche.
-          navigate('/recrutement/recherche-cv', { state: { openCvId: createdId } })
+          // reopenSaisieAfter : a la fermeture du modal fiche, on revient
+          // sur la Saisie pour enchainer un nouveau CV.
+          navigate('/recrutement/recherche-cv', {
+            state: { openCvId: createdId, reopenSaisieAfter: true },
+          })
         } else {
           navigate('/recrutement/recherche-cv')
         }

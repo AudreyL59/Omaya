@@ -16,19 +16,32 @@ export default function RechercheCVPageAdm() {
   const myUserId = user ? String(user.id_salarie) : ''
   const [openId, setOpenId] = useState<string>('')
   const [removedIds, setRemovedIds] = useState<string[]>([])
+  const [reopenSaisie, setReopenSaisie] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
 
   // Si on arrive ici via navigate(..., {state: {openCvId}}) (typiquement
   // depuis Fen_CVSaisie), on ouvre directement la fiche CV creee.
+  // reopenSaisieAfter : a la fermeture de la fiche, on renavigate vers
+  // /recrutement/saisie-cv pour enchainer un nouveau CV.
   useEffect(() => {
-    const state = location.state as { openCvId?: string } | null
+    const state = location.state as {
+      openCvId?: string; reopenSaisieAfter?: boolean
+    } | null
     if (state?.openCvId) {
       setOpenId(state.openCvId)
-      // Nettoie le state pour eviter de re-ouvrir si retour navigation
+      setReopenSaisie(!!state.reopenSaisieAfter)
       navigate(location.pathname, { replace: true, state: {} })
     }
   }, [location, navigate])
+
+  const handleFicheClose = () => {
+    setOpenId('')
+    if (reopenSaisie) {
+      setReopenSaisie(false)
+      navigate('/recrutement/saisie-cv')
+    }
+  }
 
   return (
     <>
@@ -44,7 +57,7 @@ export default function RechercheCVPageAdm() {
           idCv={openId}
           userDroits={user?.droits || []}
           onDeleted={(id) => setRemovedIds((prev) => [...prev, id])}
-          onClose={() => setOpenId('')}
+          onClose={handleFicheClose}
         />
       )}
     </>
