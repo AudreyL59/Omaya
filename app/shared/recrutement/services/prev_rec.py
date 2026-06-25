@@ -457,11 +457,11 @@ def cherche_coopt_sourcing(
         where_cp = f"AND cv.id_communes_france IN ({in_clause})"
 
     sql = f"""
-        SELECT cv.id_cvtheque, cv.id_cv_source
+        SELECT cv.id_cvtheque, cv.id_cvsource AS id_cv_source
           FROM recrutement.pgt_cvtheque cv
          WHERE (cv.modif_elem IS NULL OR cv.modif_elem NOT LIKE '%suppr%')
-           AND cv.id_cv_source IN (1, 3, 7)
-           AND cv.id_cv_poste IN (0, 1, 10, 13)
+           AND cv.id_cvsource IN (1, 3, 7)
+           AND cv.id_cvposte IN (0, 1, 10, 13)
            AND (cv.date_naissance IS NULL OR
                 cv.date_naissance BETWEEN ? AND ?)
            AND (
