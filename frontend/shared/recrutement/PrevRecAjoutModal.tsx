@@ -281,22 +281,26 @@ export default function PrevRecAjoutModal({
             </Section>
 
             <Section title="Lieu de PC">
-              <div className="grid grid-cols-[1fr_120px] gap-2 items-start">
-                <Row label="Ville">
-                  <VilleAutocomplete apiBase={apiBase}
-                                     value={idCommune} label={villeLabel}
-                                     onChange={(id, cp, ville) => {
-                                       setIdCommune(id)
-                                       setVilleLabel(id ? `${cp} ${ville}` : '')
-                                     }} />
-                </Row>
-                <Row label="Rayon (km)">
+              <Row label="Ville">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <VilleAutocomplete apiBase={apiBase}
+                                       value={idCommune} label={villeLabel}
+                                       onChange={(id, cp, ville) => {
+                                         setIdCommune(id)
+                                         setVilleLabel(id ? `${cp} ${ville}` : '')
+                                       }} />
+                  </div>
+                  <label className="text-xs whitespace-nowrap" style={{ color: COL_BRUN }}>
+                    Rayon
+                  </label>
                   <input type="number" value={rayon}
                          onChange={e => setRayon(Number(e.target.value) || 0)}
-                         className="w-full px-2 py-1.5 rounded border text-sm"
+                         className="w-16 px-2 py-1.5 rounded border text-sm text-center"
                          style={{ borderColor: COL_BORDER }} />
-                </Row>
-              </div>
+                  <span className="text-xs" style={{ color: COL_BRUN }}>km</span>
+                </div>
+              </Row>
             </Section>
 
             <Section title="Stats Coopt et Sourcing">
