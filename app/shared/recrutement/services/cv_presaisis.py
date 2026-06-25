@@ -204,6 +204,37 @@ def soft_delete_mails(ids: list[int], op_id: int) -> dict:
     return {"ok": True, "count": in_clause.count(",") + 1}
 
 
+def restore_mail(id_mail: int, op_id: int) -> dict:
+    """Bouton 'Restaurer ce mail' : repasse modif_elem='modif' pour que
+    le mail reapparaisse dans la liste 'a traiter'."""
+    if not id_mail:
+        return {"ok": False, "error": "id_required"}
+    db = get_pg_connection("recrutement")
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque_temporaire
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_cvtheque_auto = ?""",
+        (int(op_id), int(id_mail)),
+    )
+    return {"ok": True}
+
+
+def link_mail_to_cv(id_mail: int, id_cv: int, op_id: int) -> dict:
+    """Apres conversion : marque le mail temp comme suppr + lie l'id_cv
+    cree (cf WinDev reqUpCvTemp)."""
+    if not id_mail or not id_cv:
+        return {"ok": False, "error": "ids_required"}
+    db = get_pg_connection("recrutement")
+    db.query(
+        """UPDATE recrutement.pgt_cvtheque_temporaire
+              SET modif_date = NOW(), modif_op = ?,
+                  modif_elem = 'suppr', id_cvtheque = ?
+            WHERE id_cvtheque_auto = ?""",
+        (int(op_id), int(id_cv), int(id_mail)),
+    )
+    return {"ok": True}
+
+
 def get_mail_contenu(id_mail: int) -> dict:
     """Pour Fen_CvPreSaisiContenu (loupe verte) : retourne le contenu
     complet d'un mail (objet + contenu + nom du fichier CV attache)."""

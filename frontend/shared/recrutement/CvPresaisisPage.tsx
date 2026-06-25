@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
+import CvPresaisiContenuModal from './CvPresaisiContenuModal'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -360,8 +361,12 @@ export default function CvPresaisisPage({
       </div>
 
       {contentMail && (
-        <MailContenuModal apiBase={apiBase} idMail={contentMail}
-                          onClose={() => setContentMail('')} />
+        <CvPresaisiContenuModal apiBase={apiBase} idMail={contentMail}
+                                onClose={(newCvId, openFiche) => {
+                                  setContentMail('')
+                                  if (newCvId && openFiche) onOpenFiche(newCvId)
+                                }}
+                                onDeleted={search} />
       )}
     </div>
   )
@@ -389,81 +394,3 @@ function Select({ value, onChange, options }: {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Sous-modal contenu mail (Fen_CvPreSaisiContenu)
-// ---------------------------------------------------------------------------
-
-function MailContenuModal({ apiBase, idMail, onClose }: {
-  apiBase: string; idMail: string; onClose: () => void
-}) {
-  const [data, setData] = useState<Record<string, string> | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    fetch(`${apiBase}/recrutement/cv/cv-presaisis/${idMail}/contenu`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(setData)
-      .finally(() => setLoading(false))
-  }, [apiBase, idMail])
-
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-         onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col"
-           onClick={e => e.stopPropagation()}
-           style={{ border: `1px solid ${COL_BORDER}` }}>
-        <div className="px-4 py-3 border-b flex items-center gap-2"
-             style={{ borderColor: COL_BORDER }}>
-          <Mail className="w-5 h-5" style={{ color: COL_PRIMARY }} />
-          <h3 className="text-lg font-bold flex-1" style={{ color: COL_BRUN }}>
-            Contenu du mail
-          </h3>
-          <button type="button" onClick={onClose}
-                  className="p-1 rounded hover:bg-gray-100"
-                  style={{ color: COL_BRUN }}>✕</button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin mx-auto"
-                     style={{ color: COL_PRIMARY }} />
-          ) : !data ? (
-            <p className="italic" style={{ color: '#A68D8A' }}>Mail introuvable.</p>
-          ) : (
-            <div className="space-y-3 text-sm" style={{ color: COL_BRUN }}>
-              <Line label="Date" value={fmtDateTime(data.mail_date)} />
-              <Line label="Objet" value={data.mail_objet} />
-              <Line label="Boite" value={data.adr_mail_rh} />
-              <Line label="Candidat"
-                    value={`${data.nom?.toUpperCase()} ${data.prenom}`} />
-              <Line label="Mail" value={data.mail} />
-              <Line label="GSM" value={data.gsm} />
-              <Line label="Ville" value={`${data.cp} ${data.ville}`.trim()} />
-              {data.fic_cv && <Line label="CV joint" value={data.fic_cv} />}
-              {data.observ && <Line label="Observ" value={data.observ} />}
-              {data.mail_contenu && (
-                <div>
-                  <div className="font-bold mt-3 mb-1">Contenu :</div>
-                  <div className="border rounded p-2 bg-gray-50 text-xs whitespace-pre-wrap"
-                       style={{ borderColor: COL_BORDER, maxHeight: '40vh', overflowY: 'auto' }}
-                       dangerouslySetInnerHTML={{ __html: data.mail_contenu }} />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Line({ label, value }: { label: string; value: string }) {
-  if (!value) return null
-  return (
-    <div className="grid grid-cols-[100px_1fr] gap-2">
-      <strong>{label} :</strong>
-      <span className="break-all">{value}</span>
-    </div>
-  )
-}

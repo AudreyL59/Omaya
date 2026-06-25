@@ -339,6 +339,21 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             user.id_salarie,
         )
 
+    @router.post("/cv-presaisis/{id_mail}/restore")
+    def post_restore_presaisi(
+        id_mail: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return presaisis_svc.restore_mail(id_mail, user.id_salarie)
+
+    @router.post("/cv-presaisis/{id_mail}/link-cv/{id_cv}")
+    def post_link_presaisi_cv(
+        id_mail: int,
+        id_cv: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return presaisis_svc.link_mail_to_cv(id_mail, id_cv, user.id_salarie)
+
     # -- Fen_PrevRec : prevision de recrutement (orga tree + sessions) -----
 
     @router.get("/prev-rec/orgas/racine",

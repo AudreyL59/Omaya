@@ -479,14 +479,16 @@ def create_cv(p: CreateCVPayload, op_id: int) -> CreateCVResponse:
               date_reac, ope_reac, observ, date_rappel)
            VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, ?, ?, ?,
-                   '', NOW(), ?, ?, NOW(), 'new',
-                   NULL, 0, '', NULL)""",
+                   ?, NOW(), ?, ?, NOW(), 'new',
+                   NULL, 0, ?, NULL)""",
         (id_new, nom, prenom, (p.adresse or "").strip(),
          _int(p.id_communes_france), id_elem,
          p.date_naissance or None, pays,
          bool(p.permis_b), bool(p.vehicule), mail, gsm,
          _int(p.id_cvposte), id_src, _int(p.id_ste),
-         int(op_id), int(op_id)),
+         (p.fic_cv or "").strip(),
+         int(op_id), int(op_id),
+         (p.observ or "").strip()),
     )
 
     # INSERT cvsuivi initial avec le statut applique

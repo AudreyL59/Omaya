@@ -125,6 +125,8 @@ class CreateCVPayload(BaseModel):
     id_ste: str = ""
     id_cv_statut: str = "1"     # statut initial (par defaut 'Non Traite')
     force_doublon: bool = False  # si True : force creation + statut=8
+    observ: str = ""             # observation (pre-rempli depuis pre-saisi)
+    fic_cv: str = ""             # nom de fichier CV deja uploade
 
 
 class CreateCVResponse(BaseModel):
