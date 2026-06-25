@@ -186,7 +186,7 @@ def save_rdv(
         id_cv_lieux = 0
 
     db = get_pg_connection("recrutement")
-    db.execute(
+    db.query(
         """UPDATE recrutement.pgt_agenda_evenement
               SET titre = ?,
                   contenu = ?,
@@ -221,7 +221,7 @@ def save_rdv(
 
 def soft_delete_rdv(id_rdv: int, op_id: int) -> dict:
     db = get_pg_connection("recrutement")
-    db.execute(
+    db.query(
         """UPDATE recrutement.pgt_agenda_evenement
               SET modif_elem = 'suppr',
                   modif_date = NOW(),
@@ -243,14 +243,14 @@ def set_op_crea(id_rdv: int, new_op: int, op_id: int) -> dict:
     )
     id_cv_suivi = _int((row or {}).get("id_cv_suivi"))
 
-    db.execute(
+    db.query(
         """UPDATE recrutement.pgt_agenda_evenement
               SET op_crea = ?, modif_date = NOW(), modif_op = ?
             WHERE id_agenda_evenement = ?""",
         (int(new_op), int(op_id), int(id_rdv)),
     )
     if id_cv_suivi:
-        db.execute(
+        db.query(
             """UPDATE recrutement.pgt_cvsuivi
                   SET op_crea = ?, modif_date = NOW(), modif_op = ?
                 WHERE id_cv_suivi = ?""",
@@ -585,7 +585,7 @@ def send_sms_rdv(id_rdv: int, op_id: int) -> dict:
     # INSERT dans divers.pgt_histo_sms
     try:
         db_div = get_pg_connection("divers")
-        db_div.execute(
+        db_div.query(
             """INSERT INTO divers.pgt_histo_sms
                   (id_histo_sms, destinataire, fichier, rubrique,
                    id_elem, contenu_envoye, statut, ope_envoi,

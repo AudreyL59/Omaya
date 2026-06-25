@@ -52,7 +52,7 @@ def save_mail_content(
     if not row:
         # Cf. WinDev : pas de cas particulier si la sortie n'existe pas,
         # mais on cree une ligne pour eviter de perdre le mail
-        db.execute(
+        db.query(
             """INSERT INTO rh.pgt_salarie_sortie
                   (id_salarie, id_type_sortie, mail_objet, mail_contenu,
                    modif_date, modif_op, modif_elem)
@@ -61,7 +61,7 @@ def save_mail_content(
         )
         return {"ok": True, "created": True}
 
-    db.execute(
+    db.query(
         """UPDATE rh.pgt_salarie_sortie
               SET mail_objet = ?,
                   mail_contenu = ?,

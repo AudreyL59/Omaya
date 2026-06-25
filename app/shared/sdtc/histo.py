@@ -79,7 +79,7 @@ def ajoute_histo_contrat(
     id_histo = new_id()
 
     db = get_pg_connection("adv")
-    db.execute(
+    db.query(
         f"""INSERT INTO {table}
               (id_histo_auto, id_histo, id_contrat, op_saisie,
                date, old_etat, new_etat, date_paiement,

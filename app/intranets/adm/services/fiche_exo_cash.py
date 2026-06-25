@@ -157,7 +157,7 @@ def calc_soldes(id_salarie: int) -> dict:
 def soft_delete_livret(id_salarie_livret: int, operateur_id: int) -> dict:
     """Supprime (soft) une ligne de livret."""
     db = get_pg_connection("rh")
-    db.execute(
+    db.query(
         """UPDATE rh.pgt_salarie_livret
               SET modif_date = NOW(),
                   modif_op = ?,
@@ -276,7 +276,7 @@ def upsert_livret(
     db = get_pg_connection("rh")
     if not id_salarie_livret:
         new_id = _new_id()
-        db.execute(
+        db.query(
             """INSERT INTO rh.pgt_salarie_livret
                   (id_salarie_livret, id_salarie, operateur,
                    id_type_operation_livret, id_challenge,
@@ -296,7 +296,7 @@ def upsert_livret(
         )
         return {"ok": True, "id_salarie_livret": str(new_id)}
 
-    db.execute(
+    db.query(
         """UPDATE rh.pgt_salarie_livret
               SET id_type_operation_livret = ?,
                   id_challenge = ?,

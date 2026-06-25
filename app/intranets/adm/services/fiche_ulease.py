@@ -158,7 +158,7 @@ def create_conducteur(id_salarie: int, op_id: int) -> dict:
     db_u = get_pg_connection("ulease")
     # Cf. WinDev : conducteur.IDconducteur = idSalarie
     id_cond = int(id_salarie)
-    db_u.execute(
+    db_u.query(
         """INSERT INTO ulease.pgt_conducteur
               (id_conducteur, id_salarie,
                num_permis, type_permis, date_obtention,
@@ -199,7 +199,7 @@ def update_conducteur_permis(
 ) -> dict:
     """Met a jour les 3 champs Permis (saisis directement dans l'onglet)."""
     db = get_pg_connection("ulease")
-    db.execute(
+    db.query(
         """UPDATE ulease.pgt_conducteur
               SET num_permis = ?,
                   type_permis = ?,
@@ -461,7 +461,7 @@ def load_doc_edition(id_salarie: int) -> list[dict]:
 def mark_doc_recu(id_salarie_doc_ulease: int, op_id: int) -> dict:
     """Btn 'Doc recu signe' : UPDATE RECU=1 + RECUDATE=NOW."""
     db = get_pg_connection("rh")
-    db.execute(
+    db.query(
         """UPDATE rh.pgt_salarie_doc_ulease
               SET recu = TRUE,
                   recu_date = NOW(),
@@ -505,7 +505,7 @@ def load_attribution_carte(id_conducteur: int) -> list[dict]:
 
 def soft_delete_attribution_carte(id_carte_attribution: int, op_id: int) -> dict:
     db = get_pg_connection("ulease")
-    db.execute(
+    db.query(
         """UPDATE ulease.pgt_carteattribution
               SET modif_date = NOW(),
                   modif_op = ?,

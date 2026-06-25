@@ -389,7 +389,7 @@ def _update_nb_points(part: str, id_contrat: int, nb_points: float) -> None:
     WHERE id_contrat = ?."""
     lp = part.lower()
     db = get_pg_connection("adv")
-    db.execute(
+    db.query(
         f"""UPDATE adv.pgt_{lp}_contrat
               SET nb_points = ?, modif_date = NOW()
             WHERE id_contrat = ?""",

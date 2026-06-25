@@ -160,7 +160,7 @@ def _promote_sfr_to_paye_raccordement(
     )
 
     db = get_pg_connection("adv")
-    db.execute(
+    db.query(
         """UPDATE adv.pgt_sfr_contrat
               SET id_etat_contrat = ?,
                   mois_p_ra = ?::date,
