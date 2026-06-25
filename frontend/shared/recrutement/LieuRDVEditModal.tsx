@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  FileSearch, Globe, Loader2, MapPin, Save, X,
+  Globe, Loader2, MapPin, Save, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '../ui/dialog'

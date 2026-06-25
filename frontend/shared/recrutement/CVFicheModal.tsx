@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertCircle, ArrowLeft, Calendar, FileSearch, FilePlus, FileText,
+  ArrowLeft, Calendar, FilePlus, FileText,
   GraduationCap, Loader2, MessageSquareOff, PhoneOff, Play,
   RefreshCw, Save, ScanSearch, Trash2,
   UserX, X,
