@@ -14,7 +14,7 @@ import {
   Printer, RefreshCw, Search, Trash2, Users,
 } from 'lucide-react'
 import { getToken } from '@/api'
-import { showToast } from '../ui/dialog'
+import { showConfirm, showToast } from '../ui/dialog'
 import PrevRecAjoutModal from './PrevRecAjoutModal'
 import PrevRecFicheModal from './PrevRecFicheModal'
 
@@ -161,7 +161,33 @@ export default function PrevRecPage({ apiBase }: PrevRecPageProps) {
                    icon={Edit}>Éditer</BtnTb>
             <BtnTb onClick={() => showToast('Imprimer : à venir', 'info')}
                    icon={Printer}>Imprimer</BtnTb>
-            <BtnTb onClick={() => showToast('Supprimer : à venir', 'info')}
+            <BtnTb onClick={async () => {
+                     if (!selectedRowId) {
+                       showToast('Sélectionne une session à supprimer.', 'info')
+                       return
+                     }
+                     const ok = await showConfirm({
+                       title: 'Supprimer cette session ?',
+                       message: 'Vous êtes sur le point de supprimer cette session. Voulez-vous continuer ?',
+                       confirmLabel: 'Supprimer',
+                     })
+                     if (!ok) return
+                     try {
+                       const r = await fetch(
+                         `${apiBase}/recrutement/cv/prev-rec/session/${selectedRowId}`,
+                         {
+                           method: 'DELETE',
+                           headers: { Authorization: `Bearer ${getToken()}` },
+                         },
+                       )
+                       if (!r.ok) throw new Error(String(r.status))
+                       showToast('Session supprimée.', 'success')
+                       setSelectedRowId('')
+                       loadPrevisions()
+                     } catch (e) {
+                       showToast(`Erreur : ${(e as Error).message}`, 'error')
+                     }
+                   }}
                    icon={Trash2} variant="danger">Supprimer</BtnTb>
             <div className="flex-1" />
             <button type="button" onClick={loadPrevisions}

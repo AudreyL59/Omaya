@@ -692,6 +692,20 @@ def update_session(id_prev: int, p: SessionPayload, op_id: int) -> dict:
     return {"ok": True, "id_prevision_recrut": str(id_prev)}
 
 
+def delete_session(id_prev: int, op_id: int) -> dict:
+    """Soft-delete (modif_elem='suppr') d'une prevision."""
+    if not id_prev:
+        return {"ok": False, "error": "id_required"}
+    db = get_pg_connection("recrutement")
+    db.query(
+        """UPDATE recrutement.pgt_prev_recrut
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_prevision_recrut = ?""",
+        (int(op_id), int(id_prev)),
+    )
+    return {"ok": True}
+
+
 def list_vendeurs_orga(id_orga: int) -> list[VendeurOrgaRow]:
     """Liste les vendeurs actifs d'un orga (et descendants) avec
     date_embauche + dernier_ctt + lib_equipe.

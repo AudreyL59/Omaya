@@ -350,6 +350,16 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
             raise HTTPException(400, res.get("error") or "fail")
         return res
 
+    @router.delete("/prev-rec/session/{id_prev}")
+    def del_session(
+        id_prev: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        res = prev_svc.delete_session(id_prev, user.id_salarie)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("error") or "fail")
+        return res
+
     @router.get("/prev-rec/vendeurs-orga/{id_orga}",
                 response_model=list[prev_svc.VendeurOrgaRow])
     def get_vendeurs_orga(
