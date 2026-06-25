@@ -134,18 +134,13 @@ def get_rdv_public(id_rdv: int) -> Optional[PublicRdvDetail]:
             salon_id = _str(salon.get("id_salon"))
             salon_mdp = _str(salon.get("mpd_salon"))
 
-    # Verifie si deja confirme (via cvsuivi 'confirme_par_candidat')
-    is_confirme = False
-    if id_cv:
-        c = db.query_one(
-            """SELECT 1 FROM recrutement.pgt_cvsuivi
-                WHERE id_cvtheque = ?
-                  AND id_elem = ?
-                  AND observation LIKE 'Confirme par candidat%'
-                LIMIT 1""",
-            (id_cv, int(id_rdv)),
-        )
-        is_confirme = bool(c)
+    # Verifie si deja confirme via la categorie de l'agenda (11 = Confirme)
+    cat = db.query_one(
+        "SELECT id_categorie FROM recrutement.pgt_agenda_evenement "
+        "WHERE id_agenda_evenement = ?",
+        (int(id_rdv),),
+    )
+    is_confirme = _int((cat or {}).get("id_categorie")) == 11
 
     return PublicRdvDetail(
         id_agenda_evenement=str(_int(row["id_agenda_evenement"])),
@@ -174,45 +169,51 @@ def get_rdv_public(id_rdv: int) -> Optional[PublicRdvDetail]:
 
 
 def confirm_rdv(id_rdv: int) -> dict:
-    """Le candidat confirme sa presence : ajoute un cvsuivi log.
-
-    Idempotent : si deja confirme, retourne ok sans dupliquer.
+    """Le candidat confirme sa presence (transposition WinDev) :
+      - UPDATE agenda_evenement.id_categorie = 11 (categorie 'Confirme')
+      - UPDATE cv_suivi.observation : concat 'Rdv Confirme par SMS Auto le ...'
+    Idempotent : si deja categorie=11, retourne ok sans rien faire.
     """
     db = get_pg_connection("recrutement")
-    # Recupere id_cvtheque via le cvsuivi lie au RDV
+    # Recupere id_cv_suivi + categorie actuelle
     rdv = db.query_one(
-        """SELECT cs.id_cvtheque
-             FROM recrutement.pgt_agenda_evenement ae
-             LEFT JOIN recrutement.pgt_cvsuivi cs
-                    ON cs.id_cv_suivi = ae.id_cv_suivi
-            WHERE ae.id_agenda_evenement = ?""",
+        """SELECT id_cv_suivi, id_categorie
+             FROM recrutement.pgt_agenda_evenement
+            WHERE id_agenda_evenement = ?""",
         (int(id_rdv),),
     )
-    if not rdv or not _int(rdv.get("id_cvtheque")):
+    if not rdv:
         return {"ok": False, "error": "rdv_inconnu"}
-    id_cv = _int(rdv["id_cvtheque"])
 
-    # Verifie pas deja confirme (idempotent)
-    exists = db.query_one(
-        """SELECT 1 FROM recrutement.pgt_cvsuivi
-            WHERE id_cvtheque = ? AND id_elem = ?
-              AND observation LIKE 'Confirme par candidat%' LIMIT 1""",
-        (id_cv, int(id_rdv)),
-    )
-    if exists:
+    # Deja confirme ?
+    if _int(rdv.get("id_categorie")) == 11:
         return {"ok": True, "already": True}
 
-    # INSERT cvsuivi (statut courant inchange = 6 'Entretien planifie',
-    # juste un log d'evenement). op_crea=0 car action publique du candidat.
-    new_id = _new_id()
+    # 1) UPDATE agenda_evenement.id_categorie = 11
     db.query(
-        """INSERT INTO recrutement.pgt_cvsuivi
-             (id_cv_suivi, id_cvtheque, datecrea, op_crea, id_cv_statut,
-              type_elem, id_elem, observation,
-              modif_date, modif_op, modif_elem)
-           VALUES (?, ?, NOW(), 0, 6,
-                   'RDV', ?, 'Confirme par candidat (page externe)',
-                   NOW(), 0, 'new')""",
-        (new_id, id_cv, int(id_rdv)),
+        """UPDATE recrutement.pgt_agenda_evenement
+              SET id_categorie = 11, modif_date = NOW()
+            WHERE id_agenda_evenement = ?""",
+        (int(id_rdv),),
     )
+
+    # 2) UPDATE cv_suivi.observation (concat) si le RDV a un cvsuivi lie
+    id_cv_suivi = _int(rdv.get("id_cv_suivi"))
+    if id_cv_suivi:
+        suivi = db.query_one(
+            "SELECT observation FROM recrutement.pgt_cvsuivi WHERE id_cv_suivi = ?",
+            (id_cv_suivi,),
+        )
+        old_obs = _str((suivi or {}).get("observation"))
+        log_line = (
+            f"Rdv Confirme par SMS Auto le "
+            f"{datetime.now().strftime('%d/%m/%Y a %H:%M')}"
+        )
+        new_obs = (old_obs + "\n" + log_line) if old_obs else log_line
+        db.query(
+            """UPDATE recrutement.pgt_cvsuivi
+                  SET observation = ?, modif_date = NOW()
+                WHERE id_cv_suivi = ?""",
+            (new_obs, id_cv_suivi),
+        )
     return {"ok": True}
