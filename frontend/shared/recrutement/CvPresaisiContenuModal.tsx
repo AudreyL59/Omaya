@@ -91,13 +91,15 @@ export default function CvPresaisiContenuModal({
     Promise.all([
       fetch(`${apiBase}/recrutement/cv/cv-presaisis/${idMail}/contenu`, h)
         .then(r => r.ok ? r.json() : null),
-      fetch(`${apiBase}/recrutement/cv/combos/postes`, h).then(r => r.json()),
-      fetch(`${apiBase}/recrutement/cv/combos/statuts`, h).then(r => r.json()),
-      fetch(`${apiBase}/recrutement/cv/combos/societes`, h).then(r => r.json()),
-      fetch(`${apiBase}/recrutement/cv/combos/annonceurs`, h).then(r => r.json()),
+      fetch(`${apiBase}/recrutement/cv/postes`, h).then(r => r.json()),
+      fetch(`${apiBase}/recrutement/cv/statuts`, h).then(r => r.json()),
+      fetch(`${apiBase}/recrutement/cv/societes`, h).then(r => r.json()),
+      fetch(`${apiBase}/recrutement/cv/annonceurs`, h).then(r => r.json()),
     ]).then(([m, p, st, so, an]) => {
-      setPostes(p || []); setStatuts(st || [])
-      setSocietes(so || []); setAnnonceurs(an || [])
+      setPostes(Array.isArray(p) ? p : [])
+      setStatuts(Array.isArray(st) ? st : [])
+      setSocietes(Array.isArray(so) ? so : [])
+      setAnnonceurs(Array.isArray(an) ? an : [])
       if (m) {
         setMail(m)
         setNom((m.nom || '').toUpperCase())

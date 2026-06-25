@@ -93,13 +93,15 @@ export default function CvPresaisisPage({
   useEffect(() => {
     const h = { headers: { Authorization: `Bearer ${getToken()}` } }
     Promise.all([
-      fetch(`${apiBase}/recrutement/cv/combos/societes`, h).then(r => r.json()),
-      fetch(`${apiBase}/recrutement/cv/combos/postes`, h).then(r => r.json()),
-      fetch(`${apiBase}/recrutement/cv/combos/annonceurs`, h).then(r => r.json()),
+      fetch(`${apiBase}/recrutement/cv/societes`, h).then(r => r.json()),
+      fetch(`${apiBase}/recrutement/cv/postes`, h).then(r => r.json()),
+      fetch(`${apiBase}/recrutement/cv/annonceurs`, h).then(r => r.json()),
       fetch(`${apiBase}/recrutement/cv/cv-presaisis/sources`, h).then(r => r.json()),
     ]).then(([s, p, a, src]) => {
-      setSocietes(s || []); setPostes(p || []); setAnnonceurs(a || [])
-      setSources(src || [])
+      setSocietes(Array.isArray(s) ? s : [])
+      setPostes(Array.isArray(p) ? p : [])
+      setAnnonceurs(Array.isArray(a) ? a : [])
+      setSources(Array.isArray(src) ? src : [])
     })
   }, [apiBase])
 
