@@ -33,6 +33,7 @@ from app.shared.recrutement.services import entretien as ent_svc
 from app.shared.recrutement.services import lieux_rdv as lieux_svc
 from app.shared.recrutement.services import recherche_cv as svc
 from app.shared.recrutement.services import prev_rec as prev_svc
+from app.shared.recrutement.services import villes_favori as villes_svc
 from app.shared.recrutement.services import salons_visio as salons_svc
 
 
@@ -276,6 +277,29 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         if not res.get("ok"):
             raise HTTPException(400, res.get("error") or "fail")
         return res
+
+    # -- Fen_VillesFavorites : CRUD villes en favori -----------------------
+
+    @router.get("/villes-favorites",
+                response_model=list[villes_svc.VilleFavoriteRow])
+    def get_villes_favorites(
+        _user: UserToken = Depends(get_current_user),
+    ):
+        return villes_svc.list_favorites()
+
+    @router.post("/villes-favorites/{id_commune}")
+    def post_add_favorite(
+        id_commune: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return villes_svc.add_favorite(id_commune, user.id_salarie)
+
+    @router.delete("/villes-favorites/{id_commune}")
+    def post_remove_favorite(
+        id_commune: int,
+        user: UserToken = Depends(get_current_user),
+    ):
+        return villes_svc.remove_favorite(id_commune, user.id_salarie)
 
     # -- Fen_CVPresaisis : liste mails RH a traiter ------------------------
 
