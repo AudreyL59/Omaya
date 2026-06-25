@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   AlertCircle, Calendar, FileText, Loader2, Mail, RotateCcw,
-  Save, Search, Upload, X,
+  Save, Upload, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '../ui/dialog'
@@ -183,9 +183,9 @@ export default function CvPresaisiContenuModal({
           pays, date_naissance: dateNaiss,
           permis_b: permisB, vehicule,
           mail: mailCand, gsm,
-          id_cvposte, id_cvsource: '2',         // = Mail
+          id_cvposte: idCvposte, id_cvsource: '2',         // = Mail
           id_elem_source: idAnnonceur,
-          id_ste,
+          id_ste: idSte,
           id_cv_statut: idCvstatut,
           observ,
           fic_cv: ficCV,
