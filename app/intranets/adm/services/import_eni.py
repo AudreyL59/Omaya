@@ -45,6 +45,29 @@ class ImportEniParams(BaseModel):
     maj_etats_contrats_existants: bool = False
 
 
+# Mapping colonnes par defaut pour 'Base Journaliere ENI'
+# (cf. ecran onglet 'Base Journ. ENI').
+COLS_BJ_ENI = {
+    "num_contrat": "A",
+    "vendeur_nom": "D",
+    "date_signature": "E",
+    "type_offre": "F",
+    "statut": "G",
+    "offre": "I",
+    "puissance": "J",
+    "type_comptage": "K",
+    "car": "L",
+    "client_cp": "S",
+    "client_gsm": "T",
+    "date_heure_crea": "W",
+    "addon": "AF",
+    "opt_mail": "AH",
+    "mandat_rib": "AI",
+    "note_globale": "AJ",
+    "info_notation": "AK",
+}
+
+
 # Mapping colonnes par defaut pour 'RUN Resils' (cf. ecran onglet
 # 'RUN Resils').
 COLS_RUN_R = {
@@ -172,6 +195,8 @@ def run_import(p: ImportEniParams, file_bytes: bytes, op_id: int) -> ImportEniRe
         return _import_run_valides(p, file_bytes, op_id)
     if p.type_import == 3:
         return _import_run_resil(p, file_bytes, op_id)
+    if p.type_import == 4:
+        return _import_journalier_eni(p, file_bytes, op_id)
 
     # TODO : autres procedures
     return ImportEniResult(
@@ -939,5 +964,310 @@ def _import_run_resil(
             f"Doublons {resume.nb_doublons} | "
             f"Introuvables {resume.nb_introuvables}. "
             f"{'(SIMULATION)' if p.simulation else '(PRODUCTION — phase 1)'}"
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Type 4 : Base journaliere ENI (ImportJournalierENI)
+# ---------------------------------------------------------------------------
+
+
+def _parse_datetime_fr(s: str) -> Optional[datetime]:
+    """Parse 'AAAA-MM-JJ HH:mm:SS.CCC' ou 'AAAA-JJ-MM HH:mm:SS.CCC'.
+
+    Le code WinDev tente d'abord AAAA-JJ-MM puis bascule sur AAAA-MM-JJ
+    si invalide. On essaie les 2 ordres ici aussi."""
+    if not s:
+        return None
+    s = s.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S",
+                "%Y-%d-%m %H:%M:%S.%f", "%Y-%d-%m %H:%M:%S",
+                "%d/%m/%Y %H:%M:%S", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _id_produit_from_type_offre(type_offre: str) -> int:
+    """Dual=67, Elec=66, Gaz=65 (cf WinDev)."""
+    if type_offre == "Dual":
+        return 67
+    if type_offre == "Elec":
+        return 66
+    return 65  # default = Gaz
+
+
+def _etat_contrat_journ_eni(lib_statut: str, id_prod: int, offre: str,
+                             non_call: bool) -> tuple[int, bool, bool]:
+    """Determine (id_etat, gaz_actif, elec_actif) selon WinDev :
+      - CANCELLED :
+        - Dual : 43 (Resil partielle GAZ) ou 42 (partielle ELEC) selon offre
+        - Sinon : 57 (Retractation Client) + gaz/elec off
+      - Sinon :
+        - Pas NonCALL : 37 (En cours traitement) ou 70 (En cours valid.)
+        - NonCALL : 51 (Temporaire SF)
+    """
+    statut = (lib_statut or "").upper()
+    if "CANCELLED" in statut:
+        if id_prod == 67:  # Dual
+            if "GAZ" in (offre or "").upper():
+                return (43, False, True)  # Resil partielle GAZ
+            else:
+                return (42, True, False)  # Resil partielle ELEC
+        return (57, False, False)  # Retractation Client
+    # Pas CANCELLED
+    if not non_call:
+        if "COMPLETED" in statut:
+            return (70, id_prod != 65, id_prod != 66)  # BS CALL En cours valid.
+        return (37, id_prod != 65, id_prod != 66)  # En cours traitement
+    return (51, id_prod != 65, id_prod != 66)  # Temporaire SF
+
+
+def _lookup_vendeur_by_nom_prenom(nom_complet: str) -> tuple[int, int]:
+    """Cherche un salarie par 'NOM Prenom' ou variantes.
+    Retourne (id_salarie, id_ste). 0,0 si introuvable."""
+    if not nom_complet or not nom_complet.strip():
+        return (0, 0)
+
+    db = get_pg_connection("rh")
+    # Normalise : uppercase, remplace tirets/apostrophes/espaces par %
+    s = nom_complet.upper()
+    for c in ("-", "'", " "):
+        s = s.replace(c, "%")
+    s = s.replace("%%", "%")
+
+    # 1. Match exact concat nom+prenom (uppercased)
+    rows = db.query(
+        """SELECT s.id_salarie, e.id_ste
+             FROM rh.pgt_salarie s
+             LEFT JOIN rh.pgt_salarie_embauche e ON e.id_salarie = s.id_salarie
+            WHERE UPPER(CONCAT(s.nom, '%', s.prenom)) LIKE ?
+              AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
+            LIMIT 2""",
+        (f"%{s}%",),
+    ) or []
+    if len(rows) == 1:
+        return (int(rows[0]["id_salarie"]),
+                int(rows[0].get("id_ste") or 0))
+
+    # 2. Tentative inverse prenom+nom
+    parts = nom_complet.strip().split()
+    if len(parts) >= 2:
+        prenom = parts[0].upper()
+        nom = parts[-1].upper()
+        rows = db.query(
+            """SELECT s.id_salarie, e.id_ste
+                 FROM rh.pgt_salarie s
+                 LEFT JOIN rh.pgt_salarie_embauche e ON e.id_salarie = s.id_salarie
+                WHERE UPPER(s.nom) LIKE ? AND UPPER(s.prenom) LIKE ?
+                  AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
+                LIMIT 2""",
+            (f"{nom}%", f"{prenom}%"),
+        ) or []
+        if len(rows) == 1:
+            return (int(rows[0]["id_salarie"]),
+                    int(rows[0].get("id_ste") or 0))
+    return (0, 0)
+
+
+def _import_journalier_eni(
+    p: ImportEniParams, file_bytes: bytes, op_id: int,
+) -> ImportEniResult:
+    """Import 'Base Journaliere ENI' : pour chaque ligne du fichier,
+    cree le contrat s'il n'existe pas ou met a jour si necessaire.
+
+    Phase 1 : detection only :
+      - Si contrat n'existe pas : flag 'a creer' + recherche vendeur
+        + determination idProduit + etat initial
+      - Si contrat existe : compare valeurs Excel vs BDD, si modif et
+        etat eligible (type_etat<=2 ou etat=70) : flag 'a modifier'
+        + nouvel etat
+    Pas de creation ni MAJ effective en phase 1."""
+    from openpyxl import load_workbook
+
+    label = TYPE_LABELS.get(4, "Base journalière ENI")
+    try:
+        wb = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    except Exception as e:
+        return ImportEniResult(
+            ok=False, type_import=4, type_label=label,
+            simulation=p.simulation, resume=ImportEniResume(),
+            message=f"Lecture Excel KO : {e}",
+        )
+    ws = wb.active
+
+    cols = {k: _col_letter_to_index(v) for k, v in COLS_BJ_ENI.items()}
+
+    resume = ImportEniResume()
+    journ_eni: list[dict] = []
+
+    db = get_pg_connection("adv")
+    n_rows = ws.max_row or 0
+    nb_creer = 0
+    nb_modif = 0
+    nb_inchanges = 0
+
+    for i in range(2, n_rows + 1):
+        num_contrat = _cell(ws, i, cols["num_contrat"]).upper()
+        if not num_contrat:
+            continue
+
+        date_sign_s = _cell(ws, i, cols["date_signature"])
+        date_sign = _parse_date_fr(date_sign_s)
+        date_crea = _parse_datetime_fr(_cell(ws, i, cols["date_heure_crea"]))
+        lib_statut = _cell(ws, i, cols["statut"])
+        vend_raw = _cell(ws, i, cols["vendeur_nom"])
+        vendeur_nom = vend_raw.split("/")[0].strip() if vend_raw else ""
+
+        offre = _cell(ws, i, cols["offre"])
+        type_offre = _cell(ws, i, cols["type_offre"]).strip()
+        car = _parse_int(_cell(ws, i, cols["car"]))
+        puiss_s = _cell(ws, i, cols["puissance"])
+        puiss = _parse_int(puiss_s.split(".")[0]) if puiss_s else 0
+        type_comptage = _cell(ws, i, cols["type_comptage"])
+        opt_hphc = "HPHC" in type_comptage.upper()
+        opt_maint = "PCK_HOME_P" in _cell(ws, i, cols["addon"]).upper()
+        opt_mail = "MAIL" in _cell(ws, i, cols["opt_mail"]).upper()
+        mandat_rib = "/20" in _cell(ws, i, cols["mandat_rib"])
+        note_g = _parse_int(_cell(ws, i, cols["note_globale"]))
+        note_s5 = note_g / 2 if note_g else 0
+        info_note = _cell(ws, i, cols["info_notation"])
+        client_cp = _cell(ws, i, cols["client_cp"])
+        client_gsm = _cell(ws, i, cols["client_gsm"])
+
+        id_produit = _id_produit_from_type_offre(type_offre)
+
+        # Lookup contrat (sans opt_mandat : colonne absente du schema PG)
+        r = db.query_one(
+            """SELECT id_contrat, id_salarie, id_etat_contrat,
+                      date_signature, date_saisie,
+                      gaz_car_relevee, elec_puissance,
+                      gaz_actif, elec_actif, non_call,
+                      notation, notation_info
+                 FROM adv.pgt_eni_contrat
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_contrat,),
+        )
+
+        if not r:
+            # ---- CONTRAT N'EXISTE PAS : a CREER ----
+            non_call = True  # par defaut
+
+            # Recherche vendeur
+            id_vendeur, id_ste = _lookup_vendeur_by_nom_prenom(vendeur_nom)
+            etat, gaz_actif, elec_actif = _etat_contrat_journ_eni(
+                lib_statut, id_produit, offre, non_call=non_call,
+            )
+
+            journ_eni.append({
+                "NumCtt": num_contrat,
+                "Statut": "à créer",
+                "DateSigne": str(date_sign or ""),
+                "DateCrea": str(date_crea or ""),
+                "NomVend": vendeur_nom,
+                "IdSalarie": id_vendeur,
+                "Vendeur trouvé": id_vendeur > 0,
+                "Société": id_ste,
+                "LibProduit (id)": id_produit,
+                "TypeOffre": type_offre,
+                "CAR": car,
+                "Puissance": puiss,
+                "OptHpHc": opt_hphc,
+                "OptMail": opt_mail,
+                "OptMaint": opt_maint,
+                "OptMandatRib": mandat_rib,
+                "Note": note_s5,
+                "InfoNote": info_note,
+                "EtatContrat (initial)": etat,
+                "GazActif": gaz_actif,
+                "ElecActif": elec_actif,
+                "NonCALL": non_call,
+                "CltCP": client_cp,
+                "CltGSM": client_gsm,
+            })
+            nb_creer += 1
+            continue
+
+        # ---- CONTRAT EXISTE : compare ----
+        id_contrat = int(r["id_contrat"])
+        non_call_bdd = bool(r.get("non_call"))
+        etat_actuel = int(r.get("id_etat_contrat") or 0)
+        car_bdd = int(r.get("gaz_car_relevee") or 0)
+        puiss_bdd = int(r.get("elec_puissance") or 0)
+
+        # Options actuelles
+        opt = db.query_one(
+            """SELECT opt_entretien, opt_mail
+                 FROM adv.pgt_eni_contrat_option WHERE id_contrat = ? LIMIT 1""",
+            (id_contrat,),
+        ) or {}
+
+        # Differences detectees
+        diffs: list[str] = []
+        if date_crea and r.get("date_saisie") != date_crea:
+            diffs.append(f"date_saisie {r.get('date_saisie')} -> {date_crea}")
+        if puiss > 0 and puiss != puiss_bdd:
+            diffs.append(f"puissance {puiss_bdd} -> {puiss}")
+        if car > 0 and car != car_bdd:
+            diffs.append(f"car_gaz {car_bdd} -> {car}")
+        if bool(opt.get("opt_entretien")) != opt_maint:
+            diffs.append(f"opt_entretien -> {opt_maint}")
+        if bool(opt.get("opt_mail")) != opt_mail:
+            diffs.append(f"opt_mail -> {opt_mail}")
+
+        # Eligibilite MAJ etat
+        etat_info = db.query_one(
+            """SELECT id_type_etat FROM adv.pgt_eni_etat_contrat
+                WHERE id_etat = ? LIMIT 1""",
+            (etat_actuel,),
+        )
+        id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
+        eligible_etat = (id_type_etat <= 2) or etat_actuel == 70
+
+        nouvel_etat = etat_actuel
+        if eligible_etat:
+            nouvel_etat, _, _ = _etat_contrat_journ_eni(
+                lib_statut, id_produit, offre, non_call=non_call_bdd,
+            )
+            if nouvel_etat != etat_actuel:
+                diffs.append(f"etat {etat_actuel} -> {nouvel_etat}")
+
+        if diffs:
+            journ_eni.append({
+                "NumCtt": num_contrat,
+                "Statut": "à modifier",
+                "DateSigne": str(r.get("date_signature") or ""),
+                "EtatActuel": etat_actuel,
+                "TypeEtat": id_type_etat,
+                "NouvelEtat": nouvel_etat,
+                "Diffs": " | ".join(diffs),
+                "LibProduit (id)": id_produit,
+                "TypeOffre": type_offre,
+                "OptMail Excel": opt_mail,
+                "OptMaint Excel": opt_maint,
+            })
+            nb_modif += 1
+        else:
+            nb_inchanges += 1
+
+    wb.close()
+
+    resume.nb_modifications = nb_modif
+    resume.nb_valides = nb_creer  # reutilise champ : 'a creer' = futurs valides
+
+    return ImportEniResult(
+        ok=True, type_import=4, type_label=label,
+        simulation=p.simulation, resume=resume,
+        contrat_import_journ_eni=journ_eni,
+        message=(
+            f"{n_rows - 1} ligne(s) lue(s) | "
+            f"À créer : {nb_creer} | À modifier : {nb_modif} | "
+            f"Inchangés : {nb_inchanges}. "
+            f"{'(SIMULATION)' if p.simulation else '(PRODUCTION — phase 1 : pas de création/MAJ)'}"
         ),
     )
