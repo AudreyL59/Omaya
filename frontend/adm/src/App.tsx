@@ -32,6 +32,7 @@ import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
 import ImportEniPage from '@/pages/ImportEniPage'
 import ImportIagPage from '@/pages/ImportIagPage'
+import ImportOenPage from '@/pages/ImportOenPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -92,6 +93,7 @@ function App() {
           <Route path="imports/contrats" element={<ImportsHubPage />} />
           <Route path="imports/eni" element={<ImportEniPage />} />
           <Route path="imports/iag" element={<ImportIagPage />} />
+          <Route path="imports/oen" element={<ImportOenPage />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />

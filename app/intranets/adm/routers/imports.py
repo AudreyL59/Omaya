@@ -14,6 +14,7 @@ from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import imports as svc
 from app.intranets.adm.services import import_eni as eni_svc
 from app.intranets.adm.services import import_iag as iag_svc
+from app.intranets.adm.services import import_oen as oen_svc
 
 
 router = APIRouter(prefix="/imports", tags=["adm-imports"])
@@ -64,6 +65,35 @@ async def post_iag_run(
             mois_paiement_distrib=mois_paiement_distrib,
         ),
         contents, user.id_salarie,
+    )
+
+
+# -- Fen_ImportOEN : 4 types OHM Energie -------------------------------------
+
+
+@router.post("/oen/run", response_model=oen_svc.ImportOenResult)
+async def post_oen_run(
+    type_import: int = Form(...),
+    simulation: bool = Form(True),
+    periode1_du: str = Form(""), periode1_au: str = Form(""),
+    periode1_mois_paiement: str = Form(""),
+    periode2_du: str = Form(""), periode2_au: str = Form(""),
+    periode2_mois_paiement: str = Form(""),
+    mois_paiement_distrib: str = Form(""),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    content = await file.read()
+    return oen_svc.run_import_oen(
+        oen_svc.ImportOenParams(
+            type_import=type_import, simulation=simulation,
+            periode1_du=periode1_du, periode1_au=periode1_au,
+            periode1_mois_paiement=periode1_mois_paiement,
+            periode2_du=periode2_du, periode2_au=periode2_au,
+            periode2_mois_paiement=periode2_mois_paiement,
+            mois_paiement_distrib=mois_paiement_distrib,
+        ),
+        content, user.id_salarie,
     )
 
 

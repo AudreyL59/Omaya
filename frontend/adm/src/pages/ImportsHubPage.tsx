@@ -44,6 +44,7 @@ const API_BASE = '/api/adm'
 const IMPLEMENTED_IMPORTS: Set<string> = new Set([
   'ENI',  // -> /imports/eni (Plenitude)
   'IAG',  // -> /imports/iag
+  'OEN',  // -> /imports/oen (OHM Énergie)
 ])
 
 const fmtDateTime = (iso: string): string => {
