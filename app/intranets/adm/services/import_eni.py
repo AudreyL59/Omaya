@@ -462,6 +462,53 @@ def _import_journalier_call(
                 (code_enr, nouvel_etat, int(op_id), id_contrat),
             )
 
+            # Traitement client : lookup / update / create
+            ci = {
+                "nom": client["nom"], "prenom": client["prenom"],
+                "adresse": client["adresse"], "cplt": client["cplt"],
+                "cp": client["cp"], "ville": client["ville"],
+                "tel": client["tel"], "gsm": client["gsm"],
+                "mail": client["mail"], "date_naiss": client["date_naiss"],
+            }
+            id_client_new = _lookup_or_create_client(ci, op_id)
+            id_client_old = int(r.get("id_client") or 0)
+            if id_client_new and id_client_new != id_client_old:
+                # Re-link contrat -> nouveau client + soft-delete ancien
+                db.query(
+                    """UPDATE adv.pgt_eni_contrat
+                          SET id_client = ?, modif_date = NOW()
+                        WHERE id_contrat = ?""",
+                    (id_client_new, id_contrat),
+                )
+                if id_client_old:
+                    db.query(
+                        """UPDATE adv.pgt_client
+                              SET modif_elem = 'suppr', modif_date = NOW(),
+                                  modif_op = ?
+                            WHERE id_client = ?""",
+                        (int(op_id), id_client_old),
+                    )
+
+            # Cree option si absente
+            opt_exists = db.query_one(
+                """SELECT 1 FROM adv.pgt_eni_contrat_option
+                    WHERE id_contrat = ? LIMIT 1""",
+                (id_contrat,),
+            )
+            if not opt_exists:
+                auto = db.query_one(
+                    "SELECT COALESCE(MAX(id_contrat_option_auto), 0) + 1 AS n "
+                    "FROM adv.pgt_eni_contrat_option"
+                )
+                db.query(
+                    """INSERT INTO adv.pgt_eni_contrat_option
+                          (id_contrat_option_auto, id_contrat, num_bs,
+                           modif_op, modif_date, modif_elem)
+                       VALUES (?, ?, ?, ?, NOW(), 'new')""",
+                    (int(auto["n"]) if auto else 1,
+                     id_contrat, r.get("num_bs") or "", int(op_id)),
+                )
+
     wb.close()
 
     return ImportEniResult(
@@ -743,9 +790,42 @@ def _import_run_valides(
             "OptMail Excel": opt_mails,
             "OptHPHC Excel": opt_hphc,
             "OptProtec Excel": opt_protect,
+            # Payload pour MAJ prod
+            "_maj_data": {
+                "id_contrat": id_contrat,
+                "id_produit": int(r.get("id_produit") or 0),
+                "date_signature": date_sign_omaya,
+                "maj_etat": maj_etat_flag,
+                "maj_car": maj_car_flag,
+                "etat_actuel": etat_actuel,
+                "nouvel_etat": nouvel_etat,
+                "gaz_valide": gaz_valide_nouv,
+                "elec_valide": elec_valide_nouv,
+                "mois_p": mois_paiement,
+                "mois_p_old": str(r.get("mois_p") or ""),
+                "car_excel": car,
+                "puiss_excel": puiss_elec,
+                "opt_mail": opt_mails,
+                "opt_protect": opt_protect,
+                "notation": r.get("notation"),
+            },
         })
 
     wb.close()
+
+    # -- PASSE PROD : MAJ contrat + option + histo --
+    nb_majs = 0
+    if not p.simulation or p.maj_produit_contrat_stand:
+        for row in contrats_run:
+            md = row.pop("_maj_data", {})
+            if not md:
+                continue
+            try:
+                done = _apply_maj_run_valides(md, op_id, p.simulation)
+                if done:
+                    nb_majs += 1
+            except Exception as e:
+                row["Erreur"] = str(e)
 
     return ImportEniResult(
         ok=True, type_import=2, type_label=label,
@@ -760,9 +840,94 @@ def _import_run_valides(
             f"Hors délai {resume.nb_contrats_hors_delai} | "
             f"Doublons {resume.nb_doublons} | "
             f"Introuvables {resume.nb_introuvables}. "
-            f"{'(SIMULATION)' if p.simulation else '(PRODUCTION — phase 1 : pas encore de MAJ)'}"
+            + (f"{nb_majs} MAJ appliquées." if not p.simulation
+               else "(SIMULATION)")
         ),
     )
+
+
+def _apply_maj_run_valides(md: dict, op_id: int, simulation: bool) -> bool:
+    """MAJ eni_contrat + eni_contrat_option pour RUN Valides.
+    Si simulation=True : ne fait que la MAJ CAR/Puissance (cf WinDev
+    InterrupteurMAJCAR). Sinon : MAJ complete + histo.
+    Retourne True si une MAJ a ete appliquee."""
+    db = get_pg_connection("adv")
+    id_contrat = int(md["id_contrat"])
+    has_change = False
+
+    # MAJ CAR / Puissance (MAJ produit STAND : peut tourner meme en simu)
+    if md.get("maj_car"):
+        # Recalcul nb_points
+        prod = db.query_one(
+            """SELECT famille, sous_fam FROM adv.pgt_eni_produit
+                WHERE id_produit = ? LIMIT 1""",
+            (int(md.get("id_produit") or 0),),
+        )
+        nb_pts = 0.0
+        if prod:
+            nb_pts = _calcul_points_eni(
+                prod.get("famille") or "", prod.get("sous_fam") or "",
+                int(md.get("car_excel") or 0),
+                md.get("date_signature"),
+                "",
+                int(md.get("puiss_excel") or 0),
+            )
+        db.query(
+            """UPDATE adv.pgt_eni_contrat
+                  SET gaz_car_relevee = ?, elec_puissance = ?,
+                      nb_points = ?,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_contrat = ?""",
+            (int(md.get("car_excel") or 0), int(md.get("puiss_excel") or 0),
+             nb_pts, int(op_id), id_contrat),
+        )
+        has_change = True
+
+    if simulation:
+        return has_change
+
+    # MAJ etat + option + histo (PRODUCTION uniquement)
+    if md.get("maj_etat"):
+        db.query(
+            """UPDATE adv.pgt_eni_contrat
+                  SET id_etat_contrat = ?, gaz_actif = ?, elec_actif = ?,
+                      mois_p = ?,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_contrat = ?""",
+            (int(md["nouvel_etat"]), bool(md.get("gaz_valide")),
+             bool(md.get("elec_valide")), md.get("mois_p"),
+             int(op_id), id_contrat),
+        )
+        _ajoute_histo_eni_etat(
+            id_contrat, int(md["etat_actuel"]), int(md["nouvel_etat"]),
+            md.get("mois_p_old", ""), op_id,
+        )
+        has_change = True
+
+    # MAJ options (Mail + Protection)
+    if md.get("opt_mail"):
+        # Si opt_mail=true on coche aussi les 3 cases liees (cf WinDev)
+        db.query(
+            """UPDATE adv.pgt_eni_contrat_option
+                  SET opt_mail = TRUE, opt_e_facture = TRUE,
+                      opt_e_communication = TRUE, opt_optin_commercial = TRUE,
+                      opt_protection = ?,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_contrat = ?""",
+            (bool(md.get("opt_protect")), int(op_id), id_contrat),
+        )
+        has_change = True
+    elif md.get("opt_protect") is not None:
+        db.query(
+            """UPDATE adv.pgt_eni_contrat_option
+                  SET opt_mail = FALSE, opt_protection = ?,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_contrat = ?""",
+            (bool(md["opt_protect"]), int(op_id), id_contrat),
+        )
+        has_change = True
+
+    return has_change
 
 
 # ---------------------------------------------------------------------------
@@ -945,9 +1110,42 @@ def _import_run_resil(
             "Nouveau MoisP": nouveau_mois_p,
             "Traitement": traitement,
             "MAJ etat": majetat_flag,
+            "_maj_data": {
+                "id_contrat": id_contrat,
+                "maj_etat": majetat_flag,
+                "etat_actuel": etat_actuel,
+                "nouvel_etat": nouvel_etat,
+                "mois_p": mois_paiement if traitement != "resilie" else None,
+                "mois_p_old": str(mois_p_omaya) if mois_p_omaya else "",
+            },
         })
 
     wb.close()
+
+    # -- PASSE PROD : MAJ etat + histo (si pas simulation) --
+    nb_majs = 0
+    if not p.simulation:
+        for row in contrats_run:
+            md = row.pop("_maj_data", {})
+            if not md or not md.get("maj_etat"):
+                continue
+            try:
+                db.query(
+                    """UPDATE adv.pgt_eni_contrat
+                          SET id_etat_contrat = ?, mois_p = ?,
+                              modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                        WHERE id_contrat = ?""",
+                    (int(md["nouvel_etat"]), md.get("mois_p"),
+                     int(op_id), int(md["id_contrat"])),
+                )
+                _ajoute_histo_eni_etat(
+                    int(md["id_contrat"]),
+                    int(md["etat_actuel"]), int(md["nouvel_etat"]),
+                    md.get("mois_p_old", ""), op_id,
+                )
+                nb_majs += 1
+            except Exception as e:
+                row["Erreur"] = str(e)
 
     return ImportEniResult(
         ok=True, type_import=3, type_label=label,
@@ -963,7 +1161,8 @@ def _import_run_resil(
             f"Hors délai {resume.nb_contrats_hors_delai} | "
             f"Doublons {resume.nb_doublons} | "
             f"Introuvables {resume.nb_introuvables}. "
-            f"{'(SIMULATION)' if p.simulation else '(PRODUCTION — phase 1)'}"
+            + (f"{nb_majs} MAJ appliquées." if not p.simulation
+               else "(SIMULATION)")
         ),
     )
 
