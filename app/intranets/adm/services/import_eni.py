@@ -152,8 +152,7 @@ TYPE_LABELS = {
     1: "Base Journalière CALL",
     2: "RUN Valides",
     3: "RUN Résils",
-    4: "Salesforce",
-    5: "Base journalière ENI",
+    4: "Base journalière ENI",
 }
 
 

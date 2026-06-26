@@ -29,8 +29,7 @@ const TYPES = [
   { id: 1, label: 'Base Journalière CALL' },
   { id: 2, label: 'RUN Valides' },
   { id: 3, label: 'RUN Résils' },
-  { id: 4, label: 'Salesforce' },
-  { id: 5, label: 'Base journalière ENI' },
+  { id: 4, label: 'Base journalière ENI' },
 ]
 
 interface Resume {
