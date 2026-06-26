@@ -16,6 +16,7 @@ from app.intranets.adm.services import import_eni as eni_svc
 from app.intranets.adm.services import import_iag as iag_svc
 from app.intranets.adm.services import import_oen as oen_svc
 from app.intranets.adm.services import import_pro as pro_svc
+from app.intranets.adm.services import import_sfr as sfr_svc
 
 
 router = APIRouter(prefix="/imports", tags=["adm-imports"])
@@ -59,6 +60,39 @@ async def post_iag_run(
         iag_svc.ImportIagParams(
             type_import=type_import, simulation=simulation,
             format_vendeur=format_vendeur,
+            periode1_du=periode1_du, periode1_au=periode1_au,
+            periode1_mois_paiement=periode1_mois_paiement,
+            periode2_du=periode2_du, periode2_au=periode2_au,
+            periode2_mois_paiement=periode2_mois_paiement,
+            mois_paiement_distrib=mois_paiement_distrib,
+        ),
+        contents, user.id_salarie,
+    )
+
+
+# -- Fen_ImportSFR : 10 types (BJ Fibre/Mobile/CALL, Hebdo, Options, RUN, CallRET x4) --
+
+
+@router.post("/sfr/run", response_model=sfr_svc.ImportSfrResult)
+async def post_sfr_run(
+    type_import: int = Form(...),
+    simulation: bool = Form(True),
+    ligne_depart: int = Form(3),
+    periode1_du: str = Form(""), periode1_au: str = Form(""),
+    periode1_mois_paiement: str = Form(""),
+    periode2_du: str = Form(""), periode2_au: str = Form(""),
+    periode2_mois_paiement: str = Form(""),
+    mois_paiement_distrib: str = Form(""),
+    files: list[UploadFile] = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    contents: list[tuple[str, bytes]] = []
+    for f in files:
+        contents.append((f.filename or "fichier.xlsx", await f.read()))
+    return sfr_svc.run_import_sfr(
+        sfr_svc.ImportSfrParams(
+            type_import=type_import, simulation=simulation,
+            ligne_depart=ligne_depart,
             periode1_du=periode1_du, periode1_au=periode1_au,
             periode1_mois_paiement=periode1_mois_paiement,
             periode2_du=periode2_du, periode2_au=periode2_au,
