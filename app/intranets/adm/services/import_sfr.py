@@ -402,6 +402,380 @@ def _import_placeholder(
 
 
 # ---------------------------------------------------------------------------
+# Type 5 : ImportOptions (MAJ Box8Verif / OptionVerif)
+# ---------------------------------------------------------------------------
+
+
+def _import_options(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    modifies: list, erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 5 : pour chaque BS, MAJ box8_verif ou option_verif=TRUE si
+    StatOpt=VERSEE, selon Lib_Option (Box 8 vs autre)."""
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        resume.nb_erreurs += 1
+        erreurs.append({"_erreur": f"Lecture : {e}"})
+        return
+    ws = wb.active
+    cols_map = {"num_bs": "A", "lib_option": "B", "statut_option": "C"}
+    cols = {k: _col_letter_to_index(v) for k, v in cols_map.items()}
+    db = get_pg_connection("adv")
+    ligne_dep = p.ligne_depart or 2
+
+    for i in range(ligne_dep, (ws.max_row or 0) + 1):
+        num_bs = _cell(ws, i, cols["num_bs"]).upper().strip()
+        if not num_bs:
+            continue
+        lib_opt = _cell(ws, i, cols["lib_option"])
+        stat_opt = _cell(ws, i, cols["statut_option"]).upper()
+
+        ctt = db.query_one(
+            """SELECT id_contrat, num_bs, box8, box8_verif, option_dec,
+                      option_verif, id_salarie, date_signature, id_etat_contrat
+                 FROM adv.pgt_sfr_contrat
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_bs,),
+        )
+        if not ctt:
+            erreurs.append({"NumBS": num_bs, "Erreur": "BS introuvable",
+                            "LibOption": lib_opt, "Statut": stat_opt})
+            resume.nb_introuvables += 1
+            continue
+
+        id_contrat = int(ctt["id_contrat"])
+        b8_avant = bool(ctt.get("box8_verif"))
+        opt_avant = bool(ctt.get("option_verif"))
+
+        is_box8 = "BOX 8" in lib_opt.upper()
+        is_versee = stat_opt == "VERSEE"
+
+        if is_box8 and is_versee:
+            new_b8_verif = True
+            new_opt_verif = opt_avant
+        elif (not is_box8) and is_versee:
+            new_b8_verif = b8_avant
+            new_opt_verif = True
+        else:
+            # Pas de changement
+            new_b8_verif = b8_avant
+            new_opt_verif = opt_avant
+
+        if new_b8_verif != b8_avant or new_opt_verif != opt_avant:
+            modifies.append({
+                "NumBS": num_bs, "LibOption": lib_opt, "Statut": stat_opt,
+                "Box8Verif Avant": b8_avant, "Box8Verif Apres": new_b8_verif,
+                "OptionVerif Avant": opt_avant, "OptionVerif Apres": new_opt_verif,
+            })
+            resume.nb_modifies += 1
+            if not p.simulation:
+                try:
+                    db.query(
+                        """UPDATE adv.pgt_sfr_contrat
+                              SET box8_verif = ?, option_verif = ?,
+                                  modif_date = NOW(), modif_op = ?,
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (new_b8_verif, new_opt_verif, int(op_id), id_contrat),
+                    )
+                except Exception as e:
+                    modifies[-1]["Erreur"] = str(e)
+        else:
+            resume.nb_non_modifies += 1
+    wb.close()
+
+
+# ---------------------------------------------------------------------------
+# Type 6 : ImportRUN (squelette multi-feuilles - logique metier partielle)
+# ---------------------------------------------------------------------------
+
+
+def _import_run(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, erreurs: list,
+    resume: ImportSfrResume,
+) -> None:
+    """Type 6 : ImportRUN. Lit 3 feuilles (Offre/Booster, Mobile, Option/
+    Volumique) avec colonnes differentes par feuille. Pour chaque ligne :
+    lookup BS, detection periode, creation/MAJ SFR_Contrat_Remun, verif
+    montant officiel, hors delai.
+
+    NOTE : implementation simplifiee, traitementOngletRun WinDev est tres
+    riche (gestion VV/Racc, regul negative, geste co, statut Operateur,
+    montant officiel par produit/typeVente/dateSign). A enrichir au fur
+    et a mesure.
+    """
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        resume.nb_erreurs += 1
+        erreurs.append({"_erreur": f"Lecture : {e}"})
+        return
+    db = get_pg_connection("adv")
+
+    p1_du = _parse_date_fr(p.periode1_du) or date(1900, 1, 1)
+    p1_au = _parse_date_fr(p.periode1_au) or date(2100, 12, 31)
+    p2_du = _parse_date_fr(p.periode2_du) or date(1900, 1, 1)
+    p2_au = _parse_date_fr(p.periode2_au) or date(2100, 12, 31)
+    mp1 = _dernier_jour_mois(p.periode1_mois_paiement)
+    mp2 = _dernier_jour_mois(p.periode2_mois_paiement)
+    mp_distrib = _dernier_jour_mois(p.mois_paiement_distrib)
+
+    # Colonnes par feuille (cf grpValide WinDev Run1=Offres, Run2=Mobile/Option,
+    # Run3=Volumique). Defaults raisonnables a ajuster selon vrai fichier.
+    cols_per_sheet = {
+        0: {"num_bs": "A", "techno": "B", "offre": "C", "type_vente": "D",
+            "statut_ra": "E", "motif_annul": "F", "date_ra": "G",
+            "hors_zone": "H", "type_rem": "I", "montant_rem": "J",
+            "date_sign": "K", "client_nom": "L", "client_prenom": "M",
+            "statut": "N", "motif_dero": "O", "geste_co": "P"},
+        1: {"num_bs": "A", "techno": "B", "offre": "C", "type_vente": "D",
+            "statut_ra": "E", "motif_annul": "F", "date_ra": "G",
+            "hors_zone": "H", "type_opt": "I", "lib_opt": "J",
+            "type_rem": "K", "montant_rem": "L", "date_sign": "M",
+            "client_nom": "N", "client_prenom": "O", "statut": "P",
+            "motif_dero": "Q"},
+        2: {"num_bs": "A", "techno": "B", "offre": "C", "type_vente": "D",
+            "statut_ra": "E", "motif_annul": "F", "date_ra": "G",
+            "hors_zone": "H", "type_rem": "I", "montant_rem": "J",
+            "periode": "K", "date_sign": "L", "client_nom": "M",
+            "client_prenom": "N", "statut": "O"},
+    }
+
+    nb_introu = 0; nb_paye = 0; nb_deja_p = 0; nb_va_non_p = 0
+    nb_mont0 = 0; nb_err_rem = 0; nb_err_hd = 0
+
+    for sheet_idx, sheet_name in enumerate(wb.sheetnames):
+        if sheet_idx >= 3:
+            break  # On ne traite que les 3 premieres feuilles
+        ws = wb[sheet_name]
+        cols_map = cols_per_sheet.get(sheet_idx, cols_per_sheet[0])
+        cols = {k: _col_letter_to_index(v) for k, v in cols_map.items()}
+
+        for i in range(2, (ws.max_row or 0) + 1):
+            num_bs = _cell(ws, i, cols.get("num_bs", 1)).upper().strip()
+            if not num_bs:
+                continue
+            client_nom = _cell(ws, i, cols.get("client_nom", 1))
+            client_prenom = _cell(ws, i, cols.get("client_prenom", 1))
+            techno = _cell(ws, i, cols.get("techno", 1))
+            offre = _cell(ws, i, cols.get("offre", 1))
+            statut_ra = _cell(ws, i, cols.get("statut_ra", 1))
+            type_rem = _cell(ws, i, cols.get("type_rem", 1))
+            mt_s = _cell(ws, i, cols.get("montant_rem", 1)).replace(",", ".")
+            try:
+                montant_rem = float(mt_s) if mt_s else 0.0
+            except ValueError:
+                montant_rem = 0.0
+            date_ra = _parse_date_fr(_cell(ws, i, cols.get("date_ra", 1)))
+            date_sign = _parse_date_fr(_cell(ws, i, cols.get("date_sign", 1)))
+            statut = _cell(ws, i, cols.get("statut", 1))
+            motif_dero = _cell(ws, i, cols.get("motif_dero", 1))
+            lib_opt = _cell(ws, i, cols.get("lib_opt", 1)) if "lib_opt" in cols else ""
+            type_opt = _cell(ws, i, cols.get("type_opt", 1)) if "type_opt" in cols else ""
+            periode = _cell(ws, i, cols.get("periode", 1)) if "periode" in cols else ""
+
+            lib_rem = offre
+            if "Option" in sheet_name:
+                lib_rem = f"{type_opt} : {lib_opt}"
+            elif "Volumique" in sheet_name:
+                lib_rem = periode
+
+            ctt = db.query_one(
+                """SELECT id_contrat, id_salarie, date_signature, type_vente,
+                          id_produit, remise, id_etat_sfr, info_vente_sfr
+                     FROM adv.pgt_sfr_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
+            )
+            if not ctt:
+                nb_introu += 1
+                erreurs.append({
+                    "Onglet": sheet_name, "NumBS": num_bs,
+                    "DateSign": str(date_sign or ""),
+                    "Client": f"{client_nom} {client_prenom}".strip(),
+                    "Offre": offre, "TypeRem": type_rem,
+                    "Montant": montant_rem, "Statut": statut,
+                    "Erreur": "Introuvable",
+                })
+                resume.nb_introuvables += 1
+                continue
+
+            id_contrat = int(ctt["id_contrat"])
+            id_sal = int(ctt.get("id_salarie") or 0)
+            date_sign_db = ctt.get("date_signature")
+            type_vente_db = int(ctt.get("type_vente") or 0)
+
+            # Detection periode
+            agence, equipe, is_distrib = _affectation_sfr_min(id_sal)
+            mois_p, periode_lbl = _detect_periode_sfr(
+                date_sign_db, is_distrib,
+                p1_du, p1_au, mp1, p2_du, p2_au, mp2, mp_distrib,
+            )
+            mois_p_str = mois_p.strftime("%m-%Y") if mois_p else ""
+
+            if periode_lbl == "HORS_DELAI":
+                nb_err_hd += 1
+                erreurs.append({
+                    "Onglet": sheet_name, "NumBS": num_bs,
+                    "Erreur": "Hors Délai",
+                    "DateSign": str(date_sign_db or ""),
+                    "Agence": agence, "Equipe": equipe,
+                })
+                resume.nb_hors_delai += 1
+
+            if montant_rem == 0:
+                nb_mont0 += 1
+                modifies.append({
+                    "Onglet": sheet_name, "NumBS": num_bs,
+                    "Erreur": "Montant à 0",
+                    "Offre": offre, "TypeRem": type_rem,
+                    "Statut": statut,
+                })
+                continue
+
+            lib_type_rem = type_rem.split(" (")[0]
+            if montant_rem < 0:
+                lib_type_rem += " - Régul"
+
+            # Verifie rem deja enregistree
+            existing_rem = None
+            try:
+                existing_rem = db.query_one(
+                    """SELECT id_sfr_contrat_remun, ra_montant, ra_mois_p
+                         FROM adv.pgt_sfr_contrat_remun
+                        WHERE id_contrat = ? AND type_rem = ? AND lib_option = ?
+                        LIMIT 1""",
+                    (id_contrat, lib_type_rem, lib_rem),
+                )
+            except Exception:
+                existing_rem = None
+
+            if existing_rem:
+                nb_deja_p += 1
+                modifies.append({
+                    "Onglet": sheet_name, "NumBS": num_bs,
+                    "Offre": offre, "TypeRem": type_rem,
+                    "LibRem": lib_rem,
+                    "Montant Omaya": float(existing_rem.get("ra_montant") or 0),
+                    "MoisP Omaya": str(existing_rem.get("ra_mois_p") or ""),
+                    "Montant Import": montant_rem,
+                    "MoisP Import": mois_p_str,
+                    "Statut": statut, "Note": "Déjà payé",
+                })
+            else:
+                nb_paye += 1
+                ajoutes.append({
+                    "Onglet": sheet_name, "NumBS": num_bs,
+                    "DateSign": str(date_sign_db or ""),
+                    "DateRa": str(date_ra or ""),
+                    "Client": f"{client_nom} {client_prenom}".strip(),
+                    "Offre": offre, "TypeRem": type_rem, "LibRem": lib_rem,
+                    "Montant": montant_rem, "MoisP": mois_p_str,
+                    "Statut": statut, "MotifDero": motif_dero,
+                    "Agence": agence, "Equipe": equipe,
+                })
+                resume.nb_modifies += 1
+                if not p.simulation:
+                    try:
+                        new_id = _new_id()
+                        is_va = "(VV)" in type_rem
+                        db.query(
+                            """INSERT INTO adv.pgt_sfr_contrat_remun
+                                  (id_sfr_contrat_remun_auto, id_sfr_contrat_remun,
+                                   id_contrat, num, type_rem, lib_option,
+                                   validation, va_mois_p, va_montant, va_statut, va_motif,
+                                   raccordement, ra_mois_p, ra_montant, ra_statut, ra_motif,
+                                   modif_date, modif_op, modif_elem)
+                               VALUES (?, ?, ?, ?, ?, ?,
+                                       ?, ?, ?, ?, ?,
+                                       ?, ?, ?, ?, ?,
+                                       NOW(), ?, 'new')""",
+                            (new_id, new_id, id_contrat, num_bs,
+                             lib_type_rem, lib_rem,
+                             is_va, mois_p if is_va else None,
+                             montant_rem if is_va else None,
+                             statut if is_va else "",
+                             motif_dero if is_va else "",
+                             not is_va, mois_p if not is_va else None,
+                             montant_rem if not is_va else None,
+                             statut if not is_va else "",
+                             motif_dero if not is_va else "",
+                             int(op_id)),
+                        )
+                    except Exception as e:
+                        ajoutes[-1]["Erreur"] = str(e)
+
+    wb.close()
+    # Reporting global
+    erreurs.append({
+        "Note": "Resume",
+        "NB Paye": nb_paye, "NB Deja Paye": nb_deja_p,
+        "NB VA Non Paye": nb_va_non_p, "NB Introuvable": nb_introu,
+        "NB Montant 0": nb_mont0, "NB Err REM": nb_err_rem,
+        "NB Hors Delai": nb_err_hd,
+    })
+
+
+def _affectation_sfr_min(id_salarie: int) -> tuple[str, str, bool]:
+    """Wrapper minimal - reutilise _affectation_oen-like."""
+    if not id_salarie:
+        return ("", "", False)
+    try:
+        db = get_pg_connection("rh")
+        rows = db.query(
+            """SELECT o.lib_orga, o.id_type_niveau_orga, o.id_type_orga
+                 FROM rh.pgt_salarie_organigramme so
+                 JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+                WHERE so.id_salarie = ?
+                  AND (so.modif_elem IS NULL OR so.modif_elem NOT LIKE '%suppr%')""",
+            (int(id_salarie),),
+        ) or []
+        agence = ""; equipe = ""; is_distrib = False
+        for r in rows:
+            lvl = r.get("id_type_niveau_orga")
+            lib = r.get("lib_orga") or ""
+            if lvl == 3 and not agence:
+                agence = lib
+                if int(r.get("id_type_orga") or 0) == 3:
+                    is_distrib = True
+            elif lvl == 4 and not equipe:
+                equipe = lib
+        return (agence, equipe, is_distrib)
+    except Exception:
+        return ("", "", False)
+
+
+def _detect_periode_sfr(
+    date_sign, is_distrib: bool,
+    p1_du: date, p1_au: date, mp1, p2_du: date, p2_au: date, mp2,
+    mp_distrib,
+):
+    if not date_sign:
+        return (None, "")
+    if is_distrib:
+        return (mp_distrib, "Distrib")
+    if p1_du <= date_sign <= p1_au:
+        return (mp1, "Période 1")
+    if p2_du <= date_sign <= p2_au:
+        return (mp2, "Période 2")
+    p1_du_m1 = (p1_du.replace(month=p1_du.month - 1) if p1_du.month > 1
+                else p1_du.replace(year=p1_du.year - 1, month=12))
+    p1_au_m1 = (p1_au.replace(month=p1_au.month - 1) if p1_au.month > 1
+                else p1_au.replace(year=p1_au.year - 1, month=12))
+    if p1_du_m1 <= date_sign <= p1_au_m1:
+        return (mp1, "Période -1 mois")
+    return (None, "HORS_DELAI")
+
+
+# ---------------------------------------------------------------------------
 # CALL RET (types 7, 8, 9, 10) - vendeurs sentinelles + helpers
 # ---------------------------------------------------------------------------
 
@@ -914,6 +1288,12 @@ def run_import_sfr(
                     ajoutes, modifies, migrations, modif_vendeurs,
                     erreurs, resume,
                 )
+            elif p.type_import == 5:
+                _import_options(p, content, op_id,
+                                modifies, erreurs, resume)
+            elif p.type_import == 6:
+                _import_run(p, content, op_id,
+                            ajoutes, modifies, erreurs, resume)
             elif p.type_import == 7:
                 _import_callret_ko(p, content, op_id,
                                    ajoutes, modifies, erreurs, resume)
