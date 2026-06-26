@@ -30,6 +30,7 @@ from app.shared.recrutement.services.recherche_cv import _int, _str
 from app.intranets.adm.services.import_eni import (
     _new_id, _calcul_points_eni, _lookup_or_create_client,
     _col_letter_to_index, _cell, _parse_date_fr, _normaliser_nom,
+    _dernier_jour_mois,
 )
 
 
@@ -427,6 +428,294 @@ def _import_journalier_iag(
     wb.close()
 
 
+def _ajoute_histo_iag_etat(id_contrat: int, old_etat: int, new_etat: int,
+                            date_paiement: str, op_id: int) -> None:
+    """Historise un changement d'etat IAG."""
+    if not id_contrat:
+        return
+    db = get_pg_connection("adv")
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_histo_auto), 0) + 1 AS n FROM adv.pgt_iag_histo_etat_ctt"
+    )
+    db.query(
+        """INSERT INTO adv.pgt_iag_histo_etat_ctt
+              (id_histo_auto, id_histo, id_contrat, op_saisie, date,
+               old_etat, new_etat, date_paiement,
+               modif_op, modif_date, modif_elem)
+           VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), 'new')""",
+        (int(auto["n"]) if auto else 1, _new_id(),
+         int(id_contrat), int(op_id),
+         int(old_etat) if old_etat else 0,
+         int(new_etat) if new_etat else 0,
+         date_paiement or "", int(op_id)),
+    )
+
+
+def _detect_periode_iag(
+    date_sign: Optional[date], is_distrib: bool,
+    p1_du: date, p1_au: date, mp1: Optional[date],
+    p2_du: date, p2_au: date, mp2: Optional[date],
+    mp_distrib: Optional[date],
+) -> tuple[Optional[date], str]:
+    """Determine (mois_paiement, libelle_periode) selon les dates."""
+    if not date_sign:
+        return (None, "")
+    if is_distrib:
+        return (mp_distrib, "Distrib")
+    if p1_du <= date_sign <= p1_au:
+        return (mp1, "Période 1")
+    if p2_du <= date_sign <= p2_au:
+        return (mp2, "Période 2")
+    # Periode -1 mois (fallback)
+    import datetime as _dt
+    p1_du_m1 = (p1_du.replace(month=p1_du.month - 1) if p1_du.month > 1
+                else p1_du.replace(year=p1_du.year - 1, month=12))
+    p1_au_m1 = (p1_au.replace(month=p1_au.month - 1) if p1_au.month > 1
+                else p1_au.replace(year=p1_au.year - 1, month=12))
+    if p1_du_m1 <= date_sign <= p1_au_m1:
+        return (mp1, "Période -1 mois")
+    return (None, "HORS_DELAI")
+
+
+def _affectation_iag(id_salarie: int) -> tuple[str, str, bool]:
+    """Retourne (agence, equipe, is_distrib). Simplification : derniere
+    affectation connue (pas de versioning historique date)."""
+    if not id_salarie:
+        return ("", "", False)
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT o.lib_orga, o.id_type_niveau_orga, o.id_type_orga
+             FROM rh.pgt_salarie_organigramme so
+             JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+            WHERE so.id_salarie = ?
+              AND (so.modif_elem IS NULL OR so.modif_elem NOT LIKE '%suppr%')""",
+        (int(id_salarie),),
+    ) or []
+    agence = ""; equipe = ""; is_distrib = False
+    for r in rows:
+        lvl = r.get("id_type_niveau_orga")
+        lib = r.get("lib_orga") or ""
+        if lvl == 3 and not agence:
+            agence = lib
+            if int(r.get("id_type_orga") or 0) == 3:
+                is_distrib = True
+        elif lvl == 4 and not equipe:
+            equipe = lib
+    return (agence, equipe, is_distrib)
+
+
+def _import_run_iag(
+    p: ImportIagParams, fname: str, content: bytes, op_id: int,
+    mode: str,  # 'valide' ou 'resil'
+    runs: list[dict], modifies: list[dict], non_trouves: list[dict],
+    pb_vendeur: list[dict], resume: ImportIagResume,
+) -> None:
+    """Logique commune importValide + importResil IAG."""
+    from openpyxl import load_workbook
+
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        resume.nb_erreurs += 1
+        modifies.append({"_erreur": f"Lecture {fname} : {e}"})
+        return
+    ws = wb.active
+    cols = {k: _col_letter_to_index(v) for k, v in COLS_RUN_IAG.items()}
+
+    p1_du = _parse_date_fr(p.periode1_du) or date(1900, 1, 1)
+    p1_au = _parse_date_fr(p.periode1_au) or date(2100, 12, 31)
+    p2_du = _parse_date_fr(p.periode2_du) or date(1900, 1, 1)
+    p2_au = _parse_date_fr(p.periode2_au) or date(2100, 12, 31)
+    mp1 = _dernier_jour_mois(p.periode1_mois_paiement)
+    mp2 = _dernier_jour_mois(p.periode2_mois_paiement)
+    mp_distrib = _dernier_jour_mois(p.mois_paiement_distrib)
+
+    db = get_pg_connection("adv")
+
+    for i in range(2, (ws.max_row or 0) + 1):
+        num_contrat = _cell(ws, i, cols["num_contrat"]).upper()
+        if not num_contrat:
+            continue
+        vendeur_cell = _cell(ws, i, cols["vendeur"])
+        date_sign_s = _cell(ws, i, cols["date_signature"])
+        comment = _cell(ws, i, cols["commentaire"])
+        client = {
+            "nom": _cell(ws, i, cols["client_nom"]),
+            "prenom": _cell(ws, i, cols["client_prenom"]),
+        }
+
+        # Lookup contrat(s)
+        rows_ctt = db.query(
+            """SELECT id_contrat, id_salarie, id_client, num_bs,
+                      id_etat_contrat, date_signature, mois_p, id_produit
+                 FROM adv.pgt_iag_contrat
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (num_contrat,),
+        ) or []
+
+        if len(rows_ctt) == 0:
+            non_trouves.append({
+                "NumCtt": num_contrat,
+                "DateSign": date_sign_s,
+                "Vendeur": vendeur_cell,
+                "CltNom": client["nom"],
+                "CltPrenom": client["prenom"],
+                "Statut": "VALID" if mode == "valide" else "RESIL",
+            })
+            resume.nb_introuvables += 1
+            continue
+        if len(rows_ctt) > 1:
+            resume.nb_doublons += 1
+            for r in rows_ctt:
+                pb_vendeur.append({
+                    "NumCtt": num_contrat,
+                    "id_contrat": int(r.get("id_contrat") or 0),
+                    "DateSigne": str(r.get("date_signature") or ""),
+                    "Erreur": "DOUBLON - " + ("Valid" if mode == "valide" else "Résil"),
+                })
+            continue
+
+        r = rows_ctt[0]
+        id_contrat = int(r["id_contrat"])
+        id_sal_db = int(r.get("id_salarie") or 0)
+        etat_actuel = int(r.get("id_etat_contrat") or 0)
+        mois_p_omaya = r.get("mois_p")
+        date_sign_omaya = r.get("date_signature")
+
+        # Affectation + periode
+        agence, equipe, is_distrib = _affectation_iag(id_sal_db)
+        mois_p, periode_lbl = _detect_periode_iag(
+            date_sign_omaya, is_distrib,
+            p1_du, p1_au, mp1, p2_du, p2_au, mp2, mp_distrib,
+        )
+        if periode_lbl == "HORS_DELAI":
+            resume.nb_pb_vendeur += 1
+            pb_vendeur.append({
+                "NumCtt": num_contrat,
+                "DateSigne": str(date_sign_omaya or ""),
+                "Erreur": "Hors Délai - " + ("Valid" if mode == "valide" else "Résil"),
+                "Agence": agence, "Equipe": equipe,
+                "_id_contrat": id_contrat,
+            })
+
+        # Lookup type_etat
+        etat_info = db.query_one(
+            """SELECT id_type_etat, lib_etat FROM adv.pgt_iag_etat_contrat
+                WHERE id_etat = ? LIMIT 1""",
+            (etat_actuel,),
+        )
+        id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
+        lib_etat_actuel = (etat_info.get("lib_etat") or "") if etat_info else ""
+
+        # ---- Determination du traitement (cf WinDev) ----
+        info_sal = _info_salarie_iag(id_sal_db)
+        nom_vend = (f"{_str(info_sal.get('nom'))} "
+                    f"{_str(info_sal.get('prenom')).title()}").strip()
+
+        nouvel_etat = etat_actuel
+        nouveau_mois_p: Optional[date] = None
+        traitement = "deja_statue"
+
+        if mode == "valide":
+            # Eligible si type_etat in (1,2) OU etat in (29,30)
+            if id_type_etat in (1, 2) or etat_actuel in (29, 30):
+                nouvel_etat = 19  # Valide - Paye par l'operateur
+                # Si etat=29 ou 30 -> garde mois_p ancien
+                if etat_actuel in (29, 30):
+                    nouveau_mois_p = mois_p_omaya
+                else:
+                    nouveau_mois_p = mois_p
+                traitement = "valide"
+                resume.nb_valides += 1
+            else:
+                resume.nb_deja_statues += 1
+        else:  # mode == 'resil'
+            if id_type_etat == 5:  # Paye -> decommissionne
+                nouvel_etat = 20
+                nouveau_mois_p = mois_p
+                traitement = "decomm"
+                resume.nb_decommissions = (
+                    (resume.nb_decommissions if hasattr(resume, 'nb_decommissions')
+                     else 0) + 1
+                ) if False else 0  # Pas de champ nb_decommissions sur IAG
+                # On utilise nb_resilies pour les decomm aussi
+                resume.nb_resilies += 1
+            elif id_type_etat in (1, 2):  # En attente -> resilie
+                nouvel_etat = 16
+                nouveau_mois_p = None  # mois_p = ""
+                traitement = "resilie"
+                resume.nb_resilies += 1
+            else:
+                resume.nb_deja_statues += 1
+
+        # Snapshot a afficher
+        row_snap = {
+            "NumCtt": num_contrat,
+            "DateSigne": str(date_sign_omaya or ""),
+            "Vendeur": nom_vend,
+            "Société": int(r.get("id_produit") or 0),
+            "Agence": agence,
+            "Equipe": equipe,
+            "Periode": periode_lbl,
+            "Etat actuel": etat_actuel,
+            "Lib Etat": lib_etat_actuel,
+            "Nouvel etat": nouvel_etat,
+            "Nouveau MoisP": str(nouveau_mois_p) if nouveau_mois_p else "",
+            "Traitement": traitement,
+        }
+
+        if traitement == "deja_statue":
+            modifies.append(row_snap)
+        else:
+            runs.append(row_snap)
+
+        # -- Action prod : UPDATE + histo --
+        if not p.simulation and traitement != "deja_statue":
+            old_mois_p_str = str(mois_p_omaya) if mois_p_omaya else ""
+            try:
+                if mode == "valide":
+                    db.query(
+                        """UPDATE adv.pgt_iag_contrat
+                              SET id_etat_contrat = ?, mois_p = ?,
+                                  modif_date = NOW(), modif_op = ?,
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (nouvel_etat, nouveau_mois_p, int(op_id), id_contrat),
+                    )
+                elif mode == "resil":
+                    if traitement == "decomm":
+                        db.query(
+                            """UPDATE adv.pgt_iag_contrat
+                                  SET id_etat_contrat = ?, mois_p = ?,
+                                      info_interne = COALESCE(info_interne, '') || '\n' || ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (nouvel_etat, nouveau_mois_p, comment,
+                             int(op_id), id_contrat),
+                        )
+                    else:  # resilie
+                        db.query(
+                            """UPDATE adv.pgt_iag_contrat
+                                  SET id_etat_contrat = ?, mois_p = NULL,
+                                      info_interne = COALESCE(info_interne, '') ||
+                                                     '\nMotif Résil : ' || ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (nouvel_etat, comment, int(op_id), id_contrat),
+                        )
+                _ajoute_histo_iag_etat(
+                    id_contrat, etat_actuel, nouvel_etat,
+                    old_mois_p_str, op_id,
+                )
+            except Exception as e:
+                row_snap["Erreur"] = str(e)
+
+    wb.close()
+
+
 def run_import_iag(
     p: ImportIagParams, files: list[tuple[str, bytes]], op_id: int,
 ) -> ImportIagResult:
@@ -455,8 +744,12 @@ def run_import_iag(
                 ajoutes, modifies, pb_vendeur, resume,
             )
         elif p.type_import == 2:
-            # TODO : _import_valide_iag / _import_resil_iag (a venir)
-            resume.nb_erreurs += 1
+            # Dispatch valide/resil selon 'ANNUL' dans le nom de fichier
+            mode = "resil" if "ANNUL" in fname.upper() else "valide"
+            _import_run_iag(
+                p, fname, content, op_id, mode,
+                runs, modifies, non_trouves, pb_vendeur, resume,
+            )
 
     # -- PASSE PROD : creation contrat + reattribution vendeur (si pas simu) --
     nb_crees = 0
