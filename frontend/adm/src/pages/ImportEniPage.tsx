@@ -9,7 +9,7 @@
  * (run_import) au fur et a mesure des procedures WinDev recues.
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Calendar, CheckCircle2, Download, FileUp, Loader2, Mail, Play, XCircle,
 } from 'lucide-react'
@@ -83,6 +83,19 @@ const moisCourant = () => {
 export default function ImportEniPage() {
   useDocumentTitle('Import ENI / PLENITUDE')
 
+  const [logoSrc, setLogoSrc] = useState('')
+  useEffect(() => {
+    fetch(`${API_BASE}/imports/partenaires`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: Array<{ prefixe_bdd: string; logo_b64: string }>) => {
+        const eni = (rows || []).find(p => p.prefixe_bdd === 'ENI')
+        if (eni?.logo_b64) setLogoSrc(eni.logo_b64)
+      })
+      .catch(() => {})
+  }, [])
+
   const [typeImport, setTypeImport] = useState(1)
   const [simulation, setSimulation] = useState(true)
   const [p1Du, setP1Du] = useState(today())
@@ -136,8 +149,7 @@ export default function ImportEniPage() {
     <div className="p-4 flex flex-col h-[calc(100vh-120px)]"
          style={{ color: COL_BRUN }}>
       <h1 className="text-xl font-bold mb-3 flex items-center gap-2">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Eni_SpA_logo.svg/640px-Eni_SpA_logo.svg.png"
-             alt="Plenitude" className="h-6" />
+        {logoSrc && <img src={logoSrc} alt="Plenitude" className="h-7" />}
         Import ENI / PLENITUDE
         {simulation && (
           <span className="ml-2 text-xs px-2 py-0.5 rounded"
@@ -201,31 +213,33 @@ export default function ImportEniPage() {
           </button>
         </div>
 
-        {/* Section 2 : GRPeriodePaiement */}
-        <div className="p-3">
-          <h3 className="text-[10px] uppercase font-bold mb-2"
-              style={{ color: COL_PRIMARY }}>
-            Périodes de paiement
-          </h3>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-            <Periode label="Période 1" du={p1Du} setDu={setP1Du}
-                     au={p1Au} setAu={setP1Au}
-                     mois={p1Mois} setMois={setP1Mois} />
-            <Periode label="Période 2" du={p2Du} setDu={setP2Du}
-                     au={p2Au} setAu={setP2Au}
-                     mois={p2Mois} setMois={setP2Mois} />
-            <div className="flex flex-col">
-              <label className="text-[10px] mb-1" style={{ color: COL_BRUN }}>
-                Mois paiement DISTRIB
-              </label>
-              <input type="text" value={moisDistrib}
-                     onChange={e => setMoisDistrib(e.target.value)}
-                     placeholder="MM-YYYY"
-                     className="px-2 py-1.5 rounded border text-sm w-28 text-center"
-                     style={{ borderColor: COL_BORDER }} />
+        {/* Section 2 : GRPeriodePaiement - visible si type RUN (2/3) */}
+        {(typeImport === 2 || typeImport === 3) && (
+          <div className="p-3">
+            <h3 className="text-[10px] uppercase font-bold mb-2"
+                style={{ color: COL_PRIMARY }}>
+              Périodes de paiement
+            </h3>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <Periode label="Période 1" du={p1Du} setDu={setP1Du}
+                       au={p1Au} setAu={setP1Au}
+                       mois={p1Mois} setMois={setP1Mois} />
+              <Periode label="Période 2" du={p2Du} setDu={setP2Du}
+                       au={p2Au} setAu={setP2Au}
+                       mois={p2Mois} setMois={setP2Mois} />
+              <div className="flex flex-col">
+                <label className="text-[10px] mb-1" style={{ color: COL_BRUN }}>
+                  Mois paiement DISTRIB
+                </label>
+                <input type="text" value={moisDistrib}
+                       onChange={e => setMoisDistrib(e.target.value)}
+                       placeholder="MM-YYYY"
+                       className="px-2 py-1.5 rounded border text-sm w-28 text-center"
+                       style={{ borderColor: COL_BORDER }} />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Section 3 : Options de MAJ */}
         <div className="p-3">

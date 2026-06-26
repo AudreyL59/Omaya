@@ -20,6 +20,7 @@ class PartenaireImport(BaseModel):
     prefixe_bdd: str         # ex: 'SFR', 'OEN'
     lib_partenaire: str
     is_actif: bool = True
+    logo_b64: str = ""       # 'data:image/X;base64,...' ou vide
 
 
 class ImportAutoSuivi(BaseModel):
@@ -33,21 +34,36 @@ class ImportAutoSuivi(BaseModel):
 
 def list_partenaires() -> list[PartenaireImport]:
     """Liste des partenaires (tous, actifs en premier) pour la combo
-    de choix d'import manuel."""
+    de choix d'import manuel. Inclut le logo b64 si disponible."""
+    import base64
     db = get_pg_connection("adv")
     rows = db.query(
-        """SELECT id_partenaire, prefixe_bdd, lib_partenaire, is_actif
+        """SELECT id_partenaire, prefixe_bdd, lib_partenaire, is_actif, logo
              FROM pgt_partenaire
             WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
               AND COALESCE(NULLIF(prefixe_bdd, ''), '') <> ''
          ORDER BY is_actif DESC, lib_partenaire ASC"""
     ) or []
-    return [PartenaireImport(
-        id_partenaire=str(_int(r["id_partenaire"])),
-        prefixe_bdd=_str(r["prefixe_bdd"]),
-        lib_partenaire=_str(r["lib_partenaire"]),
-        is_actif=bool(r.get("is_actif")),
-    ) for r in rows]
+    out: list[PartenaireImport] = []
+    for r in rows:
+        logo = r.get("logo")
+        logo_b64 = ""
+        if logo:
+            b = bytes(logo)
+            mime = "image/png"
+            if b[:3] == b"\xff\xd8\xff":
+                mime = "image/jpeg"
+            elif b[:4] == b"GIF8":
+                mime = "image/gif"
+            logo_b64 = f"data:{mime};base64,{base64.b64encode(b).decode()}"
+        out.append(PartenaireImport(
+            id_partenaire=str(_int(r["id_partenaire"])),
+            prefixe_bdd=_str(r["prefixe_bdd"]),
+            lib_partenaire=_str(r["lib_partenaire"]),
+            is_actif=bool(r.get("is_actif")),
+            logo_b64=logo_b64,
+        ))
+    return out
 
 
 def list_imports_auto_suivi() -> list[ImportAutoSuivi]:
