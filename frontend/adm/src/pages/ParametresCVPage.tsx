@@ -6,8 +6,9 @@
  * form droite, toolbar Nouveau / Editer / Supprimer.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  ArrowDown, ArrowUp, ArrowUpDown,
   Edit, Image as ImageIcon, Loader2, Plus, Save, Settings, Trash2, Upload,
 } from 'lucide-react'
 import { getToken } from '@/api'
@@ -93,6 +94,8 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
   const [rows, setRows] = useState<EntityRow[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState('')
+  const [sortKey, setSortKey] = useState<string>(cfg.labelCol)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
   // Form
   const [formId, setFormId] = useState('0')
@@ -116,7 +119,33 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
     load()
     setSelectedId(''); setFormId('0'); setFormLabel('')
     setFormActif(true); setFormExtra('')
-  }, [load])
+    // Reset sort sur le label par defaut lors du changement d'onglet
+    setSortKey(cfg.labelCol); setSortDir('asc')
+  }, [load, cfg.labelCol])
+
+  const sortedRows = useMemo(() => {
+    const arr = [...rows]
+    arr.sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      let cmp = 0
+      if (sortKey === 'id') {
+        cmp = (Number(av) || 0) - (Number(bv) || 0)
+      } else if (typeof av === 'boolean' || typeof bv === 'boolean') {
+        cmp = (av ? 1 : 0) - (bv ? 1 : 0)
+      } else {
+        cmp = String(av || '').localeCompare(String(bv || ''),
+                                              'fr', { sensitivity: 'base' })
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [rows, sortKey, sortDir])
+
+  const toggleSort = (k: string) => {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
+  }
 
   const resetForm = () => {
     setSelectedId(''); setFormId('0'); setFormLabel('')
@@ -222,17 +251,28 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
               <thead className="sticky top-0"
                      style={{ backgroundColor: COL_PRIMARY, color: 'white' }}>
                 <tr>
-                  <th className="px-2 py-2 text-left w-20">ID</th>
-                  <th className="px-2 py-2 text-left">{cfg.labelHeader}</th>
-                  {cfg.hasIsActif && <th className="px-2 py-2 text-center w-16">Actif</th>}
+                  <SortTh w="w-20" label="ID" col="id"
+                          sortKey={sortKey} sortDir={sortDir}
+                          onClick={toggleSort} />
+                  <SortTh label={cfg.labelHeader} col={cfg.labelCol}
+                          sortKey={sortKey} sortDir={sortDir}
+                          onClick={toggleSort} />
+                  {cfg.hasIsActif && (
+                    <SortTh w="w-16" align="center" label="Actif" col="is_actif"
+                            sortKey={sortKey} sortDir={sortDir}
+                            onClick={toggleSort} />
+                  )}
                   {cfg.hasLogo && <th className="px-2 py-2 text-center w-20">Logo</th>}
                   {cfg.extraField && (
-                    <th className="px-2 py-2 text-left w-24">{cfg.extraFieldLabel}</th>
+                    <SortTh w="w-24" label={cfg.extraFieldLabel || ''}
+                            col={cfg.extraField}
+                            sortKey={sortKey} sortDir={sortDir}
+                            onClick={toggleSort} />
                   )}
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r => {
+                {sortedRows.map(r => {
                   const isSel = selectedId === r.id
                   return (
                     <tr key={r.id} onClick={() => editRow(r)}
@@ -343,6 +383,31 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
         )}
       </div>
     </div>
+  )
+}
+
+function SortTh({ label, col, sortKey, sortDir, onClick, w, align }: {
+  label: string
+  col: string
+  sortKey: string
+  sortDir: 'asc' | 'desc'
+  onClick: (col: string) => void
+  w?: string
+  align?: 'left' | 'center' | 'right'
+}) {
+  const active = sortKey === col
+  const Icon = active ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown
+  const alignCls = align === 'center' ? 'text-center justify-center'
+                 : align === 'right' ? 'text-right justify-end'
+                 : 'text-left justify-start'
+  return (
+    <th className={`px-2 py-2 cursor-pointer select-none ${w || ''} ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'}`}
+        onClick={() => onClick(col)}>
+      <div className={`flex items-center gap-1 ${alignCls}`}>
+        <span>{label}</span>
+        <Icon className="w-3 h-3 inline opacity-70" />
+      </div>
+    </th>
   )
 }
 
