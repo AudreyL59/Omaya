@@ -147,30 +147,39 @@ export default function ImportEniPage() {
         )}
       </h1>
 
-      {/* Bandeau parametres */}
-      <div className="border rounded p-3 mb-3 space-y-3"
+      {/* Bandeau parametres - 3 sections empilees */}
+      <div className="border rounded mb-3 divide-y"
            style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>
-        {/* Ligne 1 : fichier + type + simulation + demarrer */}
-        <div className="grid grid-cols-[auto_280px_180px_auto_1fr] gap-3 items-end">
-          <div>
-            <label className="text-[10px] block mb-1">Fichier Excel</label>
+
+        {/* Section 1 : Fichier / Type / Simulation / Demarrer */}
+        <div className="p-3 flex flex-wrap items-end gap-3">
+          <div className="flex flex-col">
+            <label className="text-[10px] mb-1" style={{ color: COL_BRUN }}>
+              Fichier Excel
+            </label>
             <input ref={fileRef} type="file"
                    accept=".xlsx,.xls,.xlsm,.csv"
                    onChange={e => setFile(e.target.files?.[0] || null)}
                    className="hidden" />
             <button type="button" onClick={() => fileRef.current?.click()}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs"
-                    style={{ borderColor: COL_BORDER, color: COL_PRIMARY }}>
-              <FileUp className="w-3.5 h-3.5" />
-              {file ? file.name : 'Choisir mon fichier'}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded border text-xs h-9"
+                    style={{ borderColor: COL_BORDER, color: COL_PRIMARY,
+                             minWidth: '200px', maxWidth: '320px' }}>
+              <FileUp className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">
+                {file ? `${file.name} (${Math.round(file.size / 1024)} ko)`
+                      : 'Choisir mon fichier'}
+              </span>
             </button>
           </div>
-          <div>
-            <label className="text-[10px] block mb-1">Type d'import</label>
+          <div className="flex flex-col">
+            <label className="text-[10px] mb-1" style={{ color: COL_BRUN }}>
+              Type d'import
+            </label>
             <select value={typeImport}
                     onChange={e => setTypeImport(Number(e.target.value))}
-                    className="w-full px-2 py-1.5 rounded border text-sm"
-                    style={{ borderColor: COL_BORDER }}>
+                    className="px-2 py-1.5 rounded border text-sm h-9"
+                    style={{ borderColor: COL_BORDER, minWidth: '220px' }}>
               {TYPES.map(t => (
                 <option key={t.id} value={t.id}>{t.label}</option>
               ))}
@@ -182,6 +191,7 @@ export default function ImportEniPage() {
                    onChange={e => setSimulation(e.target.checked)} />
             Simulation
           </label>
+          <div className="flex-1" />
           <button type="button" onClick={demarrer} disabled={busy || !file}
                   className="flex items-center gap-2 px-4 py-1.5 rounded text-white text-sm disabled:opacity-50 h-9"
                   style={{ backgroundColor: COL_PRIMARY }}>
@@ -189,44 +199,52 @@ export default function ImportEniPage() {
                   : <Play className="w-4 h-4" />}
             Démarrer
           </button>
-          <div className="text-right text-xs italic" style={{ color: '#A68D8A' }}>
-            {file && `${Math.round(file.size / 1024)} ko`}
+        </div>
+
+        {/* Section 2 : GRPeriodePaiement */}
+        <div className="p-3">
+          <h3 className="text-[10px] uppercase font-bold mb-2"
+              style={{ color: COL_PRIMARY }}>
+            Périodes de paiement
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <Periode label="Période 1" du={p1Du} setDu={setP1Du}
+                     au={p1Au} setAu={setP1Au}
+                     mois={p1Mois} setMois={setP1Mois} />
+            <Periode label="Période 2" du={p2Du} setDu={setP2Du}
+                     au={p2Au} setAu={setP2Au}
+                     mois={p2Mois} setMois={setP2Mois} />
+            <div className="flex flex-col">
+              <label className="text-[10px] mb-1" style={{ color: COL_BRUN }}>
+                Mois paiement DISTRIB
+              </label>
+              <input type="text" value={moisDistrib}
+                     onChange={e => setMoisDistrib(e.target.value)}
+                     placeholder="MM-YYYY"
+                     className="px-2 py-1.5 rounded border text-sm w-28 text-center"
+                     style={{ borderColor: COL_BORDER }} />
+            </div>
           </div>
         </div>
 
-        {/* Ligne 2 : dates periodes */}
-        <div className="grid grid-cols-3 gap-4">
-          <Periode label="Période 1" du={p1Du} setDu={setP1Du}
-                   au={p1Au} setAu={setP1Au}
-                   mois={p1Mois} setMois={setP1Mois} />
-          <Periode label="Période 2" du={p2Du} setDu={setP2Du}
-                   au={p2Au} setAu={setP2Au}
-                   mois={p2Mois} setMois={setP2Mois} />
-          <div className="grid grid-cols-[auto_1fr] items-center gap-2">
-            <label className="text-xs whitespace-nowrap"
-                   style={{ color: COL_BRUN }}>Mois paiement DISTRIB</label>
-            <input type="text" value={moisDistrib}
-                   onChange={e => setMoisDistrib(e.target.value)}
-                   placeholder="MM-YYYY"
-                   className="px-2 py-1 rounded border text-sm w-24"
-                   style={{ borderColor: COL_BORDER }} />
+        {/* Section 3 : Options de MAJ */}
+        <div className="p-3">
+          <h3 className="text-[10px] uppercase font-bold mb-2"
+              style={{ color: COL_PRIMARY }}>
+            Options de mise à jour
+          </h3>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={majProduit}
+                     onChange={e => setMajProduit(e.target.checked)} />
+              Mise à jour Produit contrat STAND
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={majEtats}
+                     onChange={e => setMajEtats(e.target.checked)} />
+              Mise à jour États des contrats existants
+            </label>
           </div>
-        </div>
-
-        {/* Ligne 3 : options de MAJ */}
-        <div className="flex items-center gap-6 text-sm">
-          <strong className="text-xs uppercase"
-                  style={{ color: COL_PRIMARY }}>Options de mise à jour</strong>
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={majProduit}
-                   onChange={e => setMajProduit(e.target.checked)} />
-            Mise à jour Produit contrat STAND
-          </label>
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={majEtats}
-                   onChange={e => setMajEtats(e.target.checked)} />
-            Mise à jour États des contrats existants
-          </label>
         </div>
       </div>
 
@@ -324,29 +342,33 @@ function Periode({ label, du, setDu, au, setAu, mois, setMois }: {
   mois: string; setMois: (v: string) => void
 }) {
   return (
-    <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_80px] items-center gap-1">
-      <strong className="text-xs whitespace-nowrap pr-1"
-              style={{ color: COL_BRUN }}>{label} : Du</strong>
-      <div className="relative">
-        <input type="date" value={du} onChange={e => setDu(e.target.value)}
-               className="w-full px-2 py-1 rounded border text-sm pr-6"
+    <div className="flex flex-col">
+      <label className="text-[10px] mb-1 font-bold"
+             style={{ color: COL_BRUN }}>{label}</label>
+      <div className="flex items-center gap-1 flex-wrap">
+        <span className="text-xs" style={{ color: COL_BRUN }}>Du</span>
+        <div className="relative">
+          <input type="date" value={du} onChange={e => setDu(e.target.value)}
+                 className="px-2 py-1.5 rounded border text-sm pr-7 w-36"
+                 style={{ borderColor: COL_BORDER }} />
+          <Calendar className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: COL_PRIMARY }} />
+        </div>
+        <span className="text-xs" style={{ color: COL_BRUN }}>au</span>
+        <div className="relative">
+          <input type="date" value={au} onChange={e => setAu(e.target.value)}
+                 className="px-2 py-1.5 rounded border text-sm pr-7 w-36"
+                 style={{ borderColor: COL_BORDER }} />
+          <Calendar className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: COL_PRIMARY }} />
+        </div>
+        <span className="text-xs whitespace-nowrap pl-2"
+              style={{ color: COL_BRUN }}>Mois paiement</span>
+        <input type="text" value={mois} onChange={e => setMois(e.target.value)}
+               placeholder="MM-YYYY"
+               className="px-2 py-1.5 rounded border text-sm w-24 text-center"
                style={{ borderColor: COL_BORDER }} />
-        <Calendar className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: COL_PRIMARY }} />
       </div>
-      <label className="text-xs px-1">au</label>
-      <div className="relative">
-        <input type="date" value={au} onChange={e => setAu(e.target.value)}
-               className="w-full px-2 py-1 rounded border text-sm pr-6"
-               style={{ borderColor: COL_BORDER }} />
-        <Calendar className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: COL_PRIMARY }} />
-      </div>
-      <label className="text-xs whitespace-nowrap pl-1">Mois paiement</label>
-      <input type="text" value={mois} onChange={e => setMois(e.target.value)}
-             placeholder="MM-YYYY"
-             className="px-2 py-1 rounded border text-sm w-full text-center"
-             style={{ borderColor: COL_BORDER }} />
     </div>
   )
 }
