@@ -43,6 +43,7 @@ const API_BASE = '/api/adm'
 // Pages d'import deja codees (ajoute ici quand tu codes une Fen_ImportXXX)
 const IMPLEMENTED_IMPORTS: Set<string> = new Set([
   'ENI',  // -> /imports/eni (Plenitude)
+  'IAG',  // -> /imports/iag
 ])
 
 const fmtDateTime = (iso: string): string => {
