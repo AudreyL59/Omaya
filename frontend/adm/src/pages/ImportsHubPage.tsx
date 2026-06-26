@@ -45,6 +45,7 @@ const IMPLEMENTED_IMPORTS: Set<string> = new Set([
   'ENI',  // -> /imports/eni (Plenitude)
   'IAG',  // -> /imports/iag
   'OEN',  // -> /imports/oen (OHM Énergie)
+  'PRO',  // -> /imports/pro (PROTECTED)
 ])
 
 const fmtDateTime = (iso: string): string => {
