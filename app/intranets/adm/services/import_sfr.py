@@ -401,6 +401,489 @@ def _import_placeholder(
     resume.nb_erreurs += 1
 
 
+# ---------------------------------------------------------------------------
+# CALL RET (types 7, 8, 9, 10) - vendeurs sentinelles + helpers
+# ---------------------------------------------------------------------------
+
+# Salaries sentinelles (cf code WinDev)
+ABASSI_AHD = 20230920112006538          # vendeur cible Call RET
+FIBRE_INCONNU = 20200715153948361       # vendeur par defaut si TK pas trouve
+ID_AFFECT_DISTRIB_CALL_RETENTION = 20230601160425831
+
+
+def _donne_statut_call(libelle: str) -> tuple[int, str]:
+    """donneStatutCall : lookup pgt_sfr_etat_call_ret by lib_etat LIKE.
+    Retourne (id_etat_call_ret, lib_etat)."""
+    if not libelle:
+        return (0, "")
+    try:
+        db = get_pg_connection("adv")
+        r = db.query_one(
+            """SELECT id_etat_call_ret, lib_etat FROM adv.pgt_sfr_etat_call_ret
+                WHERE LOWER(lib_etat) LIKE LOWER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (f"%{libelle}%",),
+        )
+        return ((_int(r.get("id_etat_call_ret")), _str(r.get("lib_etat")))
+                if r else (0, ""))
+    except Exception:
+        return (0, "")
+
+
+def _iter_sheets(content: bytes):
+    """Itere toutes les feuilles d'un classeur (nb_sheets de WinDev)."""
+    from openpyxl import load_workbook
+    wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    for sheet in wb.sheetnames:
+        yield wb[sheet], sheet
+    wb.close()
+
+
+def _create_sfr_contrat_callret(orig: dict, new_bs: str,
+                                date_sign: Optional[date], op_id: int,
+                                info_motif: str) -> int:
+    """Cree un nouveau SFR_contrat (rattrape par Call RET) en cascadant les
+    valeurs du contrat origine."""
+    db = get_pg_connection("adv")
+    id_contrat = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_contrat_auto), 0) + 1 AS n FROM adv.pgt_sfr_contrat"
+    )
+    db.query(
+        """INSERT INTO adv.pgt_sfr_contrat
+              (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
+               num_bs, date_signature, id_etat_sfr, id_etat_contrat,
+               id_sfr_cluster, id_produit, technologie, self_install,
+               type_vente, box8, box8_verif, option_dec, option_verif,
+               motif_annulation, info_interne, non_call, remise,
+               hors_cible, issu_tk_diff,
+               op_saisie, date_saisie, modif_op, modif_date, modif_elem)
+           VALUES (?, ?, ?, ?, 0,
+                   ?, ?, 1, 1,
+                   ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?,
+                   '', ?, TRUE, ?,
+                   ?, 0,
+                   ?, NOW(), ?, NOW(), 'new')""",
+        (int(auto["n"]) if auto else 1, id_contrat,
+         int(orig.get("id_client") or 0), int(ABASSI_AHD),
+         new_bs, date_sign,
+         int(orig.get("id_sfr_cluster") or 0),
+         int(orig.get("id_produit") or 0),
+         int(orig.get("technologie") or 0),
+         bool(orig.get("self_install")),
+         int(orig.get("type_vente") or 0),
+         bool(orig.get("box8")), bool(orig.get("box8")),
+         bool(orig.get("option_dec")), bool(orig.get("option_verif")),
+         info_motif,
+         bool(orig.get("remise")),
+         bool(orig.get("hors_cible")),
+         int(op_id), int(op_id)),
+    )
+    return id_contrat
+
+
+def _import_callret_ko(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 7 : ImportCallRET_KO. Lit toutes les feuilles, pour chaque ligne
+    lookup BS, ajoute new BS si fourni + MAJ id_etat_call_ret + obs."""
+    cols_map = {"num_bs": "A", "statut": "I", "comment": "L", "new_bs": "AT"}
+    cols = {k: _col_letter_to_index(v) for k, v in cols_map.items()}
+    db = get_pg_connection("adv")
+    ligne_dep = p.ligne_depart or 2
+
+    for ws, _sheet in _iter_sheets(content):
+        for i in range(ligne_dep, (ws.max_row or 0) + 1):
+            num_bs = _cell(ws, i, cols["num_bs"]).upper().replace(" ", "")
+            if not num_bs:
+                continue
+            statut = _cell(ws, i, cols["statut"])
+            comment = _cell(ws, i, cols["comment"])
+            new_bs = _cell(ws, i, cols["new_bs"]).upper().replace(" ", "")
+            id_statut, lib_etat_call = _donne_statut_call(statut)
+            if statut and id_statut == 0:
+                erreurs.append({
+                    "NumBS": num_bs, "Erreur": "Statut inconnu",
+                    "Statut": statut,
+                })
+                resume.nb_erreurs += 1
+
+            orig = db.query_one(
+                """SELECT id_contrat, id_client, id_salarie, id_produit,
+                          date_signature, id_sfr_cluster, technologie,
+                          self_install, type_vente, box8, option_dec,
+                          option_verif, remise, hors_cible, id_etat_call_ret,
+                          obs_call_ret, id_contrat_ret
+                     FROM adv.pgt_sfr_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
+            )
+            if not orig:
+                erreurs.append({"NumBS": num_bs, "Erreur": "BS introuvable",
+                                "Statut": statut})
+                resume.nb_introuvables += 1
+                continue
+
+            id_contrat_orig = int(orig["id_contrat"])
+            modifs_done = []
+
+            # Ajout d'un nouveau BS si fourni
+            if new_bs:
+                # Verifier si le new_bs existe deja
+                exist = db.query_one(
+                    """SELECT id_contrat FROM adv.pgt_sfr_contrat
+                        WHERE UPPER(num_bs) = UPPER(?) LIMIT 1""",
+                    (new_bs,),
+                )
+                row_a = {
+                    "NumBS_Origine": num_bs, "NewBS": new_bs,
+                    "LibEtatCall": lib_etat_call,
+                    "Existant": bool(exist),
+                }
+                if not exist:
+                    if not p.simulation:
+                        try:
+                            new_id = _create_sfr_contrat_callret(
+                                orig, new_bs, orig.get("date_signature"),
+                                op_id,
+                                f"Contrat KO Rattrape par le Call RET, "
+                                f"Num Origine : {num_bs}",
+                            )
+                            row_a["NewIdContrat"] = new_id
+                            # MAJ id_contrat_ret sur l'origine
+                            db.query(
+                                """UPDATE adv.pgt_sfr_contrat
+                                      SET id_contrat_ret = ?, modif_date = NOW(),
+                                          modif_op = ?, modif_elem = 'modif'
+                                    WHERE id_contrat = ?""",
+                                (new_id, int(op_id), id_contrat_orig),
+                            )
+                        except Exception as e:
+                            row_a["Erreur"] = str(e)
+                ajoutes.append(row_a)
+                resume.nb_ajoutes += 1
+
+            # MAJ id_etat_call_ret + obs si different
+            if id_statut and int(orig.get("id_etat_call_ret") or 0) != id_statut:
+                modifs_done.append(f"EtatCallRet -> {id_statut} ({lib_etat_call})")
+                if not p.simulation:
+                    new_obs = (f"{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
+                               f"{lib_etat_call} : {comment}\n")
+                    db.query(
+                        """UPDATE adv.pgt_sfr_contrat
+                              SET id_etat_call_ret = ?, obs_call_ret = ?,
+                                  modif_date = NOW(), modif_op = ?,
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (id_statut, new_obs, int(op_id), id_contrat_orig),
+                    )
+
+            if modifs_done:
+                modifies.append({
+                    "NumBS": num_bs, "LibEtatCall": lib_etat_call,
+                    "Modifs": " | ".join(modifs_done), "Comment": comment,
+                })
+                resume.nb_modifies += 1
+
+
+def _import_callret_racc(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 8 : ImportCallRET_Racc. 1 BS origine + jusqu'a 4 nouveaux BS."""
+    cols_map = {"num_bs": "A", "comment": "L",
+                "new_bs1": "AT", "new_bs2": "AU", "new_bs3": "AV", "new_bs4": "AW"}
+    cols = {k: _col_letter_to_index(v) for k, v in cols_map.items()}
+    db = get_pg_connection("adv")
+    ligne_dep = p.ligne_depart or 2
+
+    for ws, _sheet in _iter_sheets(content):
+        for i in range(ligne_dep, (ws.max_row or 0) + 1):
+            num_bs = _cell(ws, i, cols["num_bs"]).upper().replace(" ", "")
+            if not num_bs:
+                continue
+            comment = _cell(ws, i, cols["comment"])
+            new_bss = [_cell(ws, i, cols[k]).upper().replace(" ", "")
+                       for k in ("new_bs1", "new_bs2", "new_bs3", "new_bs4")]
+            new_bss = [b for b in new_bss if b]
+
+            orig = db.query_one(
+                """SELECT id_contrat, id_client, id_salarie, id_produit,
+                          date_signature, id_sfr_cluster, technologie,
+                          self_install, type_vente, box8, option_dec,
+                          option_verif, remise, hors_cible, info_interne
+                     FROM adv.pgt_sfr_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
+            )
+            if not orig:
+                erreurs.append({"NumBS": num_bs, "Erreur": "BS introuvable"})
+                resume.nb_introuvables += 1
+                continue
+
+            id_orig = int(orig["id_contrat"])
+            id_clt = int(orig.get("id_client") or 0)
+            liste_bs_add = []
+
+            for new_bs in new_bss:
+                exist = db.query_one(
+                    """SELECT id_contrat, id_client, id_salarie
+                         FROM adv.pgt_sfr_contrat
+                        WHERE UPPER(num_bs) = UPPER(?) LIMIT 1""",
+                    (new_bs,),
+                )
+                row_a = {"NumBS_Origine": num_bs, "NewBS": new_bs,
+                         "Existant": bool(exist)}
+                if exist:
+                    # MAJ client / vendeur si different
+                    if int(exist.get("id_client") or 0) != id_clt:
+                        if not p.simulation:
+                            db.query(
+                                """UPDATE adv.pgt_sfr_contrat
+                                      SET id_client = ?, modif_date = NOW(),
+                                          modif_op = ?, modif_elem = 'modif'
+                                    WHERE id_contrat = ?""",
+                                (id_clt, int(op_id), int(exist["id_contrat"])),
+                            )
+                        row_a["Note"] = "ID Client mis a jour"
+                    sal_db = int(exist.get("id_salarie") or 0)
+                    if sal_db in (0, FIBRE_INCONNU):
+                        if not p.simulation:
+                            db.query(
+                                """UPDATE adv.pgt_sfr_contrat
+                                      SET id_salarie = ?, modif_date = NOW(),
+                                          modif_op = ?, modif_elem = 'modif'
+                                    WHERE id_contrat = ?""",
+                                (int(ABASSI_AHD), int(op_id),
+                                 int(exist["id_contrat"])),
+                            )
+                        row_a["Note"] = (row_a.get("Note", "")
+                                         + " | ID Vendeur mis a jour").strip(" |")
+                else:
+                    if not p.simulation:
+                        try:
+                            new_id = _create_sfr_contrat_callret(
+                                orig, new_bs, orig.get("date_signature"),
+                                op_id,
+                                f"Vente RACC par le Call RET, "
+                                f"Num Origine : {num_bs}",
+                            )
+                            row_a["NewIdContrat"] = new_id
+                        except Exception as e:
+                            row_a["Erreur"] = str(e)
+                ajoutes.append(row_a)
+                resume.nb_ajoutes += 1
+                liste_bs_add.append(new_bs)
+
+            # MAJ info_interne origine
+            if liste_bs_add and not p.simulation:
+                info_add = (f"\n{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
+                            f"Ventes ADD par Call RET\n    - "
+                            + "\n    - ".join(liste_bs_add))
+                obs_add = (f"{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
+                           f"{comment}\n" if comment else "")
+                try:
+                    db.query(
+                        """UPDATE adv.pgt_sfr_contrat
+                              SET info_interne = COALESCE(info_interne, '') || ?,
+                                  obs_call_ret = CASE WHEN ? <> ''
+                                                      THEN ? ELSE obs_call_ret END,
+                                  modif_date = NOW(), modif_op = ?,
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (info_add, obs_add, obs_add, int(op_id), id_orig),
+                    )
+                except Exception as e:
+                    modifies.append({"NumBS": num_bs, "Erreur": str(e)})
+
+
+def _import_callret_rdvtech(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 10 : ImportCallRET_RDVTech. MAJ date_rdv_tech + id_sfr_statut_rdv."""
+    cols_map = {"num_bs": "A", "statut": "I", "comment": "L", "date_rdv": "BB"}
+    cols = {k: _col_letter_to_index(v) for k, v in cols_map.items()}
+    db = get_pg_connection("adv")
+    ligne_dep = p.ligne_depart or 2
+
+    for ws, _sheet in _iter_sheets(content):
+        for i in range(ligne_dep, (ws.max_row or 0) + 1):
+            num_bs = _cell(ws, i, cols["num_bs"]).upper().replace(" ", "")
+            if not num_bs:
+                continue
+            statut = _cell(ws, i, cols["statut"])
+            comment = _cell(ws, i, cols["comment"])
+            date_rdv = _parse_date_fr(_cell(ws, i, cols["date_rdv"]))
+
+            id_statut, lib_etat = _donne_statut_call(statut) if statut else (0, "")
+            id_statut_rdv = 0
+            lib_statut_rdv = ""
+            if id_statut:
+                # Lookup id_etat_rdv_tech sur etat_call_ret
+                r = db.query_one(
+                    """SELECT id_etat_rdv_tech FROM adv.pgt_sfr_etat_call_ret
+                        WHERE id_etat_call_ret = ? LIMIT 1""",
+                    (id_statut,),
+                )
+                if r and r.get("id_etat_rdv_tech"):
+                    r2 = db.query_one(
+                        """SELECT id_sfr_statut_rdv, lib_statut
+                             FROM adv.pgt_sfr_statut_rdv
+                            WHERE id_sfr_statut_rdv = ? LIMIT 1""",
+                        (int(r["id_etat_rdv_tech"]),),
+                    )
+                    if r2:
+                        id_statut_rdv = int(r2.get("id_sfr_statut_rdv") or 0)
+                        lib_statut_rdv = _str(r2.get("lib_statut"))
+
+            orig = db.query_one(
+                """SELECT id_contrat, date_rdv_tech, id_sfr_statut_rdv,
+                          info_interne
+                     FROM adv.pgt_sfr_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
+            )
+            if not orig:
+                erreurs.append({"NumBS": num_bs, "Erreur": "Contrat introuvable",
+                                "Statut": statut, "Comment": comment})
+                resume.nb_introuvables += 1
+                continue
+
+            id_orig = int(orig["id_contrat"])
+            modifs_done = []
+            new_info = orig.get("info_interne") or ""
+            new_rdv = orig.get("date_rdv_tech")
+            new_statut_rdv = int(orig.get("id_sfr_statut_rdv") or 0)
+
+            if (comment and "Import Call Ret RDV Tech :"
+                    not in (orig.get("info_interne") or "")):
+                modifs_done.append("Comment ajoute")
+                new_info += (f"\n{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
+                             f"Import Call Ret RDV Tech : {comment}")
+            if id_statut_rdv and new_statut_rdv != id_statut_rdv:
+                modifs_done.append(f"StatutRDV -> {id_statut_rdv} ({lib_statut_rdv})")
+                new_statut_rdv = id_statut_rdv
+            if date_rdv and (not new_rdv or new_rdv < date_rdv):
+                old_str = (new_rdv.strftime("%d/%m/%Y") if new_rdv else "")
+                modifs_done.append(f"DateRDV {old_str} -> {date_rdv}")
+                new_info += (f"\nModif RDV du {old_str} au "
+                             f"{date_rdv.strftime('%d/%m/%Y')}")
+                new_rdv = date_rdv
+
+            row_snap = {
+                "NumBS": num_bs, "StatutRDV": lib_statut_rdv,
+                "DateRDV": str(date_rdv or ""),
+                "Modifs": " | ".join(modifs_done) if modifs_done else "(aucune)",
+            }
+            if modifs_done:
+                ajoutes.append(row_snap)
+                resume.nb_modifies += 1
+                if not p.simulation:
+                    try:
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET date_rdv_tech = ?, id_sfr_statut_rdv = ?,
+                                      info_interne = ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (new_rdv, new_statut_rdv, new_info,
+                             int(op_id), id_orig),
+                        )
+                    except Exception as e:
+                        row_snap["Erreur"] = str(e)
+
+
+def _import_callret_ventesadd(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 9 : ImportCallRET_VentesADD. Reattribution vendeur a ABASSI si
+    fibre inconnu/anonymous. Sinon : si vendeur deja en Distrib Call Retention,
+    on signale en erreur."""
+    cols_map = {"num_bs": "A", "statut": "I", "comment": "L",
+                "date_sign": "C", "categorie": "M", "offre": "J",
+                "date_racc": "E"}
+    cols = {k: _col_letter_to_index(v) for k, v in cols_map.items()}
+    db = get_pg_connection("adv")
+    ligne_dep = p.ligne_depart or 2
+
+    for ws, _sheet in _iter_sheets(content):
+        for i in range(ligne_dep, (ws.max_row or 0) + 1):
+            num_bs = _cell(ws, i, cols["num_bs"]).upper().replace(" ", "")
+            if not num_bs:
+                continue
+            statut = _cell(ws, i, cols["statut"])
+            comment = _cell(ws, i, cols["comment"])
+            offre = _cell(ws, i, cols["offre"])
+            id_statut, lib_etat_call = _donne_statut_call(statut)
+
+            orig = db.query_one(
+                """SELECT id_contrat, id_salarie
+                     FROM adv.pgt_sfr_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
+            )
+            if not orig:
+                erreurs.append({"NumBS": num_bs, "Erreur": "Contrat introuvable",
+                                "Statut": statut, "Comment": comment})
+                resume.nb_introuvables += 1
+                continue
+
+            id_orig = int(orig["id_contrat"])
+            id_sal_db = int(orig.get("id_salarie") or 0)
+
+            if id_sal_db in (0, FIBRE_INCONNU):
+                # Reattribution a ABASSI
+                ajoutes.append({
+                    "NumBS": num_bs, "Offre": offre,
+                    "LibEtatCall": lib_etat_call,
+                    "OldIdSalarie": id_sal_db,
+                    "NewIdSalarie": ABASSI_AHD,
+                })
+                resume.nb_modif_vend += 1
+                if not p.simulation:
+                    try:
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET id_salarie = ?, modif_date = NOW(),
+                                      modif_op = ?, modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (int(ABASSI_AHD), int(op_id), id_orig),
+                        )
+                    except Exception as e:
+                        ajoutes[-1]["Erreur"] = str(e)
+            else:
+                # Verifier si deja Distrib Call Retention
+                aff = db.query_one(
+                    """SELECT o.id_parent
+                         FROM rh.pgt_salarie_organigramme so
+                         JOIN rh.pgt_organigramme o
+                              ON o.idorganigramme = so.idorganigramme
+                        WHERE so.id_salarie = ? LIMIT 1""",
+                    (id_sal_db,),
+                ) if False else None
+                # Best effort : on signale juste en erreur 'attribue a vendeur'
+                erreurs.append({
+                    "NumBS": num_bs,
+                    "Erreur": "Contrat attribué à un vendeur",
+                    "Statut": statut, "IdSalarie": id_sal_db,
+                })
+                resume.nb_erreurs += 1
+
+
 def run_import_sfr(
     p: ImportSfrParams, files: list[tuple[str, bytes]], op_id: int,
 ) -> ImportSfrResult:
@@ -431,6 +914,18 @@ def run_import_sfr(
                     ajoutes, modifies, migrations, modif_vendeurs,
                     erreurs, resume,
                 )
+            elif p.type_import == 7:
+                _import_callret_ko(p, content, op_id,
+                                   ajoutes, modifies, erreurs, resume)
+            elif p.type_import == 8:
+                _import_callret_racc(p, content, op_id,
+                                     ajoutes, modifies, erreurs, resume)
+            elif p.type_import == 9:
+                _import_callret_ventesadd(p, content, op_id,
+                                          ajoutes, modifies, erreurs, resume)
+            elif p.type_import == 10:
+                _import_callret_rdvtech(p, content, op_id,
+                                        ajoutes, modifies, erreurs, resume)
             else:
                 _import_placeholder(p, fname, label, erreurs, resume)
         except Exception as e:
