@@ -45,6 +45,16 @@ class ImportEniParams(BaseModel):
     maj_etats_contrats_existants: bool = False
 
 
+# Mapping colonnes par defaut pour 'RUN Resils' (cf. ecran onglet
+# 'RUN Resils').
+COLS_RUN_R = {
+    "num_contrat": "A",
+    "vendeur_nom": "G",
+    "type_offre": "H",
+    "date_signature": "L",
+}
+
+
 # Mapping colonnes par defaut pour 'RUN Valides' (cf. ecran Fen_ImportENI
 # onglet 'RUN Valide'). Les lettres correspondent aux colonnes Excel.
 COLS_RUN_V = {
@@ -161,6 +171,8 @@ def run_import(p: ImportEniParams, file_bytes: bytes, op_id: int) -> ImportEniRe
         return _import_journalier_call(p, file_bytes, op_id)
     if p.type_import == 2:
         return _import_run_valides(p, file_bytes, op_id)
+    if p.type_import == 3:
+        return _import_run_resil(p, file_bytes, op_id)
 
     # TODO : autres procedures
     return ImportEniResult(
@@ -725,5 +737,208 @@ def _import_run_valides(
             f"Doublons {resume.nb_doublons} | "
             f"Introuvables {resume.nb_introuvables}. "
             f"{'(SIMULATION)' if p.simulation else '(PRODUCTION — phase 1 : pas encore de MAJ)'}"
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Type 3 : RUN Resils (importRUNResil)
+# ---------------------------------------------------------------------------
+
+
+def _import_run_resil(
+    p: ImportEniParams, file_bytes: bytes, op_id: int,
+) -> ImportEniResult:
+    """Import 'RUN Resils' ENI : pour chaque ligne, determine si le
+    contrat doit etre :
+      - Resilie (etat 16) si type_etat in (1,2) ou etat=54 ou
+        (type_etat=5 ET meme mois paiement)
+      - Decommissionne (20=total, 49=partiel ELEC, 50=partiel GAZ)
+        si type_etat=5 et mois paiement different
+      - Deja statue sinon
+    Phase 1 : detection seulement."""
+    from openpyxl import load_workbook
+
+    label = TYPE_LABELS.get(3, "RUN Résils")
+    try:
+        wb = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    except Exception as e:
+        return ImportEniResult(
+            ok=False, type_import=3, type_label=label,
+            simulation=p.simulation, resume=ImportEniResume(),
+            message=f"Lecture Excel KO : {e}",
+        )
+    ws = wb.active
+
+    cols = {k: _col_letter_to_index(v) for k, v in COLS_RUN_R.items()}
+
+    d1_du = _parse_date_fr(p.periode1_du) or date(1900, 1, 1)
+    d1_au = _parse_date_fr(p.periode1_au) or date(2100, 12, 31)
+    d2_du = _parse_date_fr(p.periode2_du) or date(1900, 1, 1)
+    d2_au = _parse_date_fr(p.periode2_au) or date(2100, 12, 31)
+    mp1 = _dernier_jour_mois(p.periode1_mois_paiement)
+    mp2 = _dernier_jour_mois(p.periode2_mois_paiement)
+    d1_du_m1 = (d1_du.replace(month=d1_du.month - 1) if d1_du.month > 1
+                else d1_du.replace(year=d1_du.year - 1, month=12))
+    d1_au_m1 = (d1_au.replace(month=d1_au.month - 1) if d1_au.month > 1
+                else d1_au.replace(year=d1_au.year - 1, month=12))
+
+    resume = ImportEniResume()
+    contrats_run: list[dict] = []
+    doublons: list[dict] = []
+    non_trouves: list[dict] = []
+    hors_delai: list[dict] = []
+
+    db = get_pg_connection("adv")
+    n_rows = ws.max_row or 0
+
+    for i in range(2, n_rows + 1):
+        num_contrat = _cell(ws, i, cols["num_contrat"])
+        if not num_contrat:
+            continue
+        type_offre = _cell(ws, i, cols["type_offre"]).strip()
+        vend_full = _cell(ws, i, cols["vendeur_nom"])
+        vendeur_nom = vend_full.split(" / ")[0] if vend_full else ""
+        date_sign_s = _cell(ws, i, cols["date_signature"])
+
+        rows_ctt = db.query(
+            """SELECT id_contrat, id_salarie, id_client, num_bs,
+                      id_etat_contrat, date_signature, mois_p
+                 FROM adv.pgt_eni_contrat
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (num_contrat,),
+        ) or []
+
+        if len(rows_ctt) == 0:
+            non_trouves.append({
+                "NumCtt": num_contrat,
+                "DateSign": date_sign_s,
+                "Vendeur": vendeur_nom,
+                "TypeOffre": type_offre,
+                "Onglet": "RESIL",
+            })
+            resume.nb_introuvables += 1
+            continue
+        if len(rows_ctt) > 1:
+            resume.nb_doublons += 1
+            for r in rows_ctt:
+                doublons.append({
+                    "NumCtt": num_contrat,
+                    "id_contrat_OMAYA": r.get("id_contrat"),
+                    "DateSign_OMAYA": str(r.get("date_signature") or ""),
+                    "TypeOffre": type_offre,
+                    "Onglet": "RESIL",
+                })
+            continue
+
+        r = rows_ctt[0]
+        id_contrat = int(r["id_contrat"])
+        date_sign_omaya = r.get("date_signature")
+        etat_actuel = int(r.get("id_etat_contrat") or 0)
+        mois_p_omaya = r.get("mois_p")
+
+        # Periode + MoisP
+        mois_paiement = None
+        periode_lbl = ""
+        if date_sign_omaya:
+            if d1_du <= date_sign_omaya <= d1_au:
+                mois_paiement = mp1; periode_lbl = "Période 1"
+            elif d2_du <= date_sign_omaya <= d2_au:
+                mois_paiement = mp2; periode_lbl = "Période 2"
+            elif d1_du_m1 <= date_sign_omaya <= d1_au_m1:
+                mois_paiement = mp1; periode_lbl = "Période -1 mois"
+            else:
+                resume.nb_contrats_hors_delai += 1
+                hors_delai.append({
+                    "NumCtt": num_contrat,
+                    "DateSign": str(date_sign_omaya),
+                    "TypeOffre": type_offre,
+                    "Onglet": "RESIL HORS DELAI",
+                })
+
+        # Lookup type_etat
+        etat_info = db.query_one(
+            """SELECT id_type_etat, lib_etat FROM adv.pgt_eni_etat_contrat
+                WHERE id_etat = ? LIMIT 1""",
+            (etat_actuel,),
+        )
+        id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
+        lib_etat = (etat_info.get("lib_etat") or "") if etat_info else ""
+
+        # Determination du nouvel etat (cf WinDev)
+        nouvel_etat = etat_actuel
+        nouveau_mois_p = ""
+        majetat_flag = False
+        traitement = "deja_statue"
+
+        same_month = (
+            mois_paiement and mois_p_omaya
+            and mois_paiement.month == mois_p_omaya.month
+            and mois_paiement.year == mois_p_omaya.year
+        )
+
+        is_resiliable = (
+            id_type_etat in (1, 2) or etat_actuel == 54
+            or (id_type_etat == 5 and same_month)
+        )
+
+        if is_resiliable:
+            nouvel_etat = 16  # Resilie par operateur
+            nouveau_mois_p = ""
+            majetat_flag = True
+            traitement = "resilie"
+            resume.nb_resilies += 1
+        elif id_type_etat == 5:
+            # Decommissionne (mois_p_omaya different)
+            majetat_flag = True
+            if "partielle" in lib_etat.lower():
+                if "elec" in lib_etat.lower():
+                    nouvel_etat = 49  # Decommission Partielle ELEC
+                    traitement = "decomm_part_elec"
+                else:
+                    nouvel_etat = 50  # Decommission Partielle GAZ
+                    traitement = "decomm_part_gaz"
+            else:
+                nouvel_etat = 20  # Decommissionne total
+                traitement = "decomm_total"
+            nouveau_mois_p = str(mois_paiement) if mois_paiement else ""
+            resume.nb_decommissions += 1
+        else:
+            # Deja statue (autres cas)
+            resume.nb_deja_statues += 1
+
+        contrats_run.append({
+            "NumCtt": r.get("num_bs"),
+            "DateSign": str(date_sign_omaya or ""),
+            "Periode": periode_lbl,
+            "TypeOffre": type_offre,
+            "Etat actuel": etat_actuel,
+            "TypeEtat": id_type_etat,
+            "Lib Etat": lib_etat,
+            "MoisP OMAYA": str(mois_p_omaya) if mois_p_omaya else "",
+            "Nouvel etat": nouvel_etat,
+            "Nouveau MoisP": nouveau_mois_p,
+            "Traitement": traitement,
+            "MAJ etat": majetat_flag,
+        })
+
+    wb.close()
+
+    return ImportEniResult(
+        ok=True, type_import=3, type_label=label,
+        simulation=p.simulation, resume=resume,
+        contrats_run=contrats_run + hors_delai,
+        contrats_non_trouves=non_trouves,
+        contrats_modifies=doublons,
+        message=(
+            f"{n_rows - 1} ligne(s) lue(s) | "
+            f"Résiliés {resume.nb_resilies} | "
+            f"Décommissions {resume.nb_decommissions} | "
+            f"Déjà statués {resume.nb_deja_statues} | "
+            f"Hors délai {resume.nb_contrats_hors_delai} | "
+            f"Doublons {resume.nb_doublons} | "
+            f"Introuvables {resume.nb_introuvables}. "
+            f"{'(SIMULATION)' if p.simulation else '(PRODUCTION — phase 1)'}"
         ),
     )
