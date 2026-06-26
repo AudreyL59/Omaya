@@ -1026,6 +1026,218 @@ def _etat_contrat_journ_eni(lib_statut: str, id_prod: int, offre: str,
     return (51, id_prod != 65, id_prod != 66)  # Temporaire SF
 
 
+# ---------------------------------------------------------------------------
+# Helpers phase 2 (mode PRODUCTION)
+# ---------------------------------------------------------------------------
+
+
+def _new_id() -> int:
+    """Id 8 octets construit depuis la date/heure (cf idEntierDateHeureSys
+    WinDev)."""
+    n = datetime.now()
+    return int(n.strftime("%Y%m%d%H%M%S")) * 1000 + n.microsecond // 1000
+
+
+def _calcul_points_eni(famille: str, sous_fam: str, car: int,
+                        date_sign: Optional[date], _options_str: str,
+                        puissance: int) -> float:
+    """Calcule nb_points selon adv.pgt_eni_remun.
+
+    Lookup par (famille, ss_fam, date_activation <= date_sign < date_desactivation,
+    val_min <= valeur <= val_max), valeur = CAR pour Gaz, puissance pour Elec.
+    """
+    if not famille:
+        return 0.0
+    db = get_pg_connection("adv")
+
+    sous_fam_up = (sous_fam or "").upper()
+    valeur = car if "GAZ" in sous_fam_up else puissance
+
+    sql_parts = [
+        "famille = ?", "ss_fam = ?",
+        "rem_active = TRUE",
+        "(val_min IS NULL OR val_min <= ?)",
+        "(val_max IS NULL OR val_max >= ?)",
+    ]
+    params: list = [famille, sous_fam, valeur, valeur]
+    if date_sign:
+        sql_parts.append("(date_activation IS NULL OR date_activation <= ?)")
+        sql_parts.append("(date_desactivation IS NULL OR date_desactivation > ?)")
+        params.extend([date_sign, date_sign])
+
+    r = db.query_one(
+        f"""SELECT nb_points FROM adv.pgt_eni_remun
+            WHERE {' AND '.join(sql_parts)}
+            ORDER BY date_activation DESC NULLS LAST LIMIT 1""",
+        tuple(params),
+    )
+    return float(r.get("nb_points") or 0) if r else 0.0
+
+
+def _ajoute_histo_eni_etat(id_contrat: int, old_etat: int, new_etat: int,
+                            date_paiement: str, op_id: int) -> None:
+    """Ajoute une ligne dans adv.pgt_eni_histo_etat_ctt (transition etat)."""
+    if not id_contrat:
+        return
+    db = get_pg_connection("adv")
+    new_id = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_histo_auto), 0) + 1 AS n FROM adv.pgt_eni_histo_etat_ctt"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+    db.query(
+        """INSERT INTO adv.pgt_eni_histo_etat_ctt
+              (id_histo_auto, id_histo, id_contrat, op_saisie, date,
+               old_etat, new_etat, date_paiement,
+               modif_op, modif_date, modif_elem)
+           VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), 'new')""",
+        (auto_n, new_id, int(id_contrat), int(op_id),
+         int(old_etat) if old_etat else 0,
+         int(new_etat) if new_etat else 0,
+         date_paiement or "", int(op_id)),
+    )
+
+
+def _lookup_or_create_client(info: dict, op_id: int) -> int:
+    """Cherche un client existant par gsm (puis mail si pas de gsm),
+    sinon en cree un nouveau. Retourne l'id_client.
+    """
+    db = get_pg_connection("adv")
+    nom = (info.get("nom") or "").strip().upper()
+    prenom = (info.get("prenom") or "").strip()
+    gsm = "".join(c for c in (info.get("gsm") or "") if c.isdigit())
+    mail = (info.get("mail") or "").strip().lower()
+
+    # 1. Dedup par gsm + nom (le plus discriminant)
+    if gsm and len(gsm) >= 9:
+        r = db.query_one(
+            """SELECT id_client FROM adv.pgt_client
+                WHERE REGEXP_REPLACE(COALESCE(gsm, ''), '[^0-9]', '', 'g') = ?
+                  AND UPPER(COALESCE(nom, '')) = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (gsm, nom),
+        )
+        if r:
+            return int(r["id_client"])
+
+    # 2. Dedup par mail + nom
+    if mail and nom:
+        r = db.query_one(
+            """SELECT id_client FROM adv.pgt_client
+                WHERE LOWER(COALESCE(mail, '')) = ?
+                  AND UPPER(COALESCE(nom, '')) = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (mail, nom),
+        )
+        if r:
+            return int(r["id_client"])
+
+    # 3. Création
+    new_id = _new_id()
+    date_naiss = info.get("date_naiss")
+    if isinstance(date_naiss, str):
+        date_naiss = _parse_date_fr(date_naiss)
+    db.query(
+        """INSERT INTO adv.pgt_client
+              (id_client, nom, prenom, date_naiss,
+               adresse1, adresse2, cp, ville, pays,
+               tel, gsm, mail,
+               date_saisie, op_saisie,
+               modif_op, modif_date, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'FRANCE',
+                   ?, ?, ?, NOW(), ?, ?, NOW(), 'new')""",
+        (new_id, nom, prenom, date_naiss,
+         (info.get("adresse") or "").strip(),
+         (info.get("cplt") or "").strip(),
+         (info.get("cp") or "").strip(),
+         (info.get("ville") or "").strip(),
+         (info.get("tel") or "").strip(),
+         gsm, mail,
+         int(op_id), int(op_id)),
+    )
+    return new_id
+
+
+def _create_eni_contrat(td: dict, op_id: int) -> int:
+    """Cree un eni_contrat depuis un dict 'à créer' (cf TableImportCttJournENI).
+    Retourne id_contrat cree."""
+    db = get_pg_connection("adv")
+    id_contrat = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_contrat_auto), 0) + 1 AS n FROM adv.pgt_eni_contrat"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+
+    date_sign = td.get("date_signature")
+    if isinstance(date_sign, str):
+        date_sign = _parse_date_fr(date_sign)
+    date_crea = td.get("date_crea")
+    if isinstance(date_crea, str):
+        date_crea = _parse_datetime_fr(date_crea)
+
+    db.query(
+        """INSERT INTO adv.pgt_eni_contrat
+              (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
+               num_bs, id_produit, id_etat_contrat,
+               date_signature, gaz_car_relevee, gaz_car_declaree,
+               elec_puissance, gaz_actif, elec_actif,
+               op_saisie, date_saisie, non_call, code_enr,
+               notation, notation_info,
+               modif_op, modif_date, modif_elem)
+           VALUES (?, ?, ?, ?, ?,
+                   ?, ?, ?,
+                   ?, ?, ?,
+                   ?, ?, ?,
+                   ?, ?, ?, '',
+                   ?, ?,
+                   ?, NOW(), 'new')""",
+        (auto_n, id_contrat,
+         int(td.get("id_client") or 0),
+         int(td.get("id_salarie") or 0),
+         int(td.get("id_ste") or 0),
+         td.get("num_bs") or "",
+         int(td.get("id_produit") or 0),
+         int(td.get("etat_contrat") or 0),
+         date_sign, int(td.get("car") or 0), int(td.get("car") or 0),
+         int(td.get("puissance") or 0),
+         bool(td.get("gaz_actif")), bool(td.get("elec_actif")),
+         int(op_id), date_crea or datetime.now(),
+         bool(td.get("non_call")),
+         float(td.get("note") or 0), td.get("info_note") or "",
+         int(op_id)),
+    )
+
+    # Cree la ligne option vide (defaults)
+    auto_o = db.query_one(
+        "SELECT COALESCE(MAX(id_contrat_option_auto), 0) + 1 AS n FROM adv.pgt_eni_contrat_option"
+    )
+    auto_o_n = int(auto_o["n"]) if auto_o else 1
+    db.query(
+        """INSERT INTO adv.pgt_eni_contrat_option
+              (id_contrat_option_auto, id_contrat, num_bs,
+               opt_mail, opt_entretien, opt_hp_hc,
+               opt_index_gaz, opt_index_elec, opt_delai_retra,
+               opt_energie_verte_gaz, opt_energie_verte_elec,
+               opt_deja_client_eni, opt_reforestation,
+               opt_optin_commercial, opt_e_facture, opt_e_communication,
+               opt_pdc, opt_accept_com_parte, opt_consent_consult_distri,
+               opt_protection,
+               modif_op, modif_date, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, FALSE, FALSE, FALSE,
+                   FALSE, FALSE, FALSE, FALSE,
+                   FALSE, FALSE, FALSE,
+                   FALSE, FALSE, FALSE,
+                   FALSE,
+                   ?, NOW(), 'new')""",
+        (auto_o_n, id_contrat, td.get("num_bs") or "",
+         bool(td.get("opt_mail")), bool(td.get("opt_maint")),
+         bool(td.get("opt_hphc")), int(op_id)),
+    )
+    return id_contrat
+
+
 def _lookup_vendeur_by_nom_prenom(nom_complet: str) -> tuple[int, int]:
     """Cherche un salarie par 'NOM Prenom' ou variantes.
     Retourne (id_salarie, id_ste). 0,0 si introuvable."""
@@ -1189,6 +1401,31 @@ def _import_journalier_eni(
                 "NonCALL": non_call,
                 "CltCP": client_cp,
                 "CltGSM": client_gsm,
+                # ---- payload pour creation en mode prod ----
+                "_client_info": {
+                    "nom": "", "prenom": "",  # remplis depuis tk_call si possible
+                    "gsm": client_gsm,
+                    "cp": client_cp,
+                },
+                "_contrat_data": {
+                    "num_bs": num_contrat,
+                    "id_salarie": id_vendeur,
+                    "id_ste": id_ste,
+                    "id_produit": id_produit,
+                    "etat_contrat": etat,
+                    "date_signature": date_sign,
+                    "date_crea": date_crea,
+                    "car": car,
+                    "puissance": puiss,
+                    "gaz_actif": gaz_actif,
+                    "elec_actif": elec_actif,
+                    "non_call": non_call,
+                    "note": note_s5,
+                    "info_note": info_note,
+                    "opt_mail": opt_mail,
+                    "opt_maint": opt_maint,
+                    "opt_hphc": opt_hphc,
+                },
             })
             nb_creer += 1
             continue
@@ -1250,6 +1487,18 @@ def _import_journalier_eni(
                 "TypeOffre": type_offre,
                 "OptMail Excel": opt_mail,
                 "OptMaint Excel": opt_maint,
+                # Payload pour MAJ en prod
+                "_maj_data": {
+                    "id_contrat": id_contrat,
+                    "date_saisie": date_crea,
+                    "puissance": puiss,
+                    "car": car,
+                    "opt_maint": opt_maint,
+                    "opt_mail": opt_mail,
+                    "etat_actuel": etat_actuel,
+                    "nouvel_etat": nouvel_etat if eligible_etat else etat_actuel,
+                    "etat_change": eligible_etat and (nouvel_etat != etat_actuel),
+                },
             })
             nb_modif += 1
         else:
@@ -1257,8 +1506,30 @@ def _import_journalier_eni(
 
     wb.close()
 
+    # -- PASSE PROD : creation + MAJ si pas simulation --
+    nb_crees = 0
+    nb_majs = 0
+    if not p.simulation:
+        for row in journ_eni:
+            try:
+                if row.get("Statut") == "à créer":
+                    ci = row.pop("_client_info", {})
+                    cd = row.pop("_contrat_data", {})
+                    if ci:
+                        cd["id_client"] = _lookup_or_create_client(ci, op_id)
+                    new_id = _create_eni_contrat(cd, op_id)
+                    row["IdContratCree"] = new_id
+                    nb_crees += 1
+                elif row.get("Statut") == "à modifier":
+                    md = row.pop("_maj_data", {})
+                    if md and md.get("id_contrat"):
+                        _apply_maj_eni_journ(md, op_id)
+                        nb_majs += 1
+            except Exception as e:
+                row["Erreur"] = str(e)
+
     resume.nb_modifications = nb_modif
-    resume.nb_valides = nb_creer  # reutilise champ : 'a creer' = futurs valides
+    resume.nb_valides = nb_creer
 
     return ImportEniResult(
         ok=True, type_import=4, type_label=label,
@@ -1268,6 +1539,57 @@ def _import_journalier_eni(
             f"{n_rows - 1} ligne(s) lue(s) | "
             f"À créer : {nb_creer} | À modifier : {nb_modif} | "
             f"Inchangés : {nb_inchanges}. "
-            f"{'(SIMULATION)' if p.simulation else '(PRODUCTION — phase 1 : pas de création/MAJ)'}"
+            + (f"PRODUCTION : {nb_crees} créés, {nb_majs} MAJ."
+               if not p.simulation else "(SIMULATION)")
         ),
     )
+
+
+def _apply_maj_eni_journ(md: dict, op_id: int) -> None:
+    """MAJ eni_contrat + eni_contrat_option pour un contrat existant
+    (ImportJournalierENI). Historise si l'etat change."""
+    db = get_pg_connection("adv")
+    id_contrat = int(md["id_contrat"])
+    sets = []
+    params: list = []
+    if md.get("date_saisie"):
+        sets.append("date_saisie = ?")
+        params.append(md["date_saisie"])
+    if md.get("puissance"):
+        sets.append("elec_puissance = ?")
+        params.append(int(md["puissance"]))
+    if md.get("car"):
+        sets.append("gaz_car_relevee = ?")
+        params.append(int(md["car"]))
+    if md.get("etat_change"):
+        sets.append("id_etat_contrat = ?")
+        params.append(int(md["nouvel_etat"]))
+
+    if sets:
+        sets.append("modif_date = NOW()")
+        sets.append("modif_op = ?")
+        sets.append("modif_elem = 'modif'")
+        params.append(int(op_id))
+        params.append(id_contrat)
+        db.query(
+            f"""UPDATE adv.pgt_eni_contrat
+                  SET {', '.join(sets)}
+                WHERE id_contrat = ?""",
+            tuple(params),
+        )
+
+    # MAJ option
+    db.query(
+        """UPDATE adv.pgt_eni_contrat_option
+              SET opt_entretien = ?, opt_mail = ?,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_contrat = ?""",
+        (bool(md.get("opt_maint")), bool(md.get("opt_mail")),
+         int(op_id), id_contrat),
+    )
+
+    if md.get("etat_change"):
+        _ajoute_histo_eni_etat(
+            id_contrat, int(md["etat_actuel"]), int(md["nouvel_etat"]),
+            "", op_id,
+        )
