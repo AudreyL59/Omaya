@@ -37,6 +37,76 @@ from app.intranets.adm.services.import_eni import (
 )
 
 
+# Mapping colonnes Base Journaliere Mobile (cf groupe grpJournalier Mobile)
+COLS_BJ_MOBILE = {
+    "num_bs": "A",              "date_signature": "C",
+    "date_activation": "F",     "date_portabilite": "H",
+    "date_resil": "BM",         "lib_statut": "I",
+    "type_vente": "AC",         "offre": "J",
+    "code_vendeur": "X",        "num_mobile": "AT",
+    "activ_control": "AP",      "processing_state": "AQ",
+    "client_cp": "AJ",          "client_nom": "BQ",
+    "client_prenom": "BR",      "client_gsm": "BS",
+    "client_mail": "BN",
+    "parcours_chaine": "BO",    "parcours_degroupe": "BF",
+}
+
+
+# Mapping colonnes Base Journaliere CALL (vendeur via nom, pas code)
+COLS_BJ_CALL = {
+    "num_bs": "A",              "vendeur": "K",
+    "date_signature": "C",      "date_rdv": "G",
+    "lib_statut": "I",          "offre": "J",
+    "type_vente": "AC",         "technologie": "AF",
+    "client_nom": "BQ",         "client_prenom": "BR",
+    "client_adresse": "AI",     "client_cplt": "BG",
+    "client_cp": "AJ",          "client_ville": "AL",
+    "client_naiss": "BP",       "client_tel_mobile": "BS",
+    "comment": "L",
+}
+
+
+# Mapping colonnes Base Hebdo (cf groupe grpHebdo). Pattern Fibre.
+COLS_BJ_HEBDO = {
+    "num_bs": "A",              "date_signature": "C",
+    "date_va": "D",             "date_ra": "E",
+    "date_rdv": "G",            "lib_statut": "I",
+    "statut_vente": "J",        "motif_annul": "K",
+    "type_install": "AM",       "type_vente": "AC",
+    "offre": "J",               "technologie": "AF",
+    "cluster_region": "AO",     "cluster_code": "AP",
+    "cluster_ville": "AQ",
+    "client_cp": "AJ",          "client_ville": "AL",
+    "client_rue": "AI",         "client_identite": "BG",
+    "client_tel": "BS",         "client_mail": "BN",
+}
+
+
+def _lookup_vendeur_by_nom_prenom(vendeur_cell: str) -> int:
+    """Lookup salarie par concat nom+prenom (variantes avec %)."""
+    if not vendeur_cell or not vendeur_cell.strip():
+        return 0
+    try:
+        db = get_pg_connection("rh")
+        s = vendeur_cell.upper()
+        for c in ("-", "'", " "):
+            s = s.replace(c, "%")
+        s = s.replace("%%", "%")
+        pattern = f"%{s}%"
+        rows = db.query(
+            """SELECT id_salarie FROM rh.pgt_salarie
+                WHERE UPPER(CONCAT(nom, '%', prenom)) LIKE ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 2""",
+            (pattern,),
+        ) or []
+        if len(rows) == 1:
+            return int(rows[0]["id_salarie"])
+    except Exception:
+        pass
+    return 0
+
+
 # Mapping colonnes Base Journaliere Fibre (cf groupe grpJournalier Fibre)
 COLS_BJ_FIBRE = {
     "num_bs": "A",                "date_signature": "C",
@@ -385,6 +455,356 @@ def _import_journalier_fibre(
             else:
                 resume.nb_non_modifies += 1
 
+    wb.close()
+
+
+def _import_journalier_mobile(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 2 : Base Journaliere Mobile. Pattern Fibre sans cluster.
+    Compare DatePort, DateResil, DateAct, ActivControl, ProcessingState."""
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        resume.nb_erreurs += 1
+        erreurs.append({"_erreur": f"Lecture : {e}"})
+        return
+    ws = wb.active
+    cols = {k: _col_letter_to_index(v) for k, v in COLS_BJ_MOBILE.items()}
+    db = get_pg_connection("adv")
+    ligne_depart = p.ligne_depart or 3
+
+    for i in range(ligne_depart, (ws.max_row or 0) + 1):
+        num_bs = _cell(ws, i, cols["num_bs"]).upper()
+        if not num_bs:
+            continue
+        date_sign = _parse_date_fr(_cell(ws, i, cols["date_signature"]))
+        date_act = _parse_date_fr(_cell(ws, i, cols["date_activation"]))
+        date_port = _parse_date_fr(_cell(ws, i, cols["date_portabilite"]))
+        date_resil = _parse_date_fr(_cell(ws, i, cols["date_resil"]))
+        type_vente = _type_vente_fibre(_cell(ws, i, cols["type_vente"]))
+        lib_offre = _cell(ws, i, cols["offre"])
+        lib_statut = _cell(ws, i, cols["lib_statut"])
+        id_etat = _id_etat_fibre(lib_statut)
+        num_mobile = _cell(ws, i, cols["num_mobile"])
+        activ_control = _cell(ws, i, cols["activ_control"])
+        processing_state = _cell(ws, i, cols["processing_state"])
+        client_cp = _cell(ws, i, cols["client_cp"])
+        client_nom = _cell(ws, i, cols["client_nom"])
+        client_prenom = _cell(ws, i, cols["client_prenom"])
+        client_gsm = _cell(ws, i, cols["client_gsm"])
+        if client_gsm and not client_gsm.startswith("0"):
+            client_gsm = "0" + client_gsm
+        client_mail = _cell(ws, i, cols["client_mail"])
+        code_vendeur = _cell(ws, i, cols["code_vendeur"])
+
+        # Lookup produit Mobile (sous_fam=MOBILE par defaut)
+        offre = _type_offre_fibre(lib_offre, 0, date_sign)
+
+        ctt = db.query_one(
+            """SELECT id_contrat, id_salarie, id_client, id_produit,
+                      type_vente, date_signature, date_portabilite,
+                      date_resil, date_racc_activ, activ_control,
+                      processing_state, id_etat_sfr, id_etat_contrat
+                 FROM adv.pgt_sfr_contrat
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_bs,),
+        )
+        if not ctt:
+            ajoutes.append({
+                "NumBS": num_bs, "DateSign": str(date_sign or ""),
+                "DateAct": str(date_act or ""),
+                "DatePort": str(date_port or ""),
+                "DateResil": str(date_resil or ""),
+                "ClientCP": client_cp,
+                "Client": f"{client_nom} {client_prenom}".strip(),
+                "LibOffre": lib_offre, "TypeVente": type_vente,
+                "NumMobile": num_mobile, "LibStatut": lib_statut,
+            })
+            resume.nb_ajoutes += 1
+        else:
+            id_contrat = int(ctt["id_contrat"])
+            modifs = []
+            if int(ctt.get("type_vente") or 0) != type_vente:
+                modifs.append(f"TypeVente -> {type_vente}")
+            if int(ctt.get("id_produit") or 0) != offre and offre:
+                modifs.append(f"Offre -> {offre}")
+            if ctt.get("date_portabilite") != date_port and date_port:
+                modifs.append(f"DatePort -> {date_port}")
+            if ctt.get("date_resil") != date_resil and date_resil:
+                modifs.append(f"DateResil -> {date_resil}")
+            if ctt.get("date_racc_activ") != date_act and date_act:
+                modifs.append(f"DateAct -> {date_act}")
+            if (_str(ctt.get("activ_control")) != activ_control
+                    and activ_control):
+                modifs.append(f"ActivControl -> {activ_control}")
+            if (_str(ctt.get("processing_state")) != processing_state
+                    and processing_state):
+                modifs.append(f"ProcessingState -> {processing_state}")
+            if modifs:
+                modifies.append({
+                    "NumBS": num_bs, "Modifs": " | ".join(modifs),
+                    "Client": f"{client_nom} {client_prenom}".strip(),
+                    "NumMobile": num_mobile,
+                })
+                resume.nb_modifies += 1
+                if not p.simulation:
+                    try:
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET type_vente = ?, id_produit = ?,
+                                      date_portabilite = COALESCE(?, date_portabilite),
+                                      date_resil = COALESCE(?, date_resil),
+                                      date_racc_activ = COALESCE(?, date_racc_activ),
+                                      activ_control = ?, processing_state = ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (type_vente, offre, date_port, date_resil,
+                             date_act, activ_control, processing_state,
+                             int(op_id), id_contrat),
+                        )
+                    except Exception as e:
+                        modifies[-1]["Erreur"] = str(e)
+            else:
+                resume.nb_non_modifies += 1
+    wb.close()
+
+
+def _import_journalier_call(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 3 : Base Journaliere CALL (FIBRE). Vendeur via nom complet.
+    Pattern : si pas trouve -> erreur 'VENDEUR inconnu'.
+    Si contrat existant + vendeur Fibre inconnu -> reattribution.
+    Si vendeur DB different -> erreur 'Vendeur différent'."""
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        resume.nb_erreurs += 1
+        erreurs.append({"_erreur": f"Lecture : {e}"})
+        return
+    ws = wb.active
+    cols = {k: _col_letter_to_index(v) for k, v in COLS_BJ_CALL.items()}
+    db = get_pg_connection("adv")
+    ligne_depart = p.ligne_depart or 2
+
+    for i in range(ligne_depart, (ws.max_row or 0) + 1):
+        num_bs = _cell(ws, i, cols["num_bs"]).upper()
+        if not num_bs:
+            continue
+        date_sign = _parse_date_fr(_cell(ws, i, cols["date_signature"]))
+        # Date RDV : prendre les 8 premiers chars JJMMAAAA
+        date_rdv_s = _cell(ws, i, cols["date_rdv"])[:8]
+        date_rdv = None
+        if len(date_rdv_s) == 8 and date_rdv_s.isdigit():
+            try:
+                date_rdv = date(int(date_rdv_s[4:8]), int(date_rdv_s[2:4]),
+                                int(date_rdv_s[0:2]))
+            except Exception:
+                pass
+        vendeur_cell = _cell(ws, i, cols["vendeur"])
+        client_nom = _cell(ws, i, cols["client_nom"])
+        client_prenom = _cell(ws, i, cols["client_prenom"])
+        client_adr = _cell(ws, i, cols["client_adresse"])
+        client_cp = _cell(ws, i, cols["client_cp"])
+        client_ville = _cell(ws, i, cols["client_ville"])
+        client_mobile = _cell(ws, i, cols["client_tel_mobile"])
+        nom_offre = _cell(ws, i, cols["offre"])
+        type_vente_s = _cell(ws, i, cols["type_vente"])
+        comment = _cell(ws, i, cols["comment"])
+        type_vente = _type_vente_fibre(type_vente_s)
+        techno = _type_techno_fibre(_cell(ws, i, cols["technologie"]))
+        offre = _type_offre_fibre(nom_offre, techno, date_sign)
+        box8 = "8" in nom_offre
+
+        id_vendeur = _lookup_vendeur_by_nom_prenom(vendeur_cell)
+        if id_vendeur == 0:
+            erreurs.append({
+                "NumBS": num_bs, "Erreur": "VENDEUR inconnu",
+                "VendeurCell": vendeur_cell,
+                "DateSign": str(date_sign or ""),
+                "NomOffre": nom_offre, "TypeVente": type_vente_s,
+            })
+            resume.nb_erreurs += 1
+            # On continue quand meme avec sentinelle FIBRE_INCONNU
+            id_vendeur = FIBRE_INCONNU
+
+        ctt = db.query_one(
+            """SELECT id_contrat, id_salarie, id_client, id_produit,
+                      non_call, type_vente, date_signature
+                 FROM adv.pgt_sfr_contrat
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_bs,),
+        )
+        if not ctt:
+            ajoutes.append({
+                "NumBS": num_bs, "Vendeur": vendeur_cell,
+                "DateSign": str(date_sign or ""),
+                "DateRDV": str(date_rdv or ""),
+                "Client": f"{client_nom} {client_prenom}".strip(),
+                "ClientCP": client_cp, "ClientVille": client_ville,
+                "NomOffre": nom_offre, "TypeVente": type_vente_s,
+                "Comment": comment,
+            })
+            resume.nb_ajoutes += 1
+        else:
+            id_contrat = int(ctt["id_contrat"])
+            id_sal_db = int(ctt.get("id_salarie") or 0)
+            modifies.append({
+                "NumBS": num_bs, "Vendeur": vendeur_cell,
+                "DateSign": str(date_sign or ""),
+                "DateRDV": str(date_rdv or ""),
+                "Client": f"{client_nom} {client_prenom}".strip(),
+                "ClientCP": client_cp, "NomOffre": nom_offre,
+                "Comment": comment,
+            })
+            resume.nb_modifies += 1
+
+            # Reattribution si fibre inconnu et nouveau vendeur trouve
+            if id_sal_db == FIBRE_INCONNU and id_vendeur != FIBRE_INCONNU:
+                modifies[-1]["Note"] = "Contrat Fibre Inconnu réattribué"
+                if not p.simulation:
+                    try:
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET id_salarie = ?, non_call = FALSE,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (id_vendeur, int(op_id), id_contrat),
+                        )
+                    except Exception as e:
+                        modifies[-1]["ErreurReattrib"] = str(e)
+            elif id_sal_db != id_vendeur and id_vendeur != FIBRE_INCONNU:
+                # Vendeur different
+                erreurs.append({
+                    "NumBS": num_bs, "Erreur": "Vendeur différent",
+                    "VendeurOmaya": id_sal_db, "VendeurImport": vendeur_cell,
+                    "DateSign": str(date_sign or ""),
+                })
+    wb.close()
+
+
+def _import_journalier_hebdo(
+    p: ImportSfrParams, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, migrations: list,
+    erreurs: list, resume: ImportSfrResume,
+) -> None:
+    """Type 4 : Base Hebdo. Pattern Fibre (T1) adapte :
+    - Dates lues avec [:10] (formats variables)
+    - Detection 'FTTB VERS FTTH' pour migrations
+    - client_identite splittee par ',' (nom, prenom)
+    - dateref = 20201001 (filtre antiques)."""
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        resume.nb_erreurs += 1
+        erreurs.append({"_erreur": f"Lecture : {e}"})
+        return
+    ws = wb.active
+    cols = {k: _col_letter_to_index(v) for k, v in COLS_BJ_HEBDO.items()}
+    db = get_pg_connection("adv")
+    ligne_depart = p.ligne_depart or 3
+    date_ref = date(2020, 10, 1)
+
+    for i in range(ligne_depart, (ws.max_row or 0) + 1):
+        num_bs = _cell(ws, i, cols["num_bs"]).upper()
+        if not num_bs:
+            continue
+        # Dates : prendre [:10] avant parse
+        date_sign = _parse_date_fr(_cell(ws, i, cols["date_signature"])[:10])
+        date_va = _parse_date_fr(_cell(ws, i, cols["date_va"])[:10])
+        date_ra = _parse_date_fr(_cell(ws, i, cols["date_ra"])[:10])
+        date_rdv = _parse_date_fr(_cell(ws, i, cols["date_rdv"])[:10])
+        type_v_s = _cell(ws, i, cols["type_vente"])
+        type_vente = _type_vente_fibre(type_v_s)
+        techno = _type_techno_fibre(_cell(ws, i, cols["technologie"]))
+        lib_offre = _cell(ws, i, cols["offre"])
+        offre = _type_offre_fibre(lib_offre, techno, date_sign)
+        type_install = _cell(ws, i, cols["type_install"])
+        lib_statut = _cell(ws, i, cols["lib_statut"])
+        id_etat = _id_etat_fibre(lib_statut)
+        cluster_code = _cell(ws, i, cols["cluster_code"])
+        cluster_ville = _cell(ws, i, cols["cluster_ville"])
+        client_cp = _cell(ws, i, cols["client_cp"])
+        client_ville = _cell(ws, i, cols["client_ville"])
+        client_rue = _cell(ws, i, cols["client_rue"])
+        client_identite = _cell(ws, i, cols["client_identite"])
+        client_tel = _cell(ws, i, cols["client_tel"])
+        client_mail = _cell(ws, i, cols["client_mail"])
+        motif_annul = _cell(ws, i, cols["motif_annul"])
+
+        # Split identite "NOM, PRENOM"
+        parts = client_identite.split(",", 1)
+        client_nom = parts[0].strip() if parts else ""
+        client_prenom = parts[1].strip() if len(parts) > 1 else ""
+
+        # Filtre antiques
+        if (not date_sign or date_sign < date_ref) and (
+                not date_ra or date_ra < date_ref):
+            continue
+
+        # Detection migration FTTB VERS FTTH
+        is_mig = "FTTB VERS FTTH" in lib_offre.upper()
+        if is_mig and type_vente == 3:
+            type_vente = 4
+            migrations.append({
+                "NumBS": num_bs, "DateSign": str(date_sign or ""),
+                "ClientCP": client_cp, "ClientVille": client_ville,
+                "LibStatut": lib_statut, "ClusterCode": cluster_code,
+            })
+            resume.nb_migrations += 1
+
+        cluster = _test_cluster_fibre(cluster_code)
+        box8 = "8" in lib_offre
+
+        ctt = db.query_one(
+            """SELECT id_contrat, id_salarie, id_client, id_produit,
+                      id_etat_contrat, type_vente, date_signature,
+                      id_sfr_cluster
+                 FROM adv.pgt_sfr_contrat
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_bs,),
+        )
+        if not ctt:
+            ajoutes.append({
+                "NumBS": num_bs, "DateSign": str(date_sign or ""),
+                "DateVa": str(date_va or ""), "DateRa": str(date_ra or ""),
+                "DateRDV": str(date_rdv or ""), "ClientCP": client_cp,
+                "ClientVille": client_ville, "LibStatut": lib_statut,
+                "TypeVente": type_vente, "ClusterCode": cluster_code,
+            })
+            resume.nb_ajoutes += 1
+        else:
+            id_contrat = int(ctt["id_contrat"])
+            modifs = []
+            if int(ctt.get("type_vente") or 0) != type_vente:
+                modifs.append(f"TypeVente -> {type_vente}")
+            if int(ctt.get("id_produit") or 0) != offre and offre:
+                modifs.append(f"Offre -> {offre}")
+            if int(ctt.get("id_etat_contrat") or 0) != id_etat and id_etat:
+                modifs.append(f"Etat -> {id_etat}")
+            if modifs:
+                modifies.append({
+                    "NumBS": num_bs, "Modifs": " | ".join(modifs),
+                    "DateSign Omaya": str(ctt.get("date_signature") or ""),
+                    "ClientCP": client_cp,
+                })
+                resume.nb_modifies += 1
+            else:
+                resume.nb_non_modifies += 1
     wb.close()
 
 
@@ -1288,6 +1708,16 @@ def run_import_sfr(
                     ajoutes, modifies, migrations, modif_vendeurs,
                     erreurs, resume,
                 )
+            elif p.type_import == 2:
+                _import_journalier_mobile(p, content, op_id,
+                                          ajoutes, modifies, erreurs, resume)
+            elif p.type_import == 3:
+                _import_journalier_call(p, content, op_id,
+                                        ajoutes, modifies, erreurs, resume)
+            elif p.type_import == 4:
+                _import_journalier_hebdo(p, content, op_id,
+                                         ajoutes, modifies, migrations,
+                                         erreurs, resume)
             elif p.type_import == 5:
                 _import_options(p, content, op_id,
                                 modifies, erreurs, resume)
