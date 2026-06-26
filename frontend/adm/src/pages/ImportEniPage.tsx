@@ -11,7 +11,7 @@
 
 import { useRef, useState } from 'react'
 import {
-  Calendar, CheckSquare, FileUp, Loader2, Play, RefreshCw,
+  Calendar, CheckCircle2, Download, FileUp, Loader2, Mail, Play, XCircle,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
@@ -55,6 +55,24 @@ interface ImportResult {
   pb_vendeur: Record<string, unknown>[]
   contrat_import_journ_eni: Record<string, unknown>[]
   message: string
+  xlsx_b64: string
+  xlsx_name: string
+  mail_envoye: boolean
+}
+
+const downloadB64 = (b64: string, name: string): void => {
+  const bin = atob(b64)
+  const buf = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+  const blob = new Blob([buf], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = name || 'rapport.xlsx'
+  document.body.appendChild(a); a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -212,6 +230,43 @@ export default function ImportEniPage() {
           </label>
         </div>
       </div>
+
+      {/* Bandeau rapport + mail */}
+      {result && (
+        <div className="border rounded px-3 py-2 mb-3 flex items-center gap-3 text-xs"
+             style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>
+          {result.xlsx_b64 && (
+            <button type="button"
+                    onClick={() => downloadB64(result.xlsx_b64, result.xlsx_name)}
+                    className="flex items-center gap-1 px-3 py-1 rounded text-white"
+                    style={{ backgroundColor: COL_PRIMARY }}>
+              <Download className="w-3.5 h-3.5" />
+              Télécharger rapport ({result.xlsx_name})
+            </button>
+          )}
+          {result.xlsx_b64 && (
+            <span style={{ color: '#A68D8A' }}>
+              {(Math.round(result.xlsx_b64.length * 0.75 / 1024))} ko
+            </span>
+          )}
+          <div className="flex-1" />
+          {result.mail_envoye ? (
+            <span className="flex items-center gap-1"
+                  style={{ color: '#16a34a' }}>
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <Mail className="w-3.5 h-3.5" />
+              Mail BO envoyé
+            </span>
+          ) : (
+            <span className="flex items-center gap-1"
+                  style={{ color: '#B91C1C' }}>
+              <XCircle className="w-3.5 h-3.5" />
+              <Mail className="w-3.5 h-3.5" />
+              Échec envoi mail
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Onglets resultats */}
       <div className="flex-1 flex flex-col min-h-0 border rounded"

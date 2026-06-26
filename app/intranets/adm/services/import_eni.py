@@ -169,6 +169,9 @@ class ImportEniResult(BaseModel):
     pb_vendeur: list[dict] = []
     contrat_import_journ_eni: list[dict] = []
     message: str = ""
+    xlsx_b64: str = ""           # rapport XLSX en base64 (pour DL frontend)
+    xlsx_name: str = ""          # nom du fichier
+    mail_envoye: bool = False    # True si l'envoi a reussi
 
 
 TYPE_LABELS = {
@@ -511,7 +514,7 @@ def _import_journalier_call(
 
     wb.close()
 
-    return ImportEniResult(
+    res = ImportEniResult(
         ok=True, type_import=1, type_label=label,
         simulation=p.simulation, resume=resume,
         contrats_modifies=modifs,
@@ -525,6 +528,8 @@ def _import_journalier_call(
             f"{'(SIMULATION : aucune écriture)' if p.simulation else '(PRODUCTION : MAJ appliquées)'}"
         ),
     )
+    _attach_xlsx_and_mail(res, op_id, "ImportCallENI")
+    return res
 
 
 # ---------------------------------------------------------------------------
@@ -827,7 +832,7 @@ def _import_run_valides(
             except Exception as e:
                 row["Erreur"] = str(e)
 
-    return ImportEniResult(
+    res = ImportEniResult(
         ok=True, type_import=2, type_label=label,
         simulation=p.simulation, resume=resume,
         contrats_run=contrats_run + hors_delai,
@@ -844,6 +849,8 @@ def _import_run_valides(
                else "(SIMULATION)")
         ),
     )
+    _attach_xlsx_and_mail(res, op_id, "ImportRunENIValide")
+    return res
 
 
 def _apply_maj_run_valides(md: dict, op_id: int, simulation: bool) -> bool:
@@ -1147,7 +1154,7 @@ def _import_run_resil(
             except Exception as e:
                 row["Erreur"] = str(e)
 
-    return ImportEniResult(
+    res = ImportEniResult(
         ok=True, type_import=3, type_label=label,
         simulation=p.simulation, resume=resume,
         contrats_run=contrats_run + hors_delai,
@@ -1165,6 +1172,8 @@ def _import_run_resil(
                else "(SIMULATION)")
         ),
     )
+    _attach_xlsx_and_mail(res, op_id, "ImportRunENIResilDecom")
+    return res
 
 
 # ---------------------------------------------------------------------------
@@ -1730,7 +1739,7 @@ def _import_journalier_eni(
     resume.nb_modifications = nb_modif
     resume.nb_valides = nb_creer
 
-    return ImportEniResult(
+    res = ImportEniResult(
         ok=True, type_import=4, type_label=label,
         simulation=p.simulation, resume=resume,
         contrat_import_journ_eni=journ_eni,
@@ -1742,6 +1751,8 @@ def _import_journalier_eni(
                if not p.simulation else "(SIMULATION)")
         ),
     )
+    _attach_xlsx_and_mail(res, op_id, "ImportJournPLENITUDE")
+    return res
 
 
 def _apply_maj_eni_journ(md: dict, op_id: int) -> None:
@@ -1792,3 +1803,169 @@ def _apply_maj_eni_journ(md: dict, op_id: int) -> None:
             id_contrat, int(md["etat_actuel"]), int(md["nouvel_etat"]),
             "", op_id,
         )
+
+
+# ---------------------------------------------------------------------------
+# Export XLSX + envoi mail BO (commun aux 4 types)
+# ---------------------------------------------------------------------------
+
+
+def _resume_to_lines(resume: ImportEniResume) -> list[tuple[str, int]]:
+    return [
+        ("NB Validés", resume.nb_valides),
+        ("NB Déjà Statués", resume.nb_deja_statues),
+        ("NB Doublons", resume.nb_doublons),
+        ("NB Introuvables", resume.nb_introuvables),
+        ("NB Décommissions", resume.nb_decommissions),
+        ("NB Résiliés", resume.nb_resilies),
+        ("NB Modifications", resume.nb_modifications),
+        ("NB Erreurs Mails", resume.nb_erreurs_mails),
+        ("NB Erreurs Entretien", resume.nb_erreurs_entretien),
+        ("NB Contrats Hors Délai", resume.nb_contrats_hors_delai),
+        ("NB Erreurs Offres", resume.nb_erreurs_offres),
+        ("NB Erreurs Type comptage", resume.nb_erreurs_type_comptage),
+        ("NB Erreurs Énergie Verte", resume.nb_erreurs_energie_verte),
+        ("NB Erreurs CAR", resume.nb_erreurs_car),
+        ("NB Erreurs PUISS", resume.nb_erreurs_puiss),
+        ("NB Erreurs Reforestation", resume.nb_erreurs_reforest),
+        ("NB Erreurs Protection", resume.nb_erreurs_protection),
+    ]
+
+
+def _build_xlsx_import_eni(res: ImportEniResult) -> bytes:
+    """Genere un XLSX recapitulatif avec :
+      - Feuille 1 : Resume (compteurs)
+      - Feuille N : une feuille par tableau non vide (cf. WinDev 8 feuilles
+        pour RUN Valides, 5 pour RUN Resils, 3 pour Journ CALL, 1 pour
+        Journ ENI). On dynamise selon ce qui est rempli."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = Workbook()
+    # Feuille 1 : Resume
+    ws = wb.active
+    ws.title = "Résumé"
+    ws.append(["Indicateur", "Nombre"])
+    bold = Font(bold=True)
+    header_fill = PatternFill("solid", fgColor="17494E")
+    header_font = Font(bold=True, color="FFFFFF")
+    for c in ws[1]:
+        c.font = header_font
+        c.fill = header_fill
+        c.alignment = Alignment(horizontal="center")
+    for lbl, n in _resume_to_lines(res.resume):
+        ws.append([lbl, n])
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 12
+
+    sections: list[tuple[str, list[dict]]] = [
+        ("Contrats modifiés", res.contrats_modifies),
+        ("Contrats non trouvés", res.contrats_non_trouves),
+        ("Contrats RUN", res.contrats_run),
+        ("Problème Vendeur", res.pb_vendeur),
+        ("Contrat Import Journ ENI", res.contrat_import_journ_eni),
+    ]
+    for title, rows in sections:
+        if not rows:
+            continue
+        sheet = wb.create_sheet(title=title[:31])
+        keys = list(rows[0].keys())
+        sheet.append(keys)
+        for c in sheet[1]:
+            c.font = header_font
+            c.fill = header_fill
+            c.alignment = Alignment(horizontal="center", wrap_text=True)
+        for r in rows:
+            sheet.append([
+                str(r.get(k, "")) if r.get(k) is not None else ""
+                for k in keys
+            ])
+        # Largeur auto basique
+        for i, k in enumerate(keys, start=1):
+            col = chr(64 + i) if i <= 26 else f"A{chr(64 + i - 26)}"
+            sheet.column_dimensions[col].width = max(12, min(40, len(k) + 4))
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
+def _send_mail_import_eni(
+    res: ImportEniResult, xlsx_bytes: bytes, xlsx_name: str, op_id: int,
+) -> bool:
+    """Envoie le mail BO recap a l'op connecte + intranet@omaya.fr.
+    Mail BO (pas RH) : expediteur affiche 'intranet@omaya.fr'."""
+    from app.shared.notifications.mail import envoi_mail
+    from app.core.database.pg import get_pg_connection
+
+    # Mail de l'op connecte
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        """SELECT mail FROM rh.pgt_salarie_coordonnees
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(op_id),),
+    )
+    op_mail = (r.get("mail") if r else "") or ""
+
+    destinataires = []
+    if op_mail:
+        destinataires.append(op_mail)
+    # Toujours envoyer une copie a intranet (mail BO support)
+    intranet_mail = "intranet@omaya.fr"
+    cc = []
+    if intranet_mail not in destinataires:
+        cc.append(intranet_mail)
+
+    if not destinataires and not cc:
+        return False
+
+    if not destinataires:
+        destinataires = cc
+        cc = []
+
+    sujet_prefix = "SIMULATION : " if res.simulation else ""
+    sujet = f"{sujet_prefix}Importation {res.type_label} du {date.today().strftime('%d/%m/%Y')}"
+
+    resume_html = "".join(
+        f"<li><strong>{lbl} :</strong> {n}</li>"
+        for lbl, n in _resume_to_lines(res.resume) if n > 0
+    )
+    html = (
+        "<p>Bonjour,</p>"
+        f"<p>Fin importation le : {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>"
+        f"<p><strong>{res.message}</strong></p>"
+        f"<ul>{resume_html}</ul>"
+        "<p>Service Importation EXOSPHERE</p>"
+    )
+
+    try:
+        return envoi_mail(
+            sujet=sujet, html=html,
+            destinataires=destinataires,
+            cc=cc,
+            expediteur="intranet@omaya.fr",
+            attachments=[(xlsx_name, xlsx_bytes)],
+        )
+    except Exception:
+        return False
+
+
+def _attach_xlsx_and_mail(
+    res: ImportEniResult, op_id: int, file_prefix: str = "ImportENI",
+) -> None:
+    """Genere le XLSX, l'attache en base64 dans res.xlsx_b64, envoie le
+    mail. Modifie res in-place."""
+    import base64
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    suffix = "_SIMU" if res.simulation else ""
+    xlsx_name = f"{file_prefix}_{ts}{suffix}.xlsx"
+    try:
+        xlsx_bytes = _build_xlsx_import_eni(res)
+    except Exception:
+        return
+    res.xlsx_name = xlsx_name
+    res.xlsx_b64 = base64.b64encode(xlsx_bytes).decode("ascii")
+    res.mail_envoye = _send_mail_import_eni(
+        res, xlsx_bytes, xlsx_name, op_id,
+    )
