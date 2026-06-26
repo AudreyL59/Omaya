@@ -105,7 +105,7 @@ export default function ImportEniPage() {
   const [p2Au, setP2Au] = useState(today())
   const [p2Mois, setP2Mois] = useState(moisCourant())
   const [moisDistrib, setMoisDistrib] = useState(moisCourant())
-  const [majProduit, setMajProduit] = useState(true)
+  const [majProduit, setMajProduit] = useState(false)
   const [majEtats, setMajEtats] = useState(false)
 
   const [file, setFile] = useState<File | null>(null)
