@@ -194,8 +194,8 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
 
   return (
     <div className="flex gap-3 h-full">
-      {/* Tableau gauche */}
-      <div className="flex-1 flex flex-col min-w-0 border rounded"
+      {/* Tableau gauche - largeur reduite de moitie */}
+      <div className="w-1/2 flex flex-col min-w-0 border rounded"
            style={{ borderColor: COL_BORDER }}>
         <div className="px-3 py-2 flex items-center gap-2 border-b"
              style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>
@@ -274,7 +274,7 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
       </div>
 
       {/* Form droite */}
-      <div className="w-40 shrink-0 border rounded p-3 space-y-2"
+      <div className="w-80 shrink-0 border rounded p-3 space-y-2"
            style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>
         <Row label="ID">
           <input value={formId} disabled
@@ -294,7 +294,7 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
           </Row>
         )}
         {cfg.hasIsActif && (
-          <label className="flex items-center gap-2 text-sm"
+          <label className="flex items-center gap-2 text-sm pl-24"
                  style={{ color: COL_BRUN }}>
             <input type="checkbox" checked={formActif}
                    onChange={e => setFormActif(e.target.checked)} />
@@ -348,8 +348,8 @@ function EntityTab({ cfg }: { cfg: TabCfg }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
-      <label className="text-[10px] block" style={{ color: COL_BRUN }}>{label}</label>
+    <div className="grid grid-cols-[100px_1fr] items-center gap-2 min-h-8">
+      <label className="text-xs text-right" style={{ color: COL_BRUN }}>{label}</label>
       <div className="min-w-0">{children}</div>
     </div>
   )
