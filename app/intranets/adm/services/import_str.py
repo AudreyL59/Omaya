@@ -55,10 +55,18 @@ COLS_RH_STR = {
 }
 
 
-# Mapping colonnes RUN STR (typique : num + mois paiement + montant)
+# Mapping colonnes RUN STR (cf groupe _AA, meme layout que _AA1 du Resil Hebdo
+# mais sans suffixe 1). Pareil que COLS_RH_STR : C/D vendeur, E dateSign,
+# S NumBS, V Statut, W Remarques, I-R Client.
 COLS_RUN_STR = {
-    "num_bs": "A",              "statut": "B",
-    "montant": "C",
+    "vendeur_nom": "C",         "vendeur_prenom": "D",
+    "date_signature": "E",      "client_civilite": "I",
+    "client_nom": "J",          "client_prenom": "K",
+    "client_adr1": "L",         "client_adr2": "M",
+    "client_cp": "N",           "client_ville": "O",
+    "client_tel": "P",          "client_mobile": "Q",
+    "client_naiss": "R",        "num_bs": "S",
+    "statut": "V",              "remarques": "W",
 }
 
 
@@ -151,31 +159,101 @@ def _id_etat_str_by_lib(lib_statut: str) -> int:
 
 
 def _lookup_vendeur_str_nom_prenom(nom: str, prenom: str) -> int:
-    """Lookup salarie par nom + prenom exacts. Retourne 0 si introuvable
-    ou ambigu (>1 match)."""
-    if not nom or not prenom:
+    """Lookup salarie via 5 variantes (cf WinDev ReqRechercheSalarieByNomPrenom) :
+    1. nom + prenom exacts
+    2. nom + capitalise(prenom) (LIKE)
+    3. nom + premiere lettre prenom (%)
+    4. echange : prenom + nom
+    5. prenom + premiere lettre nom (%)
+    Retourne 0 si introuvable ou ambigu (>1 match)."""
+    if not nom and not prenom:
+        return 0
+    nom = (nom or "").strip()
+    prenom = (prenom or "").strip()
+    if not nom and not prenom:
         return 0
     db = get_pg_connection("rh")
-    rows = db.query(
-        """SELECT id_salarie FROM rh.pgt_salarie
-            WHERE UPPER(nom) = UPPER(?) AND UPPER(prenom) = UPPER(?)
-              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-            LIMIT 2""",
-        (nom.strip(), prenom.strip()),
-    ) or []
-    if len(rows) == 1:
-        return int(rows[0]["id_salarie"])
-    # Fallback : LIKE
-    rows = db.query(
-        """SELECT id_salarie FROM rh.pgt_salarie
-            WHERE UPPER(nom) LIKE UPPER(?) AND UPPER(prenom) LIKE UPPER(?)
-              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-            LIMIT 2""",
-        (f"{nom.strip()}%", f"{prenom.strip()}%"),
-    ) or []
-    if len(rows) == 1:
-        return int(rows[0]["id_salarie"])
+
+    def _q(n: str, p: str) -> int:
+        rows = db.query(
+            """SELECT id_salarie FROM rh.pgt_salarie
+                WHERE UPPER(nom) LIKE UPPER(?) AND UPPER(prenom) LIKE UPPER(?)
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 2""",
+            (n, p),
+        ) or []
+        return int(rows[0]["id_salarie"]) if len(rows) == 1 else 0
+
+    if nom and prenom:
+        for n, p in [
+            (nom, prenom),
+            (nom, prenom.title()),
+            (nom, prenom[:1] + "%" if prenom else ""),
+            (prenom, nom),
+            (prenom, nom[:1] + "%" if nom else ""),
+        ]:
+            r = _q(n, p)
+            if r:
+                return r
     return 0
+
+
+def _id_etat_str_journ(statut: str, remarques: str) -> int:
+    """Determine id_etat_contrat selon statut + remarques (cf WinDev) :
+    - default = 37 (En cours)
+    - 'RESILIE' -> 16
+    - 'NON VALIDE' -> 14 (ou 22 si signatures/IBAN/SEPA)
+    - 'REJET' ou 'KO' -> 14 (ou 22 si signatures/IBAN/SEPA,
+      12 si doublon, 63 si absence mail, 13 si telephone/adresse)
+    - default + 'EN ATTENTE' dans remarques -> 69 (Temporaire)
+    """
+    s = (statut or "").upper()
+    r = (remarques or "").upper()
+    id_etat = 37
+
+    if "RESILIE" in s:
+        id_etat = 16
+    elif "NON VALIDE" in s:
+        id_etat = 14
+        if ("SIGNATURES NON CONFORMES" in r or "IBAN" in r or "SEPA" in r):
+            id_etat = 22
+    elif "REJET" in s or "KO" in s:
+        id_etat = 14
+        if ("SIGNATURES NON CONFORMES" in r or "IBAN" in r or "SEPA" in r):
+            id_etat = 22
+        if "DOUBLON" in r:
+            id_etat = 12
+        if "ABSENCE MAIL" in r or "MAIL DOCUSIGN DIFFERENT" in r:
+            id_etat = 63
+        if "TÉLÉPHONE ERRONÉ" in r or "TELEPHONE ERRONE" in r or \
+           "ABSENCE ADRESSE POSTALE" in r:
+            id_etat = 13
+
+    if id_etat == 37 and "EN ATTENTE" in r:
+        id_etat = 69
+    return id_etat
+
+
+def _lookup_tk_call_str(num_bs: str) -> dict:
+    """ReqTkCall_ByNumCtt pour STR : recupere id_salarie + info client."""
+    if not num_bs:
+        return {}
+    try:
+        db = get_pg_connection("ticket_bo")
+        r = db.query_one(
+            """SELECT t.id_salarie, t.nom_client, t.nom_marital_client,
+                      t.prenom_client, t.datenaiss, t.adresse1, t.adresse2,
+                      t.cp, t.ville, t.mobile1, t.adr_mail
+                 FROM ticket_bo.pgt_tk_call t
+                 JOIN ticket_bo.pgt_tk_call_panier p ON p.id_tk_liste = t.id_tk_liste
+                WHERE UPPER(p.num_bs) = UPPER(?)
+                  AND (t.modif_elem IS NULL OR t.modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_bs,),
+        )
+        return r or {}
+    except Exception:
+        return {}
 
 
 def _info_salarie_str(id_sal: int) -> dict:
@@ -259,11 +337,16 @@ def _import_journalier_str(
     p: ImportStrParams, fname: str, content: bytes, op_id: int,
     ajoutes: list, modifies: list, pb_vendeur: list, resume: ImportStrResume,
 ) -> None:
-    """Type 1 : Base Journaliere STR. Pour chaque ligne :
-    - Lookup vendeur par nom+prenom
-    - Lookup contrat par num_bs
-      * Pas existant -> ajout (creation via _create_str_contrat en prod)
-      * Existant -> deja saisi (+ reattribution vendeur si different)
+    """Type 1 : Base Journaliere STR (cf WinDev ImportJournalier) :
+    - idProd = 78 par defaut (STR)
+    - Determine idEtat selon statut + remarques (cf _id_etat_str_journ)
+    - Si BS existe -> 'Contrats deja saisis' (modifies)
+      * Si idEtat different + type_etat actuel in (1,2) -> MAJ etat + histo
+    - Si BS n'existe pas :
+      * Lookup vendeur multi-variantes (5 fallbacks)
+      * Si pas trouve -> sheet 'Vendeur introuvable' (pb_vendeur)
+      * Lookup TK_Call STR -> remplace info client si trouve
+      * Ajout (sheet 1, creation contrat en prod via _create_str_contrat)
     """
     from openpyxl import load_workbook
     try:
@@ -275,6 +358,14 @@ def _import_journalier_str(
     ws = wb.active
     cols = {k: _col_letter_to_index(v) for k, v in COLS_BJ_STR.items()}
     db = get_pg_connection("adv")
+
+    ID_PROD_STR = 78
+    # Lookup type prod (cache)
+    prod_info = db.query_one(
+        "SELECT lib_produit FROM adv.pgt_str_produit WHERE id_produit = ? LIMIT 1",
+        (ID_PROD_STR,),
+    )
+    type_prod = (prod_info.get("lib_produit") if prod_info else "") or ""
 
     for i in range(2, (ws.max_row or 0) + 1):
         num_bs = _cell(ws, i, cols["num_bs"]).upper()
@@ -292,13 +383,17 @@ def _import_journalier_str(
         statut_vente = _cell(ws, i, cols["statut_vente"])
         remarques = _cell(ws, i, cols["remarques"])
 
-        id_vendeur = _lookup_vendeur_str_nom_prenom(vendeur_nom, vendeur_prenom)
-        info_sal = _info_salarie_str(id_vendeur) if id_vendeur else {}
-        id_ste = int(info_sal.get("id_ste") or 0)
-        id_etat = _id_etat_str_by_lib(statut_vente) or 1
+        # Determine id_etat
+        id_etat = _id_etat_str_journ(statut_vente, remarques)
+        etat_info = db.query_one(
+            "SELECT lib_etat FROM adv.pgt_str_etat_contrat WHERE id_etat = ? LIMIT 1",
+            (id_etat,),
+        )
+        lib_etat = (etat_info.get("lib_etat") if etat_info else "") or ""
 
         ctt = db.query_one(
-            """SELECT id_contrat, id_salarie, num_bs, date_signature, id_produit
+            """SELECT id_contrat, id_salarie, id_client, num_bs,
+                      date_signature, id_etat_contrat, opt_mandat
                  FROM adv.pgt_str_contrat
                 WHERE UPPER(num_bs) = UPPER(?)
                   AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
@@ -306,50 +401,183 @@ def _import_journalier_str(
             (num_bs,),
         )
 
-        if not ctt:
-            ajoutes.append({
-                "NumBS": num_bs, "DateSign": str(date_sign or ""),
-                "Distributeur": distributeur,
-                "Vendeur": f"{vendeur_nom} {vendeur_prenom}".strip(),
-                "IdSalarie": id_vendeur, "Société": id_ste,
-                "Client": f"{client_civilite} {client_nom} {client_prenom}".strip(),
-                "ClientCP": client_cp, "ClientVille": client_ville,
-                "StatutVente": statut_vente, "Remarques": remarques,
-                "EtatContrat": id_etat,
-                "_payload_create": {
-                    "num_bs": num_bs, "id_salarie": id_vendeur,
-                    "id_ste": id_ste, "id_produit": 0,
-                    "etat_contrat": id_etat,
-                    "date_signature": date_sign,
-                    "non_call": True, "info_interne": remarques,
-                },
-            })
-            if id_vendeur == 0:
-                pb_vendeur.append({
-                    "NumBS": num_bs, "DateSign": str(date_sign or ""),
-                    "Vendeur Import": f"{vendeur_nom} {vendeur_prenom}".strip(),
-                    "Erreur": "Vendeur introuvable",
-                })
-                resume.nb_pb_vendeur += 1
-            resume.nb_ajoutes += 1
-        else:
+        if ctt:
+            # Contrat existant
             id_contrat = int(ctt["id_contrat"])
             id_sal_db = int(ctt.get("id_salarie") or 0)
+            etat_db = int(ctt.get("id_etat_contrat") or 0)
+            etat_db_info = db.query_one(
+                """SELECT id_type_etat FROM adv.pgt_str_etat_contrat
+                    WHERE id_etat = ? LIMIT 1""",
+                (etat_db,),
+            )
+            type_etat_db = (int(etat_db_info.get("id_type_etat") or 0)
+                            if etat_db_info else 0)
+
+            info_sal_db = _info_salarie_str(id_sal_db)
+            agence, equipe, _ = _affectation_str(id_sal_db)
+            changement_etat = "non"
+
+            if id_etat != etat_db and type_etat_db in (1, 2):
+                changement_etat = "oui"
+                if not p.simulation:
+                    try:
+                        db.query(
+                            """UPDATE adv.pgt_str_contrat
+                                  SET id_etat_contrat = ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (id_etat, int(op_id), id_contrat),
+                        )
+                        _ajoute_histo_str_etat(id_contrat, etat_db, id_etat,
+                                               "", op_id)
+                    except Exception as e:
+                        changement_etat = f"oui (err: {e})"
+
             modifies.append({
-                "NumBS": ctt.get("num_bs"),
-                "DateSign OMAYA": str(ctt.get("date_signature") or ""),
-                "IdSalarie DB": id_sal_db,
-                "Vendeur Import": f"{vendeur_nom} {vendeur_prenom}".strip(),
+                "NumBS": num_bs,
+                "ClientNom": client_nom, "ClientPrenom": client_prenom,
+                "ClientCP": client_cp, "ClientVille": client_ville,
+                "Vendeur": (f"{_str(info_sal_db.get('nom'))} "
+                            f"{capitalise_str(_str(info_sal_db.get('prenom')))}".strip()),
+                "DateSign": str(ctt.get("date_signature") or ""),
+                "TypeProd": type_prod, "Statut": lib_etat,
+                "Agence": agence, "Equipe": equipe,
+                "SEPADemat": bool(ctt.get("opt_mandat")),
+                "Remarques": remarques, "MAJ Etat": changement_etat,
             })
             resume.nb_deja_saisis += 1
-            if id_sal_db != id_vendeur and id_vendeur != 0:
-                pb_vendeur.append({
-                    "NumBS": ctt.get("num_bs"),
-                    "Erreur": "vendeur réattribué",
-                    "OldIdSalarie": id_sal_db, "NewIdSalarie": id_vendeur,
-                    "_id_contrat": id_contrat,
-                })
+            continue
+
+        # Contrat nouveau : lookup vendeur
+        id_vendeur = _lookup_vendeur_str_nom_prenom(vendeur_nom, vendeur_prenom)
+        nom_vend_final = f"{vendeur_nom} {vendeur_prenom}".strip()
+        agence = ""; equipe = ""
+        id_ste = 0
+
+        if id_vendeur == 0:
+            # Vendeur introuvable -> sheet 3
+            pb_vendeur.append({
+                "NumBS": num_bs, "ClientNom": client_nom,
+                "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                "ClientVille": client_ville,
+                "Vendeur": nom_vend_final,
+                "DateSign": str(date_sign or ""),
+                "TypeProd": type_prod, "Statut": lib_etat,
+                "Remarques": remarques,
+                "Erreur": "Vendeur introuvable",
+            })
+            resume.nb_pb_vendeur += 1
+        else:
+            info_sal = _info_salarie_str(id_vendeur)
+            id_ste = int(info_sal.get("id_ste") or 0)
+            agence, equipe, _ = _affectation_str(id_vendeur)
+            nom_vend_final = (f"{_str(info_sal.get('nom'))} "
+                              f"{capitalise_str(_str(info_sal.get('prenom')))}".strip())
+
+        # Lookup TK_Call STR pour remplacer info client si trouve
+        tk = _lookup_tk_call_str(num_bs)
+        if tk:
+            if tk.get("id_salarie"):
+                id_vendeur = int(tk["id_salarie"])
+                info_sal = _info_salarie_str(id_vendeur)
+                id_ste = int(info_sal.get("id_ste") or 0)
+                agence, equipe, _ = _affectation_str(id_vendeur)
+                nom_vend_final = (f"{_str(info_sal.get('nom'))} "
+                                  f"{capitalise_str(_str(info_sal.get('prenom')))}".strip())
+            client_nom = tk.get("nom_client") or client_nom
+            if tk.get("nom_marital_client"):
+                client_nom += f" ep {tk['nom_marital_client']}"
+            client_prenom = tk.get("prenom_client") or client_prenom
+            client_cp = tk.get("cp") or client_cp
+            client_ville = tk.get("ville") or client_ville
+
+        # Ajout sheet 1
+        ajoutes.append({
+            "NumBS": num_bs, "ClientNom": client_nom,
+            "ClientPrenom": client_prenom, "ClientCP": client_cp,
+            "ClientVille": client_ville,
+            "ClientTel": _str(tk.get("mobile1")) if tk else "",
+            "ClientMail": _str(tk.get("adr_mail")) if tk else "",
+            "Vendeur": nom_vend_final, "DateSign": str(date_sign or ""),
+            "TypeProd": type_prod, "Statut": lib_etat,
+            "Agence": agence, "Equipe": equipe, "SEPADemat": False,
+            "Distributeur": distributeur, "Remarques": remarques,
+            "_payload_create": {
+                "num_bs": num_bs, "id_salarie": id_vendeur,
+                "id_ste": id_ste, "id_produit": ID_PROD_STR,
+                "etat_contrat": id_etat,
+                "date_signature": date_sign,
+                "non_call": True, "info_interne": remarques,
+                "opt_mandat": False,
+                "_client": {
+                    "nom": client_nom, "prenom": client_prenom,
+                    "cp": client_cp, "ville": client_ville,
+                    "adresse": tk.get("adresse1") if tk else "",
+                    "adresse2": tk.get("adresse2") if tk else "",
+                    "tel": tk.get("mobile1") if tk else "",
+                    "mail": tk.get("adr_mail") if tk else "",
+                    "datenaiss": tk.get("datenaiss") if tk else None,
+                },
+            },
+        })
+        resume.nb_ajoutes += 1
+
     wb.close()
+
+
+def _affectation_str(id_salarie: int) -> tuple[str, str, bool]:
+    """(agence, equipe, is_distrib) via JOIN organigramme + niveau 3/4."""
+    if not id_salarie:
+        return ("", "", False)
+    try:
+        db = get_pg_connection("rh")
+        rows = db.query(
+            """SELECT o.lib_orga, o.id_type_niveau_orga, o.id_type_orga
+                 FROM rh.pgt_salarie_organigramme so
+                 JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+                WHERE so.id_salarie = ?
+                  AND (so.modif_elem IS NULL OR so.modif_elem NOT LIKE '%suppr%')""",
+            (int(id_salarie),),
+        ) or []
+        agence = ""; equipe = ""; is_distrib = False
+        for r in rows:
+            lvl = r.get("id_type_niveau_orga")
+            lib = r.get("lib_orga") or ""
+            if lvl == 3 and not agence:
+                agence = lib
+                if int(r.get("id_type_orga") or 0) == 3:
+                    is_distrib = True
+            elif lvl == 4 and not equipe:
+                equipe = lib
+        return (agence, equipe, is_distrib)
+    except Exception:
+        return ("", "", False)
+
+
+def _detect_periode_str(
+    date_sign: Optional[date], is_distrib: bool,
+    p1_du: date, p1_au: date, mp1: Optional[date],
+    p2_du: date, p2_au: date, mp2: Optional[date],
+    mp_distrib: Optional[date],
+) -> tuple[Optional[date], str]:
+    """Identique aux autres partenaires : (mois_p, periode_lbl)."""
+    if not date_sign:
+        return (None, "")
+    if is_distrib:
+        return (mp_distrib, "Période Distrib")
+    if p1_du <= date_sign <= p1_au:
+        return (mp1, "Période 1")
+    if p2_du <= date_sign <= p2_au:
+        return (mp2, "Période 2")
+    p1_du_m1 = (p1_du.replace(month=p1_du.month - 1) if p1_du.month > 1
+                else p1_du.replace(year=p1_du.year - 1, month=12))
+    p1_au_m1 = (p1_au.replace(month=p1_au.month - 1) if p1_au.month > 1
+                else p1_au.replace(year=p1_au.year - 1, month=12))
+    if p1_du_m1 <= date_sign <= p1_au_m1:
+        return (mp1, "Période -1 mois")
+    return (None, "HORS_DELAI")
 
 
 def _import_run_str(
@@ -357,7 +585,21 @@ def _import_run_str(
     runs: list, modifies: list, non_trouves: list, pb_vendeur: list,
     resume: ImportStrResume,
 ) -> None:
-    """Type 2 : RUN STR. Squelette en attente du code WinDev detaille."""
+    """Type 2 : RUN STR. Pour chaque ligne :
+    - Lookup BS, si pas trouve -> introuvable
+    - Detection periode (P1/P2/-1mois/Distrib/HORS_DELAI)
+    - Si HORS_DELAI -> sheet 4 (hors_delai)
+    - Si statut contient 'VALIDE' :
+      * Si type_etat in (1,2) ou etat in (29,30) -> MAJ etat 19
+        (Valide-Paye operateur) + mois_p (garde ancien si etat 29/30)
+        + histo (couleur verte)
+      * Sinon -> deja statue
+    - Sinon (resiliation) :
+      * Si type_etat in (1,2) -> MAJ etat 16 (Resilie op) ou 57
+        (Retractation si statut='RESILIE') + mois_p=null + concat
+        Motif Resil (couleur rouge)
+      * Sinon -> deja statue
+    """
     from openpyxl import load_workbook
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
@@ -369,16 +611,31 @@ def _import_run_str(
     cols = {k: _col_letter_to_index(v) for k, v in COLS_RUN_STR.items()}
     db = get_pg_connection("adv")
 
+    p1_du = _parse_date_fr(p.periode1_du) or date(1900, 1, 1)
+    p1_au = _parse_date_fr(p.periode1_au) or date(2100, 12, 31)
+    p2_du = _parse_date_fr(p.periode2_du) or date(1900, 1, 1)
+    p2_au = _parse_date_fr(p.periode2_au) or date(2100, 12, 31)
+    mp1 = _dernier_jour_mois(p.periode1_mois_paiement)
+    mp2 = _dernier_jour_mois(p.periode2_mois_paiement)
+    mp_distrib = _dernier_jour_mois(p.mois_paiement_distrib)
+
     for i in range(2, (ws.max_row or 0) + 1):
         num_bs = _cell(ws, i, cols["num_bs"]).upper()
         if not num_bs:
             continue
         statut = _cell(ws, i, cols["statut"])
-        montant = _cell(ws, i, cols["montant"])
+        remarques = _cell(ws, i, cols["remarques"])
+        vendeur_nom = _cell(ws, i, cols["vendeur_nom"])
+        vendeur_prenom = _cell(ws, i, cols["vendeur_prenom"])
+        client_nom = _cell(ws, i, cols["client_nom"])
+        client_prenom = _cell(ws, i, cols["client_prenom"])
+        client_adr1 = _cell(ws, i, cols["client_adr1"])
+        client_cp = _cell(ws, i, cols["client_cp"])
+        client_ville = _cell(ws, i, cols["client_ville"])
 
         ctt = db.query_one(
             """SELECT id_contrat, id_salarie, num_bs, date_signature,
-                      id_etat_contrat, mois_p
+                      id_etat_contrat, info_partagee, mois_p
                  FROM adv.pgt_str_contrat
                 WHERE UPPER(num_bs) = UPPER(?)
                   AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
@@ -386,17 +643,170 @@ def _import_run_str(
             (num_bs,),
         )
         if not ctt:
-            non_trouves.append({"NumBS": num_bs, "Statut": statut,
-                                "Montant": montant})
+            non_trouves.append({
+                "NumBS": num_bs, "ClientNom": client_nom,
+                "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                "ClientVille": client_ville,
+                "Vendeur": f"{vendeur_nom} {capitalise_str(vendeur_prenom)}".strip(),
+                "Statut": statut, "Remarques": remarques,
+            })
             resume.nb_introuvables += 1
             continue
-        runs.append({
-            "NumBS": ctt.get("num_bs"),
-            "DateSign": str(ctt.get("date_signature") or ""),
-            "Statut": statut, "Montant": montant,
-            "Note": "Logique RUN STR à compléter avec code WinDev",
-        })
-        resume.nb_valides += 1
+
+        id_contrat = int(ctt["id_contrat"])
+        id_etat_actuel = int(ctt.get("id_etat_contrat") or 0)
+        date_sign_db = ctt.get("date_signature")
+        mois_p_omaya = ctt.get("mois_p")
+        info_existing = ctt.get("info_partagee") or ""
+
+        # Lookup type_etat actuel
+        etat_info = db.query_one(
+            """SELECT id_type_etat, lib_etat FROM adv.pgt_str_etat_contrat
+                WHERE id_etat = ? LIMIT 1""",
+            (id_etat_actuel,),
+        )
+        id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
+        lib_etat_actuel = (etat_info.get("lib_etat") or "") if etat_info else ""
+
+        info_sal = _info_salarie_str(int(ctt.get("id_salarie") or 0))
+        nom_vend_db = f"{_str(info_sal.get('nom'))} {capitalise_str(_str(info_sal.get('prenom')))}".strip()
+
+        # Detection periode
+        agence, equipe, is_distrib = _affectation_str(int(ctt.get("id_salarie") or 0))
+        mois_p, periode_lbl = _detect_periode_str(
+            date_sign_db, is_distrib,
+            p1_du, p1_au, mp1, p2_du, p2_au, mp2, mp_distrib,
+        )
+        mois_p_str = mois_p.strftime("%m-%Y") if mois_p else ""
+
+        if periode_lbl == "HORS_DELAI":
+            resume.nb_hors_delai += 1
+            pb_vendeur.append({
+                "NumBS": num_bs, "ClientNom": client_nom,
+                "ClientPrenom": client_prenom,
+                "DateSign": str(date_sign_db or ""),
+                "Vendeur": nom_vend_db,
+                "TypeEtat actuel": str(id_type_etat),
+                "Lib Etat actuel": lib_etat_actuel,
+                "Agence": agence, "Equipe": equipe,
+                "Statut Import": statut, "Erreur": "Hors Délai",
+            })
+            continue
+
+        is_valide = "VALIDE" in statut.upper()
+
+        if is_valide:
+            # Cas VALIDE : eligible si type_etat in (1,2) ou etat in (29,30)
+            if id_type_etat in (1, 2) or id_etat_actuel in (29, 30):
+                # Garde mois_p ancien si etat etait 29/30
+                new_mois_p = mois_p_omaya if id_etat_actuel in (29, 30) else mois_p
+                runs.append({
+                    "NumBS": num_bs, "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom, "ClientAdr": client_adr1,
+                    "ClientCP": client_cp, "ClientVille": client_ville,
+                    "DateSign": str(date_sign_db or ""),
+                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                    "Periode": periode_lbl, "MoisP": mois_p_str,
+                    "AncienEtat": lib_etat_actuel,
+                    "NouvelEtat": "Valide - Payé par l'opérateur",
+                    "_id_contrat": id_contrat,
+                    "_old_etat": id_etat_actuel, "_new_etat": 19,
+                    "_new_mois_p": new_mois_p, "_traitement": "valide",
+                })
+                resume.nb_valides += 1
+            else:
+                modifies.append({
+                    "NumBS": num_bs, "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                    "ClientVille": client_ville,
+                    "DateSign": str(date_sign_db or ""),
+                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                    "Statut Import": statut, "EtatEnregistre": lib_etat_actuel,
+                    "Periode": periode_lbl,
+                })
+                resume.nb_deja_statues += 1
+        else:
+            # Cas RESILIATION : eligible si type_etat in (1,2)
+            if id_type_etat in (1, 2):
+                new_etat = 57 if statut.upper() == "RESILIE" else 16
+                new_etat_info = db.query_one(
+                    """SELECT lib_etat FROM adv.pgt_str_etat_contrat
+                        WHERE id_etat = ? LIMIT 1""",
+                    (new_etat,),
+                )
+                new_etat_lib = ((new_etat_info.get("lib_etat") or "")
+                                if new_etat_info else "")
+                runs.append({
+                    "NumBS": num_bs, "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom, "ClientAdr": client_adr1,
+                    "ClientCP": client_cp, "ClientVille": client_ville,
+                    "DateSign": str(date_sign_db or ""),
+                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                    "Periode": periode_lbl, "MoisP": mois_p_str,
+                    "AncienEtat": lib_etat_actuel,
+                    "NouvelEtat": new_etat_lib,
+                    "_id_contrat": id_contrat,
+                    "_old_etat": id_etat_actuel, "_new_etat": new_etat,
+                    "_remarques": remarques,
+                    "_info_existing": info_existing,
+                    "_traitement": "resil",
+                })
+                resume.nb_resilies += 1
+            else:
+                modifies.append({
+                    "NumBS": num_bs, "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                    "ClientVille": client_ville,
+                    "DateSign": str(date_sign_db or ""),
+                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                    "Statut Import": statut, "EtatEnregistre": lib_etat_actuel,
+                    "Periode": periode_lbl,
+                })
+                resume.nb_deja_statues += 1
+
+    # PASSE PROD : MAJ etat sur les runs
+    if not p.simulation:
+        for row in runs:
+            id_ct = row.pop("_id_contrat", None)
+            old_etat = row.pop("_old_etat", 0)
+            new_etat = row.pop("_new_etat", 0)
+            traitement = row.pop("_traitement", "")
+            new_mois_p = row.pop("_new_mois_p", None)
+            remarques = row.pop("_remarques", "")
+            info_existing = row.pop("_info_existing", "")
+            if not id_ct or not new_etat:
+                continue
+            try:
+                if traitement == "valide":
+                    db.query(
+                        """UPDATE adv.pgt_str_contrat
+                              SET id_etat_contrat = ?, mois_p = ?,
+                                  modif_op = ?, modif_date = NOW(),
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (int(new_etat), new_mois_p, int(op_id), int(id_ct)),
+                    )
+                else:  # resil
+                    new_info = (info_existing or "") + f"\nMotif Résil : {remarques}"
+                    db.query(
+                        """UPDATE adv.pgt_str_contrat
+                              SET id_etat_contrat = ?, info_partagee = ?,
+                                  mois_p = NULL,
+                                  modif_op = ?, modif_date = NOW(),
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (int(new_etat), new_info, int(op_id), int(id_ct)),
+                    )
+                _ajoute_histo_str_etat(int(id_ct), int(old_etat), int(new_etat),
+                                       str(new_mois_p or ""), op_id)
+            except Exception as e:
+                row["Erreur"] = str(e)
+    else:
+        for row in runs:
+            for k in ("_id_contrat", "_old_etat", "_new_etat", "_traitement",
+                      "_new_mois_p", "_remarques", "_info_existing"):
+                row.pop(k, None)
+
     wb.close()
 
 
