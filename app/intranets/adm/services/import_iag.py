@@ -218,7 +218,12 @@ def _info_salarie_iag(id_sal: int) -> dict:
 
 
 def _calcul_points_iag(id_produit: int, date_sign: Optional[date]) -> float:
-    """Lookup pgt_iag_remun par produit + date d'activation."""
+    """Calcule nb_points IAG en deleguant a calcul_point_contrat (transposition
+    fidele WinDev calculPointContrat).
+
+    Lookup famille/sous_fam dans pgt_iag_produit puis appelle le bareme
+    central pgt_bareme_point via calcul_point_contrat.
+    """
     if not id_produit:
         return 0.0
     db = get_pg_connection("adv")
@@ -229,19 +234,13 @@ def _calcul_points_iag(id_produit: int, date_sign: Optional[date]) -> float:
     )
     if not prod:
         return 0.0
-    sql_parts = ["famille = ?", "ss_fam = ?", "rem_active = TRUE"]
-    params: list = [prod.get("famille") or "", prod.get("sous_fam") or ""]
-    if date_sign:
-        sql_parts.append("(date_activation IS NULL OR date_activation <= ?)")
-        sql_parts.append("(date_desactivation IS NULL OR date_desactivation > ?)")
-        params.extend([date_sign, date_sign])
-    r = db.query_one(
-        f"""SELECT nb_points FROM adv.pgt_iag_remun
-            WHERE {' AND '.join(sql_parts)}
-            ORDER BY date_activation DESC NULLS LAST LIMIT 1""",
-        tuple(params),
+    from app.shared.sdtc.bareme import calcul_point_contrat
+    return calcul_point_contrat(
+        fam=prod.get("famille") or "",
+        ss_fam=prod.get("sous_fam") or "",
+        palier=0,
+        date_sign=str(date_sign) if date_sign else "",
     )
-    return float(r.get("nb_points") or 0) if r else 0.0
 
 
 def _create_iag_contrat(td: dict, op_id: int) -> int:

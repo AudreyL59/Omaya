@@ -1247,39 +1247,33 @@ def _new_id() -> int:
 
 
 def _calcul_points_eni(famille: str, sous_fam: str, car: int,
-                        date_sign: Optional[date], _options_str: str,
+                        date_sign: Optional[date], options_str: str,
                         puissance: int) -> float:
-    """Calcule nb_points selon adv.pgt_eni_remun.
+    """Calcule nb_points en deleguant a calcul_point_contrat (transposition
+    fidele WinDev calculPointContrat).
 
-    Lookup par (famille, ss_fam, date_activation <= date_sign < date_desactivation,
-    val_min <= valeur <= val_max), valeur = CAR pour Gaz, puissance pour Elec.
+    Mapping WinDev :
+      - Palier  = valeur metier (CAR pour Gaz, puissance pour Elec)
+      - palier2 = autre valeur (puissance si GAZ, CAR si ELEC) - utilise
+        pour le bonus ELEC sur GAZ-ELEC depuis 2023-02-07
+      - InfoCplt = options_str (RIB//, MAIL//, MAINT//, NOTE: depuis 2026-05-01)
     """
-    if not famille:
-        return 0.0
-    db = get_pg_connection("adv")
-
+    from app.shared.sdtc.bareme import calcul_point_contrat
     sous_fam_up = (sous_fam or "").upper()
-    valeur = car if "GAZ" in sous_fam_up else puissance
-
-    sql_parts = [
-        "famille = ?", "ss_fam = ?",
-        "rem_active = TRUE",
-        "(val_min IS NULL OR val_min <= ?)",
-        "(val_max IS NULL OR val_max >= ?)",
-    ]
-    params: list = [famille, sous_fam, valeur, valeur]
-    if date_sign:
-        sql_parts.append("(date_activation IS NULL OR date_activation <= ?)")
-        sql_parts.append("(date_desactivation IS NULL OR date_desactivation > ?)")
-        params.extend([date_sign, date_sign])
-
-    r = db.query_one(
-        f"""SELECT nb_points FROM adv.pgt_eni_remun
-            WHERE {' AND '.join(sql_parts)}
-            ORDER BY date_activation DESC NULLS LAST LIMIT 1""",
-        tuple(params),
+    if "GAZ" in sous_fam_up:
+        palier = car or 0
+        palier2 = puissance or 0
+    else:
+        palier = puissance or 0
+        palier2 = car or 0
+    return calcul_point_contrat(
+        fam=famille or "ENI",
+        ss_fam=sous_fam or "",
+        palier=palier,
+        date_sign=str(date_sign) if date_sign else "",
+        info_cplt=options_str or "",
+        palier2=palier2,
     )
-    return float(r.get("nb_points") or 0) if r else 0.0
 
 
 def _ajoute_histo_eni_etat(id_contrat: int, old_etat: int, new_etat: int,

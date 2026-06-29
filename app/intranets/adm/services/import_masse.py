@@ -943,9 +943,19 @@ def run_modif_vendeur(
 
 def _recalc_points_eni(id_contrat: int, sous_fam: str, op_id: int) -> None:
     """Recalcul nbPoints ENI apres MAJ etat = 5 (Valide-Paye).
-    Met aussi a jour GazActif/ElecActif selon sous_fam.
-    Helper simplifie (le vrai calculPointContrat ENI est complexe)."""
+    Recalcule via calcul_point_contrat (table pgt_bareme_point) +
+    met a jour GazActif/ElecActif selon sous_fam.
+    """
     db = get_pg_connection("adv")
+
+    # Recupere les infos contrat necessaires au recalcul
+    ctt = db.query_one(
+        """SELECT date_signature, gaz_car_relevee, gaz_car_declaree,
+                  elec_puissance, opt_rib, opt_mail, opt_maint, notation
+             FROM adv.pgt_eni_contrat WHERE id_contrat = ?""",
+        (int(id_contrat),),
+    )
+
     gaz_actif = elec_actif = False
     sf = (sous_fam or "").upper()
     if sf == "GAZ":
@@ -954,13 +964,35 @@ def _recalc_points_eni(id_contrat: int, sous_fam: str, op_id: int) -> None:
         elec_actif = True
     else:
         gaz_actif = True; elec_actif = True
+
+    # Recalcul nb_points via le bareme central
+    nb_points = 0.0
+    if ctt and ctt.get("date_signature"):
+        from app.shared.sdtc.bareme import calcul_point_contrat
+        car = int(ctt.get("gaz_car_relevee") or ctt.get("gaz_car_declaree") or 0)
+        puissance = int(ctt.get("elec_puissance") or 0)
+        # Reconstruit la chaine d'options pour les regles ENI >= 2026-05-01
+        opt_parts = []
+        if ctt.get("opt_rib"): opt_parts.append("RIB//")
+        if ctt.get("opt_mail"): opt_parts.append("MAIL//")
+        if ctt.get("opt_maint"): opt_parts.append("MAINT//")
+        if ctt.get("notation"): opt_parts.append(f"NOTE:{ctt.get('notation')}//")
+        info_cplt = "".join(opt_parts)
+        palier = car if "GAZ" in sf else puissance
+        palier2 = puissance if "GAZ" in sf else car
+        nb_points = calcul_point_contrat(
+            fam="ENI", ss_fam=sous_fam or "",
+            palier=palier, date_sign=str(ctt["date_signature"]),
+            info_cplt=info_cplt, palier2=palier2,
+        )
+
     try:
         db.query(
             """UPDATE adv.pgt_eni_contrat
-                  SET gaz_actif = ?, elec_actif = ?,
+                  SET gaz_actif = ?, elec_actif = ?, nb_points = ?,
                       modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
                 WHERE id_contrat = ?""",
-            (gaz_actif, elec_actif, int(op_id), int(id_contrat)),
+            (gaz_actif, elec_actif, nb_points, int(op_id), int(id_contrat)),
         )
     except Exception:
         pass

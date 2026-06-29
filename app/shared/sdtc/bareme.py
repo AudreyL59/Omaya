@@ -21,10 +21,11 @@ Ce module concentre :
 
 3. `palier_remun(nb_tot_pts)` : barème global SDTC.
 
-Note sur la table de barème : la requête WinDev `ReqPtsBareme(Fam, Ssfam,
-Palier, Datesign)` pointe sur la table centrale `adv.pgt_eni_remun` (qui
-contient en réalité tous les produits ENI ET les familles SFR `FIB CQ`,
-`MOB CQ`, etc.).
+Table de barème : la requête WinDev `ReqPtsBareme(Fam, Ssfam, Palier,
+Datesign)` pointe sur la table centrale `adv.pgt_bareme_point` (HFSQL
+`baremePoint`) qui contient tous les barèmes multi-partenaire (ENI, SFR,
+IAG, etc.) avec 2 types de bornes (TypeBarème 1 = palier range, 2 = tout
+palier).
 """
 
 from __future__ import annotations
@@ -45,32 +46,41 @@ from .helpers import _int, _num, _str, normalize_nom_produit
 def _req_pts_bareme(
     fam: str, ss_fam: str, palier: Any, date_sign: str
 ) -> float:
-    """SELECT SUM(nb_points) sur adv.pgt_eni_remun selon famille/ss_fam/
-    palier/date_signature, filtrée par rem_active + plage d'activation.
+    """SELECT SUM(nb_points) sur adv.pgt_bareme_point selon
+    famille/sous_fam/palier/date_signature.
 
-    Cf. requête `ReqPtsBareme` WinDev.
+    Transposition fidele de la requete WinDev ReqPtsBareme :
+      - famille = ? AND sous_fam = ?
+      - 2 types de bornes paliers :
+          * TypeBareme=1 : palier_deb <= palier <= palier_fin
+          * TypeBareme=2 : palier_deb=0 AND palier_fin=0 (tout palier)
+      - date_debut <= date_sign
+      - date_fin >= date_sign OR date_fin IS NULL
+      - modif_elem != 'suppr'
 
     Args:
         fam: ex. "ENI", "FIB CQ", "MOB CQ"
         ss_fam: ex. "ELEC", "GAZ", "GAZ-ELEC", "OPTRIB", "Dual<n>"
-        palier: numérique (forfait ou Car) - testé avec BETWEEN val_min/max
+        palier: numerique (forfait, Car, puissance, etc.)
         date_sign: ISO 'YYYY-MM-DD' ou 'YYYYMMDD'
     """
     if not fam:
         return 0.0
-    palier_num = _int(palier)
+    palier_num = _num(palier)
     ds = _normalize_date(date_sign)
     db = get_pg_connection("adv")
     rows = db.query(
         """SELECT COALESCE(SUM(nb_points), 0) AS la_somme_nb_points
-             FROM adv.pgt_eni_remun
+             FROM adv.pgt_bareme_point
             WHERE famille = ?
-              AND ss_fam = ?
-              AND COALESCE(val_min, 0) <= ?
-              AND COALESCE(val_max, 999999) >= ?
-              AND COALESCE(rem_active, FALSE) = TRUE
-              AND (date_activation IS NULL OR date_activation <= ?::date)
-              AND (date_desactivation IS NULL OR date_desactivation > ?::date)""",
+              AND sous_fam = ?
+              AND (
+                    (palier_deb <= ? AND palier_fin >= ? AND type_bareme = 1)
+                 OR (palier_deb = 0 AND palier_fin = 0 AND type_bareme = 2)
+              )
+              AND date_debut <= ?::date
+              AND (date_fin >= ?::date OR date_fin IS NULL)
+              AND (modif_elem IS NULL OR modif_elem <> 'suppr')""",
         (fam, ss_fam, palier_num, palier_num, ds, ds),
     )
     if not rows:
