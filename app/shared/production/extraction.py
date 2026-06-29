@@ -615,20 +615,20 @@ def _load_heure_from_tk(num_bs_list: list[str]) -> dict[str, str]:
     if not num_to_idtk:
         return {}
 
-    # 2) id_tk_liste → datecrea via TK_Liste
+    # 2) id_tk_liste → date_crea via TK_Liste
     idtk_to_datecrea: dict[int, str] = {}
     for chunk in _chunked(list(set(num_to_idtk.values())), _IN_CHUNK):
         ids_sql = ",".join(str(i) for i in chunk)
         try:
             rows = db_tk.query(
-                f"SELECT id_tk_liste, datecrea FROM pgt_tk_liste WHERE id_tk_liste IN ({ids_sql})"
+                f"SELECT id_tk_liste, date_crea FROM pgt_tk_liste WHERE id_tk_liste IN ({ids_sql})"
             )
         except Exception as e:
             logger.warning(f"[heure_tk] TK_Liste failed: {e}")
             continue
         for r in rows:
             idtk = _to_int(r.get("id_tk_liste"))
-            dc = str(r.get("datecrea") or "")
+            dc = str(r.get("date_crea") or "")
             if idtk and dc:
                 idtk_to_datecrea[idtk] = dc
 
