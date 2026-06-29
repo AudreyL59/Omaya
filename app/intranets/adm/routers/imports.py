@@ -21,6 +21,7 @@ from app.intranets.adm.services import import_str as str_svc
 from app.intranets.adm.services import import_val as val_svc
 from app.intranets.adm.services import import_masse as masse_svc
 from app.intranets.adm.services import import_ajout_colonne as ajout_col_svc
+from app.intranets.adm.services import import_notation as notation_svc
 
 
 router = APIRouter(prefix="/imports", tags=["adm-imports"])
@@ -71,6 +72,38 @@ async def post_iag_run(
             mois_paiement_distrib=mois_paiement_distrib,
         ),
         contents, user.id_salarie,
+    )
+
+
+# -- Fen_ImportNotation : import des notations contrats --------------------
+
+
+@router.get("/notation/mapping/{partenaire}", response_model=dict)
+def get_notation_mapping(partenaire: str,
+                          _user: UserToken = Depends(get_current_user)):
+    """Mapping cols defaut (col_num/col_note/col_info/notes_sur) selon
+    partenaire (ENI sur 5 / SFR sur 10)."""
+    return notation_svc.get_mapping_default(partenaire)
+
+
+@router.post("/notation/run", response_model=notation_svc.ImportNotationResult)
+async def post_notation_run(
+    partenaire: str = Form(...),
+    col_num_contrat: str = Form(""),
+    col_note: str = Form(""),
+    col_info: str = Form(""),
+    notes_sur: float = Form(5.0),
+    simulation: bool = Form(True),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    return notation_svc.run_import_notation(
+        notation_svc.ImportNotationParams(
+            partenaire=partenaire, col_num_contrat=col_num_contrat,
+            col_note=col_note, col_info=col_info, notes_sur=notes_sur,
+            simulation=simulation,
+        ),
+        await file.read(), user.id_salarie,
     )
 
 
