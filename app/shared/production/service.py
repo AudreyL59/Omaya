@@ -260,7 +260,17 @@ def list_jobs(id_salarie_user: int, limit: int = 50) -> list[dict]:
         (id_salarie_user,),
     )
     queue = _load_pending_queue()
-    return [_row_to_dict(r, queue) for r in rows]
+    jobs = [_row_to_dict(r, queue) for r in rows]
+    # Masque les jobs 'done' dont le .parquet n'est pas present localement.
+    # Cas typique multi-serveur (interne + OVH) : la table des jobs est
+    # synchronisee (SymmetricDS) mais pas les fichiers disque. On ne montre
+    # que les jobs dont le resultat est consultable depuis ce serveur.
+    import os
+    return [
+        j for j in jobs
+        if j["statut"] != "done"
+           or (j["path_resultat"] and os.path.exists(j["path_resultat"]))
+    ]
 
 
 def get_job(id_job: int, id_salarie_user: int) -> dict | None:
