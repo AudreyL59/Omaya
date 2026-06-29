@@ -12,6 +12,15 @@ INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial_categorie', 'adv', 'pgt_agenda_commercial_categorie', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial_categorie', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
 
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial_origine', 'adv', 'pgt_agenda_commercial_origine', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial_origine', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial_source', 'adv', 'pgt_agenda_commercial_source', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('adv_pgt_agenda_commercial_source', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('adv_pgt_bareme_point', 'adv', 'pgt_bareme_point', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('adv_pgt_bareme_point', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('adv_pgt_client', 'adv', 'pgt_client', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('adv_pgt_client', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
 
@@ -437,10 +446,6 @@ INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_
 
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_type_tache', 'divers', 'pgt_type_tache', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_type_tache', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
-
-INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_uuid_connexion', 'divers', 'pgt_uuid_connexion', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
-INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_uuid_connexion', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
-INSERT INTO sym_conflict (conflict_id, source_node_group_id, target_node_group_id, target_schema_name, target_table_name, detect_type, resolve_type, ping_back, resolve_changes_only, resolve_row_only, create_time, last_update_time) VALUES ('cf_divers_pgt_uuid_connexion', 'erp', 'erp', 'divers', 'pgt_uuid_connexion', 'USE_PK_DATA', 'FALLBACK', 'SINGLE_ROW', 0, 0, current_timestamp, current_timestamp) ON CONFLICT (conflict_id) DO NOTHING;
 
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('recrutement_pgt_agenda_categorie', 'recrutement', 'pgt_agenda_categorie', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('recrutement_pgt_agenda_categorie', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
@@ -896,9 +901,6 @@ INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_
 
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('ulease_pgt_vehicule_marque', 'ulease', 'pgt_vehicule_marque', 'erp_blob', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('ulease_pgt_vehicule_marque', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
-
-INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('ulease_pgt_vehicule_pv', 'ulease', 'pgt_vehicule_pv', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
-INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('ulease_pgt_vehicule_pv', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
 
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('ulease_pgt_vehicule_releve', 'ulease', 'pgt_vehicule_releve', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('ulease_pgt_vehicule_releve', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
