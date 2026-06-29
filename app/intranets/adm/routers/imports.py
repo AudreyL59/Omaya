@@ -20,6 +20,7 @@ from app.intranets.adm.services import import_sfr as sfr_svc
 from app.intranets.adm.services import import_str as str_svc
 from app.intranets.adm.services import import_val as val_svc
 from app.intranets.adm.services import import_masse as masse_svc
+from app.intranets.adm.services import import_ajout_colonne as ajout_col_svc
 
 
 router = APIRouter(prefix="/imports", tags=["adm-imports"])
@@ -70,6 +71,29 @@ async def post_iag_run(
             mois_paiement_distrib=mois_paiement_distrib,
         ),
         contents, user.id_salarie,
+    )
+
+
+# -- Fen_AjoutColonneImport : enrichit XLSX avec colonnes BDD --------------
+
+
+@router.post("/ajout-colonne/run", response_model=ajout_col_svc.AjoutColonneResult)
+async def post_ajout_colonne(
+    action: str = Form(...),
+    col_num_contrat: str = Form("B"),
+    mode_partenaire: str = Form("liste"),
+    partenaire: str = Form(""),
+    col_partenaire: str = Form(""),
+    file: UploadFile = File(...),
+    _user: UserToken = Depends(get_current_user),
+):
+    return ajout_col_svc.dispatch(
+        ajout_col_svc.AjoutColonneParams(
+            action=action, col_num_contrat=col_num_contrat,
+            mode_partenaire=mode_partenaire, partenaire=partenaire,
+            col_partenaire=col_partenaire,
+        ),
+        await file.read(),
     )
 
 

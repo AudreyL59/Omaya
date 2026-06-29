@@ -6,7 +6,7 @@
  * + fichier Excel (col A = num_bs).
  */
 import { useEffect, useRef, useState } from 'react'
-import { FileUp, Loader2, Play, Search } from 'lucide-react'
+import { FileUp, Loader2, Play } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'

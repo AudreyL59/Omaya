@@ -38,6 +38,7 @@ import ImportSfrPage from '@/pages/ImportSfrPage'
 import ImportStrPage from '@/pages/ImportStrPage'
 import ImportValPage from '@/pages/ImportValPage'
 import ImportMassePage from '@/pages/ImportMassePage'
+import ImportAjoutColonnePage from '@/pages/ImportAjoutColonnePage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -104,6 +105,7 @@ function App() {
           <Route path="imports/str" element={<ImportStrPage />} />
           <Route path="imports/val" element={<ImportValPage />} />
           <Route path="imports/masse" element={<ImportMassePage />} />
+          <Route path="imports/colonnes" element={<ImportAjoutColonnePage />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />
