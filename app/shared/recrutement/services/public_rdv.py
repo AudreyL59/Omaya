@@ -171,7 +171,7 @@ def get_rdv_public(id_rdv: int) -> Optional[PublicRdvDetail]:
 def confirm_rdv(id_rdv: int) -> dict:
     """Le candidat confirme sa presence (transposition WinDev) :
       - UPDATE agenda_evenement.id_categorie = 11 (categorie 'Confirme')
-      - UPDATE cv_suivi.observation : concat 'Rdv Confirme par SMS Auto le ...'
+      - UPDATE cv_suivi.observation : concat 'Rdv Confirmé par SMS Auto le ...'
     Idempotent : si deja categorie=11, retourne ok sans rien faire.
     """
     db = get_pg_connection("recrutement")
@@ -206,8 +206,8 @@ def confirm_rdv(id_rdv: int) -> dict:
         )
         old_obs = _str((suivi or {}).get("observation"))
         log_line = (
-            f"Rdv Confirme par SMS Auto le "
-            f"{datetime.now().strftime('%d/%m/%Y a %H:%M')}"
+            f"Rdv Confirmé par SMS Auto le "
+            f"{datetime.now().strftime('%d/%m/%Y à %H:%M')}"
         )
         new_obs = (old_obs + "\n" + log_line) if old_obs else log_line
         db.query(
