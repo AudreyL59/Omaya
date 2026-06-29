@@ -47,6 +47,7 @@ const IMPLEMENTED_IMPORTS: Set<string> = new Set([
   'OEN',  // -> /imports/oen (OHM Énergie)
   'PRO',  // -> /imports/pro (PROTECTED)
   'SFR',  // -> /imports/sfr (10 types : BJ Fibre/Mobile/CALL, Hebdo, Options, RUN, CallRET x4)
+  'STR',  // -> /imports/str (STRATO : BJ + RUN + Resil Hebdo)
 ])
 
 const fmtDateTime = (iso: string): string => {

@@ -35,6 +35,7 @@ import ImportIagPage from '@/pages/ImportIagPage'
 import ImportOenPage from '@/pages/ImportOenPage'
 import ImportProPage from '@/pages/ImportProPage'
 import ImportSfrPage from '@/pages/ImportSfrPage'
+import ImportStrPage from '@/pages/ImportStrPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -98,6 +99,7 @@ function App() {
           <Route path="imports/oen" element={<ImportOenPage />} />
           <Route path="imports/pro" element={<ImportProPage />} />
           <Route path="imports/sfr" element={<ImportSfrPage />} />
+          <Route path="imports/str" element={<ImportStrPage />} />
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />
