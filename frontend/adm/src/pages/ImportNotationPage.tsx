@@ -6,7 +6,7 @@
  * La note est normalisée sur 5 avant écriture en BDD.
  */
 import { useEffect, useRef, useState } from 'react'
-import { Download, FileUp, Loader2, Mail, Play, Star } from 'lucide-react'
+import { Download, FileUp, Loader2, Play, Star } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -79,7 +79,8 @@ export default function ImportNotationPage() {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then(r => r.ok ? r.json() : {})
-      .then(d => {
+      .then((d: { col_num?: string; col_note?: string;
+                  col_info?: string; notes_sur?: number }) => {
         setColNum(d.col_num || '')
         setColNote(d.col_note || '')
         setColInfo(d.col_info || '')

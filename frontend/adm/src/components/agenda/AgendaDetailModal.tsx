@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import CVFicheModal from '@shared/recrutement/CVFicheModal'
 import {
   ExternalLink,
   Loader2,
@@ -116,6 +117,7 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [opPickerOpen, setOpPickerOpen] = useState(false)
+  const [ficheCvOpen, setFicheCvOpen] = useState(false)
   const [sendingSms, setSendingSms] = useState(false)
 
   // Charge le RDV + referentiels au montage
@@ -379,10 +381,14 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
                 <ToolbarBtn
                   icon={<ExternalLink className="w-4 h-4" />}
                   label="Voir Fiche CV"
-                  onClick={() =>
-                    showToast('Fiche CV : à venir.', 'info')
-                  }
-                  disabled={!detail.id_cv_suivi}
+                  onClick={() => {
+                    if (!detail.id_cvtheque) {
+                      showToast('Aucun CV lié à ce RDV.', 'info')
+                      return
+                    }
+                    setFicheCvOpen(true)
+                  }}
+                  disabled={!detail.id_cvtheque}
                 />
                 <ToolbarBtn
                   icon={<Send className="w-4 h-4" />}
@@ -674,6 +680,15 @@ export default function AgendaDetailModal({ idRdv, onClose, onSaved }: Props) {
                 showToast(`Échec : ${(e as Error).message}`, 'error')
               }
             }}
+          />
+        )}
+
+        {/* Modal Fiche CV (bouton 'Voir Fiche CV') */}
+        {ficheCvOpen && detail?.id_cvtheque && (
+          <CVFicheModal
+            apiBase="/api/adm"
+            idCv={detail.id_cvtheque}
+            onClose={() => setFicheCvOpen(false)}
           />
         )}
       </motion.div>
