@@ -25,17 +25,18 @@ from app.intranets.adm.services.import_eni import (
 )
 
 
-# Mapping colonnes Base Journaliere STR (cf groupe grAlexJournalier)
-# Visible sur l'ecran : Date Signature E, Vendeur nom C, prenom D, Num BS N,
-# Statut vente Q, Remarques R, Distributeur B, Client (Civilite I/Nom J/Prenom K),
-# Client CP L, VILLE M
+# Mapping colonnes Base Journaliere VAL (cf screen Fen_ImportVAL onglet 1)
+# Chaque ligne du fichier = 2 BS distincts : Valandre (K/L/M) + GoActu (N/O/P/Q)
+# Vendeur nom C, prenom D, dateSign E, Client civilité F, Nom G, Prenom H, CP I, VILLE J
 COLS_BJ_VAL = {
-    "distributeur": "B",        "vendeur_nom": "C",
-    "vendeur_prenom": "D",      "date_signature": "E",
-    "client_civilite": "I",     "client_nom": "J",
-    "client_prenom": "K",       "client_cp": "L",
-    "client_ville": "M",        "num_bs": "N",
-    "statut_vente": "Q",        "remarques": "R",
+    "vendeur_nom": "C",         "vendeur_prenom": "D",
+    "date_signature": "E",      "client_civilite": "F",
+    "client_nom": "G",          "client_prenom": "H",
+    "client_cp": "I",           "client_ville": "J",
+    "num_bs_valandre": "K",     "statut_vente_valandre": "L",
+    "remarques_valandre": "M",
+    "num_bs_goactu": "N",       "statut_vente_goactu": "O",
+    "remarques_goactu": "P",    "format_goactu": "Q",
 }
 
 
@@ -199,38 +200,31 @@ def _lookup_vendeur_val_nom_prenom(nom: str, prenom: str) -> int:
 
 
 def _id_etat_val_journ(statut: str, remarques: str) -> int:
-    """Determine id_etat_contrat selon statut + remarques (cf WinDev) :
+    """Determine id_etat_contrat selon statut + remarques (cf WinDev VAL) :
     - default = 37 (En cours)
-    - 'RESILIE' -> 16
-    - 'NON VALIDE' -> 14 (ou 22 si signatures/IBAN/SEPA)
-    - 'REJET' ou 'KO' -> 14 (ou 22 si signatures/IBAN/SEPA,
-      12 si doublon, 63 si absence mail, 13 si telephone/adresse)
-    - default + 'EN ATTENTE' dans remarques -> 69 (Temporaire)
+    - 'rejete' dans statut -> 16
+    - 'RESILIATION' dans statut -> 57
+    - 'iban' ou 'rib' dans remarques -> 22
+    - 'doublon' dans remarques -> 12
+    - 'absence mail' ou 'mail docusign different' -> 63
+    - 'telephone errone' ou 'adresse postale' -> 13
     """
     s = (statut or "").upper()
     r = (remarques or "").upper()
     id_etat = 37
-
-    if "RESILIE" in s:
+    if "REJETE" in s or "REJETÉ" in s:
         id_etat = 16
-    elif "NON VALIDE" in s:
-        id_etat = 14
-        if ("SIGNATURES NON CONFORMES" in r or "IBAN" in r or "SEPA" in r):
-            id_etat = 22
-    elif "REJET" in s or "KO" in s:
-        id_etat = 14
-        if ("SIGNATURES NON CONFORMES" in r or "IBAN" in r or "SEPA" in r):
-            id_etat = 22
-        if "DOUBLON" in r:
-            id_etat = 12
-        if "ABSENCE MAIL" in r or "MAIL DOCUSIGN DIFFERENT" in r:
-            id_etat = 63
-        if "TÉLÉPHONE ERRONÉ" in r or "TELEPHONE ERRONE" in r or \
-           "ABSENCE ADRESSE POSTALE" in r:
-            id_etat = 13
-
-    if id_etat == 37 and "EN ATTENTE" in r:
-        id_etat = 69
+    if "RESILIATION" in s:
+        id_etat = 57
+    if "IBAN" in r or "RIB" in r:
+        id_etat = 22
+    if "DOUBLON" in r:
+        id_etat = 12
+    if "ABSENCE MAIL" in r or "MAIL DOCUSIGN DIFFERENT" in r:
+        id_etat = 63
+    if "TELEPHONE ERRONE" in r or "TÉLÉPHONE ERRONÉ" in r or \
+       "ADRESSE POSTALE" in r:
+        id_etat = 13
     return id_etat
 
 
@@ -334,11 +328,11 @@ def _create_val_contrat(td: dict, op_id: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _import_journalier_val(
+def _import_journalier_val_OLD(
     p: ImportValParams, fname: str, content: bytes, op_id: int,
     ajoutes: list, modifies: list, pb_vendeur: list, resume: ImportValResume,
 ) -> None:
-    """Type 1 : Base Journaliere STR (cf WinDev ImportJournalier) :
+    """ANCIEN (clone STR), garde pour reference, n'est plus appele.
     - idProd = 79 par defaut (VAL, ajuster si besoin)
     - Determine idEtat selon statut + remarques (cf _id_etat_val_journ)
     - Si BS existe -> 'Contrats deja saisis' (modifies)
@@ -525,6 +519,202 @@ def _import_journalier_val(
         })
         resume.nb_ajoutes += 1
 
+    wb.close()
+
+
+def _import_journalier_val(
+    p: ImportValParams, fname: str, content: bytes, op_id: int,
+    ajoutes: list, modifies: list, pb_vendeur: list, resume: ImportValResume,
+) -> None:
+    """Type 1 : Base Journaliere VAL (cf WinDev ImportJournalier).
+
+    Particularite VAL : chaque ligne du fichier produit jusqu'a 2 contrats :
+    - 1 contrat Valandre (id_produit=74) si NumBS_Valandre rempli
+    - 1 contrat GoActu   (id_produit=73) si NumBS_GoActu rempli
+    Avec num_bs_associe = l'autre BS si les 2 sont presents.
+
+    nbPoints :
+    - 0.15 si id_etat = 37 (En cours)
+    - 0.2  si id_etat = 37 ET BS associe aussi en 37
+    """
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as e:
+        resume.nb_erreurs += 1
+        modifies.append({"_erreur": f"Lecture {fname} : {e}"})
+        return
+    ws = wb.active
+    cols = {k: _col_letter_to_index(v) for k, v in COLS_BJ_VAL.items()}
+    db = get_pg_connection("adv")
+
+    prod_74 = db.query_one(
+        "SELECT lib_produit FROM adv.pgt_val_produit WHERE id_produit = 74 LIMIT 1"
+    )
+    prod_73 = db.query_one(
+        "SELECT lib_produit FROM adv.pgt_val_produit WHERE id_produit = 73 LIMIT 1"
+    )
+    lib_prod_74 = ((prod_74.get("lib_produit") if prod_74 else "Valandre")
+                   or "Valandre")
+    lib_prod_73 = ((prod_73.get("lib_produit") if prod_73 else "GoActu")
+                   or "GoActu")
+
+    for i in range(2, (ws.max_row or 0) + 1):
+        vendeur_nom = _cell(ws, i, cols["vendeur_nom"])
+        vendeur_prenom = _cell(ws, i, cols["vendeur_prenom"])
+        date_sign = _parse_date_fr(_cell(ws, i, cols["date_signature"]))
+        client_nom = _cell(ws, i, cols["client_nom"])
+        client_prenom = _cell(ws, i, cols["client_prenom"])
+        client_cp = _cell(ws, i, cols["client_cp"])
+        client_ville = _cell(ws, i, cols["client_ville"])
+
+        num_bs_val = _cell(ws, i, cols["num_bs_valandre"]).upper()
+        statut_val = _cell(ws, i, cols["statut_vente_valandre"])
+        remarques_val = _cell(ws, i, cols["remarques_valandre"])
+        num_bs_go = _cell(ws, i, cols["num_bs_goactu"]).upper()
+        statut_go = _cell(ws, i, cols["statut_vente_goactu"])
+        remarques_go = _cell(ws, i, cols["remarques_goactu"])
+        format_go_num = "NUM" in _cell(ws, i, cols["format_goactu"]).upper()
+
+        id_etat_val = _id_etat_val_journ(statut_val, remarques_val)
+        # Cf WinDev : si statut_GoActu='RESILIATION' -> idetatValandre=57
+        if "RESILIATION" in statut_go.upper():
+            id_etat_val = 57
+        id_etat_go = _id_etat_val_journ(statut_go, remarques_go)
+
+        mes_bs: list[dict] = []
+        if num_bs_val:
+            nbpt = 0.0
+            if id_etat_val == 37:
+                nbpt = 0.15
+                if num_bs_go and id_etat_go == 37:
+                    nbpt = 0.2
+            mes_bs.append({
+                "num_bs": num_bs_val, "id_etat": id_etat_val,
+                "remarque": remarques_val, "id_produit": 74,
+                "num_bs_associe": num_bs_go, "nbpt": nbpt,
+                "format_numerique": False, "lib_produit": lib_prod_74,
+            })
+        if num_bs_go:
+            nbpt = 0.0
+            if id_etat_go == 37:
+                nbpt = 0.15
+                if num_bs_val and id_etat_val == 37:
+                    nbpt = 0.2
+            mes_bs.append({
+                "num_bs": num_bs_go, "id_etat": id_etat_go,
+                "remarque": remarques_go, "id_produit": 73,
+                "num_bs_associe": num_bs_val, "nbpt": nbpt,
+                "format_numerique": format_go_num,
+                "lib_produit": lib_prod_73,
+            })
+
+        if not mes_bs:
+            continue
+
+        id_vendeur = _lookup_vendeur_val_nom_prenom(vendeur_nom, vendeur_prenom)
+        info_sal = _info_salarie_val(id_vendeur) if id_vendeur else {}
+        id_ste = int(info_sal.get("id_ste") or 0)
+        nom_vend_xls = f"{vendeur_nom} {vendeur_prenom}".strip()
+        agence = ""; equipe = ""
+        nom_vend_final = nom_vend_xls
+        if id_vendeur:
+            agence, equipe, _ = _affectation_val(id_vendeur)
+            nom_vend_final = (f"{_str(info_sal.get('nom'))} "
+                              f"{capitalise_str(_str(info_sal.get('prenom')))}".strip())
+
+        for bs in mes_bs:
+            etat_info = db.query_one(
+                "SELECT lib_etat FROM adv.pgt_val_etat_contrat WHERE id_etat = ? LIMIT 1",
+                (bs["id_etat"],),
+            )
+            lib_etat = (etat_info.get("lib_etat") if etat_info else "") or ""
+
+            ctt = db.query_one(
+                """SELECT id_contrat, id_salarie, id_client, num_bs
+                     FROM adv.pgt_val_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (bs["num_bs"],),
+            )
+
+            if ctt:
+                modifies.append({
+                    "NumBS": bs["num_bs"], "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                    "ClientVille": client_ville,
+                    "Vendeur": nom_vend_final, "DateSign": str(date_sign or ""),
+                    "TypeProd": bs["lib_produit"], "Statut": lib_etat,
+                    "Agence": agence, "Equipe": equipe,
+                    "BSAssocie": bs["num_bs_associe"], "NbPts": bs["nbpt"],
+                    "Remarques": bs["remarque"],
+                })
+                resume.nb_deja_saisis += 1
+                continue
+
+            # TK_Call VAL : enrichit info client + reattribue vendeur
+            tk = _lookup_tk_call_val(bs["num_bs"])
+            cli_nom = client_nom; cli_prenom = client_prenom
+            cli_cp = client_cp; cli_ville = client_ville
+            cli_tel = ""; cli_mail = ""
+            id_vend_bs = id_vendeur; id_ste_bs = id_ste
+            nom_vend_bs = nom_vend_final
+            agence_bs = agence; equipe_bs = equipe
+            if tk:
+                tk_sal = int(tk.get("id_salarie") or 0)
+                if tk_sal:
+                    id_vend_bs = tk_sal
+                    info_sal2 = _info_salarie_val(id_vend_bs)
+                    id_ste_bs = int(info_sal2.get("id_ste") or 0)
+                    agence_bs, equipe_bs, _ = _affectation_val(id_vend_bs)
+                    nom_vend_bs = (f"{_str(info_sal2.get('nom'))} "
+                                   f"{capitalise_str(_str(info_sal2.get('prenom')))}".strip())
+                cli_nom = tk.get("nom_client") or cli_nom
+                if tk.get("nom_marital_client"):
+                    cli_nom += f" ep {tk['nom_marital_client']}"
+                cli_prenom = tk.get("prenom_client") or cli_prenom
+                cli_cp = tk.get("cp") or cli_cp
+                cli_ville = tk.get("ville") or cli_ville
+                cli_tel = _str(tk.get("mobile1"))
+                cli_mail = _str(tk.get("adr_mail"))
+
+            if id_vend_bs == 0:
+                pb_vendeur.append({
+                    "NumBS": bs["num_bs"], "ClientNom": cli_nom,
+                    "ClientPrenom": cli_prenom, "ClientCP": cli_cp,
+                    "ClientVille": cli_ville, "Vendeur": nom_vend_xls,
+                    "DateSign": str(date_sign or ""),
+                    "TypeProd": bs["lib_produit"], "Statut": lib_etat,
+                    "BSAssocie": bs["num_bs_associe"], "NbPts": bs["nbpt"],
+                    "Remarques": bs["remarque"], "Erreur": "Vendeur introuvable",
+                })
+                resume.nb_pb_vendeur += 1
+
+            ajoutes.append({
+                "NumBS": bs["num_bs"], "ClientNom": cli_nom,
+                "ClientPrenom": cli_prenom, "ClientCP": cli_cp,
+                "ClientVille": cli_ville, "ClientTel": cli_tel,
+                "ClientMail": cli_mail, "Vendeur": nom_vend_bs,
+                "DateSign": str(date_sign or ""),
+                "TypeProd": bs["lib_produit"], "Statut": lib_etat,
+                "Agence": agence_bs, "Equipe": equipe_bs,
+                "BSAssocie": bs["num_bs_associe"], "NbPts": bs["nbpt"],
+                "Remarques": bs["remarque"],
+                "FormatNumGoActu": bs["format_numerique"],
+                "_payload_create": {
+                    "num_bs": bs["num_bs"],
+                    "num_bs_associe": bs["num_bs_associe"],
+                    "id_salarie": id_vend_bs, "id_ste": id_ste_bs,
+                    "id_produit": bs["id_produit"],
+                    "etat_contrat": bs["id_etat"],
+                    "date_signature": date_sign,
+                    "non_call": True, "info_interne": bs["remarque"],
+                    "format_numerique": "1" if bs["format_numerique"] else "0",
+                    "nb_points": bs["nbpt"],
+                },
+            })
+            resume.nb_ajoutes += 1
     wb.close()
 
 
