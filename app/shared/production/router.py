@@ -11,11 +11,10 @@ Endpoints :
   GET    /production/etats                → liste TypeEtatContrat
 """
 
-import csv
 import io
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
@@ -44,6 +43,21 @@ from app.shared.production.extraction import (
     read_contrats_page,
     read_job_stats,
 )
+
+
+def _build_xlsx(rows: list[dict]) -> bytes:
+    """Construit un XLSX en memoire depuis les rows + EXPORT_COLUMNS."""
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Production"
+    ws.append([lbl for _, lbl in EXPORT_COLUMNS])
+    for r in rows:
+        ws.append([csv_value(r, k) for k, _ in EXPORT_COLUMNS])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -227,12 +241,12 @@ def get_job_stats(
     return read_job_stats(user.id_salarie, id_job)
 
 
-@router.get("/jobs/{id_job}/export.csv")
-def get_export_csv(
+@router.get("/jobs/{id_job}/export.xlsx")
+def get_export_xlsx(
     id_job: int,
     user: UserToken = Depends(get_current_user),
 ):
-    """Export CSV complet (UTF-8 BOM pour Excel FR)."""
+    """Export XLSX complet (lit tout le Parquet, censure selon droits)."""
     job = get_job(id_job, user.id_salarie)
     if not job:
         raise HTTPException(status_code=404, detail="Job introuvable")
@@ -242,25 +256,16 @@ def get_export_csv(
     if not path:
         raise HTTPException(status_code=404, detail="Fichier résultat introuvable")
 
-    # On lit tout le Parquet (sans pagination) avec censure selon droits user
     data = read_contrats_page(
         path, page=1, page_size=1_000_000, droits=user.droits,
     )
-    rows = data["rows"]
-
-    def gen():
-        buf = io.StringIO()
-        buf.write("﻿")  # BOM UTF-8 pour Excel FR
-        writer = csv.writer(buf, delimiter=";")
-        writer.writerow([lbl for _, lbl in EXPORT_COLUMNS])
-        for r in rows:
-            writer.writerow([csv_value(r, k) for k, _ in EXPORT_COLUMNS])
-        yield buf.getvalue().encode("utf-8")
-
-    filename = f"production-job-{id_job}.csv"
-    return StreamingResponse(
-        gen(),
-        media_type="text/csv; charset=utf-8",
+    content = _build_xlsx(data["rows"])
+    filename = f"production-job-{id_job}.xlsx"
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -274,13 +279,13 @@ class SelectionExportRequest(BaseModel):
     items: list[SelectionExportItem]
 
 
-@router.post("/jobs/{id_job}/export-selection.csv")
-def post_export_selection_csv(
+@router.post("/jobs/{id_job}/export-selection.xlsx")
+def post_export_selection_xlsx(
     id_job: int,
     body: SelectionExportRequest,
     user: UserToken = Depends(get_current_user),
 ):
-    """Export CSV des contrats explicitement sélectionnés (multi-lignes)."""
+    """Export XLSX des contrats explicitement sélectionnés (multi-lignes)."""
     job = get_job(id_job, user.id_salarie)
     if not job:
         raise HTTPException(status_code=404, detail="Job introuvable")
@@ -292,11 +297,9 @@ def post_export_selection_csv(
     if not body.items:
         raise HTTPException(status_code=400, detail="Aucune ligne sélectionnée")
 
-    # Set des clés à conserver : (partenaire, id_contrat)
     wanted: set[tuple[str, str]] = {
         (it.partenaire, str(it.id_contrat)) for it in body.items
     }
-
     data = read_contrats_page(
         path, page=1, page_size=1_000_000, droits=user.droits,
     )
@@ -304,19 +307,12 @@ def post_export_selection_csv(
         r for r in data["rows"]
         if (r.get("partenaire", ""), str(r.get("id_contrat", ""))) in wanted
     ]
-
-    def gen():
-        buf = io.StringIO()
-        buf.write("﻿")  # BOM UTF-8 pour Excel FR
-        writer = csv.writer(buf, delimiter=";")
-        writer.writerow([lbl for _, lbl in EXPORT_COLUMNS])
-        for r in rows:
-            writer.writerow([csv_value(r, k) for k, _ in EXPORT_COLUMNS])
-        yield buf.getvalue().encode("utf-8")
-
-    filename = f"production-job-{id_job}-selection.csv"
-    return StreamingResponse(
-        gen(),
-        media_type="text/csv; charset=utf-8",
+    content = _build_xlsx(rows)
+    filename = f"production-job-{id_job}-selection.xlsx"
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

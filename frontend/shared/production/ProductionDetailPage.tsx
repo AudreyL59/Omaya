@@ -15,6 +15,9 @@ import {
   Minus,
 } from 'lucide-react'
 import { getToken, getStoredUser } from '@/api'
+import {
+  useTableSortFilter, SortableTh, exportRowsToXlsx, FilterInput,
+} from './_tableHelpers'
 
 // --- Types -------------------------------------------------------
 
@@ -579,15 +582,15 @@ export default function ProductionDetailPage({ apiBase, listBase = '/production'
       .catch(() => {})
   }, [idJob])
 
-  const downloadCsv = async () => {
-    const r = await fetch(`${apiBase}/production/jobs/${idJob}/export.csv`, {
+  const downloadXlsx = async () => {
+    const r = await fetch(`${apiBase}/production/jobs/${idJob}/export.xlsx`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
     const blob = await r.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `production-job-${idJob}.csv`
+    a.download = `production-job-${idJob}.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -635,11 +638,11 @@ export default function ProductionDetailPage({ apiBase, listBase = '/production'
           </div>
         </div>
         <button
-          onClick={downloadCsv}
+          onClick={downloadXlsx}
           className="flex items-center gap-2 px-3 py-2 border border-c-line rounded-lg text-sm font-medium text-c-ink-soft hover:bg-c-surface-soft"
         >
           <FileDown className="w-4 h-4" />
-          Export CSV
+          Export XLSX
         </button>
       </motion.div>
 
@@ -769,12 +772,12 @@ function ContratsTable({
   }
   const clearSelection = () => setSelected(new Map())
 
-  const exportSelectionCsv = async () => {
+  const exportSelectionXlsx = async () => {
     const items = Array.from(selected.values()).map((r) => ({
       partenaire: r.partenaire,
       id_contrat: r.id_contrat,
     }))
-    const resp = await fetch(`${apiBase}/production/jobs/${idJob}/export-selection.csv`, {
+    const resp = await fetch(`${apiBase}/production/jobs/${idJob}/export-selection.xlsx`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${getToken()}`,
@@ -787,7 +790,7 @@ function ContratsTable({
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `production-job-${idJob}-selection.csv`
+    a.download = `production-job-${idJob}-selection.xlsx`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -939,9 +942,9 @@ function ContratsTable({
               title="Copie les NumBS dans le presse-papier (un par ligne)"
             >Copier NumBS</button>
             <button
-              onClick={exportSelectionCsv}
+              onClick={exportSelectionXlsx}
               className="px-2 py-1 rounded-md bg-c-brand text-white hover:opacity-90 transition-opacity"
-              title="Télécharge un CSV avec uniquement les lignes sélectionnées"
+              title="Télécharge un XLSX avec uniquement les lignes sélectionnées"
             >Exporter sélection</button>
             <button
               onClick={clearSelection}
@@ -1131,6 +1134,13 @@ function ContratsTable({
 // --- Onglet Répartition ------------------------------------------
 
 function RepartTable({ stats }: { stats: JobStats | null }) {
+  const data = stats?.repart_partenaires ?? []
+  const tsf = useTableSortFilter(
+    data as unknown as Array<Record<string, unknown>>,
+    { key: 'brut', dir: 'desc' },
+    (r) => `${r.lib_partenaire ?? ''} ${r.partenaire ?? ''}`,
+  )
+
   if (!stats) {
     return (
       <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-c-line">
@@ -1138,9 +1148,7 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
       </div>
     )
   }
-
-  const rows = stats.repart_partenaires
-  if (rows.length === 0) {
+  if (data.length === 0) {
     return (
       <div className="text-center py-16 text-c-ink-faint-2 text-sm border border-dashed border-c-line-strong rounded-xl">
         Aucune donnée.
@@ -1148,43 +1156,66 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
     )
   }
 
-  const totals = rows.reduce(
+  const totals = (tsf.rows as unknown as typeof data).reduce(
     (acc, r) => ({
-      brut: acc.brut + r.brut,
-      temporaire: acc.temporaire + r.temporaire,
-      envoye: acc.envoye + r.envoye,
-      rejet: acc.rejet + r.rejet,
-      resil: acc.resil + r.resil,
-      payé: acc.payé + r.payé,
+      brut: acc.brut + r.brut, temporaire: acc.temporaire + r.temporaire,
+      envoye: acc.envoye + r.envoye, rejet: acc.rejet + r.rejet,
+      resil: acc.resil + r.resil, payé: acc.payé + r.payé,
       decomm: acc.decomm + r.decomm,
       racc_activ_ko: acc.racc_activ_ko + r.racc_activ_ko,
       racc_active: acc.racc_active + r.racc_active,
     }),
-    { brut: 0, temporaire: 0, envoye: 0, rejet: 0, resil: 0, payé: 0, decomm: 0, racc_activ_ko: 0, racc_active: 0 },
+    { brut: 0, temporaire: 0, envoye: 0, rejet: 0, resil: 0, payé: 0,
+      decomm: 0, racc_activ_ko: 0, racc_active: 0 },
   )
-
   const num = (n: number) => n.toLocaleString('fr-FR')
+
+  const exportXlsx = () => exportRowsToXlsx(
+    [
+      { key: 'lib_partenaire', label: 'Partenaire' },
+      { key: 'brut', label: 'Brut' },
+      { key: 'temporaire', label: 'Temp.' },
+      { key: 'envoye', label: 'Envoyé' },
+      { key: 'rejet', label: 'Rejet' },
+      { key: 'resil', label: 'Résil.' },
+      { key: 'payé', label: 'Payé' },
+      { key: 'decomm', label: 'Decomm.' },
+      { key: 'racc_activ_ko', label: 'Racc/Act. KO' },
+      { key: 'racc_active', label: 'Raccordé/Activé' },
+    ],
+    tsf.rows as unknown as Array<Record<string, unknown>>,
+    'repartition-partenaires', 'Répartition',
+  )
 
   return (
     <div className="bg-white rounded-xl border border-c-line overflow-hidden">
+      <div className="px-3 py-2 flex items-center gap-2 border-b border-c-line-soft">
+        <FilterInput value={tsf.filter} onChange={tsf.setFilter}
+          placeholder="Filtrer partenaire…" />
+        <div className="flex-1" />
+        <button onClick={exportXlsx}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
+          <FileDown className="w-3.5 h-3.5" /> Export XLSX
+        </button>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-c-surface-soft text-xs text-c-ink-faint uppercase tracking-wide">
             <tr>
-              <th className="text-left px-4 py-2.5 font-medium">Partenaire</th>
-              <th className="text-right px-3 py-2.5 font-medium">Brut</th>
-              <th className="text-right px-3 py-2.5 font-medium">Temp.</th>
-              <th className="text-right px-3 py-2.5 font-medium">Envoyé</th>
-              <th className="text-right px-3 py-2.5 font-medium">Rejet</th>
-              <th className="text-right px-3 py-2.5 font-medium">Résil.</th>
-              <th className="text-right px-3 py-2.5 font-medium">Payé</th>
-              <th className="text-right px-3 py-2.5 font-medium">Decomm.</th>
-              <th className="text-right px-3 py-2.5 font-medium">Racc/Act. KO</th>
-              <th className="text-right px-3 py-2.5 font-medium">Raccordé/Activé</th>
+              <SortableTh label="Partenaire" sortKey="lib_partenaire" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Brut" sortKey="brut" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Temp." sortKey="temporaire" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Envoyé" sortKey="envoye" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Rejet" sortKey="rejet" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Résil." sortKey="resil" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Payé" sortKey="payé" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Decomm." sortKey="decomm" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Racc/Act. KO" sortKey="racc_activ_ko" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Raccordé/Activé" sortKey="racc_active" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
             </tr>
           </thead>
           <tbody className="divide-y divide-c-line-soft">
-            {rows.map((r) => (
+            {(tsf.rows as unknown as typeof data).map((r) => (
               <tr key={r.partenaire} className="hover:bg-c-surface-soft">
                 <td className="px-4 py-2 font-medium text-c-ink flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0"
@@ -1224,14 +1255,29 @@ function RepartTable({ stats }: { stats: JobStats | null }) {
 // --- Onglet Vendeurs ---------------------------------------------
 
 function VendeursTable({ stats }: { stats: JobStats | null }) {
-  const [filter, setFilter] = useState('')
-
   const partenaires = useMemo(() => {
     if (!stats) return [] as string[]
     const s = new Set<string>()
     for (const v of stats.vendeurs) Object.keys(v.par_partenaire).forEach((p) => s.add(p))
     return Array.from(s).sort()
   }, [stats])
+
+  // On enrichit les rows avec les compteurs par partenaire en top-level
+  // pour permettre le tri sur ces colonnes.
+  const enrichedData = useMemo(() => {
+    if (!stats) return []
+    return stats.vendeurs.map((v) => {
+      const enriched: Record<string, unknown> = { ...v }
+      for (const p of partenaires) enriched[`p_${p}`] = v.par_partenaire[p] ?? 0
+      return enriched
+    })
+  }, [stats, partenaires])
+
+  const tsf = useTableSortFilter(
+    enrichedData,
+    { key: 'nb_contrats', dir: 'desc' },
+    (r) => `${r.nom ?? ''} ${r.prenom ?? ''} ${r.agence ?? ''} ${r.equipe ?? ''}`,
+  )
 
   if (!stats) {
     return (
@@ -1240,18 +1286,6 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
       </div>
     )
   }
-
-  const filtered = stats.vendeurs.filter((v) => {
-    if (!filter) return true
-    const q = filter.toLowerCase()
-    return (
-      v.nom.toLowerCase().includes(q) ||
-      v.prenom.toLowerCase().includes(q) ||
-      v.agence.toLowerCase().includes(q) ||
-      v.equipe.toLowerCase().includes(q)
-    )
-  })
-
   if (stats.vendeurs.length === 0) {
     return (
       <div className="text-center py-16 text-c-ink-faint-2 text-sm border border-dashed border-c-line-strong rounded-xl">
@@ -1260,6 +1294,23 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
     )
   }
 
+  const exportXlsx = () => exportRowsToXlsx(
+    [
+      { key: 'nom', label: 'Nom' },
+      { key: 'prenom', label: 'Prénom' },
+      { key: 'agence', label: 'Agence' },
+      { key: 'equipe', label: 'Équipe' },
+      { key: 'poste', label: 'Poste' },
+      { key: 'nb_contrats', label: 'Contrats' },
+      { key: 'nb_hors_rejet', label: 'Hors rejet' },
+      { key: 'nb_paye', label: 'Payés' },
+      { key: 'nb_points', label: 'Points' },
+      ...partenaires.map((p) => ({ key: `p_${p}`, label: p })),
+    ],
+    tsf.rows,
+    'vendeurs', 'Vendeurs',
+  )
+
   return (
     <>
       <div className="flex items-center gap-3 mb-4">
@@ -1267,14 +1318,19 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
           <Search className="w-4 h-4 text-c-ink-faint-2 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             placeholder="Rechercher vendeur / agence / équipe…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            value={tsf.filter}
+            onChange={(e) => tsf.setFilter(e.target.value)}
             className="pl-9 pr-3 py-1.5 border border-c-line-strong rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-c-line-strong w-96"
           />
         </div>
         <span className="text-xs text-c-ink-faint">
-          {filtered.length} / {stats.vendeurs.length} vendeurs
+          {tsf.rows.length} / {stats.vendeurs.length} vendeurs
         </span>
+        <div className="flex-1" />
+        <button onClick={exportXlsx}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
+          <FileDown className="w-3.5 h-3.5" /> Export XLSX
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-c-line overflow-hidden">
@@ -1282,28 +1338,28 @@ function VendeursTable({ stats }: { stats: JobStats | null }) {
           <table className="w-full text-sm">
             <thead className="bg-c-surface-soft text-xs text-c-ink-faint uppercase tracking-wide">
               <tr>
-                <th className="text-left px-3 py-2.5 font-medium">Vendeur</th>
-                <th className="text-left px-3 py-2.5 font-medium">Agence</th>
-                <th className="text-left px-3 py-2.5 font-medium">Équipe</th>
-                <th className="text-left px-3 py-2.5 font-medium">Poste</th>
-                <th className="text-right px-3 py-2.5 font-medium">Contrats</th>
-                <th className="text-right px-3 py-2.5 font-medium">Hors rejet</th>
-                <th className="text-right px-3 py-2.5 font-medium">Payés</th>
-                <th className="text-right px-3 py-2.5 font-medium">Points</th>
+                <SortableTh label="Vendeur" sortKey="nom" sort={tsf.sort} onSort={tsf.toggleSort} />
+                <SortableTh label="Agence" sortKey="agence" sort={tsf.sort} onSort={tsf.toggleSort} />
+                <SortableTh label="Équipe" sortKey="equipe" sort={tsf.sort} onSort={tsf.toggleSort} />
+                <SortableTh label="Poste" sortKey="poste" sort={tsf.sort} onSort={tsf.toggleSort} />
+                <SortableTh label="Contrats" sortKey="nb_contrats" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+                <SortableTh label="Hors rejet" sortKey="nb_hors_rejet" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+                <SortableTh label="Payés" sortKey="nb_paye" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+                <SortableTh label="Points" sortKey="nb_points" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
                 {partenaires.map((p) => (
-                  <th key={p} className="text-right px-3 py-2.5 font-medium">{p}</th>
+                  <SortableTh key={p} label={p} sortKey={`p_${p}`} sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-c-line-soft">
-              {filtered.length === 0 ? (
+              {tsf.rows.length === 0 ? (
                 <tr>
                   <td colSpan={8 + partenaires.length} className="text-center py-12 text-c-ink-faint-2">
                     Aucun résultat
                   </td>
                 </tr>
               ) : (
-                filtered.map((v) => (
+                (tsf.rows as unknown as typeof stats.vendeurs).map((v) => (
                   <tr key={v.id_salarie} className="hover:bg-c-surface-soft">
                     <td className="px-3 py-2 font-medium text-c-ink">
                       {v.nom} {capitalize(v.prenom)}
@@ -1734,6 +1790,28 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
 
   const pct = (v: number) => `${v.toFixed(1)} %`
 
+  const exportXlsx = () => exportRowsToXlsx(
+    [
+      { key: 'nom', label: 'Nom' }, { key: 'prenom', label: 'Prénom' },
+      { key: 'agence', label: 'Agence' }, { key: 'equipe', label: 'Équipe' },
+      { key: 'nb_ra', label: 'nb Ra' }, { key: 'nb_thd', label: 'nb THD hors Att.' },
+      { key: 'tx_racc', label: 'Tx Racc (%)' },
+      { key: 'tx_churn_mob', label: 'Tx Churn Mob (%)' },
+      { key: 'tx_churn_fixe', label: 'Tx Churn Fixe (%)' },
+      { key: 'tx_consent', label: 'Tx Consent (%)' },
+      { key: 'tx_portab', label: 'Tx Portab (%)' },
+      { key: 'tx_mobile', label: 'Tx Mobile (%)' },
+      { key: 'tx_prise', label: 'Tx Prise (%)' },
+      { key: 'tx_ctt_note', label: 'Tx Ctt Notés (%)' },
+      { key: 'note_moy', label: 'Note moy.' },
+      { key: 'productivite', label: 'Productivité' },
+      { key: 'nb_jour_pres', label: 'Nb Jours Prés.' },
+      { key: 'en_activite', label: 'Actif' },
+    ],
+    filtered as unknown as Array<Record<string, unknown>>,
+    'vendeurs-sfr', 'Vendeurs SFR',
+  )
+
   return (
     <>
       <div className="flex items-center gap-3 mb-3">
@@ -1756,6 +1834,10 @@ function VendeurSFRTable({ rows }: { rows: TxRaccVendeurRow[] }) {
           Masquer inactifs
         </label>
         <span className="text-xs text-c-ink-faint ml-auto">{filtered.length} lignes</span>
+        <button onClick={exportXlsx}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
+          <FileDown className="w-3.5 h-3.5" /> Export XLSX
+        </button>
       </div>
       <div className="bg-white rounded-xl border border-c-line overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-340px)]">
@@ -1956,6 +2038,25 @@ function VendeurOENTable({ rows }: { rows: TxRaccVendeurOENRow[] }) {
   }
   const pct = (v: number) => `${v.toFixed(1)} %`
 
+  const exportXlsx = () => exportRowsToXlsx(
+    [
+      { key: 'nom', label: 'Nom' }, { key: 'prenom', label: 'Prénom' },
+      { key: 'agence', label: 'Agence' }, { key: 'equipe', label: 'Équipe' },
+      { key: 'nb_ctt', label: 'nb Ctt' },
+      { key: 'tx_resil', label: 'Tx Résil (%)' },
+      { key: 'tx_dual', label: 'Tx Dual (%)' },
+      { key: 'tx_6kva', label: 'Tx 6Kva+ (%)' },
+      { key: 'tx_consent', label: 'Tx Consent (%)' },
+      { key: 'tx_ctt_note', label: 'Tx Ctt Notés (%)' },
+      { key: 'note_moy', label: 'Note moy.' },
+      { key: 'productivite', label: 'Productivité' },
+      { key: 'nb_jour_pres', label: 'Nb Jours Prés.' },
+      { key: 'en_activite', label: 'Actif' },
+    ],
+    filtered as unknown as Array<Record<string, unknown>>,
+    'vendeurs-oen', 'Vendeurs OEN',
+  )
+
   return (
     <>
       <div className="flex items-center gap-3 mb-3">
@@ -1978,6 +2079,10 @@ function VendeurOENTable({ rows }: { rows: TxRaccVendeurOENRow[] }) {
           Masquer inactifs
         </label>
         <span className="text-xs text-c-ink-faint ml-auto">{filtered.length} lignes</span>
+        <button onClick={exportXlsx}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
+          <FileDown className="w-3.5 h-3.5" /> Export XLSX
+        </button>
       </div>
       <div className="bg-white rounded-xl border border-c-line overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-340px)]">
@@ -2153,6 +2258,22 @@ function VendeurENITable({ rows }: { rows: TxRaccVendeurENIRow[] }) {
   }
   const pct = (v: number) => `${v.toFixed(1)} %`
 
+  const exportXlsx = () => exportRowsToXlsx(
+    [
+      { key: 'nom', label: 'Nom' }, { key: 'prenom', label: 'Prénom' },
+      { key: 'agence', label: 'Agence' }, { key: 'equipe', label: 'Équipe' },
+      { key: 'nb_ctt', label: 'nb Ctt' },
+      { key: 'tx_resil', label: 'Tx Résil (%)' },
+      { key: 'tx_dual', label: 'Tx Dual (%)' },
+      { key: 'tx_6kva', label: 'Tx 6Kva+ (%)' },
+      { key: 'tx_base', label: 'Tx Base (%)' },
+      { key: 'tx_consent', label: 'Tx Consent (%)' },
+      { key: 'en_activite', label: 'Actif' },
+    ],
+    filtered as unknown as Array<Record<string, unknown>>,
+    'vendeurs-eni', 'Vendeurs ENI',
+  )
+
   return (
     <>
       <div className="flex items-center gap-3 mb-3">
@@ -2175,6 +2296,10 @@ function VendeurENITable({ rows }: { rows: TxRaccVendeurENIRow[] }) {
           Masquer inactifs
         </label>
         <span className="text-xs text-c-ink-faint ml-auto">{filtered.length} lignes</span>
+        <button onClick={exportXlsx}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
+          <FileDown className="w-3.5 h-3.5" /> Export XLSX
+        </button>
       </div>
       <div className="bg-white rounded-xl border border-c-line overflow-hidden">
         <div className="overflow-auto max-h-[calc(100vh-340px)]">
