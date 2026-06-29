@@ -447,13 +447,13 @@ function ResumePanel({ resume, fichiers, msg }: {
   const items: Array<[string, number]> = [
     ['NB Fichiers', resume.nb_fichiers],
     ['NB Ajoutés', resume.nb_ajoutes],
-    ['NB Validés', resume.nb_valides],
-    ['NB Résiliés', resume.nb_resilies],
-    ['NB Déjà saisis', resume.nb_deja_saisis],
-    ['NB Déjà statués', resume.nb_deja_statues],
+    ['NB Modifiés', resume.nb_modifies],
+    ['NB Modif vendeurs', resume.nb_modif_vend],
+    ['NB Migrations FTTB→FTTH', resume.nb_migrations],
+    ['NB Non modifiés', resume.nb_non_modifies],
     ['NB Introuvables', resume.nb_introuvables],
     ['NB Doublons', resume.nb_doublons],
-    ['NB Pb Vendeur', resume.nb_pb_vendeur],
+    ['NB Hors délai', resume.nb_hors_delai],
     ['NB Erreurs', resume.nb_erreurs],
   ]
   return (
