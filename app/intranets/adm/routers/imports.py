@@ -19,6 +19,7 @@ from app.intranets.adm.services import import_pro as pro_svc
 from app.intranets.adm.services import import_sfr as sfr_svc
 from app.intranets.adm.services import import_str as str_svc
 from app.intranets.adm.services import import_val as val_svc
+from app.intranets.adm.services import import_masse as masse_svc
 
 
 router = APIRouter(prefix="/imports", tags=["adm-imports"])
@@ -69,6 +70,114 @@ async def post_iag_run(
             mois_paiement_distrib=mois_paiement_distrib,
         ),
         contents, user.id_salarie,
+    )
+
+
+# -- Fen_ImportMasse : 5 onglets (Etat, Produit, Options SFR, Infos, Vendeur) ---
+
+
+@router.get("/masse/partenaires", response_model=list[dict])
+def get_masse_partenaires(_user: UserToken = Depends(get_current_user)):
+    return masse_svc.list_partenaires()
+
+
+@router.get("/masse/etats/{partenaire}", response_model=list[dict])
+def get_masse_etats(partenaire: str, _user: UserToken = Depends(get_current_user)):
+    return masse_svc.list_etats(partenaire)
+
+
+@router.get("/masse/produits/{partenaire}", response_model=list[dict])
+def get_masse_produits(partenaire: str, _user: UserToken = Depends(get_current_user)):
+    return masse_svc.list_produits(partenaire)
+
+
+@router.post("/masse/etat", response_model=masse_svc.MasseResult)
+async def post_masse_etat(
+    partenaire: str = Form(...),
+    id_etat_new: int = Form(...),
+    mois_paiement: str = Form(""),
+    col_num: str = Form("A"),
+    simulation: bool = Form(True),
+    modif_deja_statues: bool = Form(False),
+    modif_uniquement_attente: bool = Form(True),
+    recoche_energies: bool = Form(False),
+    mode: str = Form("vendeur"),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    return masse_svc.run_modif_etat(
+        masse_svc.MasseEtatParams(
+            partenaire=partenaire, id_etat_new=id_etat_new,
+            mois_paiement=mois_paiement, col_num=col_num,
+            simulation=simulation, modif_deja_statues=modif_deja_statues,
+            modif_uniquement_attente=modif_uniquement_attente,
+            recoche_energies=recoche_energies, mode=mode,
+        ),
+        await file.read(), user.id_salarie,
+    )
+
+
+@router.post("/masse/produit", response_model=masse_svc.MasseResult)
+async def post_masse_produit(
+    partenaire: str = Form(...), id_produit_new: int = Form(...),
+    col_num: str = Form("A"), simulation: bool = Form(True),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    return masse_svc.run_modif_produit(
+        masse_svc.MasseProduitParams(
+            partenaire=partenaire, id_produit_new=id_produit_new,
+            col_num=col_num, simulation=simulation,
+        ),
+        await file.read(), user.id_salarie,
+    )
+
+
+@router.post("/masse/option-sfr", response_model=masse_svc.MasseResult)
+async def post_masse_option_sfr(
+    hors_cluster: bool = Form(...),
+    col_num: str = Form("A"), simulation: bool = Form(True),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    return masse_svc.run_modif_option_sfr(
+        masse_svc.MasseOptionSfrParams(
+            hors_cluster=hors_cluster, col_num=col_num, simulation=simulation,
+        ),
+        await file.read(), user.id_salarie,
+    )
+
+
+@router.post("/masse/info-interne", response_model=masse_svc.MasseResult)
+async def post_masse_info_interne(
+    partenaire: str = Form(...),
+    col_num: str = Form("A"), col_comment: str = Form("B"),
+    simulation: bool = Form(True),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    return masse_svc.run_ajout_info_interne(
+        masse_svc.MasseInfoParams(
+            partenaire=partenaire, col_num=col_num, col_comment=col_comment,
+            simulation=simulation,
+        ),
+        await file.read(), user.id_salarie,
+    )
+
+
+@router.post("/masse/vendeur", response_model=masse_svc.MasseResult)
+async def post_masse_vendeur(
+    partenaire: str = Form(...), id_salarie_new: int = Form(...),
+    col_num: str = Form("A"), simulation: bool = Form(True),
+    file: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    return masse_svc.run_modif_vendeur(
+        masse_svc.MasseVendeurParams(
+            partenaire=partenaire, id_salarie_new=id_salarie_new,
+            col_num=col_num, simulation=simulation,
+        ),
+        await file.read(), user.id_salarie,
     )
 
 
