@@ -276,6 +276,40 @@ PROCEDURE INTERNE SyncOneTable(LOCAL sSchema is string, LOCAL sTableHF is string
     ELSE
         SyncFullReload(sSchema, sTableHF, sTablePG, tabCols, sColPK_HF, sColPK_PG)
     END
+
+    // Apres sync : compare le nb d'enregistrements HFSQL vs PG.
+    // Si ecart, log un WARN (la table est sous-/sur-syncronisee).
+    CheckCountMismatch(sSchema, sTableHF, sTablePG)
+END
+
+
+// -- Verif coherence HFSQL <-> PG (apres chaque sync) -------------------------
+//
+// Compte les enregistrements des 2 cotes et log un WARN si difference.
+// Ne fait rien si HFSQL ou PG inaccessibles (le log d'erreur principal aura
+// deja signale).
+PROCEDURE INTERNE CheckCountMismatch(LOCAL sSchema, sTableHF, sTablePG is string)
+    WHEN EXCEPTION IN
+        nHF is int = SafeNbEnr(sTableHF)
+        nPG is int = -1
+
+        sSQL is string = "SELECT COUNT(*) AS n FROM " + sSchema + "." + sTablePG
+        HExecuteSQLQuery("reqCount", MaConnexionPG, hQueryWithoutCorrection, sSQL)
+        HReadFirst("reqCount")
+        IF NOT HOut("reqCount") THEN
+            nPG = {"reqCount.n"}
+        END
+
+        IF nPG >= 0 AND nHF <> nPG THEN
+            nDiff is int = nHF - nPG
+            LogAction("[WARN] " + sSchema + "." + sTableHF + ...
+                      " : HFSQL=" + nHF + " vs PG=" + nPG + ...
+                      " (diff=" + nDiff + ")")
+        END
+    DO
+        LogAction("[WARN] CheckCount " + sSchema + "." + sTableHF + ...
+                  " : " + ExceptionInfo())
+    END
 END
 
 // -- Strategie incrementale (292 tables avec modif_date) ----------------------
