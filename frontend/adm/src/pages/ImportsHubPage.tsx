@@ -48,6 +48,7 @@ const IMPLEMENTED_IMPORTS: Set<string> = new Set([
   'PRO',  // -> /imports/pro (PROTECTED)
   'SFR',  // -> /imports/sfr (10 types : BJ Fibre/Mobile/CALL, Hebdo, Options, RUN, CallRET x4)
   'STR',  // -> /imports/str (STRATO : BJ + RUN + Resil Hebdo)
+  'VAL',  // -> /imports/val (VALANDRE : BJ + RUN + Resil Hebdo)
 ])
 
 const fmtDateTime = (iso: string): string => {

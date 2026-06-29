@@ -18,6 +18,7 @@ from app.intranets.adm.services import import_oen as oen_svc
 from app.intranets.adm.services import import_pro as pro_svc
 from app.intranets.adm.services import import_sfr as sfr_svc
 from app.intranets.adm.services import import_str as str_svc
+from app.intranets.adm.services import import_val as val_svc
 
 
 router = APIRouter(prefix="/imports", tags=["adm-imports"])
@@ -61,6 +62,37 @@ async def post_iag_run(
         iag_svc.ImportIagParams(
             type_import=type_import, simulation=simulation,
             format_vendeur=format_vendeur,
+            periode1_du=periode1_du, periode1_au=periode1_au,
+            periode1_mois_paiement=periode1_mois_paiement,
+            periode2_du=periode2_du, periode2_au=periode2_au,
+            periode2_mois_paiement=periode2_mois_paiement,
+            mois_paiement_distrib=mois_paiement_distrib,
+        ),
+        contents, user.id_salarie,
+    )
+
+
+# -- Fen_ImportVAL : 3 types (BJ + RUN + Resil Hebdo), multi-fichier --------
+
+
+@router.post("/val/run", response_model=val_svc.ImportValResult)
+async def post_val_run(
+    type_import: int = Form(...),
+    simulation: bool = Form(True),
+    periode1_du: str = Form(""), periode1_au: str = Form(""),
+    periode1_mois_paiement: str = Form(""),
+    periode2_du: str = Form(""), periode2_au: str = Form(""),
+    periode2_mois_paiement: str = Form(""),
+    mois_paiement_distrib: str = Form(""),
+    files: list[UploadFile] = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    contents: list[tuple[str, bytes]] = []
+    for f in files:
+        contents.append((f.filename or "fichier.xlsx", await f.read()))
+    return val_svc.run_import_val(
+        val_svc.ImportValParams(
+            type_import=type_import, simulation=simulation,
             periode1_du=periode1_du, periode1_au=periode1_au,
             periode1_mois_paiement=periode1_mois_paiement,
             periode2_du=periode2_du, periode2_au=periode2_au,
