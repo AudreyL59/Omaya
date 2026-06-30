@@ -1,7 +1,7 @@
 """Router Fen_FacturesSuivi + Fen_FactureFiche (ADM > Suivi des factures)."""
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -122,10 +122,11 @@ def download_facture(
     id_facture: int,
     _u: UserToken = Depends(get_current_user),
 ):
-    path, info = svc.get_facture_file_path(id_facture)
-    if not path:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Fichier introuvable. Attendu : {info}",
-        )
-    return FileResponse(str(path), filename=info)
+    content, info = svc.get_facture_content(id_facture)
+    if content is None:
+        raise HTTPException(status_code=404, detail=info)
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{info}"'},
+    )

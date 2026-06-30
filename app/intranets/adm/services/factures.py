@@ -383,26 +383,19 @@ def update_commande(id_commande: int, p: CommandeCreatePayload,
 # ---------- Upload / Download facture ----------------------------------
 
 
-def _factures_dir(id_commande: int):
-    """Dossier de stockage des factures d'une commande."""
-    from app.core.config import DOCS_BASE_PATH
-    return DOCS_BASE_PATH / "factures" / str(id_commande)
-
-
 def add_facture(
     id_commande: int, file_content: bytes, file_name: str,
     montant_ttc: float, op_id: int,
 ) -> int:
-    """Sauve le fichier sur disque + INSERT pgt_commande_facture.
+    """Stocke le contenu du fichier en BDD (bytea) + INSERT
+    pgt_commande_facture. Meme principe que les documents salaries
+    (pgt_doc_rh.contenu).
     Retourne id_commande_facture."""
-    import os, pathlib
-    folder = _factures_dir(id_commande)
-    folder.mkdir(parents=True, exist_ok=True)
+    import pathlib
+    import psycopg2
     # Nouveau nom : timestamp + extension (cf WinDev DateHeureSys()+ResExtension)
     ext = pathlib.Path(file_name).suffix or ""
     new_name = datetime.now().strftime("%Y%m%d%H%M%S") + ext
-    target = folder / new_name
-    target.write_bytes(file_content)
 
     db = get_pg_connection("divers")
     id_new = _new_id()
@@ -414,11 +407,12 @@ def add_facture(
     db.query(
         """INSERT INTO divers.pgt_commande_facture
               (id_commande_facture_auto, id_commande_facture, id_commande,
-               date_ajout, montant_ttc, nom_fic,
+               date_ajout, montant_ttc, nom_fic, contenu,
                modif_date, modif_op, modif_elem)
-           VALUES (?, ?, ?, NOW(), ?, ?, NOW(), ?, 'new')""",
+           VALUES (?, ?, ?, NOW(), ?, ?, ?, NOW(), ?, 'new')""",
         (auto_n, id_new, int(id_commande),
-         float(montant_ttc), new_name, int(op_id)),
+         float(montant_ttc), new_name,
+         psycopg2.Binary(file_content), int(op_id)),
     )
     return id_new
 
@@ -434,24 +428,24 @@ def delete_facture(id_facture: int, op_id: int) -> bool:
     return True
 
 
-def get_facture_file_path(id_facture: int):
-    """Retourne (path, nom_original) pour le download.
-    Si le fichier n'existe pas localement, retourne (None, expected_path)
-    pour que le router puisse signaler le path attendu (utile pour
-    diagnostic : factures historiques WinDev pas encore migrees)."""
+def get_facture_content(id_facture: int):
+    """Retourne (content_bytes, nom_fichier) depuis la BDD.
+    Retourne (None, msg) si introuvable ou contenu vide (facture
+    historique WinDev pas encore migree en bytea)."""
     db = get_pg_connection("divers")
     r = db.query_one(
-        """SELECT id_commande, nom_fic FROM divers.pgt_commande_facture
+        """SELECT nom_fic, contenu FROM divers.pgt_commande_facture
             WHERE id_commande_facture = ?""",
         (int(id_facture),),
     )
     if not r:
         return None, "introuvable en BDD"
-    p = _factures_dir(int(r["id_commande"])) / (r.get("nom_fic") or "")
-    if p.exists():
-        return p, r.get("nom_fic") or "facture.pdf"
-    # Fichier absent : on retourne le path attendu pour diagnostic
-    return None, str(p)
+    c = r.get("contenu")
+    if c is None:
+        return None, ("contenu non present en BDD (facture historique "
+                      "WinDev a remigrer)")
+    content = bytes(c) if isinstance(c, memoryview) else c
+    return content, r.get("nom_fic") or "facture.pdf"
 
 
 # ---------- Suppression (soft delete) ----------------------------------

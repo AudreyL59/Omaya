@@ -94,7 +94,8 @@ CREATE TABLE divers.pgt_commande_facture (
     id_commande               bigint,  -- IDCommande
     date_ajout                timestamp,  -- DateAjout
     montant_ttc               numeric(19,4),  -- MontantTTC
-    nom_fic                   varchar(25),  -- nom_Fic
+    nom_fic                   varchar(255),  -- nom_Fic (etendu : noms longs)
+    contenu                   bytea,  -- Contenu binaire du fichier (pdf/jpg/...)
     modif_date                timestamp,  -- ModifDate
     modif_op                  bigint,  -- ModifOP
     modif_elem                varchar(5),  -- ModifELEM
