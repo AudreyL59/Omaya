@@ -483,9 +483,36 @@ export default function FactureFicheModal({
                         : <Save className="w-4 h-4" />}
                   Enregistrer
                 </button>
+
+                {/* Ajout facture - en bas col gauche pour reequilibrer */}
+                <div className="border border-c-line rounded p-3 bg-c-surface-soft space-y-2 mt-3">
+                  <h4 className="text-sm font-semibold text-c-ink mb-1">
+                    Ajouter une facture
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-c-ink-faint w-24 shrink-0">Montant TTC</label>
+                    <input type="number" step="0.01" value={factureMontant || ''}
+                      onChange={e => setFactureMontant(parseFloat(e.target.value) || 0)}
+                      className="flex-1 px-2 py-1.5 border border-c-line rounded text-sm text-right bg-white" />
+                    <span className="text-c-ink-faint">€</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-c-ink-faint w-24 shrink-0">Fichier</label>
+                    <input type="file"
+                      onChange={e => setFactureFile(e.target.files?.[0] || null)}
+                      className="flex-1 text-xs" />
+                  </div>
+                  <button type="button" onClick={handleAjoutFacture}
+                    disabled={uploading || !factureFile}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-c-brand text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" />
+                               : <FileUp className="w-4 h-4" />}
+                    Ajouter la facture
+                  </button>
+                </div>
               </div>
 
-              {/* Colonne droite : factures liées + ajout */}
+              {/* Colonne droite : factures liées + apercu */}
               <div className="space-y-3">
                 <div className="border border-c-line rounded overflow-hidden">
                   <table className="w-full text-xs">
@@ -548,33 +575,6 @@ export default function FactureFicheModal({
                   </span>
                 </div>
 
-                {/* Ajout facture */}
-                <div className="border border-c-line rounded p-3 bg-c-surface-soft space-y-2">
-                  <h4 className="text-sm font-semibold text-c-ink mb-1">
-                    Ajouter une facture
-                  </h4>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-c-ink-faint w-24 shrink-0">Montant TTC</label>
-                    <input type="number" step="0.01" value={factureMontant || ''}
-                      onChange={e => setFactureMontant(parseFloat(e.target.value) || 0)}
-                      className="flex-1 px-2 py-1.5 border border-c-line rounded text-sm text-right bg-white" />
-                    <span className="text-c-ink-faint">€</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs text-c-ink-faint w-24 shrink-0">Fichier</label>
-                    <input type="file"
-                      onChange={e => setFactureFile(e.target.files?.[0] || null)}
-                      className="flex-1 text-xs" />
-                  </div>
-                  <button type="button" onClick={handleAjoutFacture}
-                    disabled={uploading || !factureFile}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 bg-c-brand text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" />
-                               : <FileUp className="w-4 h-4" />}
-                    Ajouter la facture
-                  </button>
-                </div>
-
                 {/* Apercu inline de la facture sélectionnée */}
                 <div className="border border-c-line rounded overflow-hidden">
                   <div className="px-3 py-1.5 bg-c-surface-soft border-b border-c-line-soft text-xs font-medium text-c-ink-faint flex items-center gap-2">
@@ -585,7 +585,7 @@ export default function FactureFicheModal({
                       </span>
                     )}
                   </div>
-                  <div className="bg-c-surface-soft" style={{ minHeight: 280 }}>
+                  <div className="bg-c-surface-soft" style={{ minHeight: 400 }}>
                     {!selectedFactureId ? (
                       <p className="text-xs italic text-center py-12 text-c-ink-faint-2">
                         Clique sur une ligne du tableau pour afficher la facture
@@ -600,11 +600,11 @@ export default function FactureFicheModal({
                       </p>
                     ) : isImage ? (
                       <img src={previewUrl} alt={previewName}
-                        className="w-full max-h-[60vh] object-contain bg-white" />
+                        className="w-full max-h-[75vh] object-contain bg-white" />
                     ) : isPdf ? (
                       <iframe src={previewUrl} title={previewName}
                         className="w-full bg-white"
-                        style={{ height: '60vh', border: 0 }} />
+                        style={{ height: '75vh', border: 0 }} />
                     ) : (
                       <p className="text-xs italic text-center py-12 text-c-ink-faint-2">
                         Aperçu non disponible pour ce type de fichier.
