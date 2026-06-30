@@ -17,6 +17,7 @@ import {
 import {
   useTableSortFilter, SortableTh, FilterInput,
 } from '@shared/production/_tableHelpers'
+import TicketCallPlanning from '@/components/sfr/TicketCallPlanning'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
@@ -42,6 +43,13 @@ interface AnalyseVentes {
   pas_encore_statuees: number; ventes_validees: number; ventes_annulees: number
   par_delai: Array<{ delai: string; ventes_valides: number; ventes_annulees: number }>
 }
+interface PlanningRdv {
+  titre: string; contenu: string
+  date_debut: string; date_fin: string
+  ressource: string; couleur: string
+  delai_label: string; delai_min: number
+  nb_valide: number
+}
 
 type Etat = 'ouverts' | 'clotures' | 'tous'
 type Onglet = 'liste' | 'analyse' | 'appels' | 'ventes'
@@ -59,6 +67,7 @@ export default function SfrTicketCallPage() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [tranches, setTranches] = useState<Tranche[]>([])
   const [ventes, setVentes] = useState<AnalyseVentes | null>(null)
+  const [planning, setPlanning] = useState<PlanningRdv[]>([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -69,14 +78,16 @@ export default function SfrTicketCallPage() {
     try {
       const h = { Authorization: `Bearer ${getToken()}` }
       const params = `du=${du}&au=${au}&etat=${etat}`
-      const [t, an, ven] = await Promise.all([
+      const [t, an, ven, pl] = await Promise.all([
         fetch(`${API_BASE}/suivi-sfr/ticket-call?${params}`, { headers: h }).then(r => r.json()),
         fetch(`${API_BASE}/suivi-sfr/ticket-call/analyse?${params}`, { headers: h }).then(r => r.json()),
         fetch(`${API_BASE}/suivi-sfr/ticket-call/analyse-ventes?${params}`, { headers: h }).then(r => r.json()),
+        fetch(`${API_BASE}/suivi-sfr/ticket-call/planning?${params}`, { headers: h }).then(r => r.json()),
       ])
       setTickets(Array.isArray(t) ? t : [])
       setTranches(Array.isArray(an) ? an : [])
       setVentes(ven)
+      setPlanning(Array.isArray(pl) ? pl : [])
     } catch (e) {
       showToast(`Erreur : ${(e as Error).message}`, 'error')
     } finally { setLoading(false) }
@@ -191,12 +202,7 @@ export default function SfrTicketCallPage() {
         )}
         {onglet === 'analyse' && <OngletAnalyse tranches={tranches} />}
         {onglet === 'appels' && (
-          <div className="p-8 text-center text-sm text-c-ink-faint italic">
-            Planning visuel des appels : à venir<br/>
-            <span className="text-xs">
-              (composant calendrier custom, implémenté à l'étape suivante)
-            </span>
-          </div>
+          <TicketCallPlanning rdvs={planning} initialDate={du} />
         )}
         {onglet === 'ventes' && ventes && <OngletVentes ventes={ventes} />}
       </div>

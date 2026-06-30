@@ -625,6 +625,116 @@ def analyse_tk_call_sfr(
     return sorted(buckets.values(), key=lambda x: x.tranche_horaire)
 
 
+class PlanningRdvItem(BaseModel):
+    """Un rendez-vous a afficher sur le planning visuel."""
+    titre: str
+    contenu: str
+    date_debut: str             # ISO YYYY-MM-DD HH:MM:SS
+    date_fin: str
+    ressource: str              # 'Crea Ticket' OU nom de l'operateur
+    couleur: str                # hex code (#86efac / #fde68a / #fdba74 / #fca5a5)
+    delai_label: str            # '< 3 min' / 'Entre 3 et 5 min' / etc.
+    delai_min: float
+    nb_valide: int              # 0 = icone 'pas valide', >0 = icone OK
+
+
+# Couleurs (cf legend WinDev : Vert / OrangeClair / OrangeFonce / Rouge)
+_COULEURS_DELAI = {
+    "< 3 min":           "#86efac",   # vert
+    "Entre 3 et 5 min":  "#fde68a",   # jaune
+    "Entre 5 et 7 min":  "#fdba74",   # orange
+    "> 7 min":           "#fca5a5",   # rouge clair
+}
+
+
+def planning_appels(
+    du: date, au: date, etat: str = "tous",
+) -> list[PlanningRdvItem]:
+    """Construit la liste des RDV pour le planning visuel (onglet
+    'Analyse des Appels').
+
+    Chaque ticket genere 2 RDV :
+      1. Un RDV sur la ressource 'Crea Ticket' a date_crea (3 minutes)
+      2. Un RDV sur la ressource = nom_operateur entre
+         date_deb_prise_en_charge et date_fin_prise_en_charge.
+
+    La couleur = categorie de delai (avant prise en charge).
+    """
+    rows = _load_ticket_call_sfr(du, au, etat)
+    ids = [int(r["id_tk_call_sfr"]) for r in rows]
+    paniers_by_id = _load_paniers_by_tickets(ids)
+
+    out: list[PlanningRdvItem] = []
+    for r in rows:
+        id_tc = int(r["id_tk_call_sfr"])
+        crea = r.get("date_crea")
+        if not isinstance(crea, datetime):
+            continue
+        deb = r.get("date_deb_prise_en_charge")
+        fin = r.get("date_fin_prise_en_charge")
+        app = r.get("date_h_appel")
+
+        delai = 0.0
+        if isinstance(deb, datetime) and isinstance(app, datetime):
+            delai = (deb - app).total_seconds() / 60.0
+            if delai < 0:
+                delai = 0.0
+        delai_lbl = _delai_label(delai)
+        couleur = _COULEURS_DELAI[delai_lbl]
+
+        # Resume panier (multiligne)
+        paniers = paniers_by_id.get(id_tc, [])
+        nb_valide = sum(1 for p in paniers if int(p.get("statut_prod") or 0) in (1, 3))
+        lines = []
+        for p in paniers:
+            num = p.get("num") or ""
+            etat_p = _statut_prod_label(p.get("statut_prod"))
+            d = p.get("num_date_saisie")
+            line = num
+            if d: line += f" ({_date_str(d)})"
+            line += f" - {etat_p}"
+            lines.append(line)
+        contenu = "\n".join(lines)
+
+        titre = (
+            (r.get("nom_client") or "").strip() + " "
+            + _capitalize((r.get("prenom_client") or "").strip())
+        ).strip()
+
+        # On exclut les tickets faits par l'op 6 (cf WinDev op_crea<>6)
+        # (deja filtre dans _load_ticket_call_sfr).
+
+        # RDV 1 : creation du ticket (Crea Ticket, 3 min)
+        crea_min = crea.replace(microsecond=0, second=0)
+        fin_crea = crea_min + timedelta(minutes=3)
+        out.append(PlanningRdvItem(
+            titre=titre, contenu=contenu,
+            date_debut=crea_min.strftime("%Y-%m-%d %H:%M:%S"),
+            date_fin=fin_crea.strftime("%Y-%m-%d %H:%M:%S"),
+            ressource="Crea Ticket",
+            couleur=couleur, delai_label=delai_lbl,
+            delai_min=round(delai, 1), nb_valide=nb_valide,
+        ))
+
+        # RDV 2 : appel par l'operateur (entre date_deb et date_fin)
+        if isinstance(deb, datetime) and isinstance(fin, datetime):
+            if deb > fin:
+                fin = deb + timedelta(minutes=3)
+            sa_nom = (r.get("sa_nom") or "").strip()
+            sa_prenom = _capitalize((r.get("sa_prenom") or "").strip())
+            nom_ope = f"{sa_nom} {sa_prenom}".strip() or "—"
+            out.append(PlanningRdvItem(
+                titre=titre, contenu=contenu,
+                date_debut=deb.strftime("%Y-%m-%d %H:%M:%S"),
+                date_fin=fin.strftime("%Y-%m-%d %H:%M:%S"),
+                ressource=nom_ope,
+                couleur=couleur, delai_label=delai_lbl,
+                delai_min=round(delai, 1), nb_valide=nb_valide,
+            ))
+
+    return out
+
+
 def analyse_ventes_tk_call_sfr(
     du: date, au: date, etat: str = "tous",
 ) -> AnalyseVentesTotaux:

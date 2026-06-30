@@ -140,3 +140,14 @@ def get_ticket_call_analyse_ventes(
     _u: UserToken = Depends(get_current_user),
 ):
     return svc.analyse_ventes_tk_call_sfr(du, au, etat)
+
+
+@router.get("/ticket-call/planning",
+            response_model=list[svc.PlanningRdvItem])
+def get_ticket_call_planning(
+    du: date,
+    au: date,
+    etat: str = "tous",
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.planning_appels(du, au, etat)
