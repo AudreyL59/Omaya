@@ -647,6 +647,220 @@ _COULEURS_DELAI = {
 }
 
 
+class TicketCallPanierItem(BaseModel):
+    id_tk_call_sfr_panier: str
+    id_offres_sfr: int = 0
+    lib_offre: str = ""
+    type: str = ""
+    type_vente: int = 0
+    num: str = ""
+    num_date_saisie: str = ""
+    portabilite: bool = False
+    num_portabilite: str = ""
+    num_prise_rio: str = ""
+    num_prise_optique: str = ""
+    opt_tv: str = ""
+    opt_choisies: str = ""
+    test_eligibilite: str = ""
+    motif_annulation: str = ""
+    statut_prod: int = 0
+    a_creer: bool = False             # auto cf code WinDev : NUM<>'' AND statut_prod=1
+
+
+class TicketCallDetail(BaseModel):
+    # TK_Liste
+    id_tk_liste: str
+    date_crea: str = ""
+    id_tk_statut: int = 0
+    lib_statut: str = ""
+    cloturee: bool = False
+    date_cloture: str = ""
+    date_report: str = ""
+    op_crea: int = 0
+    op_crea_nom: str = ""
+    # TK_CallSFR (client)
+    id_tk_call_sfr: str = ""
+    id_salarie: int = 0
+    id_salarie_nom: str = ""
+    nom_client: str = ""
+    prenom_client: str = ""
+    nom_marital_client: str = ""
+    civilite_client: int = 0
+    date_naiss: str = ""
+    dep_naiss: str = ""
+    adresse1: str = ""
+    adresse2: str = ""
+    cp: str = ""
+    ville: str = ""
+    mobile1: str = ""
+    adr_mail: str = ""
+    type_logement: int = 0
+    opt_rappel: bool = False
+    opt_partenaire: bool = False
+    intervention_vend: bool = False
+    info_vente: str = ""
+    ref_appel: str = ""
+    motif_annulation: str = ""
+    code_valid: str = ""
+    # Lignes panier
+    paniers: list[TicketCallPanierItem] = []
+
+
+def get_ticket_call_detail(id_tk_liste: int) -> Optional[TicketCallDetail]:
+    """Charge le detail complet du ticket : TK_Liste + TK_CallSFR + paniers."""
+    db_tk = get_pg_connection("ticket")
+    db_bo = get_pg_connection("ticket_bo")
+    db_rh = get_pg_connection("rh")
+
+    # TK_Liste
+    tl = db_tk.query_one(
+        """SELECT tl.id_tk_liste, tl.date_crea, tl.id_tk_statut,
+                  tl.cloturee, tl.date_cloture, tl.date_report, tl.op_crea,
+                  ts.lib_statut
+             FROM ticket.pgt_tk_liste tl
+             LEFT JOIN ticket.pgt_tk_statut ts ON ts.id_tk_statut = tl.id_tk_statut
+            WHERE tl.id_tk_liste = ? LIMIT 1""",
+        (int(id_tk_liste),),
+    )
+    if not tl:
+        return None
+
+    # TK_CallSFR
+    tc = db_bo.query_one(
+        """SELECT id_tk_call_sfr, id_salarie, nom_client, prenom_client,
+                  nom_marital_client, civilite_client, date_naiss, dep_naiss,
+                  adresse1, adresse2, cp, ville, mobile1, adr_mail,
+                  type_logement, opt_rappel, opt_partenaire,
+                  intervention_vend, info_vente, ref_appel,
+                  motif_annulation, code_valid
+             FROM ticket_bo.pgt_tk_call_sfr
+            WHERE id_tk_liste = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (int(id_tk_liste),),
+    ) or {}
+
+    # Resolution noms salaries (op_crea + id_salarie du call)
+    op_crea = int(tl.get("op_crea") or 0)
+    id_sal = int(tc.get("id_salarie") or 0)
+    nom_op = ""; nom_sal = ""
+    ids_needed = []
+    if op_crea: ids_needed.append(op_crea)
+    if id_sal and id_sal != op_crea: ids_needed.append(id_sal)
+    if ids_needed:
+        ids_sql = ",".join(str(i) for i in ids_needed)
+        sals = db_rh.query(
+            f"SELECT id_salarie, nom, prenom FROM rh.pgt_salarie "
+            f"WHERE id_salarie IN ({ids_sql})"
+        ) or []
+        smap = {int(s["id_salarie"]): s for s in sals}
+        if op_crea and op_crea in smap:
+            s = smap[op_crea]
+            nom_op = f"{(s.get('nom') or '').strip()} {_capitalize((s.get('prenom') or '').strip())}".strip()
+        if id_sal and id_sal in smap:
+            s = smap[id_sal]
+            nom_sal = f"{(s.get('nom') or '').strip()} {_capitalize((s.get('prenom') or '').strip())}".strip()
+
+    # Paniers
+    paniers: list[TicketCallPanierItem] = []
+    id_tc = int(tc.get("id_tk_call_sfr") or 0)
+    if id_tc:
+        rows = db_bo.query(
+            """SELECT p.id_tk_call_sfr_panier, p.id_offres_sfr, p.type,
+                      p.type_vente, p.num, p.num_date_saisie,
+                      p.portabilite, p.num_portabilite, p.num_prise_rio,
+                      p.num_prise_optique, p.opt_tv, p.opt_choisies,
+                      p.test_eligibilite, p.motif_annulation, p.statut_prod,
+                      o.lib_offre
+                 FROM ticket_bo.pgt_tk_call_sfr_panier p
+                 LEFT JOIN adv.pgt_sfr_offres_provad o
+                        ON o.id_offres_sfr = p.id_offres_sfr
+                WHERE p.id_tk_call_sfr = ?
+                  AND (p.modif_elem IS NULL OR p.modif_elem NOT LIKE '%suppr%')
+                ORDER BY p.id_tk_call_sfr_panier""",
+            (id_tc,),
+        ) or []
+        for r in rows:
+            num = (r.get("num") or "").strip()
+            statut_p = int(r.get("statut_prod") or 0)
+            paniers.append(TicketCallPanierItem(
+                id_tk_call_sfr_panier=str(r["id_tk_call_sfr_panier"]),
+                id_offres_sfr=int(r.get("id_offres_sfr") or 0),
+                lib_offre=r.get("lib_offre") or "",
+                type=r.get("type") or "",
+                type_vente=int(r.get("type_vente") or 0),
+                num=num,
+                num_date_saisie=_date_str(r.get("num_date_saisie")),
+                portabilite=bool(r.get("portabilite")),
+                num_portabilite=r.get("num_portabilite") or "",
+                num_prise_rio=r.get("num_prise_rio") or "",
+                num_prise_optique=r.get("num_prise_optique") or "",
+                opt_tv=r.get("opt_tv") or "",
+                opt_choisies=r.get("opt_choisies") or "",
+                test_eligibilite=r.get("test_eligibilite") or "",
+                motif_annulation=r.get("motif_annulation") or "",
+                statut_prod=statut_p,
+                a_creer=bool(num and statut_p == 1),
+            ))
+
+    return TicketCallDetail(
+        id_tk_liste=str(tl["id_tk_liste"]),
+        date_crea=_date_str(tl.get("date_crea")),
+        id_tk_statut=int(tl.get("id_tk_statut") or 0),
+        lib_statut=tl.get("lib_statut") or "",
+        cloturee=bool(tl.get("cloturee")),
+        date_cloture=_date_str(tl.get("date_cloture")),
+        date_report=_date_str(tl.get("date_report")),
+        op_crea=op_crea, op_crea_nom=nom_op,
+        id_tk_call_sfr=str(id_tc) if id_tc else "",
+        id_salarie=id_sal, id_salarie_nom=nom_sal,
+        nom_client=tc.get("nom_client") or "",
+        prenom_client=tc.get("prenom_client") or "",
+        nom_marital_client=tc.get("nom_marital_client") or "",
+        civilite_client=int(tc.get("civilite_client") or 0),
+        date_naiss=_date_str(tc.get("date_naiss")),
+        dep_naiss=str(tc.get("dep_naiss") or ""),
+        adresse1=tc.get("adresse1") or "",
+        adresse2=tc.get("adresse2") or "",
+        cp=tc.get("cp") or "",
+        ville=tc.get("ville") or "",
+        mobile1=tc.get("mobile1") or "",
+        adr_mail=tc.get("adr_mail") or "",
+        type_logement=int(tc.get("type_logement") or 0),
+        opt_rappel=bool(tc.get("opt_rappel")),
+        opt_partenaire=bool(tc.get("opt_partenaire")),
+        intervention_vend=bool(tc.get("intervention_vend")),
+        info_vente=tc.get("info_vente") or "",
+        ref_appel=tc.get("ref_appel") or "",
+        motif_annulation=tc.get("motif_annulation") or "",
+        code_valid=tc.get("code_valid") or "",
+        paniers=paniers,
+    )
+
+
+def update_panier_num(
+    id_panier: int, new_num: str, id_tk_liste: int, op_id: int,
+) -> bool:
+    """Met a jour TK_CallSFR_Panier.NUM + bascule TK_Liste.IDTK_Statut=17
+    (SFR - Num BS SFR renseigne) cf code WinDev modif colonne NUM."""
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    norm = (new_num or "").strip().upper()
+    db_bo.query(
+        """UPDATE ticket_bo.pgt_tk_call_sfr_panier
+              SET num=?, modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_tk_call_sfr_panier=?""",
+        (norm, int(op_id), int(id_panier)),
+    )
+    db_tk.query(
+        """UPDATE ticket.pgt_tk_liste
+              SET id_tk_statut=17, modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_tk_liste=?""",
+        (int(op_id), int(id_tk_liste)),
+    )
+    return True
+
+
 def planning_appels(
     du: date, au: date, etat: str = "tous",
 ) -> list[PlanningRdvItem]:

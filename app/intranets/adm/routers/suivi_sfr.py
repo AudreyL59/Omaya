@@ -142,6 +142,35 @@ def get_ticket_call_analyse_ventes(
     return svc.analyse_ventes_tk_call_sfr(du, au, etat)
 
 
+@router.get("/ticket-call/detail/{id_tk_liste}",
+            response_model=svc.TicketCallDetail)
+def get_ticket_call_detail(
+    id_tk_liste: int,
+    _u: UserToken = Depends(get_current_user),
+):
+    from fastapi import HTTPException
+    d = svc.get_ticket_call_detail(id_tk_liste)
+    if not d:
+        raise HTTPException(status_code=404, detail="Ticket introuvable")
+    return d
+
+
+class UpdatePanierNumPayload(BaseModel):
+    num: str
+    id_tk_liste: int
+
+
+@router.put("/ticket-call/panier/{id_panier}/num")
+def put_panier_num(
+    id_panier: int,
+    payload: UpdatePanierNumPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_panier_num(id_panier, payload.num, payload.id_tk_liste,
+                          u.id_salarie)
+    return {"ok": True}
+
+
 @router.get("/ticket-call/planning",
             response_model=list[svc.PlanningRdvItem])
 def get_ticket_call_planning(

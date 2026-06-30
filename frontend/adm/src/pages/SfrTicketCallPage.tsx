@@ -18,6 +18,7 @@ import {
   useTableSortFilter, SortableTh, FilterInput,
 } from '@shared/production/_tableHelpers'
 import TicketCallPlanning from '@/components/sfr/TicketCallPlanning'
+import TicketCallContenuModal from '@/components/sfr/TicketCallContenuModal'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
@@ -68,6 +69,7 @@ export default function SfrTicketCallPage() {
   const [tranches, setTranches] = useState<Tranche[]>([])
   const [ventes, setVentes] = useState<AnalyseVentes | null>(null)
   const [planning, setPlanning] = useState<PlanningRdv[]>([])
+  const [contenuTicketId, setContenuTicketId] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -198,7 +200,8 @@ export default function SfrTicketCallPage() {
       <div className="flex-1 overflow-hidden bg-white rounded-xl border border-c-line">
         {onglet === 'liste' && (
           <OngletListe tickets={tickets} selected={selected}
-            toggle={toggle} toggleAll={toggleAll} />
+            toggle={toggle} toggleAll={toggleAll}
+            onVoirTicket={(id) => setContenuTicketId(id)} />
         )}
         {onglet === 'analyse' && <OngletAnalyse tranches={tranches} />}
         {onglet === 'appels' && (
@@ -206,16 +209,25 @@ export default function SfrTicketCallPage() {
         )}
         {onglet === 'ventes' && ventes && <OngletVentes ventes={ventes} />}
       </div>
+
+      {contenuTicketId && (
+        <TicketCallContenuModal
+          idTkListe={contenuTicketId}
+          onClose={() => setContenuTicketId('')}
+          onChanged={rechercher}
+        />
+      )}
     </div>
   )
 }
 
 // =================== Onglet 1 : Liste ===========================
 function OngletListe({
-  tickets, selected, toggle, toggleAll,
+  tickets, selected, toggle, toggleAll, onVoirTicket,
 }: {
   tickets: Ticket[]; selected: Set<string>
   toggle: (id: string) => void; toggleAll: () => void
+  onVoirTicket: (idTkListe: string) => void
 }) {
   const tsf = useTableSortFilter(
     tickets as unknown as Array<Record<string, unknown>>,
@@ -233,7 +245,11 @@ function OngletListe({
         <button type="button"
           className="flex items-center gap-1 px-2 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30"
           disabled={selected.size !== 1}
-          onClick={() => showToast('Voir le ticket : ouvre Fen_ContenuTicketCallSFR (à venir)', 'info')}>
+          onClick={() => {
+            const id = Array.from(selected)[0]
+            const t = tickets.find(x => x.id_tk_call_sfr === id)
+            if (t) onVoirTicket(t.id_tk_liste)
+          }}>
           <Eye className="w-3.5 h-3.5" /> Voir le ticket
         </button>
         <button type="button"
@@ -286,6 +302,7 @@ function OngletListe({
             ) : rows.map(t => (
               <tr key={t.id_tk_call_sfr}
                 onClick={() => toggle(t.id_tk_call_sfr)}
+                onDoubleClick={() => onVoirTicket(t.id_tk_liste)}
                 className={`cursor-pointer hover:bg-c-surface-soft ${
                   selected.has(t.id_tk_call_sfr) ? 'bg-c-brand/10' : ''
                 }`}>
