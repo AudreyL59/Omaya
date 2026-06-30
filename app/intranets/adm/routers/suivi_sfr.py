@@ -193,6 +193,29 @@ def get_extraction_sfr_search(
     return svc.search_extraction_sfr(du, au, mode, id_etat_sfr)
 
 
+@router.get("/extraction-sfr/export.xlsx")
+def get_extraction_sfr_export(
+    du: date,
+    au: date,
+    mode: str = "date_racc",
+    id_etat_sfr: int = 0,
+    _u: UserToken = Depends(get_current_user),
+):
+    from fastapi.responses import Response
+    rows = svc.search_extraction_sfr(du, au, mode, id_etat_sfr)
+    content = svc.export_extraction_sfr_xlsx(rows)
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="extraction-sfr-{mode}-{du}-{au}.xlsx"',
+        },
+    )
+
+
 class ConvertContratsPayload(BaseModel):
     id_contrats: list[int]
 

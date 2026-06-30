@@ -144,42 +144,26 @@ export default function SfrExtractionPage() {
   }
 
   const exportXlsx = async () => {
-    const { exportRowsToXlsx } = await import('@shared/production/_tableHelpers')
-    exportRowsToXlsx(
-      [
-        { key: 'num_bs', label: 'Num BS' },
-        { key: 'lib_produit', label: 'Lib Produit' },
-        { key: 'type_prod', label: 'Type Prod' },
-        { key: 'type_vente', label: 'Type vente' },
-        { key: 'date_signature', label: 'Date Signature' },
-        { key: 'type_etat', label: 'Type Etat' },
-        { key: 'etat_contrat', label: 'Etat contrat' },
-        { key: 'nom_vendeur', label: 'Vendeur' },
-        { key: 'client_nom', label: 'Client' },
-        { key: 'client_adr', label: 'Adresse' },
-        { key: 'client_cp', label: 'CP' },
-        { key: 'client_ville', label: 'Ville' },
-        { key: 'client_mail', label: 'Mail' },
-        { key: 'client_mobile', label: 'Mobile' },
-        { key: 'cluster_code', label: 'Cluster Code' },
-        { key: 'cluster_nom', label: 'Cluster Nom' },
-        { key: 'date_portabilite', label: 'Date Portabilité' },
-        { key: 'date_racc_valid', label: 'Date Racc' },
-        { key: 'date_rdv_tech', label: 'Date RDV Tech' },
-        { key: 'date_resil', label: 'Date Résil' },
-        { key: 'date_validation', label: 'Date Validation' },
-        { key: 'box8', label: 'Box8' },
-        { key: 'box8_verif', label: 'Box8 Vérif' },
-        { key: 'internet_garanti', label: 'Internet Garanti' },
-        { key: 'remise', label: 'Remise' },
-        { key: 'self_install', label: 'Self Install' },
-        { key: 'technologie', label: 'Techno' },
-        { key: 'infos_internes', label: 'Infos Internes' },
-        { key: 'infos_partagees', label: 'Infos Partagées' },
-      ],
-      visible as unknown as Array<Record<string, unknown>>,
-      'extraction-sfr', 'Extraction SFR',
-    )
+    // Export backend (openpyxl) avec couleurs de fond par ligne
+    // selon TypeEtatContrat.
+    try {
+      const r = await fetch(
+        `${API_BASE}/suivi-sfr/extraction-sfr/export.xlsx?du=${du}&au=${au}&mode=${mode}&id_etat_sfr=${idEtatSfr}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const cd = r.headers.get('content-disposition') || ''
+      const m = /filename="?([^";]+)"?/.exec(cd)
+      a.download = m ? m[1] : `extraction-sfr-${mode}-${du}-${au}.xlsx`
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+    } catch (e) {
+      showToast(`Erreur export : ${(e as Error).message}`, 'error')
+    }
   }
 
   return (

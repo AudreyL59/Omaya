@@ -1120,6 +1120,82 @@ def search_extraction_sfr(
     return out
 
 
+def export_extraction_sfr_xlsx(rows: list[ExtractionSfrRow]) -> bytes:
+    """Genere un XLSX openpyxl avec fond de ligne colore selon le
+    couleur_hex de chaque ExtractionSfrRow (= couleur du TypeEtatContrat)."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment
+
+    columns: list[tuple[str, str]] = [
+        ("num_bs", "Num BS"),
+        ("lib_produit", "Lib Produit"),
+        ("type_prod", "Type Prod"),
+        ("type_vente", "Type vente"),
+        ("date_signature", "Date Signature"),
+        ("type_etat", "Type Etat"),
+        ("etat_contrat", "Etat contrat"),
+        ("nom_vendeur", "Vendeur"),
+        ("client_nom", "Client"),
+        ("client_adr", "Adresse"),
+        ("client_cp", "CP"),
+        ("client_ville", "Ville"),
+        ("client_mail", "Mail"),
+        ("client_mobile", "Mobile"),
+        ("cluster_code", "Cluster Code"),
+        ("cluster_nom", "Cluster Nom"),
+        ("date_portabilite", "Date Portabilité"),
+        ("date_racc_valid", "Date Racc"),
+        ("date_rdv_tech", "Date RDV Tech"),
+        ("date_resil", "Date Résil"),
+        ("date_validation", "Date Validation"),
+        ("box8", "Box8"),
+        ("box8_verif", "Box8 Vérif"),
+        ("internet_garanti", "Internet Garanti"),
+        ("remise", "Remise"),
+        ("self_install", "Self Install"),
+        ("technologie", "Techno"),
+        ("infos_internes", "Infos Internes"),
+        ("infos_partagees", "Infos Partagées"),
+    ]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Extraction SFR"
+    ws.append([lbl for _, lbl in columns])
+    header_fill = PatternFill(start_color="FF17494E", end_color="FF17494E",
+                               fill_type="solid")
+    header_font = Font(color="FFFFFFFF", bold=True)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="left", vertical="center")
+
+    for r in rows:
+        values = [getattr(r, k) for k, _ in columns]
+        ws.append(values)
+        # Applique la couleur de fond sur toute la ligne
+        if r.couleur_hex and r.couleur_hex.startswith("#"):
+            hex_code = "FF" + r.couleur_hex[1:].upper()
+            fill = PatternFill(start_color=hex_code, end_color=hex_code,
+                                fill_type="solid")
+            for cell in ws[ws.max_row]:
+                cell.fill = fill
+
+    # Largeurs colonnes approximatives
+    widths = [14, 24, 12, 8, 12, 14, 22, 22, 22, 28, 8, 18, 26, 14,
+              12, 18, 14, 12, 12, 12, 14, 6, 8, 12, 8, 12, 8, 30, 30]
+    for i, w in enumerate(widths[:len(columns)], start=1):
+        ws.column_dimensions[chr(64 + i) if i <= 26 else
+                              chr(64 + (i - 1) // 26) + chr(64 + (i - 1) % 26 + 1)].width = w
+
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf); buf.seek(0)
+    return buf.read()
+
+
 def _create_tk_liste(db_tk, id_tk_liste: int, op_id: int,
                       id_type_demande: int) -> None:
     """Cree une entree TK_Liste (cf code WinDev TK_Liste.* dans
