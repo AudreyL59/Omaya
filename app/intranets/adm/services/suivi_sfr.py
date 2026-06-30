@@ -1007,10 +1007,11 @@ def analyse_ventes_tk_call_sfr(
     for r in rows:
         id_tc = int(r["id_tk_call_sfr"])
         deb = r.get("date_deb_prise_en_charge")
-        app = r.get("date_h_appel")
+        crea = r.get("date_crea")
+        # Col_DelaiAvPriseCharge WinDev = date_deb - date_crea
         delai = 0.0
-        if isinstance(deb, datetime) and isinstance(app, datetime):
-            delai = (deb - app).total_seconds() / 60.0
+        if isinstance(deb, datetime) and isinstance(crea, datetime):
+            delai = (deb - crea).total_seconds() / 60.0
             if delai < 0: delai = 0.0
         delai_lbl = _delai_label(delai)
 
