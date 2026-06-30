@@ -876,6 +876,28 @@ def get_ticket_call_detail(id_tk_liste: int) -> Optional[TicketCallDetail]:
     )
 
 
+def resolve_cin_url(id_call_sfr: int, source: str = "normal") -> str:
+    """Test HEAD sur {id_call_sfr}_CIN.jpg, fallback _PieceIdentite.pdf
+    cf code WinDev boutons 'Voir la CIN' / 'Voir la CIN SOS'.
+
+    source : 'normal' -> https://groupe-exo.omaya.fr
+             'sos'    -> https://sos.groupe-exo.omaya.fr
+    Retourne l'URL a ouvrir cote front."""
+    import requests
+    base = ("https://sos.groupe-exo.omaya.fr" if source == "sos"
+            else "https://groupe-exo.omaya.fr")
+    url_jpg = f"{base}/DocOmaya/{id_call_sfr}_CIN.jpg"
+    try:
+        r = requests.head(url_jpg, timeout=5, allow_redirects=True)
+        if r.status_code == 404:
+            return f"{base}/DocOmaya/{id_call_sfr}_PieceIdentite.pdf"
+        return url_jpg
+    except Exception:
+        # En cas d'erreur reseau, on renvoie le JPG par defaut (le
+        # navigateur affichera son propre 404 si vraiment absent).
+        return url_jpg
+
+
 def update_panier_num(
     id_panier: int, new_num: str, id_tk_liste: int, op_id: int,
 ) -> bool:

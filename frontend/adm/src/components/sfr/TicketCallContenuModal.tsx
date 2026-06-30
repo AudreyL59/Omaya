@@ -141,6 +141,23 @@ export default function TicketCallContenuModal({
     )
   }
 
+  const handleVoirCin = async (source: 'normal' | 'sos') => {
+    if (!detail?.id_tk_call_sfr) {
+      showToast('Pas de ticket Call SFR associé.', 'info'); return
+    }
+    try {
+      const r = await fetch(
+        `${API_BASE}/suivi-sfr/ticket-call/${detail.id_tk_call_sfr}/cin-url?source=${source}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      if (d.url) window.open(d.url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    }
+  }
+
   return (
     <AnimatePresence>
       <motion.div
@@ -242,12 +259,12 @@ export default function TicketCallContenuModal({
                 <div className="col-span-3 flex flex-col overflow-hidden">
                   <div className="flex items-center justify-end gap-2 mb-2">
                     <button type="button"
-                      onClick={() => showToast('Voir la CIN : à venir', 'info')}
+                      onClick={() => handleVoirCin('normal')}
                       className="flex items-center gap-1.5 px-2 py-1 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
                       <IdCard className="w-3.5 h-3.5" /> Voir la CIN
                     </button>
                     <button type="button"
-                      onClick={() => showToast('Voir la CIN SOS : à venir', 'info')}
+                      onClick={() => handleVoirCin('sos')}
                       className="flex items-center gap-1.5 px-2 py-1 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
                       <IdCard className="w-3.5 h-3.5" /> Voir la CIN SOS
                     </button>

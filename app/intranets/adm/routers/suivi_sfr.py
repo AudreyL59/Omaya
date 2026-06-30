@@ -160,6 +160,16 @@ class UpdatePanierNumPayload(BaseModel):
     id_tk_liste: int
 
 
+@router.get("/ticket-call/{id_call_sfr}/cin-url")
+def get_cin_url(
+    id_call_sfr: int,
+    source: str = "normal",   # 'normal' | 'sos'
+    _u: UserToken = Depends(get_current_user),
+):
+    """Renvoie l'URL a ouvrir : essaie .jpg, fallback _PieceIdentite.pdf."""
+    return {"url": svc.resolve_cin_url(id_call_sfr, source)}
+
+
 @router.put("/ticket-call/panier/{id_panier}/num")
 def put_panier_num(
     id_panier: int,
