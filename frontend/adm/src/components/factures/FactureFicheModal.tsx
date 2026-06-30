@@ -104,6 +104,13 @@ export default function FactureFicheModal({
   const [factureFile, setFactureFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
 
+  // Aperçu inline d'une facture sélectionnée
+  const [selectedFactureId, setSelectedFactureId] = useState<string>('')
+  const [previewUrl, setPreviewUrl] = useState<string>('')
+  const [previewName, setPreviewName] = useState<string>('')
+  const [previewError, setPreviewError] = useState<string>('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+
   // Charge le détail + référentiels
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -221,6 +228,42 @@ export default function FactureFicheModal({
     } finally { setUploading(false) }
   }
 
+  // Charge l'apercu d'une facture (blob URL) au clic ligne
+  const loadPreview = useCallback(async (id: string, nom: string) => {
+    if (selectedFactureId === id) return  // deja sélectionné
+    setSelectedFactureId(id)
+    setPreviewError('')
+    setPreviewName(nom)
+    setPreviewLoading(true)
+    // Libère l'ancien blob avant d'en créer un nouveau
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl('')
+    try {
+      const r = await fetch(`${API_BASE}/factures/factures/${id}/download`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setPreviewError(j.detail || `HTTP ${r.status}`)
+        return
+      }
+      const blob = await r.blob()
+      setPreviewUrl(URL.createObjectURL(blob))
+    } catch (e) {
+      setPreviewError((e as Error).message)
+    } finally { setPreviewLoading(false) }
+  }, [selectedFactureId, previewUrl])
+
+  // Cleanup blob URL au demontage
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }
+  }, [previewUrl])
+
+  // Detection type pour affichage
+  const previewExt = previewName.toLowerCase().split('.').pop() || ''
+  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(previewExt)
+  const isPdf = previewExt === 'pdf'
+
   const handleDownloadFacture = (id: string) => {
     // On utilise fetch + blob pour passer le Bearer token
     fetch(`${API_BASE}/factures/factures/${id}/download`, {
@@ -261,6 +304,11 @@ export default function FactureFicheModal({
       })
       if (!r.ok) throw new Error(String(r.status))
       setFactures(factures.filter(f => f.id_commande_facture !== id))
+      if (selectedFactureId === id) {
+        if (previewUrl) URL.revokeObjectURL(previewUrl)
+        setSelectedFactureId(''); setPreviewUrl(''); setPreviewName('')
+        setPreviewError('')
+      }
       showToast('Facture supprimée.', 'success')
       onChanged?.()
     } catch (e) {
@@ -278,7 +326,7 @@ export default function FactureFicheModal({
         <motion.div
           initial={{ scale: 0.96, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
-          className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[95vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-4 py-3 border-b border-c-line flex items-center gap-2">
@@ -456,12 +504,18 @@ export default function FactureFicheModal({
                           </td>
                         </tr>
                       ) : factures.map(f => (
-                        <tr key={f.id_commande_facture}>
+                        <tr key={f.id_commande_facture}
+                          onClick={() => loadPreview(f.id_commande_facture, f.nom_fic)}
+                          className={`cursor-pointer hover:bg-c-surface-soft ${
+                            selectedFactureId === f.id_commande_facture
+                              ? 'bg-c-brand/10' : ''
+                          }`}>
                           <td className="px-2 py-1.5">{shortDate(f.date_ajout)}</td>
                           <td className="px-2 py-1.5 text-right tabular-nums">
                             {formatEur(f.montant_ttc)}
                           </td>
-                          <td className="px-2 py-1.5 flex gap-1">
+                          <td className="px-2 py-1.5 flex gap-1"
+                            onClick={(e) => e.stopPropagation()}>
                             <button onClick={() => handleDownloadFacture(f.id_commande_facture)}
                               className="p-1 text-c-brand hover:bg-c-brand/10 rounded"
                               title={f.nom_fic}>
@@ -519,6 +573,45 @@ export default function FactureFicheModal({
                                : <FileUp className="w-4 h-4" />}
                     Ajouter la facture
                   </button>
+                </div>
+
+                {/* Apercu inline de la facture sélectionnée */}
+                <div className="border border-c-line rounded overflow-hidden">
+                  <div className="px-3 py-1.5 bg-c-surface-soft border-b border-c-line-soft text-xs font-medium text-c-ink-faint flex items-center gap-2">
+                    Aperçu
+                    {previewName && (
+                      <span className="text-c-ink truncate flex-1" title={previewName}>
+                        : {previewName}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-c-surface-soft" style={{ minHeight: 280 }}>
+                    {!selectedFactureId ? (
+                      <p className="text-xs italic text-center py-12 text-c-ink-faint-2">
+                        Clique sur une ligne du tableau pour afficher la facture
+                      </p>
+                    ) : previewLoading ? (
+                      <div className="flex justify-center py-12">
+                        <Loader2 className="w-5 h-5 animate-spin text-c-brand" />
+                      </div>
+                    ) : previewError ? (
+                      <p className="text-xs text-red-600 text-center py-12 px-3">
+                        {previewError}
+                      </p>
+                    ) : isImage ? (
+                      <img src={previewUrl} alt={previewName}
+                        className="w-full max-h-[60vh] object-contain bg-white" />
+                    ) : isPdf ? (
+                      <iframe src={previewUrl} title={previewName}
+                        className="w-full bg-white"
+                        style={{ height: '60vh', border: 0 }} />
+                    ) : (
+                      <p className="text-xs italic text-center py-12 text-c-ink-faint-2">
+                        Aperçu non disponible pour ce type de fichier.
+                        Utilise le bouton télécharger.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
