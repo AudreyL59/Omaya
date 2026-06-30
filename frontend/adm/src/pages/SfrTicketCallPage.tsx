@@ -28,11 +28,16 @@ const API_BASE = '/api/adm'
 
 interface Ticket {
   id_tk_call_sfr: string; id_tk_liste: string
-  nb_ctt: number; nb_ctt_avec_num: number; contenu_panier: string
+  nb_ctt: number; nb_num_rens: number; nb_ctt_avec_num: number
+  contenu_panier: string
   date_crea: string; nom_vendeur: string
   nom_client: string; prenom_client: string; cp: string; ville: string
+  nom_operateur: string
   date_deb_prise_en_charge: string; date_fin_prise_en_charge: string
   delai_av_prise_charge_min: number
+  duree_appel_min: number
+  parcours_chaines: boolean
+  row_color_alert: boolean
   lib_statut: string; cloturee: boolean; nb_valide: number
 }
 interface Tranche {
@@ -53,7 +58,7 @@ interface PlanningRdv {
 }
 
 type Etat = 'ouverts' | 'clotures' | 'tous'
-type Onglet = 'liste' | 'analyse' | 'appels' | 'ventes'
+type Onglet = 'liste' | 'appels' | 'ventes'
 
 const todayIso = (): string => new Date().toISOString().slice(0, 10)
 const shortDate = (iso: string): string =>
@@ -111,9 +116,10 @@ export default function SfrTicketCallPage() {
       [
         { key: 'date_crea', label: 'Fiche créée le' },
         { key: 'nb_ctt', label: 'NB Ctt panier' },
-        { key: 'nb_ctt_avec_num', label: 'NB Ctt avec Num BS' },
+        { key: 'nb_num_rens', label: 'NB Num Rens' },
         { key: 'contenu_panier', label: 'Contenu Panier' },
         { key: 'nom_vendeur', label: 'Vendeur' },
+        { key: 'nom_operateur', label: 'Opérateur' },
         { key: 'nom_client', label: 'Nom Client' },
         { key: 'prenom_client', label: 'Prénom Client' },
         { key: 'cp', label: 'CP' },
@@ -121,6 +127,8 @@ export default function SfrTicketCallPage() {
         { key: 'date_deb_prise_en_charge', label: 'Début prise en charge' },
         { key: 'date_fin_prise_en_charge', label: 'Fin prise en charge' },
         { key: 'delai_av_prise_charge_min', label: 'Délai (min)' },
+        { key: 'duree_appel_min', label: 'Durée appel (min)' },
+        { key: 'parcours_chaines', label: 'Parcours chaînés' },
         { key: 'lib_statut', label: 'Statut' },
         { key: 'cloturee', label: 'Clôturé' },
       ],
@@ -180,7 +188,6 @@ export default function SfrTicketCallPage() {
       <div className="flex gap-1 border-b border-c-line mb-3">
         {([
           ['liste', 'Liste des Tickets', null],
-          ['analyse', 'Analyse', null],
           ['appels', 'Analyse des Appels', CalendarClock],
           ['ventes', 'Analyse des ventes', BarChart3],
         ] as const).map(([key, label, Icon]) => (
@@ -203,7 +210,6 @@ export default function SfrTicketCallPage() {
             toggle={toggle} toggleAll={toggleAll}
             onVoirTicket={(id) => setContenuTicketId(id)} />
         )}
-        {onglet === 'analyse' && <OngletAnalyse tranches={tranches} />}
         {onglet === 'appels' && (
           <TicketCallPlanning rdvs={planning} initialDate={du} />
         )}
@@ -280,45 +286,51 @@ function OngletListe({
                   checked={tickets.length > 0 && selected.size === tickets.length} />
               </th>
               <SortableTh label="NB Ctt" sortKey="nb_ctt" sort={tsf.sort} onSort={tsf.toggleSort} align="center" />
-              <SortableTh label="NB Ctt avec Num BS" sortKey="nb_ctt_avec_num" sort={tsf.sort} onSort={tsf.toggleSort} align="center" />
+              <SortableTh label="NB Num Rens" sortKey="nb_num_rens" sort={tsf.sort} onSort={tsf.toggleSort} align="center" />
               <SortableTh label="Contenu Panier" sortKey="contenu_panier" sort={tsf.sort} onSort={tsf.toggleSort} />
               <SortableTh label="Fiche créée le" sortKey="date_crea" sort={tsf.sort} onSort={tsf.toggleSort} />
               <SortableTh label="Vendeur" sortKey="nom_vendeur" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Opérateur" sortKey="nom_operateur" sort={tsf.sort} onSort={tsf.toggleSort} />
               <SortableTh label="Nom Client" sortKey="nom_client" sort={tsf.sort} onSort={tsf.toggleSort} />
               <SortableTh label="Prénom" sortKey="prenom_client" sort={tsf.sort} onSort={tsf.toggleSort} />
               <SortableTh label="CP" sortKey="cp" sort={tsf.sort} onSort={tsf.toggleSort} />
               <SortableTh label="Ville" sortKey="ville" sort={tsf.sort} onSort={tsf.toggleSort} />
               <SortableTh label="Délai (min)" sortKey="delai_av_prise_charge_min" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Durée appel (min)" sortKey="duree_appel_min" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Parc. chaînés" sortKey="parcours_chaines" sort={tsf.sort} onSort={tsf.toggleSort} align="center" />
               <SortableTh label="Statut" sortKey="lib_statut" sort={tsf.sort} onSort={tsf.toggleSort} />
             </tr>
           </thead>
           <tbody className="divide-y divide-c-line-soft">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={12} className="text-center py-12 text-c-ink-faint-2 italic">
+                <td colSpan={14} className="text-center py-12 text-c-ink-faint-2 italic">
                   Aucun ticket — choisis dates puis Rechercher.
                 </td>
               </tr>
-            ) : rows.map(t => (
+            ) : rows.map(t => {
+              const selBg = selected.has(t.id_tk_call_sfr) ? 'bg-c-brand/10' : ''
+              // Alerte rouge si au moins 1 panier saisi > 1h après crea
+              const alertBg = t.row_color_alert ? 'bg-red-50' : ''
+              return (
               <tr key={t.id_tk_call_sfr}
                 onClick={() => toggle(t.id_tk_call_sfr)}
                 onDoubleClick={() => onVoirTicket(t.id_tk_liste)}
-                className={`cursor-pointer hover:bg-c-surface-soft ${
-                  selected.has(t.id_tk_call_sfr) ? 'bg-c-brand/10' : ''
-                }`}>
+                className={`cursor-pointer hover:bg-c-surface-soft ${selBg || alertBg}`}>
                 <td className="px-2 py-1.5 text-center align-top">
                   <input type="checkbox" checked={selected.has(t.id_tk_call_sfr)}
                     onChange={() => toggle(t.id_tk_call_sfr)}
                     onClick={(e) => e.stopPropagation()} />
                 </td>
                 <td className="px-2 py-1.5 text-center align-top">{t.nb_ctt}</td>
-                <td className="px-2 py-1.5 text-center align-top">{t.nb_ctt_avec_num}</td>
+                <td className="px-2 py-1.5 text-center align-top">{t.nb_num_rens}</td>
                 {/* Multi-ligne : chaque BS sur sa ligne */}
                 <td className="px-2 py-1.5 align-top text-c-ink-faint whitespace-pre-line">
                   {t.contenu_panier}
                 </td>
                 <td className="px-2 py-1.5 align-top">{shortDate(t.date_crea)}</td>
                 <td className="px-2 py-1.5 align-top">{t.nom_vendeur}</td>
+                <td className="px-2 py-1.5 align-top">{t.nom_operateur}</td>
                 <td className="px-2 py-1.5 align-top">{t.nom_client}</td>
                 <td className="px-2 py-1.5 align-top">{t.prenom_client}</td>
                 <td className="px-2 py-1.5 align-top">{t.cp}</td>
@@ -326,9 +338,15 @@ function OngletListe({
                 <td className="px-2 py-1.5 text-right tabular-nums align-top">
                   {t.delai_av_prise_charge_min.toFixed(1)}
                 </td>
+                <td className="px-2 py-1.5 text-right tabular-nums align-top">
+                  {t.duree_appel_min > 0 ? t.duree_appel_min.toFixed(1) : ''}
+                </td>
+                <td className="px-2 py-1.5 text-center align-top">
+                  {t.parcours_chaines ? '✓' : ''}
+                </td>
                 <td className="px-2 py-1.5 align-top">{t.lib_statut}</td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>

@@ -406,8 +406,9 @@ class TicketCallItem(BaseModel):
     id_tk_call_sfr: str
     id_tk_liste: str
     nb_ctt: int = 0                      # nb lignes panier (NB Ctt dans le panier)
-    nb_ctt_avec_num: int = 0             # nb lignes panier avec NumBS (NB Ctt avec Num BS)
-    contenu_panier: str = ""             # multi-ligne resume des paniers
+    nb_num_rens: int = 0                 # nb panier avec vrai NumBS (sans 'TK')
+    nb_ctt_avec_num: int = 0             # nb lignes panier avec NumBS (TK ou pas)
+    contenu_panier: str = ""             # multi-ligne 'TYPE LibOffre NUM (date)'
     date_crea: str = ""
     nom_vendeur: str = ""
     agence: str = ""                     # affectation cf vendeur (TODO)
@@ -416,10 +417,13 @@ class TicketCallItem(BaseModel):
     prenom_client: str = ""
     cp: str = ""
     ville: str = ""
-    nom_operateur: str = ""              # OPCrea (qui a fait le ticket)
+    nom_operateur: str = ""              # OpeAppel (qui a pris l'appel)
     date_deb_prise_en_charge: str = ""
     date_fin_prise_en_charge: str = ""
-    delai_av_prise_charge_min: float = 0.0   # date_deb - date_h_appel en minutes
+    delai_av_prise_charge_min: float = 0.0   # date_deb - date_crea en minutes
+    duree_appel_min: float = 0.0         # date_fin - date_deb en minutes
+    parcours_chaines: bool = False       # FIBRE + MOBILE dans le panier
+    row_color_alert: bool = False        # au moins un panier saisi > 1h apres crea
     lib_statut: str = ""
     cloturee: bool = False
     nb_valide: int = 0                   # nb panier statut=1 ou 3
@@ -481,11 +485,13 @@ def _load_ticket_call_sfr(
                tl.date_crea, tl.id_tk_statut, tl.cloturee,
                tl.date_cloture, tl.op_crea,
                ts.lib_statut,
-               s.nom AS sa_nom, s.prenom AS sa_prenom
+               s.nom AS sa_nom, s.prenom AS sa_prenom,
+               sa.nom AS oa_nom, sa.prenom AS oa_prenom
           FROM ticket_bo.pgt_tk_call_sfr tc
           JOIN ticket.pgt_tk_liste tl ON tl.id_tk_liste = tc.id_tk_liste
           LEFT JOIN ticket.pgt_tk_statut ts ON ts.id_tk_statut = tl.id_tk_statut
           LEFT JOIN rh.pgt_salarie s ON s.id_salarie = tl.op_crea
+          LEFT JOIN rh.pgt_salarie sa ON sa.id_salarie = tc.ope_appel
          WHERE (tc.modif_elem IS NULL OR tc.modif_elem NOT LIKE '%suppr%')
            -- date_crea est un timestamp : on filtre [du 00:00, au+1 00:00[
            -- pour inclure toute la journee 'au' (sinon BETWEEN du au ne
@@ -545,33 +551,62 @@ def list_ticket_call_sfr(
         nb_valide = sum(1 for p in paniers if int(p.get("statut_prod") or 0) in (1, 3))
         nb_avec_num = sum(1 for p in paniers if (p.get("num") or "").strip())
 
-        # Texte de resume panier (multiligne)
+        # Resume panier multiligne + NB Num Rens + parcours chaines + alerte
+        # color (au moins un panier saisi > 1h apres crea ticket)
+        crea = r.get("date_crea")
+        nb_num_rens = 0
+        test_fibre = False
+        test_mob = False
+        alert = False
         contenu_lines = []
         for p in paniers:
-            num = p.get("num") or ""
-            etat_p = _statut_prod_label(p.get("statut_prod"))
-            line = num
+            num = (p.get("num") or "").strip()
+            tp = (p.get("type") or "").strip()
+            lib = (p.get("lib_offre") or "").strip()
+            line = f"{tp} {lib} {num}".strip()
             d = p.get("num_date_saisie")
             if d:
                 line += f" ({_date_str(d)})"
-            line += f" - {etat_p}"
+                if isinstance(d, datetime) and isinstance(crea, datetime):
+                    if (d - crea).total_seconds() >= 3600:
+                        alert = True
             contenu_lines.append(line)
+            # NB num rens : NUM != "" et ne commence pas par 'TK'
+            if num and not num.upper().startswith("TK"):
+                nb_num_rens += 1
+                if tp.upper() == "FIBRE": test_fibre = True
+                else: test_mob = True
 
-        # Delai (date_deb_prise_en_charge - date_h_appel) en minutes
+        # Delai prise en charge (date_deb_prise_en_charge - date_crea) en min
+        # NB : code WinDev fait DateHeureDifference(DH_crea, DH_Deb), donc
+        # delai = deb - crea (et pas deb - date_h_appel).
         delai = 0.0
         deb = r.get("date_deb_prise_en_charge")
-        app = r.get("date_h_appel")
-        if isinstance(deb, datetime) and isinstance(app, datetime):
-            delai = (deb - app).total_seconds() / 60.0
+        if isinstance(deb, datetime) and isinstance(crea, datetime):
+            delai = (deb - crea).total_seconds() / 60.0
             if delai < 0: delai = 0.0
+
+        # Duree appel (date_fin - date_deb)
+        duree_appel = 0.0
+        fin = r.get("date_fin_prise_en_charge")
+        if isinstance(deb, datetime) and isinstance(fin, datetime):
+            duree_appel = (fin - deb).total_seconds() / 60.0
+            if duree_appel < 0: duree_appel = 0.0
+
+        # Nom operateur d'appel (OpeAppel)
+        nom_ope = " ".join(filter(None, [
+            _capitalize((r.get("oa_prenom") or "").strip()),
+            (r.get("oa_nom") or "").strip(),
+        ]))
 
         out.append(TicketCallItem(
             id_tk_call_sfr=str(id_tc),
             id_tk_liste=str(r.get("id_tk_liste") or ""),
             nb_ctt=len(paniers),
+            nb_num_rens=nb_num_rens,
             nb_ctt_avec_num=nb_avec_num,
             contenu_panier="\n".join(contenu_lines),
-            date_crea=_date_str(r.get("date_crea")),
+            date_crea=_date_str(crea),
             nom_vendeur=" ".join(filter(None, [
                 (r.get("sa_nom") or "").strip(),
                 _capitalize((r.get("sa_prenom") or "").strip()),
@@ -580,10 +615,13 @@ def list_ticket_call_sfr(
             prenom_client=_capitalize((r.get("prenom_client") or "").strip()),
             cp=r.get("cp") or "",
             ville=r.get("ville") or "",
-            nom_operateur="",      # OPCrea deja resolu via sa_nom/sa_prenom mais c'est l'OP du ticket
+            nom_operateur=nom_ope,
             date_deb_prise_en_charge=_date_str(deb),
-            date_fin_prise_en_charge=_date_str(r.get("date_fin_prise_en_charge")),
+            date_fin_prise_en_charge=_date_str(fin),
             delai_av_prise_charge_min=round(delai, 2),
+            duree_appel_min=round(duree_appel, 2),
+            parcours_chaines=test_fibre and test_mob,
+            row_color_alert=alert,
             lib_statut=r.get("lib_statut") or "",
             cloturee=bool(r.get("cloturee")),
             nb_valide=nb_valide,
