@@ -14,6 +14,9 @@ import {
   Search, Loader2, ArrowLeft, PhoneCall, FileDown,
   CalendarClock, BarChart3, Eye,
 } from 'lucide-react'
+import {
+  useTableSortFilter, SortableTh, FilterInput,
+} from '@shared/production/_tableHelpers'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
@@ -51,7 +54,7 @@ export default function SfrTicketCallPage() {
   useDocumentTitle('Ticket Call SFR')
   const [du, setDu] = useState(todayIso())
   const [au, setAu] = useState(todayIso())
-  const [etat, setEtat] = useState<Etat>('clotures')
+  const [etat, setEtat] = useState<Etat>('tous')
   const [onglet, setOnglet] = useState<Onglet>('liste')
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [tranches, setTranches] = useState<Tranche[]>([])
@@ -208,9 +211,19 @@ function OngletListe({
   tickets: Ticket[]; selected: Set<string>
   toggle: (id: string) => void; toggleAll: () => void
 }) {
+  const tsf = useTableSortFilter(
+    tickets as unknown as Array<Record<string, unknown>>,
+    { key: 'date_crea', dir: 'desc' },
+    (r) => [
+      r.nom_client, r.prenom_client, r.cp, r.ville,
+      r.nom_vendeur, r.lib_statut, r.contenu_panier,
+    ].map((v) => String(v ?? '')).join(' '),
+  )
+  const rows = tsf.rows as unknown as Ticket[]
+
   return (
     <div className="h-full flex flex-col">
-      <div className="px-3 py-1.5 border-b border-c-line-soft flex items-center gap-2 text-xs">
+      <div className="px-3 py-1.5 border-b border-c-line-soft flex items-center gap-2 text-xs flex-wrap">
         <button type="button"
           className="flex items-center gap-1 px-2 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30"
           disabled={selected.size !== 1}
@@ -230,8 +243,11 @@ function OngletListe({
           Clôturer sans convertir
         </button>
         <span className="ml-3 text-c-ink-faint">
-          {tickets.length} ticket(s) | {selected.size} sélectionné(s)
+          {rows.length} / {tickets.length} ticket(s) | {selected.size} sélectionné(s)
         </span>
+        <div className="flex-1" />
+        <FilterInput value={tsf.filter} onChange={tsf.setFilter}
+          placeholder="Filtrer (client, vendeur, BS…)" />
       </div>
       <div className="flex-1 overflow-auto">
         <table className="w-full text-xs">
@@ -241,53 +257,53 @@ function OngletListe({
                 <input type="checkbox" onChange={toggleAll}
                   checked={tickets.length > 0 && selected.size === tickets.length} />
               </th>
-              <th className="px-2 py-2 text-center">NB Ctt</th>
-              <th className="px-2 py-2 text-center">NB Ctt avec Num BS</th>
-              <th className="px-2 py-2 text-left">Contenu Panier</th>
-              <th className="px-2 py-2 text-left">Fiche créée le</th>
-              <th className="px-2 py-2 text-left">Vendeur</th>
-              <th className="px-2 py-2 text-left">Nom Client</th>
-              <th className="px-2 py-2 text-left">Prénom</th>
-              <th className="px-2 py-2 text-left">CP</th>
-              <th className="px-2 py-2 text-left">Ville</th>
-              <th className="px-2 py-2 text-right">Délai (min)</th>
-              <th className="px-2 py-2 text-left">Statut</th>
+              <SortableTh label="NB Ctt" sortKey="nb_ctt" sort={tsf.sort} onSort={tsf.toggleSort} align="center" />
+              <SortableTh label="NB Ctt avec Num BS" sortKey="nb_ctt_avec_num" sort={tsf.sort} onSort={tsf.toggleSort} align="center" />
+              <SortableTh label="Contenu Panier" sortKey="contenu_panier" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Fiche créée le" sortKey="date_crea" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Vendeur" sortKey="nom_vendeur" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Nom Client" sortKey="nom_client" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Prénom" sortKey="prenom_client" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="CP" sortKey="cp" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Ville" sortKey="ville" sort={tsf.sort} onSort={tsf.toggleSort} />
+              <SortableTh label="Délai (min)" sortKey="delai_av_prise_charge_min" sort={tsf.sort} onSort={tsf.toggleSort} align="right" />
+              <SortableTh label="Statut" sortKey="lib_statut" sort={tsf.sort} onSort={tsf.toggleSort} />
             </tr>
           </thead>
           <tbody className="divide-y divide-c-line-soft">
-            {tickets.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={12} className="text-center py-12 text-c-ink-faint-2 italic">
                   Aucun ticket — choisis dates puis Rechercher.
                 </td>
               </tr>
-            ) : tickets.map(t => (
+            ) : rows.map(t => (
               <tr key={t.id_tk_call_sfr}
                 onClick={() => toggle(t.id_tk_call_sfr)}
                 className={`cursor-pointer hover:bg-c-surface-soft ${
                   selected.has(t.id_tk_call_sfr) ? 'bg-c-brand/10' : ''
                 }`}>
-                <td className="px-2 py-1.5 text-center">
+                <td className="px-2 py-1.5 text-center align-top">
                   <input type="checkbox" checked={selected.has(t.id_tk_call_sfr)}
                     onChange={() => toggle(t.id_tk_call_sfr)}
                     onClick={(e) => e.stopPropagation()} />
                 </td>
-                <td className="px-2 py-1.5 text-center">{t.nb_ctt}</td>
-                <td className="px-2 py-1.5 text-center">{t.nb_ctt_avec_num}</td>
-                <td className="px-2 py-1.5 max-w-[280px] truncate text-c-ink-faint"
-                    title={t.contenu_panier}>
-                  {t.contenu_panier.split('\n')[0] + (t.contenu_panier.includes('\n') ? ' …' : '')}
+                <td className="px-2 py-1.5 text-center align-top">{t.nb_ctt}</td>
+                <td className="px-2 py-1.5 text-center align-top">{t.nb_ctt_avec_num}</td>
+                {/* Multi-ligne : chaque BS sur sa ligne */}
+                <td className="px-2 py-1.5 align-top text-c-ink-faint whitespace-pre-line">
+                  {t.contenu_panier}
                 </td>
-                <td className="px-2 py-1.5">{shortDate(t.date_crea)}</td>
-                <td className="px-2 py-1.5">{t.nom_vendeur}</td>
-                <td className="px-2 py-1.5">{t.nom_client}</td>
-                <td className="px-2 py-1.5">{t.prenom_client}</td>
-                <td className="px-2 py-1.5">{t.cp}</td>
-                <td className="px-2 py-1.5">{t.ville}</td>
-                <td className="px-2 py-1.5 text-right tabular-nums">
+                <td className="px-2 py-1.5 align-top">{shortDate(t.date_crea)}</td>
+                <td className="px-2 py-1.5 align-top">{t.nom_vendeur}</td>
+                <td className="px-2 py-1.5 align-top">{t.nom_client}</td>
+                <td className="px-2 py-1.5 align-top">{t.prenom_client}</td>
+                <td className="px-2 py-1.5 align-top">{t.cp}</td>
+                <td className="px-2 py-1.5 align-top">{t.ville}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums align-top">
                   {t.delai_av_prise_charge_min.toFixed(1)}
                 </td>
-                <td className="px-2 py-1.5">{t.lib_statut}</td>
+                <td className="px-2 py-1.5 align-top">{t.lib_statut}</td>
               </tr>
             ))}
           </tbody>
