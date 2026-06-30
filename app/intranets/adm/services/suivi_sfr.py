@@ -1174,13 +1174,17 @@ def list_clusters() -> list[ClusterSfr]:
 
 def list_cluster_periodes(id_sfr_cluster: int) -> list[ClusterPeriode]:
     db = get_pg_connection("adv")
+    # 989/1206 periodes en BDD sont des "coquilles vides" heritees de WinDev
+    # (du=NULL, au=NULL, objectif_vv=0) -> on les masque a l'affichage.
     rows = db.query(
         """SELECT id_sfr_cluster_periode, id_sfr_cluster,
                   du, au, objectif_vv
              FROM adv.pgt_sfr_cluster_periode
             WHERE id_sfr_cluster = ?
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-            ORDER BY du DESC""",
+              AND (du IS NOT NULL OR au IS NOT NULL
+                   OR COALESCE(objectif_vv, 0) > 0)
+            ORDER BY du DESC NULLS LAST""",
         (int(id_sfr_cluster),),
     ) or []
     return [ClusterPeriode(

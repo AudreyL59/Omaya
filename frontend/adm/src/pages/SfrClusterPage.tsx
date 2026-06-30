@@ -60,7 +60,8 @@ export default function SfrClusterPage() {
   }, [selected])
 
   const loadPeriodes = useCallback(async (id: string) => {
-    if (!id) { setPeriodes([]); return }
+    setPeriodes([])   // reset avant tout fetch pour eviter le "fantome"
+    if (!id) return
     try {
       const r = await fetch(
         `${API_BASE}/suivi-sfr/clusters/${id}/periodes`,
@@ -289,9 +290,45 @@ export default function SfrClusterPage() {
 
         {/* Tableau périodes + formulaire ajout */}
         <div className="bg-white rounded-xl border border-c-line overflow-hidden flex flex-col">
-          <div className="px-3 py-1.5 border-b border-c-line-soft text-xs font-medium text-c-ink-faint">
-            Périodes
-          </div>
+          {(() => {
+            const c = clusters.find(x => x.id_sfr_cluster === selected)
+            return (
+              <div className="px-3 py-2 border-b border-c-line-soft bg-c-brand/5">
+                <div className="text-[10px] uppercase tracking-wide text-c-ink-faint">
+                  Périodes du cluster
+                </div>
+                {c ? (
+                  <div className="flex items-center gap-3 mt-1 text-xs flex-wrap">
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-c-brand" />
+                      <span className="font-semibold text-c-ink">
+                        {c.nom_cluster || '(sans nom)'}
+                      </span>
+                    </span>
+                    {c.code_vad && (
+                      <span className="px-1.5 py-0.5 rounded bg-white border border-c-line text-c-ink-soft tabular-nums">
+                        {c.code_vad}
+                      </span>
+                    )}
+                    {c.region && (
+                      <span className="text-c-ink-soft">
+                        Région : <span className="text-c-ink">{c.region}</span>
+                      </span>
+                    )}
+                    {c.mail_bo && (
+                      <span className="text-c-ink-soft truncate">
+                        Mail BO : <span className="text-c-ink">{c.mail_bo}</span>
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs italic text-c-ink-faint mt-1">
+                    Aucun cluster sélectionné
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           <div className="flex-1 overflow-auto">
             <table className="w-full text-xs">
               <thead className="bg-c-surface-soft text-c-ink-faint uppercase tracking-wide sticky top-0">
