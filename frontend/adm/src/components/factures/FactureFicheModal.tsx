@@ -326,10 +326,10 @@ export default function FactureFicheModal({
         <motion.div
           initial={{ scale: 0.96, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
-          className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[95vh] overflow-y-auto"
+          className="bg-white rounded-xl shadow-xl w-full max-w-6xl h-[95vh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-4 py-3 border-b border-c-line flex items-center gap-2">
+          <div className="px-4 py-3 border-b border-c-line flex items-center gap-2 shrink-0">
             <Receipt className="w-4 h-4 text-c-brand" />
             <h3 className="font-bold text-c-ink flex-1">Fiche Facture</h3>
             <button onClick={onClose}
@@ -339,13 +339,13 @@ export default function FactureFicheModal({
           </div>
 
           {loading ? (
-            <div className="p-8 flex justify-center">
+            <div className="flex-1 flex justify-center items-center">
               <Loader2 className="w-6 h-6 animate-spin text-c-brand" />
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 p-4">
-              {/* Colonne gauche : edition commande */}
-              <div className="space-y-3 text-sm">
+            <div className="flex-1 grid grid-cols-2 gap-4 p-4 overflow-hidden">
+              {/* Colonne gauche : edition commande (scroll interne si besoin) */}
+              <div className="space-y-3 text-sm overflow-y-auto pr-1">
                 <div className="flex items-center gap-2">
                   <label className="text-c-ink-faint w-24 shrink-0 text-xs">Le</label>
                   <div className="flex-1 relative">
@@ -513,8 +513,8 @@ export default function FactureFicheModal({
               </div>
 
               {/* Colonne droite : factures liées + apercu */}
-              <div className="space-y-3">
-                <div className="border border-c-line rounded overflow-hidden">
+              <div className="flex flex-col gap-3 overflow-hidden">
+                <div className="border border-c-line rounded overflow-hidden shrink-0">
                   <table className="w-full text-xs">
                     <thead className="bg-c-surface-soft text-c-ink-faint">
                       <tr>
@@ -566,7 +566,7 @@ export default function FactureFicheModal({
                   </table>
                 </div>
 
-                <div className="text-sm flex items-center justify-between">
+                <div className="text-sm flex items-center justify-between shrink-0">
                   <span className="text-c-ink-faint">Montant restant :</span>
                   <span className={`font-bold tabular-nums ${
                     montantRestant === 0 ? 'text-c-brand' : 'text-red-600'
@@ -575,9 +575,9 @@ export default function FactureFicheModal({
                   </span>
                 </div>
 
-                {/* Apercu inline de la facture sélectionnée */}
-                <div className="border border-c-line rounded overflow-hidden">
-                  <div className="px-3 py-1.5 bg-c-surface-soft border-b border-c-line-soft text-xs font-medium text-c-ink-faint flex items-center gap-2">
+                {/* Apercu inline de la facture sélectionnée (prend tout l'espace restant) */}
+                <div className="border border-c-line rounded overflow-hidden flex-1 flex flex-col min-h-0">
+                  <div className="px-3 py-1.5 bg-c-surface-soft border-b border-c-line-soft text-xs font-medium text-c-ink-faint flex items-center gap-2 shrink-0">
                     Aperçu
                     {previewName && (
                       <span className="text-c-ink truncate flex-1" title={previewName}>
@@ -585,7 +585,7 @@ export default function FactureFicheModal({
                       </span>
                     )}
                   </div>
-                  <div className="bg-c-surface-soft" style={{ minHeight: 400 }}>
+                  <div className="bg-c-surface-soft flex-1 min-h-0 overflow-hidden">
                     {!selectedFactureId ? (
                       <p className="text-xs italic text-center py-12 text-c-ink-faint-2">
                         Clique sur une ligne du tableau pour afficher la facture
@@ -600,11 +600,11 @@ export default function FactureFicheModal({
                       </p>
                     ) : isImage ? (
                       <img src={previewUrl} alt={previewName}
-                        className="w-full max-h-[75vh] object-contain bg-white" />
+                        className="w-full h-full object-contain bg-white" />
                     ) : isPdf ? (
                       <iframe src={previewUrl} title={previewName}
-                        className="w-full bg-white"
-                        style={{ height: '75vh', border: 0 }} />
+                        className="w-full h-full bg-white"
+                        style={{ border: 0 }} />
                     ) : (
                       <p className="text-xs italic text-center py-12 text-c-ink-faint-2">
                         Aperçu non disponible pour ce type de fichier.
