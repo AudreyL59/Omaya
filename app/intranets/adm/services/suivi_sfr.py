@@ -487,7 +487,11 @@ def _load_ticket_call_sfr(
           LEFT JOIN ticket.pgt_tk_statut ts ON ts.id_tk_statut = tl.id_tk_statut
           LEFT JOIN rh.pgt_salarie s ON s.id_salarie = tl.op_crea
          WHERE (tc.modif_elem IS NULL OR tc.modif_elem NOT LIKE '%suppr%')
-           AND tl.date_crea BETWEEN ? AND ?
+           -- date_crea est un timestamp : on filtre [du 00:00, au+1 00:00[
+           -- pour inclure toute la journee 'au' (sinon BETWEEN du au ne
+           -- match que minuit pile quand du = au).
+           AND tl.date_crea >= ?
+           AND tl.date_crea <  (?::date + INTERVAL '1 day')
            AND tl.op_crea <> 6
            {where_cloture}
          ORDER BY tl.date_crea DESC
