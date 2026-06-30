@@ -898,6 +898,427 @@ def resolve_cin_url(id_call_sfr: int, source: str = "normal") -> str:
         return url_jpg
 
 
+# ====================================================================
+# Convertir / Cloturer la selection (Fen_TicketCallSFR boutons)
+# ====================================================================
+
+# ID vendeur "generique" CALL SFR cf code WinDev
+SFR_CALL_GENERIC_SALARIE_ID = 20200715153948361
+
+
+class ConversionResultItem(BaseModel):
+    id_tk_liste: str
+    nb_paniers: int = 0
+    nb_crees: int = 0
+    nb_existants: int = 0
+    nb_erreurs: int = 0
+    message: str = ""
+    cloture_ok: bool = False
+
+
+def _enregistrer_client(
+    db_adv, civilite: int, nom: str, prenom: str,
+    date_naiss, adr: str, adr_cplt: str, cp: str, ville: str,
+    tel: str, gsm: str, mail: str, op_id: int,
+    opt_partenaire: bool = False,
+) -> int:
+    """Cree (ou retrouve) un client. Retourne id_client (0 si echec).
+    cf code WinDev EnregistrerClient + ReqRechercheClient :
+    on dedoublonne par (nom, prenom, adresse, cp, ville, tel/gsm).
+    """
+    tel1 = (tel or "").replace(".", "").replace(" ", "").replace("-", "")
+    gsm2 = (gsm or "").replace(".", "").replace(" ", "").replace("-", "")
+    # Recherche client existant (nom + prenom + cp + (tel OU gsm))
+    existing = db_adv.query_one(
+        """SELECT id_client FROM adv.pgt_client
+            WHERE UPPER(nom) = UPPER(?) AND UPPER(prenom) = UPPER(?)
+              AND COALESCE(cp, '') = ?
+              AND (
+                    (COALESCE(tel, '') = ? AND ? <> '')
+                 OR (COALESCE(gsm, '') = ? AND ? <> '')
+              )
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (nom, prenom, cp, gsm2, gsm2, tel1, tel1),
+    )
+    if existing:
+        return int(existing["id_client"])
+
+    id_new = _new_id()
+    try:
+        auto = db_adv.query_one(
+            "SELECT COALESCE(MAX(id_client_auto), 0) + 1 AS n FROM adv.pgt_client"
+        )
+        auto_n = int(auto["n"]) if auto else 1
+        db_adv.query(
+            """INSERT INTO adv.pgt_client
+                  (id_client_auto, id_client, civilite, nom, prenom,
+                   date_naiss, adresse1, adresse2, cp, ville, pays,
+                   tel, gsm, mail, opt_partenaire,
+                   op_saisie, date_saisie,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FRANCE',
+                       ?, ?, ?, ?, ?, NOW(), NOW(), ?, 'new')""",
+            (auto_n, id_new, int(civilite or 0), nom, prenom,
+             date_naiss if date_naiss else None,
+             adr, adr_cplt, cp, ville,
+             gsm2, tel1, mail, bool(opt_partenaire),
+             int(op_id), int(op_id)),
+        )
+        return id_new
+    except Exception:
+        return 0
+
+
+def _modif_fiche_client(
+    db_adv, id_client: int, nom: str, prenom: str, date_naiss,
+    adr: str, adr_cplt: str, cp: str, ville: str,
+    tel: str, gsm: str, mail: str, op_id: int,
+) -> None:
+    """Met a jour le client UNIQUEMENT si son nom est vide
+    (cf code WinDev ModifFicheClient : si client.NOM = '')."""
+    if not id_client:
+        return
+    r = db_adv.query_one(
+        "SELECT nom FROM adv.pgt_client WHERE id_client = ?", (int(id_client),))
+    if not r or (r.get("nom") or "").strip():
+        return
+    tel1 = (tel or "").replace(".", "").replace(" ", "").replace("-", "")
+    gsm2 = (gsm or "").replace(".", "").replace(" ", "").replace("-", "")
+    db_adv.query(
+        """UPDATE adv.pgt_client
+              SET nom=?, prenom=?, date_naiss=?, adresse1=?, adresse2=?,
+                  cp=?, ville=?, pays='FRANCE', tel=?, gsm=?, mail=?,
+                  op_saisie=?, date_saisie=NOW(),
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_client=?""",
+        (nom, prenom, date_naiss if date_naiss else None,
+         adr, adr_cplt, cp, ville, gsm2, tel1, mail,
+         int(op_id), int(op_id), int(id_client)),
+    )
+
+
+def _technologie_from_num(num: str) -> int:
+    """1 = THD, 2 = CBL, 3 = autre (cf code WinDev)."""
+    n = (num or "").upper()
+    if n.startswith("THD"): return 1
+    if n.startswith("CBL"): return 2
+    return 3
+
+
+def _enregistrer_ctt_sfr(
+    db_adv, num_bs: str, id_client: int, id_salarie: int,
+    date_signature, statut_panier: int, motif: str,
+    id_offres_sfr: int, type_vente: int, opt_tv: str,
+    ticket_diff: bool, num_prise_optique: str, parcours_chaines: bool,
+    op_id: int,
+) -> int:
+    """Cree un sfr_contrat. Retourne idStatutTicket :
+      - 33 si NumBS deja existant (DOUBLON)
+      - 4 si OK
+      - 0 si erreur."""
+    # Verif doublon
+    exists = db_adv.query_one(
+        """SELECT id_contrat FROM adv.pgt_sfr_contrat
+            WHERE UPPER(num_bs) = UPPER(?)
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (num_bs,),
+    )
+    if exists:
+        return 33
+
+    # Etat selon statut panier (cf selon WinDev)
+    if statut_panier == 2:
+        id_etat = 29     # Rejet - Vente annulée par le CALL
+    elif statut_panier == 4:
+        id_etat = 84    # Validé - Différé
+    elif "TK" in num_bs.upper():
+        id_etat = 30    # Rejet - Panier validé mais non finalise
+    else:
+        id_etat = 9     # Temporaire non reconnu
+
+    # IdSte du vendeur
+    id_ste = None
+    if id_salarie:
+        try:
+            db_rh = get_pg_connection("rh")
+            se = db_rh.query_one(
+                """SELECT id_ste FROM rh.pgt_salarie_embauche
+                    WHERE id_salarie = ? LIMIT 1""",
+                (int(id_salarie),),
+            )
+            if se: id_ste = se.get("id_ste")
+        except Exception:
+            pass
+
+    # Lookup offre pour id_produit + lib_offre (pour box8)
+    offre = db_adv.query_one(
+        """SELECT id_produit, lib_offre FROM adv.pgt_sfr_offres_provad
+            WHERE id_offres_sfr = ? LIMIT 1""",
+        (int(id_offres_sfr),),
+    ) or {}
+    id_produit = int(offre.get("id_produit") or 0)
+    box8 = "8" in (offre.get("lib_offre") or "")
+
+    id_new = _new_id()
+    try:
+        auto = db_adv.query_one(
+            "SELECT COALESCE(MAX(id_contrat_auto), 0) + 1 AS n FROM adv.pgt_sfr_contrat"
+        )
+        auto_n = int(auto["n"]) if auto else 1
+        db_adv.query(
+            """INSERT INTO adv.pgt_sfr_contrat
+                  (id_contrat_auto, id_contrat, id_client, id_salarie,
+                   id_ste, num_bs, date_signature,
+                   id_etat_sfr, id_etat_contrat, motif_annulation,
+                   technologie, id_produit, type_vente,
+                   box8, option_dec,
+                   non_call, issu_tk_diff, parcours_chaine,
+                   num_prise_vend,
+                   op_saisie, date_saisie,
+                   hors_cible, notation, portabilite,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?,
+                       ?, ?, ?,
+                       ?, ?,
+                       TRUE, ?, ?,
+                       ?,
+                       ?, NOW(),
+                       FALSE, 0, FALSE,
+                       NOW(), ?, 'new')""",
+            (auto_n, id_new, int(id_client), int(id_salarie),
+             id_ste, num_bs, date_signature,
+             id_etat, id_etat, motif or "",
+             _technologie_from_num(num_bs), id_produit, int(type_vente),
+             box8, opt_tv or "",
+             bool(ticket_diff), bool(parcours_chaines),
+             num_prise_optique or "",
+             int(op_id),
+             int(op_id)),
+        )
+    except Exception:
+        return 0
+
+    # Calcul nbPoints via calcul_point_contrat partage
+    try:
+        from app.shared.sdtc.bareme import calcul_point_contrat
+        prod = db_adv.query_one(
+            """SELECT famille, sous_fam FROM adv.pgt_sfr_produit
+                WHERE id_produit = ? LIMIT 1""",
+            (id_produit,),
+        ) or {}
+        fam = prod.get("famille") or ""
+        sous_fam = prod.get("sous_fam") or ""
+        # DonneFamProdSFR(famille, type_vente) : retourne 'FIB CQ' ou
+        # 'FIB MIG' selon le contexte. Pour simplifier on prend famille
+        # de la table produit.
+        nbpt = calcul_point_contrat(fam, sous_fam, 0,
+                                     str(date_signature) if date_signature else "",
+                                     str(id_new), 0)
+        if nbpt:
+            db_adv.query(
+                """UPDATE adv.pgt_sfr_contrat SET nb_points=?,
+                          modif_date=NOW(), modif_op=?
+                    WHERE id_contrat=?""",
+                (float(nbpt), int(op_id), id_new),
+            )
+    except Exception:
+        pass
+
+    return 4
+
+
+def convert_selection_to_contracts(
+    ids_tk_liste: list[int], op_id: int,
+) -> list[ConversionResultItem]:
+    """Convertit les tickets selectionnes en contrats SFR puis cloture
+    le ticket. Cf code WinDev btn 'Convertir la selection'."""
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    db_adv = get_pg_connection("adv")
+    out: list[ConversionResultItem] = []
+
+    for id_tl in ids_tk_liste:
+        item = ConversionResultItem(id_tk_liste=str(id_tl))
+
+        # 1. TK_CallSFR du ticket
+        tc = db_bo.query_one(
+            """SELECT id_tk_call_sfr, id_salarie, nom_client, prenom_client,
+                      nom_marital_client, civilite_client, date_naiss,
+                      adresse1, adresse2, cp, ville, mobile1, adr_mail,
+                      opt_partenaire
+                 FROM ticket_bo.pgt_tk_call_sfr
+                WHERE id_tk_liste = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (int(id_tl),),
+        )
+        if not tc:
+            item.message = "TK_CallSFR introuvable"
+            out.append(item); continue
+
+        # 2. Lignes panier
+        id_tc = int(tc["id_tk_call_sfr"])
+        paniers = db_bo.query(
+            """SELECT id_tk_call_sfr_panier, num, id_offres_sfr,
+                      statut_prod, motif_annulation, type, type_vente,
+                      opt_tv, num_prise_optique
+                 FROM ticket_bo.pgt_tk_call_sfr_panier
+                WHERE id_tk_call_sfr = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (id_tc,),
+        ) or []
+        item.nb_paniers = len(paniers)
+
+        # 3. Recupere date_crea pour signature
+        tl = db_tk.query_one(
+            "SELECT date_crea FROM ticket.pgt_tk_liste WHERE id_tk_liste=?",
+            (int(id_tl),),
+        )
+        date_crea = tl.get("date_crea") if tl else None
+        date_sign = date_crea.date() if date_crea else None
+
+        # NomClt = NomClient (+ ' ep ' + NomMaritalClient si renseigne)
+        nom_clt = (tc.get("nom_client") or "").strip()
+        if (tc.get("nom_marital_client") or "").strip():
+            nom_clt += " ep " + (tc.get("nom_marital_client") or "").strip()
+        prenom_clt = (tc.get("prenom_client") or "").strip()
+
+        # Test parcours chaines : FIBRE + MOBILE avec NUM non TK
+        test_fib = test_mob = False
+        for p in paniers:
+            n = (p.get("num") or "").strip().upper()
+            if n and not n.startswith("TK"):
+                if (p.get("type") or "").upper() == "FIBRE":
+                    test_fib = True
+                else:
+                    test_mob = True
+        parcours_chaines = test_fib and test_mob
+
+        id_vendeur = int(tc.get("id_salarie") or 0)
+
+        # 4. Boucle paniers
+        for p in paniers:
+            id_panier = int(p["id_tk_call_sfr_panier"])
+            num_bs = (p.get("num") or "").strip().upper()
+
+            # Si NUM vide -> genere 'TK<id>'
+            if not num_bs:
+                num_bs = f"TK{id_panier}"
+                db_bo.query(
+                    """UPDATE ticket_bo.pgt_tk_call_sfr_panier
+                          SET num=?, modif_date=NOW(), modif_op=?,
+                              modif_elem='modif'
+                        WHERE id_tk_call_sfr_panier=?""",
+                    (num_bs, int(op_id), id_panier),
+                )
+
+            # Verif si contrat existe deja
+            existing = db_adv.query_one(
+                """SELECT id_contrat, id_salarie, id_client
+                     FROM adv.pgt_sfr_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
+            )
+            if existing:
+                item.nb_existants += 1
+                # Reaffectation vendeur si actuel = generique (20200715... ou 0)
+                cur_sal = int(existing.get("id_salarie") or 0)
+                if cur_sal in (0, SFR_CALL_GENERIC_SALARIE_ID) and id_vendeur > 0:
+                    db_adv.query(
+                        """UPDATE adv.pgt_sfr_contrat
+                              SET id_salarie=?, modif_date=NOW(),
+                                  modif_op=?, modif_elem='modif'
+                            WHERE id_contrat=?""",
+                        (id_vendeur, int(op_id), int(existing["id_contrat"])),
+                    )
+                # Maj fiche client si vide
+                _modif_fiche_client(
+                    db_adv, int(existing.get("id_client") or 0),
+                    nom_clt, prenom_clt, tc.get("date_naiss"),
+                    tc.get("adresse1") or "", tc.get("adresse2") or "",
+                    tc.get("cp") or "", tc.get("ville") or "",
+                    "", tc.get("mobile1") or "", tc.get("adr_mail") or "",
+                    op_id,
+                )
+            else:
+                # Creation client + creation contrat
+                id_clt = _enregistrer_client(
+                    db_adv, int(tc.get("civilite_client") or 0),
+                    nom_clt, prenom_clt, tc.get("date_naiss"),
+                    tc.get("adresse1") or "", tc.get("adresse2") or "",
+                    tc.get("cp") or "", tc.get("ville") or "",
+                    "", tc.get("mobile1") or "", tc.get("adr_mail") or "",
+                    op_id, bool(tc.get("opt_partenaire")),
+                )
+                if not id_clt:
+                    item.nb_erreurs += 1
+                    continue
+                status = _enregistrer_ctt_sfr(
+                    db_adv, num_bs, id_clt, id_vendeur, date_sign,
+                    int(p.get("statut_prod") or 0),
+                    p.get("motif_annulation") or "",
+                    int(p.get("id_offres_sfr") or 0),
+                    int(p.get("type_vente") or 0),
+                    p.get("opt_tv") or "",
+                    False,        # TicketDiff : pas dispo en PG, on met False
+                    p.get("num_prise_optique") or "",
+                    parcours_chaines, op_id,
+                )
+                if status == 4:
+                    item.nb_crees += 1
+                else:
+                    item.nb_erreurs += 1
+
+        # 5. Cloture le ticket
+        try:
+            db_tk.query(
+                """UPDATE ticket.pgt_tk_liste
+                      SET cloturee=TRUE, date_cloture=NOW(),
+                          modif_date=NOW(), modif_op=?, modif_elem='modif'
+                    WHERE id_tk_liste=?""",
+                (int(op_id), int(id_tl)),
+            )
+            item.cloture_ok = True
+        except Exception as e:
+            item.message = f"Cloture KO : {e}"
+
+        item.message = (
+            f"{item.nb_crees} créé(s), {item.nb_existants} existant(s)"
+            + (f", {item.nb_erreurs} erreur(s)" if item.nb_erreurs else "")
+        )
+        out.append(item)
+    return out
+
+
+def cloture_selection_sans_convertir(
+    ids_tk_liste: list[int], op_id: int,
+) -> list[ConversionResultItem]:
+    """Cloture juste les tickets selectionnes (sans creer de contrat)."""
+    db_tk = get_pg_connection("ticket")
+    out: list[ConversionResultItem] = []
+    for id_tl in ids_tk_liste:
+        item = ConversionResultItem(id_tk_liste=str(id_tl))
+        try:
+            db_tk.query(
+                """UPDATE ticket.pgt_tk_liste
+                      SET cloturee=TRUE, date_cloture=NOW(),
+                          modif_date=NOW(), modif_op=?, modif_elem='modif'
+                    WHERE id_tk_liste=?""",
+                (int(op_id), int(id_tl)),
+            )
+            item.cloture_ok = True
+            item.message = "Clôturé"
+        except Exception as e:
+            item.message = f"KO : {e}"
+        out.append(item)
+    return out
+
+
 def update_panier_num(
     id_panier: int, new_num: str, id_tk_liste: int, op_id: int,
 ) -> bool:

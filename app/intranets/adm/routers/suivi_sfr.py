@@ -170,6 +170,30 @@ def get_cin_url(
     return {"url": svc.resolve_cin_url(id_call_sfr, source)}
 
 
+class SelectionTicketsPayload(BaseModel):
+    ids_tk_liste: list[int]
+
+
+@router.post("/ticket-call/convert-selection",
+             response_model=list[svc.ConversionResultItem])
+def post_convert_selection(
+    payload: SelectionTicketsPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    return svc.convert_selection_to_contracts(payload.ids_tk_liste,
+                                               u.id_salarie)
+
+
+@router.post("/ticket-call/cloture-selection",
+             response_model=list[svc.ConversionResultItem])
+def post_cloture_selection(
+    payload: SelectionTicketsPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    return svc.cloture_selection_sans_convertir(payload.ids_tk_liste,
+                                                  u.id_salarie)
+
+
 @router.put("/ticket-call/panier/{id_panier}/num")
 def put_panier_num(
     id_panier: int,

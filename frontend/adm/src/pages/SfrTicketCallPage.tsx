@@ -14,6 +14,7 @@ import {
   Search, Loader2, ArrowLeft, PhoneCall, FileDown,
   CalendarClock, BarChart3, Eye,
 } from 'lucide-react'
+import { showConfirm } from '@shared/ui/dialog'
 import {
   useTableSortFilter, SortableTh, FilterInput,
 } from '@shared/production/_tableHelpers'
@@ -142,17 +143,13 @@ export default function SfrTicketCallPage() {
       </div>
 
       {/* Filtres */}
-      <div className="flex items-end gap-3 mb-3 bg-white p-3 rounded-xl border border-c-line text-sm flex-wrap">
-        <div>
-          <label className="text-[10px] text-c-ink-faint">Du</label>
-          <input type="date" value={du} onChange={e => setDu(e.target.value)}
-            className="block px-2 py-1 border border-c-line rounded text-xs" />
-        </div>
-        <div>
-          <label className="text-[10px] text-c-ink-faint">Au</label>
-          <input type="date" value={au} onChange={e => setAu(e.target.value)}
-            className="block px-2 py-1 border border-c-line rounded text-xs" />
-        </div>
+      <div className="flex items-center gap-3 mb-3 bg-white p-3 rounded-xl border border-c-line text-sm flex-wrap">
+        <label className="text-c-ink-faint text-xs">Du</label>
+        <input type="date" value={du} onChange={e => setDu(e.target.value)}
+          className="px-2 py-1 border border-c-line rounded text-xs h-7" />
+        <label className="text-c-ink-faint text-xs">Au</label>
+        <input type="date" value={au} onChange={e => setAu(e.target.value)}
+          className="px-2 py-1 border border-c-line rounded text-xs h-7" />
         <div className="flex gap-3 items-center text-xs ml-2">
           {(['ouverts', 'clotures', 'tous'] as const).map(e => (
             <label key={e} className="flex items-center gap-1 cursor-pointer">
@@ -162,7 +159,7 @@ export default function SfrTicketCallPage() {
           ))}
         </div>
         <button type="button" onClick={rechercher} disabled={loading}
-          className="flex items-center gap-2 px-4 py-1.5 bg-c-brand text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50 h-8">
+          className="flex items-center gap-2 px-4 bg-c-brand text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50 h-7">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" />
                    : <Search className="w-4 h-4" />}
           Rechercher
@@ -170,7 +167,7 @@ export default function SfrTicketCallPage() {
         <div className="flex-1" />
         {tickets.length > 0 && (
           <button type="button" onClick={exportXlsx}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft h-8">
+            className="flex items-center gap-1.5 px-2.5 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft h-7">
             <FileDown className="w-3.5 h-3.5" /> XLSX
           </button>
         )}
@@ -200,7 +197,74 @@ export default function SfrTicketCallPage() {
         {onglet === 'liste' && (
           <OngletListe tickets={tickets} selected={selected}
             toggle={toggle} toggleAll={toggleAll}
-            onVoirTicket={(id) => setContenuTicketId(id)} />
+            onVoirTicket={(id) => setContenuTicketId(id)}
+            onConvertir={async () => {
+              const ids = tickets
+                .filter(t => selected.has(t.id_tk_call_sfr))
+                .map(t => parseInt(t.id_tk_liste, 10))
+              if (ids.length === 0) return
+              const ok = await showConfirm({
+                title: 'Convertir la sélection en contrat',
+                message: `Vous êtes sur le point de convertir ${ids.length} ticket(s) en contrat(s). Voulez-vous continuer ?`,
+              })
+              if (!ok) return
+              try {
+                const r = await fetch(
+                  `${API_BASE}/suivi-sfr/ticket-call/convert-selection`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${getToken()}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ids_tk_liste: ids }),
+                  },
+                )
+                if (!r.ok) throw new Error(String(r.status))
+                const res: Array<{ nb_crees: number; nb_existants: number; nb_erreurs: number }> = await r.json()
+                const totals = res.reduce((acc, x) => ({
+                  c: acc.c + x.nb_crees,
+                  e: acc.e + x.nb_existants,
+                  k: acc.k + x.nb_erreurs,
+                }), { c: 0, e: 0, k: 0 })
+                showToast(`Conversion : ${totals.c} créé(s), ${totals.e} existant(s)${totals.k ? `, ${totals.k} erreur(s)` : ''}`, 'success')
+                await rechercher()
+              } catch (e) {
+                showToast(`Erreur : ${(e as Error).message}`, 'error')
+              }
+            }}
+            onClore={async () => {
+              const ids = tickets
+                .filter(t => selected.has(t.id_tk_call_sfr))
+                .map(t => parseInt(t.id_tk_liste, 10))
+              if (ids.length === 0) return
+              const ok = await showConfirm({
+                title: 'Clôturer sans convertir',
+                message: `Vous êtes sur le point de clôturer ${ids.length} ticket(s) SANS convertir en contrat. Continuer ?`,
+              })
+              if (!ok) return
+              try {
+                const r = await fetch(
+                  `${API_BASE}/suivi-sfr/ticket-call/cloture-selection`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${getToken()}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ids_tk_liste: ids }),
+                  },
+                )
+                if (!r.ok) throw new Error(String(r.status))
+                const res: Array<{ cloture_ok: boolean }> = await r.json()
+                const ok_count = res.filter(x => x.cloture_ok).length
+                showToast(`${ok_count}/${res.length} ticket(s) clôturé(s)`, 'success')
+                await rechercher()
+              } catch (e) {
+                showToast(`Erreur : ${(e as Error).message}`, 'error')
+              }
+            }}
+          />
         )}
         {onglet === 'appels' && (
           <TicketCallPlanning rdvs={planning} initialDate={du} />
@@ -221,11 +285,14 @@ export default function SfrTicketCallPage() {
 
 // =================== Onglet 1 : Liste ===========================
 function OngletListe({
-  tickets, selected, toggle, toggleAll, onVoirTicket,
+  tickets, selected, toggle, toggleAll,
+  onVoirTicket, onConvertir, onClore,
 }: {
   tickets: Ticket[]; selected: Set<string>
   toggle: (id: string) => void; toggleAll: () => void
   onVoirTicket: (idTkListe: string) => void
+  onConvertir: () => void
+  onClore: () => void
 }) {
   const tsf = useTableSortFilter(
     tickets as unknown as Array<Record<string, unknown>>,
@@ -253,13 +320,13 @@ function OngletListe({
         <button type="button"
           className="px-2 py-1 rounded bg-c-brand text-white disabled:opacity-30"
           disabled={selected.size === 0}
-          onClick={() => showToast('Convertir la sélection : à venir', 'info')}>
+          onClick={onConvertir}>
           Convertir la sélection
         </button>
         <button type="button"
           className="px-2 py-1 rounded text-red-600 hover:bg-red-50 disabled:opacity-30"
           disabled={selected.size === 0}
-          onClick={() => showToast('Clôturer sans convertir : à venir', 'info')}>
+          onClick={onClore}>
           Clôturer sans convertir
         </button>
         <span className="ml-3 text-c-ink-faint">
