@@ -1120,6 +1120,240 @@ def search_extraction_sfr(
     return out
 
 
+# ====================================================================
+# 5. PARCOURS CHAINES (Fen_ParcoursChaine)
+# ====================================================================
+
+
+# IDTypeDroitAccès = 209 cf code WinDev (droit "tickets Diff SFR")
+DROIT_TK_DIFF_SFR = 209
+
+
+class ParcoursChaineRow(BaseModel):
+    id_sa: str
+    vendeur: str = ""
+    en_activite: bool = False
+    agence: str = ""
+    equipe: str = ""
+    droit_diff: bool = False
+    nb_tk_valides: int = 0
+    nb_parcours_chaines: int = 0
+    nb_tk_chaine_tot: int = 0
+    nb_tk_diff: int = 0
+    pourcent_global: float = 0.0       # chaines / tk_valides
+    pourcent_chaines: float = 0.0      # chaines / tk_chaine_tot
+    couleur_hex: str = ""              # selon les 2 taux (cf WinDev)
+
+
+def _color_parcours(tx1: float, tx2: float) -> str:
+    """Cf code WinDev :
+      - tx1 >= 0.8 et tx2 >= 0.8 -> VertPastel
+      - tx1 >= 0.8 et tx2 <  0.8 -> OrangePastel
+      - tx1 <  0.8 et tx2 >= 0.8 -> JaunePastel
+      - autre                    -> RougePastel"""
+    if tx1 >= 0.8 and tx2 >= 0.8: return "#bbf7d0"   # vert pastel
+    if tx1 >= 0.8 and tx2 <  0.8: return "#fed7aa"   # orange pastel
+    if tx1 <  0.8 and tx2 >= 0.8: return "#fef3c7"   # jaune pastel
+    return "#fecaca"                                  # rouge pastel
+
+
+def search_parcours_chaines(du: date, au: date) -> list[ParcoursChaineRow]:
+    """Calcul par vendeur (OPCrea) :
+      - nb_tk_valides : nb tickets distincts avec au moins 1 panier
+        ayant un vrai NumBS (non vide, non 'TK%')
+      - nb_parcours_chaines : nb tickets distincts ayant FIBRE+MOBILE
+        avec vrais NumBS
+      - nb_tk_chaine_tot = nb_parcours_chaines (le KO 'AnomalieMobile'
+        n'existe pas en PG actuellement)
+      - nb_tk_diff = 0 (la colonne ticket_diff/anomalie_mobile n'existe
+        pas dans pgt_tk_call_sfr PG)
+      - pourcent_global = chaines / tk_valides
+      - pourcent_chaines = chaines / tk_chaine_tot
+      - droit_diff = pgt_salarie_droit_acces (id_type_droit_acces=209)
+    """
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    db_rh = get_pg_connection("rh")
+
+    # 1. Tk validés : un ticket -> 1 si au moins un panier a un vrai NumBS
+    tk_valides = db_bo.query(
+        """SELECT DISTINCT tc.id_tk_liste, tl.op_crea
+             FROM ticket_bo.pgt_tk_call_sfr tc
+             JOIN ticket_bo.pgt_tk_call_sfr_panier p
+               ON p.id_tk_call_sfr = tc.id_tk_call_sfr
+             JOIN ticket.pgt_tk_liste tl ON tl.id_tk_liste = tc.id_tk_liste
+            WHERE (p.modif_elem IS NULL OR p.modif_elem NOT LIKE '%suppr%')
+              AND p.num <> ''
+              AND p.num NOT ILIKE 'TK%'
+              AND tl.date_crea >= ?
+              AND tl.date_crea < (?::date + INTERVAL '1 day')""",
+        (du, au),
+    ) or []
+
+    # 2. Parcours chainés : ticket avec FIBRE+MOBILE non-TK
+    chaines = db_bo.query(
+        """SELECT DISTINCT tc.id_tk_liste, tl.op_crea
+             FROM ticket_bo.pgt_tk_call_sfr tc
+             JOIN ticket_bo.pgt_tk_call_sfr_panier fib
+               ON fib.id_tk_call_sfr = tc.id_tk_call_sfr
+              AND fib.type = 'FIBRE'
+              AND fib.num <> ''
+              AND fib.num NOT ILIKE 'TK%'
+              AND (fib.modif_elem IS NULL OR fib.modif_elem NOT LIKE '%suppr%')
+             JOIN ticket_bo.pgt_tk_call_sfr_panier mob
+               ON mob.id_tk_call_sfr = tc.id_tk_call_sfr
+              AND mob.type = 'MOBILE'
+              AND mob.num <> ''
+              AND mob.num NOT ILIKE 'TK%'
+              AND (mob.modif_elem IS NULL OR mob.modif_elem NOT LIKE '%suppr%')
+             JOIN ticket.pgt_tk_liste tl ON tl.id_tk_liste = tc.id_tk_liste
+            WHERE tl.date_crea >= ?
+              AND tl.date_crea < (?::date + INTERVAL '1 day')""",
+        (du, au),
+    ) or []
+
+    # Agrege par operateur
+    by_op: dict[int, dict] = {}
+    for r in tk_valides:
+        op = int(r.get("op_crea") or 0)
+        if not op: continue
+        by_op.setdefault(op, {"valides": set(), "chaines": set()})
+        by_op[op]["valides"].add(int(r["id_tk_liste"]))
+    for r in chaines:
+        op = int(r.get("op_crea") or 0)
+        if not op: continue
+        by_op.setdefault(op, {"valides": set(), "chaines": set()})
+        by_op[op]["chaines"].add(int(r["id_tk_liste"]))
+
+    if not by_op:
+        return []
+
+    # 3. Resolution salaries + droit Diff SFR
+    op_ids = list(by_op.keys())
+    ids_sql = ",".join(str(i) for i in op_ids)
+    sals = db_rh.query(
+        f"""SELECT id_salarie, nom, prenom, en_activite
+              FROM rh.pgt_salarie s
+              LEFT JOIN LATERAL (
+                SELECT en_activite FROM rh.pgt_salarie_embauche se
+                 WHERE se.id_salarie = s.id_salarie LIMIT 1
+              ) e ON true
+             WHERE id_salarie IN ({ids_sql})""",
+    ) or []
+    sals_map = {int(s["id_salarie"]): s for s in sals}
+    droits = db_rh.query(
+        f"""SELECT id_salarie, droit_actif FROM rh.pgt_salarie_droit_acces
+             WHERE id_salarie IN ({ids_sql})
+               AND id_type_droit_acces = ?
+               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (DROIT_TK_DIFF_SFR,),
+    ) or []
+    droits_map = {int(d["id_salarie"]): bool(d.get("droit_actif")) for d in droits}
+
+    out: list[ParcoursChaineRow] = []
+    for op_id, agg in by_op.items():
+        s = sals_map.get(op_id, {})
+        nom = (s.get("nom") or "").strip()
+        prenom = _capitalize((s.get("prenom") or "").strip())
+        nb_val = len(agg["valides"])
+        nb_chn = len(agg["chaines"])
+        tx1 = nb_chn / nb_val if nb_val > 0 else 0.0
+        tx2 = nb_chn / nb_chn if nb_chn > 0 else 0.0   # tk_chaine_tot = nb_chaines
+        out.append(ParcoursChaineRow(
+            id_sa=str(op_id),
+            vendeur=f"{nom} {prenom}".strip(),
+            en_activite=bool(s.get("en_activite")),
+            droit_diff=droits_map.get(op_id, False),
+            nb_tk_valides=nb_val,
+            nb_parcours_chaines=nb_chn,
+            nb_tk_chaine_tot=nb_chn,
+            nb_tk_diff=0,
+            pourcent_global=round(tx1 * 100, 1),
+            pourcent_chaines=round(tx2 * 100, 1),
+            couleur_hex=_color_parcours(tx1, tx2),
+        ))
+    out.sort(key=lambda r: (-r.pourcent_chaines, r.vendeur))
+    return out
+
+
+def set_droit_diff_sfr(ids_salarie: list[int], actif: bool, op_id: int) -> int:
+    """Active/desactive le droit IDTypeDroitAcces=209 pour la liste."""
+    db = get_pg_connection("rh")
+    n = 0
+    for id_sal in ids_salarie:
+        existing = db.query_one(
+            """SELECT id_salarie_droit_acces FROM rh.pgt_salarie_droit_acces
+                WHERE id_salarie = ? AND id_type_droit_acces = ?
+                LIMIT 1""",
+            (int(id_sal), DROIT_TK_DIFF_SFR),
+        )
+        if existing:
+            db.query(
+                """UPDATE rh.pgt_salarie_droit_acces
+                      SET droit_actif=?, modif_date=NOW(), modif_op=?,
+                          modif_elem='modif'
+                    WHERE id_salarie_droit_acces=?""",
+                (actif, int(op_id), int(existing["id_salarie_droit_acces"])),
+            )
+        else:
+            id_new = _new_id()
+            db.query(
+                """INSERT INTO rh.pgt_salarie_droit_acces
+                      (id_salarie_droit_acces, id_salarie, id_type_droit_acces,
+                       droit_actif, modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, ?, NOW(), ?, 'new')""",
+                (id_new, int(id_sal), DROIT_TK_DIFF_SFR, actif, int(op_id)),
+            )
+        n += 1
+    return n
+
+
+def export_parcours_chaines_xlsx(rows: list[ParcoursChaineRow]) -> bytes:
+    """XLSX avec couleur de fond par ligne (selon les 2 taux)."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment
+
+    columns: list[tuple[str, str]] = [
+        ("vendeur", "Vendeur"),
+        ("agence", "Agence"),
+        ("equipe", "Équipe"),
+        ("en_activite", "Actif"),
+        ("droit_diff", "Droit Tk Diff"),
+        ("nb_tk_valides", "nb PC Validés"),
+        ("nb_parcours_chaines", "nb PC potentiels"),
+        ("pourcent_global", "% PC validés Prod chaînés potentiel"),
+        ("nb_tk_chaine_tot", "nb Tk Validés Prod globale"),
+        ("pourcent_chaines", "% PC Validés Prod globale"),
+        ("nb_tk_diff", "nb Tk Diff"),
+    ]
+    wb = Workbook(); ws = wb.active; ws.title = "Parcours chaînés"
+    ws.append([lbl for _, lbl in columns])
+    header_fill = PatternFill(start_color="FF17494E", end_color="FF17494E",
+                               fill_type="solid")
+    header_font = Font(color="FFFFFFFF", bold=True)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for r in rows:
+        ws.append([getattr(r, k) for k, _ in columns])
+        if r.couleur_hex and r.couleur_hex.startswith("#"):
+            hex_code = "FF" + r.couleur_hex[1:].upper()
+            fill = PatternFill(start_color=hex_code, end_color=hex_code,
+                                fill_type="solid")
+            for cell in ws[ws.max_row]:
+                cell.fill = fill
+
+    widths = [24, 18, 18, 6, 8, 10, 10, 16, 16, 16, 8]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    ws.freeze_panes = "A2"
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf.read()
+
+
 def export_extraction_sfr_xlsx(rows: list[ExtractionSfrRow]) -> bytes:
     """Genere un XLSX openpyxl avec fond de ligne colore selon le
     couleur_hex de chaque ExtractionSfrRow (= couleur du TypeEtatContrat)."""

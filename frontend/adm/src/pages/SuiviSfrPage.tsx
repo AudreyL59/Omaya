@@ -40,7 +40,7 @@ const ITEMS: MenuItem[] = [
   { key: 'extraction',       label: 'Extraction SFR',
     icon: Download,       to: 'extraction',        implemented: true },
   { key: 'parcours-chaines', label: 'Parcours Chaînés',
-    icon: GitBranch,      to: 'parcours-chaines',  implemented: false },
+    icon: GitBranch,      to: 'parcours-chaines',  implemented: true },
   { key: 'cluster',          label: 'Cluster',
     icon: Boxes,          to: 'cluster',           implemented: false },
   { key: 'offres-ezy',       label: 'Offres EZY',

@@ -236,6 +236,53 @@ def post_convert_racc(
     return svc.convert_to_ret_racc(payload.id_contrats, u.id_salarie)
 
 
+# -- Fen_ParcoursChaine ------------------------------------------------
+
+
+@router.get("/parcours-chaines", response_model=list[svc.ParcoursChaineRow])
+def get_parcours_chaines(
+    du: date,
+    au: date,
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.search_parcours_chaines(du, au)
+
+
+class SetDroitDiffPayload(BaseModel):
+    ids_salarie: list[int]
+    actif: bool
+
+
+@router.post("/parcours-chaines/droit-diff")
+def post_parcours_droit_diff(
+    payload: SetDroitDiffPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    n = svc.set_droit_diff_sfr(payload.ids_salarie, payload.actif, u.id_salarie)
+    return {"ok": True, "nb_updated": n}
+
+
+@router.get("/parcours-chaines/export.xlsx")
+def get_parcours_chaines_export(
+    du: date,
+    au: date,
+    _u: UserToken = Depends(get_current_user),
+):
+    from fastapi.responses import Response
+    rows = svc.search_parcours_chaines(du, au)
+    content = svc.export_parcours_chaines_xlsx(rows)
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="parcours-chaines-{du}-{au}.xlsx"',
+        },
+    )
+
+
 @router.post("/ticket-call/convert-selection",
              response_model=list[svc.ConversionResultItem])
 def post_convert_selection(
