@@ -93,13 +93,12 @@ def list_ctts_a_raccorder(
            AND (
                 e.lib_etat ILIKE '%Le raccordement est planifié%'
              OR e.lib_etat ILIKE '%Payé par employeur - Validation%'
-             -- Note WinDev : 3eme cond 'date_rdv_tech LIKE Va payée'
-             -- obsolete sur PG (date_rdv_tech est de type date, pas text)
+             OR c.date_rdv_tech BETWEEN ? AND ?
            )
          ORDER BY c.date_signature DESC
          LIMIT 5000
         """,
-        (du, au),
+        (du, au, du, au),
     ) or []
 
     today = date.today()
