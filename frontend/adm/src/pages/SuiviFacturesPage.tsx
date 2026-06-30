@@ -13,10 +13,14 @@
 import { useEffect, useState } from 'react'
 import {
   Search, FileDown, Loader2, CheckCircle2, AlertCircle, XCircle, Receipt,
+  Plus, Pencil, Trash2, X,
 } from 'lucide-react'
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import BeneficiairePicker from '@/components/factures/BeneficiairePicker'
+import FactureAjoutModal from '@/components/factures/FactureAjoutModal'
+import FactureFicheModal from '@/components/factures/FactureFicheModal'
 
 const API_BASE = '/api/adm'
 
@@ -84,10 +88,15 @@ export default function SuiviFacturesPage() {
   const [montantMin, setMontantMin] = useState(0)
   const [montantMax, setMontantMax] = useState(0)
   const [beneServiceMode, setBeneServiceMode] = useState(false)
-  const [beneId] = useState(0)  // TODO : picker bénéficiaire (étape 2)
+  const [beneId, setBeneId] = useState(0)
+  const [beneLabel, setBeneLabel] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const [busy, setBusy] = useState(false)
   const [lignes, setLignes] = useState<Ligne[]>([])
+  const [selectedId, setSelectedId] = useState<string>('')
+  const [ajoutOpen, setAjoutOpen] = useState(false)
+  const [ficheOpenId, setFicheOpenId] = useState<string>('')
 
   useEffect(() => {
     const headers = { Authorization: `Bearer ${getToken()}` }
@@ -134,6 +143,41 @@ export default function SuiviFacturesPage() {
       showToast(`Erreur : ${(e as Error).message}`, 'error')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleAjouter = () => setAjoutOpen(true)
+
+  const handleEditer = () => {
+    if (!selectedId) {
+      showToast('Sélectionne une ligne dans le tableau.', 'info'); return
+    }
+    setFicheOpenId(selectedId)
+  }
+
+  const handleSupprimer = async () => {
+    if (!selectedId) {
+      showToast('Sélectionne une ligne dans le tableau.', 'info'); return
+    }
+    const ok = await showConfirm({
+      title: 'Supprimer cet enregistrement',
+      message: 'Vous êtes sur le point de supprimer cet enregistrement.\nVoulez-vous continuer ?',
+    })
+    if (!ok) return
+    try {
+      const r = await fetch(
+        `${API_BASE}/factures/commandes/${selectedId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      setLignes(prev => prev.filter(l => l.id_commande !== selectedId))
+      setSelectedId('')
+      showToast('Commande supprimée.', 'success')
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
     }
   }
 
@@ -264,27 +308,44 @@ export default function SuiviFacturesPage() {
             </p>
           </div>
 
-          {/* Glissière salarié/service - picker à venir */}
+          {/* Glissière salarié/service + picker bénéficiaire */}
           <div className="border border-c-line-soft rounded p-2 bg-c-surface-soft">
             <div className="flex gap-1 mb-2">
               <button type="button"
-                onClick={() => setBeneServiceMode(false)}
+                onClick={() => {
+                  setBeneServiceMode(false); setBeneId(0); setBeneLabel('')
+                }}
                 className={`flex-1 py-1 rounded text-xs ${
                   !beneServiceMode ? 'bg-c-brand text-white' : 'bg-white text-c-ink-soft'
                 }`}>
                 Pour un salarié
               </button>
               <button type="button"
-                onClick={() => setBeneServiceMode(true)}
+                onClick={() => {
+                  setBeneServiceMode(true); setBeneId(0); setBeneLabel('')
+                }}
                 className={`flex-1 py-1 rounded text-xs ${
                   beneServiceMode ? 'bg-c-brand text-white' : 'bg-white text-c-ink-soft'
                 }`}>
                 Pour un service
               </button>
             </div>
-            <p className="text-[10px] text-c-ink-faint-2 italic text-center">
-              Picker bénéficiaire à venir
-            </p>
+            <div className="flex gap-1 items-center">
+              <button type="button" onClick={() => setPickerOpen(true)}
+                className="flex-1 px-2 py-1.5 bg-white border border-c-line rounded text-xs text-left truncate"
+                title={beneLabel || 'Choisir le bénéficiaire'}>
+                {beneLabel || (beneServiceMode
+                  ? 'Choisir le service…' : 'Choisir le salarié…')}
+              </button>
+              {beneId > 0 && (
+                <button type="button"
+                  onClick={() => { setBeneId(0); setBeneLabel('') }}
+                  className="p-1.5 hover:bg-red-100 rounded text-red-600"
+                  title="Effacer">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           <button type="button" onClick={rechercher} disabled={busy}
@@ -299,6 +360,23 @@ export default function SuiviFacturesPage() {
       {/* Tableau resultats */}
       <div className="flex-1 bg-white rounded-xl border border-c-line overflow-hidden flex flex-col">
         <div className="px-3 py-2 border-b border-c-line-soft flex items-center gap-2 text-xs">
+          {/* 3 boutons d'action sur la ligne sélectionnée */}
+          <button type="button" onClick={handleAjouter}
+            title="Ajouter une facture"
+            className="p-1.5 rounded text-c-brand hover:bg-c-brand/10">
+            <Plus className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={handleEditer} disabled={!selectedId}
+            title="Éditer la facture sélectionnée"
+            className="p-1.5 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 disabled:cursor-not-allowed">
+            <Pencil className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={handleSupprimer} disabled={!selectedId}
+            title="Supprimer la facture sélectionnée"
+            className="p-1.5 rounded text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed">
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <span className="w-px h-5 bg-c-line mx-1" />
           <span className="text-c-ink-faint">{lignes.length} commande(s)</span>
           {lignes.length > 0 && (
             <>
@@ -348,7 +426,11 @@ export default function SuiviFacturesPage() {
                   </td>
                 </tr>
               ) : lignes.map(l => (
-                <tr key={l.id_commande} className="hover:bg-c-surface-soft">
+                <tr key={l.id_commande}
+                  onClick={() => setSelectedId(l.id_commande)}
+                  className={`cursor-pointer hover:bg-c-surface-soft ${
+                    selectedId === l.id_commande ? 'bg-c-brand/10' : ''
+                  }`}>
                   <td className="px-2 py-1.5 text-center"><EtatBadge etat={l.etat} /></td>
                   <td className="px-2 py-1.5 tabular-nums">{shortDate(l.date_achat)}</td>
                   <td className="px-2 py-1.5">{l.ope_achat_nom}</td>
@@ -373,6 +455,36 @@ export default function SuiviFacturesPage() {
           </table>
         </div>
       </div>
+
+      {pickerOpen && (
+        <BeneficiairePicker
+          mode={beneServiceMode ? 'service' : 'salarie'}
+          onSelect={(item) => {
+            setBeneId(parseInt(item.id, 10) || 0)
+            setBeneLabel(item.label)
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {ajoutOpen && (
+        <FactureAjoutModal
+          onClose={() => setAjoutOpen(false)}
+          onCreated={(idCommande) => {
+            // Apres creation : ouvrir Fen_FactureFiche pour ajouter les
+            // factures (cf WinDev OuvreSoeur(Fen_FactureFiche, idNew))
+            setFicheOpenId(idCommande)
+          }}
+        />
+      )}
+
+      {ficheOpenId && (
+        <FactureFicheModal
+          idCommande={ficheOpenId}
+          onClose={() => setFicheOpenId('')}
+          onChanged={rechercher}
+        />
+      )}
     </div>
   )
 }

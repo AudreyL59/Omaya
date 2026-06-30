@@ -12,12 +12,26 @@ Indicateur (etat) :
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
+from unicodedata import normalize
 
 from pydantic import BaseModel
 
 from app.core.database.pg import get_pg_connection
+
+
+def _new_id() -> int:
+    """ID 8 octets timestamp (cf idEntierDateHeureSys WinDev)."""
+    n = datetime.now()
+    return int(n.strftime("%Y%m%d%H%M%S")) * 1000 + n.microsecond // 1000
+
+
+def normalize_enseigne(s: str) -> str:
+    """MAJUSCULE + sans accent + sans espace (cf ChaineFormate WinDev
+    ccMajuscule+ccSansAccent+ccSansEspace)."""
+    s = normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii")
+    return s.upper().replace(" ", "")
 
 
 # ---------- Schemas ----------------------------------------------------
@@ -52,6 +66,12 @@ class FactureSearchFilters(BaseModel):
     # (bene_service=True). 0 = pas de filtre bénéficiaire.
     bene_service: bool = False
     bene_id: int = 0
+
+
+class BeneficiaireItem(BaseModel):
+    id: str
+    label: str
+    sous_label: str = ""        # ex : agence/équipe pour un salarié
 
 
 class FactureLigne(BaseModel):
@@ -127,6 +147,328 @@ def list_societes() -> list[SocieteItem]:
         raison_sociale=r.get("raison_sociale") or "",
         rs_interne=r.get("rs_interne") or "",
     ) for r in rows]
+
+
+# ---------- Picker beneficiaire (salarie OU service) -------------------
+
+
+def search_beneficiaires(
+    mode: str, query: str = "", limit: int = 100,
+) -> list[BeneficiaireItem]:
+    """Cherche un beneficiaire selon le mode :
+      - 'salarie' : pgt_salarie en activite, label = "Nom Prenom"
+      - 'service' : pgt_organigramme, label = lib_orga
+    Recherche par "contient" (case-insensitive)."""
+    db = get_pg_connection("rh")
+    q = (query or "").strip().lower()
+    if mode == "service":
+        if q:
+            rows = db.query(
+                """SELECT idorganigramme AS id, lib_orga AS label
+                     FROM rh.pgt_organigramme
+                    WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                      AND LOWER(lib_orga) LIKE ?
+                    ORDER BY lib_orga LIMIT ?""",
+                (f"%{q}%", int(limit)),
+            ) or []
+        else:
+            rows = db.query(
+                """SELECT idorganigramme AS id, lib_orga AS label
+                     FROM rh.pgt_organigramme
+                    WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    ORDER BY lib_orga LIMIT ?""",
+                (int(limit),),
+            ) or []
+        return [BeneficiaireItem(id=str(r["id"]), label=r.get("label") or "")
+                for r in rows]
+    else:  # salarie
+        params: list = []
+        where = ["(s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')"]
+        if q:
+            where.append("(LOWER(s.nom) LIKE ? OR LOWER(s.prenom) LIKE ?)")
+            params.extend([f"%{q}%", f"%{q}%"])
+        params.append(int(limit))
+        rows = db.query(
+            f"""SELECT s.id_salarie AS id, s.nom, s.prenom
+                  FROM rh.pgt_salarie s
+                 WHERE {' AND '.join(where)}
+                 ORDER BY s.nom, s.prenom LIMIT ?""",
+            tuple(params),
+        ) or []
+        out: list[BeneficiaireItem] = []
+        for r in rows:
+            nom = (r.get("nom") or "").strip()
+            prenom = _capitalize_prenom((r.get("prenom") or "").strip())
+            out.append(BeneficiaireItem(
+                id=str(r["id"]),
+                label=f"{nom} {prenom}".strip(),
+            ))
+        return out
+
+
+# ---------- Creation (Fen_FactureAjout) -------------------------------
+
+
+class CommandeCreatePayload(BaseModel):
+    date_achat: date
+    ope_achat: int                  # IDSalarie de l'acheteur (combo Par)
+    id_ste: int = 0
+    enseigne: str = ""              # sera normalisee (MAJ + sans accent/espace)
+    mode_paiement: str              # CB / CBL / CH / PRLV / ESP
+    description: str = ""
+    montant_ttc: float
+    num_commande: str = ""
+    bene_service: bool              # False=salarie, True=service
+    bene_id: int                    # id_salarie OU idorganigramme
+
+
+def create_commande(p: CommandeCreatePayload, op_id: int) -> int:
+    """Cree une nouvelle commande dans pgt_commande.
+    Retourne l'id_commande genere (8 octets timestamp)."""
+    db = get_pg_connection("divers")
+    id_new = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_commande_auto), 0) + 1 AS n FROM divers.pgt_commande"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+    enseigne_norm = normalize_enseigne(p.enseigne)
+    db.query(
+        """INSERT INTO divers.pgt_commande
+              (id_commande_auto, id_commande, date_achat, ope_achat,
+               num_commande, montant_ttc, enseigne, description,
+               mode_paiement, bene_service, bene_id, id_ste,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (auto_n, id_new, p.date_achat, int(p.ope_achat),
+         p.num_commande or "", float(p.montant_ttc),
+         enseigne_norm, p.description or "",
+         p.mode_paiement, bool(p.bene_service), int(p.bene_id),
+         int(p.id_ste) if p.id_ste else None,
+         int(op_id)),
+    )
+    return id_new
+
+
+# ---------- Detail commande (Fen_FactureFiche) ------------------------
+
+
+class CommandeDetail(BaseModel):
+    id_commande: str
+    date_achat: str = ""
+    ope_achat: int = 0
+    ope_achat_nom: str = ""
+    num_commande: str = ""
+    montant_ttc: float = 0.0
+    enseigne: str = ""
+    description: str = ""
+    id_ste: int = 0
+    mode_paiement: str = ""
+    bene_service: bool = False
+    bene_id: int = 0
+    bene_nom: str = ""
+    # Calcules :
+    somme_factures: float = 0.0
+    montant_restant: float = 0.0
+
+
+class FactureItem(BaseModel):
+    id_commande_facture: str
+    date_ajout: str = ""
+    montant_ttc: float = 0.0
+    nom_fic: str = ""
+
+
+def get_commande_detail(id_commande: int) -> Optional[CommandeDetail]:
+    """Charge le detail d'une commande pour Fen_FactureFiche."""
+    db_d = get_pg_connection("divers")
+    db_rh = get_pg_connection("rh")
+    r = db_d.query_one(
+        """SELECT id_commande, date_achat, ope_achat, num_commande,
+                  montant_ttc, enseigne, description, id_ste, mode_paiement,
+                  bene_service, bene_id
+             FROM divers.pgt_commande WHERE id_commande = ? LIMIT 1""",
+        (int(id_commande),),
+    )
+    if not r:
+        return None
+    # Resolution noms operateur + beneficiaire
+    ope_id = int(r.get("ope_achat") or 0)
+    bene_id = int(r.get("bene_id") or 0)
+    bene_service = bool(r.get("bene_service"))
+    ope_nom = ""; bene_nom = ""
+    if ope_id:
+        s = db_rh.query_one(
+            "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ?",
+            (ope_id,),
+        )
+        if s:
+            ope_nom = (f"{(s.get('nom') or '').strip()} "
+                       f"{_capitalize_prenom((s.get('prenom') or '').strip())}").strip()
+    if bene_id:
+        if bene_service:
+            o = db_rh.query_one(
+                "SELECT lib_orga FROM rh.pgt_organigramme WHERE idorganigramme = ?",
+                (bene_id,),
+            )
+            if o: bene_nom = o.get("lib_orga") or ""
+        else:
+            s = db_rh.query_one(
+                "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ?",
+                (bene_id,),
+            )
+            if s:
+                bene_nom = (f"{(s.get('nom') or '').strip()} "
+                            f"{_capitalize_prenom((s.get('prenom') or '').strip())}").strip()
+    # Somme des factures associees
+    sum_r = db_d.query_one(
+        """SELECT COALESCE(SUM(montant_ttc), 0) AS s
+             FROM divers.pgt_commande_facture
+            WHERE id_commande = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_commande),),
+    )
+    somme = float(sum_r.get("s") or 0)
+    montant = float(r.get("montant_ttc") or 0)
+    return CommandeDetail(
+        id_commande=str(r["id_commande"]),
+        date_achat=str(r.get("date_achat") or ""),
+        ope_achat=ope_id, ope_achat_nom=ope_nom,
+        num_commande=r.get("num_commande") or "",
+        montant_ttc=montant, enseigne=r.get("enseigne") or "",
+        description=r.get("description") or "",
+        id_ste=int(r.get("id_ste") or 0),
+        mode_paiement=r.get("mode_paiement") or "",
+        bene_service=bene_service, bene_id=bene_id, bene_nom=bene_nom,
+        somme_factures=somme, montant_restant=round(montant - somme, 2),
+    )
+
+
+def list_factures_for_commande(id_commande: int) -> list[FactureItem]:
+    db = get_pg_connection("divers")
+    rows = db.query(
+        """SELECT id_commande_facture, date_ajout, montant_ttc, nom_fic
+             FROM divers.pgt_commande_facture
+            WHERE id_commande = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY date_ajout DESC""",
+        (int(id_commande),),
+    ) or []
+    return [FactureItem(
+        id_commande_facture=str(r["id_commande_facture"]),
+        date_ajout=str(r.get("date_ajout") or ""),
+        montant_ttc=float(r.get("montant_ttc") or 0),
+        nom_fic=r.get("nom_fic") or "",
+    ) for r in rows]
+
+
+def update_commande(id_commande: int, p: CommandeCreatePayload,
+                     op_id: int) -> bool:
+    db = get_pg_connection("divers")
+    db.query(
+        """UPDATE divers.pgt_commande
+              SET date_achat=?, ope_achat=?, num_commande=?, montant_ttc=?,
+                  enseigne=?, description=?, id_ste=?, mode_paiement=?,
+                  bene_service=?, bene_id=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_commande=?""",
+        (p.date_achat, int(p.ope_achat), p.num_commande or "",
+         float(p.montant_ttc), normalize_enseigne(p.enseigne),
+         p.description or "", int(p.id_ste) if p.id_ste else None,
+         p.mode_paiement, bool(p.bene_service), int(p.bene_id),
+         int(op_id), int(id_commande)),
+    )
+    return True
+
+
+# ---------- Upload / Download facture ----------------------------------
+
+
+def _factures_dir(id_commande: int):
+    """Dossier de stockage des factures d'une commande."""
+    from app.core.config import DOCS_BASE_PATH
+    return DOCS_BASE_PATH / "factures" / str(id_commande)
+
+
+def add_facture(
+    id_commande: int, file_content: bytes, file_name: str,
+    montant_ttc: float, op_id: int,
+) -> int:
+    """Sauve le fichier sur disque + INSERT pgt_commande_facture.
+    Retourne id_commande_facture."""
+    import os, pathlib
+    folder = _factures_dir(id_commande)
+    folder.mkdir(parents=True, exist_ok=True)
+    # Nouveau nom : timestamp + extension (cf WinDev DateHeureSys()+ResExtension)
+    ext = pathlib.Path(file_name).suffix or ""
+    new_name = datetime.now().strftime("%Y%m%d%H%M%S") + ext
+    target = folder / new_name
+    target.write_bytes(file_content)
+
+    db = get_pg_connection("divers")
+    id_new = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_commande_facture_auto), 0) + 1 AS n"
+        " FROM divers.pgt_commande_facture"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+    db.query(
+        """INSERT INTO divers.pgt_commande_facture
+              (id_commande_facture_auto, id_commande_facture, id_commande,
+               date_ajout, montant_ttc, nom_fic,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, NOW(), ?, ?, NOW(), ?, 'new')""",
+        (auto_n, id_new, int(id_commande),
+         float(montant_ttc), new_name, int(op_id)),
+    )
+    return id_new
+
+
+def delete_facture(id_facture: int, op_id: int) -> bool:
+    db = get_pg_connection("divers")
+    db.query(
+        """UPDATE divers.pgt_commande_facture
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_commande_facture=?""",
+        (int(op_id), int(id_facture)),
+    )
+    return True
+
+
+def get_facture_file_path(id_facture: int):
+    """Retourne (path, nom_original) pour le download."""
+    db = get_pg_connection("divers")
+    r = db.query_one(
+        """SELECT id_commande, nom_fic FROM divers.pgt_commande_facture
+            WHERE id_commande_facture = ?""",
+        (int(id_facture),),
+    )
+    if not r:
+        return None, None
+    p = _factures_dir(int(r["id_commande"])) / (r.get("nom_fic") or "")
+    return (p if p.exists() else None), r.get("nom_fic") or "facture.pdf"
+
+
+# ---------- Suppression (soft delete) ----------------------------------
+
+
+def delete_commande(id_commande: int, op_id: int) -> bool:
+    """Soft-delete d'une commande : positionne modif_elem='suppr'.
+    Soft-delete cascade aussi les factures liees. Le sync HFSQL->PG
+    incremental detectera la modif_date pour propager."""
+    db = get_pg_connection("divers")
+    db.query(
+        """UPDATE divers.pgt_commande
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_commande=?""",
+        (int(op_id), int(id_commande)),
+    )
+    db.query(
+        """UPDATE divers.pgt_commande_facture
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_commande=?""",
+        (int(op_id), int(id_commande)),
+    )
+    return True
 
 
 # ---------- Recherche principale --------------------------------------
