@@ -117,16 +117,34 @@ def delete_facture(
     return {"ok": True}
 
 
+_MIME_BY_EXT = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "png": "image/png", "gif": "image/gif",
+    "webp": "image/webp", "bmp": "image/bmp",
+    "txt": "text/plain", "html": "text/html",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
 @router.get("/factures/{id_facture}/download")
 def download_facture(
     id_facture: int,
     _u: UserToken = Depends(get_current_user),
 ):
+    """Renvoie le contenu du fichier avec le bon MIME type pour
+    permettre l'apercu inline (iframe PDF, img, etc.) cote front.
+    Le bouton download du front force le download via a.download."""
     content, info = svc.get_facture_content(id_facture)
     if content is None:
         raise HTTPException(status_code=404, detail=info)
+    ext = info.lower().rsplit(".", 1)[-1] if "." in info else ""
+    media = _MIME_BY_EXT.get(ext, "application/octet-stream")
     return Response(
         content=content,
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{info}"'},
+        media_type=media,
+        headers={"Content-Disposition": f'inline; filename="{info}"'},
     )
