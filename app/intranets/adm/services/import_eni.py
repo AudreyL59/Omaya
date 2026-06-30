@@ -1543,7 +1543,8 @@ def _import_journalier_eni(
         puiss = _parse_int(puiss_s.split(".")[0]) if puiss_s else 0
         type_comptage = _cell(ws, i, cols["type_comptage"])
         opt_hphc = "HPHC" in type_comptage.upper()
-        opt_maint = "PCK_HOME_P" in _cell(ws, i, cols["addon"]).upper()
+        _addon_up = _cell(ws, i, cols["addon"]).upper()
+        opt_maint = ("PCK_HOME_P" in _addon_up) or ("HSV_PACK_PM" in _addon_up)
         opt_mail = "MAIL" in _cell(ws, i, cols["opt_mail"]).upper()
         mandat_rib = "/20" in _cell(ws, i, cols["mandat_rib"])
         note_g = _parse_int(_cell(ws, i, cols["note_globale"]))
