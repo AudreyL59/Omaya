@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Plus, Trash2, ArrowLeft, MapPin, Loader2, Save,
+  Plus, Trash2, ArrowLeft, MapPin, Loader2, Save, ChevronRight,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -257,6 +257,7 @@ export default function SfrClusterPage() {
               <table className="w-full text-xs">
                 <thead className="bg-c-surface-soft text-c-ink-faint uppercase tracking-wide sticky top-0">
                   <tr>
+                    <th className="w-7"></th>
                     <th className="px-2 py-2 text-left">Région</th>
                     <th className="px-2 py-2 text-left">Code</th>
                     <th className="px-2 py-2 text-left">Cluster</th>
@@ -268,14 +269,24 @@ export default function SfrClusterPage() {
                     const sel = c.id_sfr_cluster === selected
                     return (
                       <tr key={c.id_sfr_cluster}
-                        onClick={() => setSelected(c.id_sfr_cluster)}
-                        className={`cursor-pointer hover:bg-c-surface-soft ${sel ? 'bg-c-brand/10' : ''}`}>
+                        className={sel ? 'bg-c-brand/10' : 'hover:bg-c-surface-soft'}>
+                        <td className="px-0 py-1 text-center">
+                          <button type="button"
+                            onClick={() => setSelected(c.id_sfr_cluster)}
+                            title="Charger les périodes de ce cluster"
+                            className={`p-1 rounded transition-colors ${
+                              sel
+                                ? 'text-c-brand bg-c-brand/20'
+                                : 'text-c-ink-faint-2 hover:text-c-brand hover:bg-c-brand/10'
+                            }`}>
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </td>
                         {(['region', 'code_vad', 'nom_cluster', 'mail_bo'] as const).map(f => (
                           <td key={f} className="px-2 py-1">
                             <input type="text" value={c[f] ?? ''}
                               onChange={(e) => updateClusterCell(c.id_sfr_cluster, f, e.target.value)}
                               onBlur={() => saveCluster(c)}
-                              onClick={(e) => e.stopPropagation()}
                               className="w-full px-1 py-0.5 bg-transparent border border-transparent hover:border-c-line focus:border-c-brand rounded text-xs" />
                           </td>
                         ))}
