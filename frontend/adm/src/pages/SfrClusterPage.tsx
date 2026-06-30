@@ -53,11 +53,11 @@ export default function SfrClusterPage() {
       if (!r.ok) throw new Error(String(r.status))
       const d: Cluster[] = await r.json()
       setClusters(d)
-      if (!selected && d.length > 0) setSelected(d[0].id_sfr_cluster)
     } catch (e) {
       showToast(`Erreur : ${(e as Error).message}`, 'error')
     } finally { setLoading(false) }
-  }, [selected])
+  }, [])    // pas de dependency sur 'selected' sinon chaque selection
+            // relance un fetch + setLoading -> le scroll du tableau est perdu
 
   const loadPeriodes = useCallback(async (id: string) => {
     setPeriodes([])   // reset avant tout fetch pour eviter le "fantome"
@@ -76,6 +76,11 @@ export default function SfrClusterPage() {
 
   useEffect(() => { void loadClusters() }, [loadClusters])
   useEffect(() => { void loadPeriodes(selected) }, [selected, loadPeriodes])
+  // auto-select le 1er cluster apres le 1er chargement, sans relancer
+  // loadClusters a chaque changement de selection
+  useEffect(() => {
+    if (!selected && clusters.length > 0) setSelected(clusters[0].id_sfr_cluster)
+  }, [clusters, selected])
 
   const saveCluster = async (c: Cluster) => {
     setSavingId(c.id_sfr_cluster)
