@@ -122,7 +122,10 @@ def download_facture(
     id_facture: int,
     _u: UserToken = Depends(get_current_user),
 ):
-    path, name = svc.get_facture_file_path(id_facture)
+    path, info = svc.get_facture_file_path(id_facture)
     if not path:
-        raise HTTPException(status_code=404, detail="Fichier introuvable")
-    return FileResponse(str(path), filename=name)
+        raise HTTPException(
+            status_code=404,
+            detail=f"Fichier introuvable. Attendu : {info}",
+        )
+    return FileResponse(str(path), filename=info)

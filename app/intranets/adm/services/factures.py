@@ -435,7 +435,10 @@ def delete_facture(id_facture: int, op_id: int) -> bool:
 
 
 def get_facture_file_path(id_facture: int):
-    """Retourne (path, nom_original) pour le download."""
+    """Retourne (path, nom_original) pour le download.
+    Si le fichier n'existe pas localement, retourne (None, expected_path)
+    pour que le router puisse signaler le path attendu (utile pour
+    diagnostic : factures historiques WinDev pas encore migrees)."""
     db = get_pg_connection("divers")
     r = db.query_one(
         """SELECT id_commande, nom_fic FROM divers.pgt_commande_facture
@@ -443,9 +446,12 @@ def get_facture_file_path(id_facture: int):
         (int(id_facture),),
     )
     if not r:
-        return None, None
+        return None, "introuvable en BDD"
     p = _factures_dir(int(r["id_commande"])) / (r.get("nom_fic") or "")
-    return (p if p.exists() else None), r.get("nom_fic") or "facture.pdf"
+    if p.exists():
+        return p, r.get("nom_fic") or "facture.pdf"
+    # Fichier absent : on retourne le path attendu pour diagnostic
+    return None, str(p)
 
 
 # ---------- Suppression (soft delete) ----------------------------------

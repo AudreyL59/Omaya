@@ -226,7 +226,10 @@ export default function FactureFicheModal({
     fetch(`${API_BASE}/factures/factures/${id}/download`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     }).then(async (r) => {
-      if (!r.ok) throw new Error(String(r.status))
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error(j.detail || `HTTP ${r.status}`)
+      }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -236,7 +239,7 @@ export default function FactureFicheModal({
       a.download = m ? m[1] : `facture-${id}.pdf`
       document.body.appendChild(a); a.click()
       document.body.removeChild(a); URL.revokeObjectURL(url)
-    }).catch(e => showToast(`Erreur : ${(e as Error).message}`, 'error'))
+    }).catch(e => showToast((e as Error).message, 'error'))
   }
 
   const handleDeleteFacture = async (id: string) => {

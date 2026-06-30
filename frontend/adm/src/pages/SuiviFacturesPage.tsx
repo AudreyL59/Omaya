@@ -428,6 +428,7 @@ export default function SuiviFacturesPage() {
               ) : lignes.map(l => (
                 <tr key={l.id_commande}
                   onClick={() => setSelectedId(l.id_commande)}
+                  onDoubleClick={() => setFicheOpenId(l.id_commande)}
                   className={`cursor-pointer hover:bg-c-surface-soft ${
                     selectedId === l.id_commande ? 'bg-c-brand/10' : ''
                   }`}>
