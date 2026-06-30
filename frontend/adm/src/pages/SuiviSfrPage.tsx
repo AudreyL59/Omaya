@@ -42,7 +42,7 @@ const ITEMS: MenuItem[] = [
   { key: 'parcours-chaines', label: 'Parcours Chaînés',
     icon: GitBranch,      to: 'parcours-chaines',  implemented: true },
   { key: 'cluster',          label: 'Cluster',
-    icon: Boxes,          to: 'cluster',           implemented: false },
+    icon: Boxes,          to: 'cluster',           implemented: true },
   { key: 'offres-ezy',       label: 'Offres EZY',
     icon: ShoppingBag,    to: 'offres-ezy',        implemented: false },
   { key: 'rdv-tech',         label: 'RDV Tech',

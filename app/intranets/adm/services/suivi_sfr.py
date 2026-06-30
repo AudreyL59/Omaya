@@ -1121,6 +1121,164 @@ def search_extraction_sfr(
 
 
 # ====================================================================
+# 6. CLUSTER SFR (Fen_SFRCluster + Fen_ClusterAjout)
+# ====================================================================
+
+
+class ClusterSfr(BaseModel):
+    id_sfr_cluster: str
+    region: str = ""
+    code_vad: str = ""
+    nom_cluster: str = ""
+    mail_bo: str = ""
+
+
+class ClusterPeriode(BaseModel):
+    id_sfr_cluster_periode: str
+    id_sfr_cluster: str
+    du: str = ""
+    au: str = ""
+    objectif_vv: int = 0
+
+
+class ClusterPayload(BaseModel):
+    region: str = ""
+    code_vad: str = ""
+    nom_cluster: str = ""
+    mail_bo: str = ""
+
+
+class PeriodePayload(BaseModel):
+    id_sfr_cluster: int
+    du: date
+    au: date
+    objectif_vv: int = 0
+
+
+def list_clusters() -> list[ClusterSfr]:
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT id_sfr_cluster, region, code_vad, nom_cluster, mail_bo
+             FROM adv.pgt_sfr_cluster
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY region, nom_cluster"""
+    ) or []
+    return [ClusterSfr(
+        id_sfr_cluster=str(r["id_sfr_cluster"]),
+        region=r.get("region") or "",
+        code_vad=r.get("code_vad") or "",
+        nom_cluster=r.get("nom_cluster") or "",
+        mail_bo=r.get("mail_bo") or "",
+    ) for r in rows]
+
+
+def list_cluster_periodes(id_sfr_cluster: int) -> list[ClusterPeriode]:
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT id_sfr_cluster_periode, id_sfr_cluster,
+                  du, au, objectif_vv
+             FROM adv.pgt_sfr_cluster_periode
+            WHERE id_sfr_cluster = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY du DESC""",
+        (int(id_sfr_cluster),),
+    ) or []
+    return [ClusterPeriode(
+        id_sfr_cluster_periode=str(r["id_sfr_cluster_periode"]),
+        id_sfr_cluster=str(r["id_sfr_cluster"]),
+        du=_date_str(r.get("du")),
+        au=_date_str(r.get("au")),
+        objectif_vv=int(r.get("objectif_vv") or 0),
+    ) for r in rows]
+
+
+def create_cluster(p: ClusterPayload, op_id: int) -> int:
+    db = get_pg_connection("adv")
+    id_new = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_sfr_cluster_auto), 0) + 1 AS n FROM adv.pgt_sfr_cluster"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+    db.query(
+        """INSERT INTO adv.pgt_sfr_cluster
+              (id_sfr_cluster_auto, id_sfr_cluster, region, code_vad,
+               nom_cluster, mail_bo,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (auto_n, id_new, p.region, p.code_vad, p.nom_cluster, p.mail_bo,
+         int(op_id)),
+    )
+    return id_new
+
+
+def update_cluster(id_cluster: int, p: ClusterPayload, op_id: int) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_sfr_cluster
+              SET region=?, code_vad=?, nom_cluster=?, mail_bo=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_sfr_cluster=?""",
+        (p.region, p.code_vad, p.nom_cluster, p.mail_bo,
+         int(op_id), int(id_cluster)),
+    )
+    return True
+
+
+def delete_cluster(id_cluster: int, op_id: int) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_sfr_cluster
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_sfr_cluster=?""",
+        (int(op_id), int(id_cluster)),
+    )
+    return True
+
+
+def create_cluster_periode(p: PeriodePayload, op_id: int) -> int:
+    db = get_pg_connection("adv")
+    id_new = _new_id()
+    # id_sfr_cluster_duau : cle composite text utilisee par WinDev pour
+    # l'indexation. On la construit comme '{id_cluster}_{du}_{au}'.
+    duau = f"{int(p.id_sfr_cluster)}_{p.du}_{p.au}"
+    db.query(
+        """INSERT INTO adv.pgt_sfr_cluster_periode
+              (id_sfr_cluster_periode, id_sfr_cluster, du, au,
+               objectif_vv, id_sfr_cluster_duau,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (id_new, int(p.id_sfr_cluster), p.du, p.au, int(p.objectif_vv),
+         duau, int(op_id)),
+    )
+    return id_new
+
+
+def update_cluster_periode(
+    id_periode: int, p: PeriodePayload, op_id: int,
+) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_sfr_cluster_periode
+              SET du=?, au=?, objectif_vv=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_sfr_cluster_periode=?""",
+        (p.du, p.au, int(p.objectif_vv), int(op_id), int(id_periode)),
+    )
+    return True
+
+
+def delete_cluster_periode(id_periode: int, op_id: int) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_sfr_cluster_periode
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_sfr_cluster_periode=?""",
+        (int(op_id), int(id_periode)),
+    )
+    return True
+
+
+# ====================================================================
 # 5. PARCOURS CHAINES (Fen_ParcoursChaine)
 # ====================================================================
 

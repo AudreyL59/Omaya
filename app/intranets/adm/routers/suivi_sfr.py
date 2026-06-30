@@ -236,6 +236,79 @@ def post_convert_racc(
     return svc.convert_to_ret_racc(payload.id_contrats, u.id_salarie)
 
 
+# -- Fen_SFRCluster ----------------------------------------------------
+
+
+@router.get("/clusters", response_model=list[svc.ClusterSfr])
+def get_clusters(_u: UserToken = Depends(get_current_user)):
+    return svc.list_clusters()
+
+
+@router.get("/clusters/{id_cluster}/periodes",
+            response_model=list[svc.ClusterPeriode])
+def get_cluster_periodes(
+    id_cluster: int,
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_cluster_periodes(id_cluster)
+
+
+@router.post("/clusters")
+def post_cluster(
+    payload: svc.ClusterPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    id_new = svc.create_cluster(payload, u.id_salarie)
+    return {"ok": True, "id_sfr_cluster": str(id_new)}
+
+
+@router.put("/clusters/{id_cluster}")
+def put_cluster(
+    id_cluster: int,
+    payload: svc.ClusterPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_cluster(id_cluster, payload, u.id_salarie)
+    return {"ok": True}
+
+
+@router.delete("/clusters/{id_cluster}")
+def delete_cluster(
+    id_cluster: int,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.delete_cluster(id_cluster, u.id_salarie)
+    return {"ok": True}
+
+
+@router.post("/cluster-periodes")
+def post_cluster_periode(
+    payload: svc.PeriodePayload,
+    u: UserToken = Depends(get_current_user),
+):
+    id_new = svc.create_cluster_periode(payload, u.id_salarie)
+    return {"ok": True, "id_sfr_cluster_periode": str(id_new)}
+
+
+@router.put("/cluster-periodes/{id_periode}")
+def put_cluster_periode(
+    id_periode: int,
+    payload: svc.PeriodePayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_cluster_periode(id_periode, payload, u.id_salarie)
+    return {"ok": True}
+
+
+@router.delete("/cluster-periodes/{id_periode}")
+def delete_cluster_periode(
+    id_periode: int,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.delete_cluster_periode(id_periode, u.id_salarie)
+    return {"ok": True}
+
+
 # -- Fen_ParcoursChaine ------------------------------------------------
 
 
