@@ -38,3 +38,71 @@ def post_send_mails(
     return svc.send_mails_to_bos(
         payload.ids_contrats, u.id_salarie, payload.test_mode,
     )
+
+
+# -- Fen_RemInterneSFR : Remunerations SFR (Fibre / Mobile) ----------
+
+
+@router.get("/remunerations", response_model=list[svc.RemunItem])
+def get_remunerations(
+    categorie: str = "FIBRE",
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_remunerations(categorie)
+
+
+@router.get("/remunerations/produits", response_model=list[svc.ProduitSfrItem])
+def get_produits_sfr(
+    categorie: str = "FIBRE",
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_sfr_produits(categorie)
+
+
+@router.get("/remunerations/{id_sfr_remun}", response_model=svc.RemunItem)
+def get_remun(
+    id_sfr_remun: int,
+    _u: UserToken = Depends(get_current_user),
+):
+    from fastapi import HTTPException
+    r = svc.get_remun(id_sfr_remun)
+    if not r:
+        raise HTTPException(status_code=404, detail="Remun introuvable")
+    return r
+
+
+@router.post("/remunerations")
+def post_remun(
+    payload: svc.RemunPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    id_new = svc.create_remun(payload, u.id_salarie)
+    return {"ok": True, "id_sfr_remun": str(id_new)}
+
+
+@router.put("/remunerations/{id_sfr_remun}")
+def put_remun(
+    id_sfr_remun: int,
+    payload: svc.RemunPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_remun(id_sfr_remun, payload, u.id_salarie)
+    return {"ok": True}
+
+
+@router.post("/remunerations/{id_sfr_remun}/duplicate")
+def post_duplicate_remun(
+    id_sfr_remun: int,
+    u: UserToken = Depends(get_current_user),
+):
+    id_new = svc.duplicate_remun(id_sfr_remun, u.id_salarie)
+    return {"ok": True, "id_sfr_remun": str(id_new)}
+
+
+@router.delete("/remunerations/{id_sfr_remun}")
+def delete_remun(
+    id_sfr_remun: int,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.delete_remun(id_sfr_remun, u.id_salarie)
+    return {"ok": True}

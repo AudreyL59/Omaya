@@ -43,6 +43,7 @@ import ImportNotationPage from '@/pages/ImportNotationPage'
 import SuiviFacturesPage from '@/pages/SuiviFacturesPage'
 import SuiviSfrPage from '@/pages/SuiviSfrPage'
 import SfrCttsARaccorderPage from '@/pages/SfrCttsARaccorderPage'
+import SfrRemunerationsPage from '@/pages/SfrRemunerationsPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -74,6 +75,7 @@ function App() {
           <Route path="factures" element={<SuiviFacturesPage />} />
           <Route path="suivi-sfr" element={<SuiviSfrPage />} />
           <Route path="suivi-sfr/ctts-a-raccorder" element={<SfrCttsARaccorderPage />} />
+          <Route path="suivi-sfr/remunerations" element={<SfrRemunerationsPage />} />
           <Route path="recherche-rh" element={<PlaceholderPage />} />
           <Route path="stat-rh" element={<StatRHPage />} />
           <Route path="stat-rh/saisie-cv" element={<StatRHSaisieCvPage />} />

@@ -34,7 +34,7 @@ const ITEMS: MenuItem[] = [
   { key: 'ctts-a-raccorder', label: 'Ctts à raccorder',
     icon: CheckSquare,    to: 'ctts-a-raccorder',  implemented: true },
   { key: 'remunerations',    label: 'Rémunérations',
-    icon: Euro,           to: 'remunerations',     implemented: false },
+    icon: Euro,           to: 'remunerations',     implemented: true },
   { key: 'ticket-call',      label: 'Ticket CALL SFR',
     icon: PhoneCall,      to: 'ticket-call',       implemented: false },
   { key: 'extraction',       label: 'Extraction SFR',

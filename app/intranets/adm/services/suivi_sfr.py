@@ -15,6 +15,12 @@ from pydantic import BaseModel
 from app.core.database.pg import get_pg_connection
 
 
+def _new_id() -> int:
+    """ID 8 octets timestamp (cf idEntierDateHeureSys WinDev)."""
+    n = datetime.now()
+    return int(n.strftime("%Y%m%d%H%M%S")) * 1000 + n.microsecond // 1000
+
+
 # ====================================================================
 # 1. CTTS A RACCORDER (Fen_SFRCttaRacc)
 # ====================================================================
@@ -161,6 +167,234 @@ class SendMailsResult(BaseModel):
     num_bs: str = ""
     ok: bool = False
     message: str = ""
+
+
+# ====================================================================
+# 2. REMUNERATIONS SFR (Fen_RemInterneSFR)
+# ====================================================================
+
+
+class RemunItem(BaseModel):
+    id_sfr_remun: str
+    categorie: str = ""              # 'FIBRE' ou 'MOBILE'
+    id_produit: int = 0
+    lib_produit: str = ""
+    type_vente: int = 0
+    date_debut: str = ""
+    date_fin: str = ""
+    montant_va: float = 0.0
+    montant_va_remise: float = 0.0
+    montant_ra: float = 0.0
+    montant_ra_remise: float = 0.0
+    prime_volumique: float = 0.0
+    abonnement_tv: float = 0.0
+    type_repart_rem: int = 0
+
+
+class RemunPayload(BaseModel):
+    categorie: str                      # 'FIBRE' ou 'MOBILE'
+    id_produit: int
+    type_vente: int = 0
+    date_debut: Optional[date] = None
+    date_fin: Optional[date] = None
+    montant_va: float = 0.0
+    montant_va_remise: float = 0.0
+    montant_ra: float = 0.0
+    montant_ra_remise: float = 0.0
+    prime_volumique: float = 0.0
+    abonnement_tv: float = 0.0
+    type_repart_rem: int = 0
+
+
+class ProduitSfrItem(BaseModel):
+    id_produit: int
+    lib_produit: str
+
+
+def list_remunerations(categorie: str) -> list[RemunItem]:
+    """Liste les rémunérations SFR pour une catégorie ('FIBRE' ou 'MOBILE'),
+    JOIN sfr_produit pour le libellé. Tri date_debut DESC, lib_produit ASC.
+    """
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT r.id_sfr_remun, r.categorie, r.id_produit,
+                  p.lib_produit,
+                  r.type_vente, r.date_debut, r.date_fin,
+                  r.montant_va, r.montant_va_remise,
+                  r.montant_ra, r.montant_ra_remise,
+                  r.prime_volumique, r.abonnement_tv, r.type_repart_rem
+             FROM adv.pgt_sfr_remun r
+             LEFT JOIN adv.pgt_sfr_produit p ON p.id_produit = r.id_produit
+            WHERE r.categorie = ?
+              AND (r.modif_elem IS NULL OR r.modif_elem NOT LIKE '%suppr%')
+            ORDER BY r.date_debut DESC NULLS LAST, p.lib_produit""",
+        (categorie.upper(),),
+    ) or []
+    return [RemunItem(
+        id_sfr_remun=str(r["id_sfr_remun"]),
+        categorie=r.get("categorie") or "",
+        id_produit=int(r.get("id_produit") or 0),
+        lib_produit=r.get("lib_produit") or "",
+        type_vente=int(r.get("type_vente") or 0),
+        date_debut=_date_str(r.get("date_debut")),
+        date_fin=_date_str(r.get("date_fin")),
+        montant_va=float(r.get("montant_va") or 0),
+        montant_va_remise=float(r.get("montant_va_remise") or 0),
+        montant_ra=float(r.get("montant_ra") or 0),
+        montant_ra_remise=float(r.get("montant_ra_remise") or 0),
+        prime_volumique=float(r.get("prime_volumique") or 0),
+        abonnement_tv=float(r.get("abonnement_tv") or 0),
+        type_repart_rem=int(r.get("type_repart_rem") or 0),
+    ) for r in rows]
+
+
+def list_sfr_produits(categorie: Optional[str] = None) -> list[ProduitSfrItem]:
+    """Liste les produits SFR, optionnellement filtres par categorie.
+    Categorie SFR : 1=Fibre, 2=Mobile (smallint pgt_sfr_produit.categorie)."""
+    db = get_pg_connection("adv")
+    where = ["(modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')",
+             "COALESCE(pro_actif, 0) = 1"]
+    params: list = []
+    if categorie:
+        cat_int = 1 if categorie.upper() == "FIBRE" else 2
+        where.append("categorie = ?")
+        params.append(cat_int)
+    rows = db.query(
+        f"""SELECT id_produit, lib_produit FROM adv.pgt_sfr_produit
+            WHERE {' AND '.join(where)}
+            ORDER BY lib_produit""",
+        tuple(params),
+    ) or []
+    return [ProduitSfrItem(
+        id_produit=int(r["id_produit"]),
+        lib_produit=r.get("lib_produit") or "",
+    ) for r in rows]
+
+
+def get_remun(id_sfr_remun: int) -> Optional[RemunItem]:
+    """Lit une remuneration pour edition."""
+    db = get_pg_connection("adv")
+    r = db.query_one(
+        """SELECT r.id_sfr_remun, r.categorie, r.id_produit, p.lib_produit,
+                  r.type_vente, r.date_debut, r.date_fin,
+                  r.montant_va, r.montant_va_remise,
+                  r.montant_ra, r.montant_ra_remise,
+                  r.prime_volumique, r.abonnement_tv, r.type_repart_rem
+             FROM adv.pgt_sfr_remun r
+             LEFT JOIN adv.pgt_sfr_produit p ON p.id_produit = r.id_produit
+            WHERE r.id_sfr_remun = ? LIMIT 1""",
+        (int(id_sfr_remun),),
+    )
+    if not r:
+        return None
+    return RemunItem(
+        id_sfr_remun=str(r["id_sfr_remun"]),
+        categorie=r.get("categorie") or "",
+        id_produit=int(r.get("id_produit") or 0),
+        lib_produit=r.get("lib_produit") or "",
+        type_vente=int(r.get("type_vente") or 0),
+        date_debut=_date_str(r.get("date_debut")),
+        date_fin=_date_str(r.get("date_fin")),
+        montant_va=float(r.get("montant_va") or 0),
+        montant_va_remise=float(r.get("montant_va_remise") or 0),
+        montant_ra=float(r.get("montant_ra") or 0),
+        montant_ra_remise=float(r.get("montant_ra_remise") or 0),
+        prime_volumique=float(r.get("prime_volumique") or 0),
+        abonnement_tv=float(r.get("abonnement_tv") or 0),
+        type_repart_rem=int(r.get("type_repart_rem") or 0),
+    )
+
+
+def create_remun(p: RemunPayload, op_id: int) -> int:
+    db = get_pg_connection("adv")
+    id_new = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_sfr_remun_auto), 0) + 1 AS n FROM adv.pgt_sfr_remun"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+    db.query(
+        """INSERT INTO adv.pgt_sfr_remun
+              (id_sfr_remun_auto, id_sfr_remun, categorie, id_produit,
+               type_vente, date_debut, date_fin,
+               montant_va, montant_va_remise, montant_ra, montant_ra_remise,
+               prime_volumique, abonnement_tv, type_repart_rem,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (auto_n, id_new, p.categorie.upper(), int(p.id_produit),
+         int(p.type_vente), p.date_debut, p.date_fin,
+         float(p.montant_va), float(p.montant_va_remise),
+         float(p.montant_ra), float(p.montant_ra_remise),
+         float(p.prime_volumique), float(p.abonnement_tv),
+         int(p.type_repart_rem), int(op_id)),
+    )
+    return id_new
+
+
+def update_remun(id_sfr_remun: int, p: RemunPayload, op_id: int) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_sfr_remun
+              SET categorie=?, id_produit=?, type_vente=?,
+                  date_debut=?, date_fin=?,
+                  montant_va=?, montant_va_remise=?,
+                  montant_ra=?, montant_ra_remise=?,
+                  prime_volumique=?, abonnement_tv=?, type_repart_rem=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_sfr_remun=?""",
+        (p.categorie.upper(), int(p.id_produit), int(p.type_vente),
+         p.date_debut, p.date_fin,
+         float(p.montant_va), float(p.montant_va_remise),
+         float(p.montant_ra), float(p.montant_ra_remise),
+         float(p.prime_volumique), float(p.abonnement_tv),
+         int(p.type_repart_rem), int(op_id), int(id_sfr_remun)),
+    )
+    return True
+
+
+def duplicate_remun(id_sfr_remun: int, op_id: int) -> int:
+    """Duplique une remuneration : copie tous les champs sauf l'ID."""
+    db = get_pg_connection("adv")
+    src = db.query_one(
+        """SELECT categorie, id_produit, type_vente, date_debut, date_fin,
+                  montant_va, montant_va_remise, montant_ra, montant_ra_remise,
+                  prime_volumique, abonnement_tv, type_repart_rem
+             FROM adv.pgt_sfr_remun WHERE id_sfr_remun = ?""",
+        (int(id_sfr_remun),),
+    )
+    if not src:
+        return 0
+    id_new = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_sfr_remun_auto), 0) + 1 AS n FROM adv.pgt_sfr_remun"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+    db.query(
+        """INSERT INTO adv.pgt_sfr_remun
+              (id_sfr_remun_auto, id_sfr_remun, categorie, id_produit,
+               type_vente, date_debut, date_fin,
+               montant_va, montant_va_remise, montant_ra, montant_ra_remise,
+               prime_volumique, abonnement_tv, type_repart_rem,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (auto_n, id_new, src.get("categorie"), src.get("id_produit"),
+         src.get("type_vente"), src.get("date_debut"), src.get("date_fin"),
+         src.get("montant_va"), src.get("montant_va_remise"),
+         src.get("montant_ra"), src.get("montant_ra_remise"),
+         src.get("prime_volumique"), src.get("abonnement_tv"),
+         src.get("type_repart_rem"), int(op_id)),
+    )
+    return id_new
+
+
+def delete_remun(id_sfr_remun: int, op_id: int) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_sfr_remun
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_sfr_remun=?""",
+        (int(op_id), int(id_sfr_remun)),
+    )
+    return True
 
 
 def send_mails_to_bos(
