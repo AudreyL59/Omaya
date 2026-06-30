@@ -26,6 +26,7 @@ from app.intranets.adm.routers.suivi_mutuelle import router as suivi_mutuelle_ro
 from app.intranets.adm.routers.params_rh import router as params_rh_router
 from app.intranets.adm.routers.params_cv import router as params_cv_router
 from app.intranets.adm.routers.imports import router as imports_router
+from app.intranets.adm.routers.factures import router as factures_router
 from app.shared.production.router import router as production_router
 from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
@@ -61,6 +62,7 @@ router.include_router(suivi_mutuelle_router)
 router.include_router(params_rh_router)
 router.include_router(params_cv_router)
 router.include_router(imports_router)
+router.include_router(factures_router)
 router.include_router(production_router)
 # Module recrutement/recherche-cv shared (ADM voit tout)
 router.include_router(get_recherche_cv_router("adm"))

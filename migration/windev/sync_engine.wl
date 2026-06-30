@@ -60,6 +60,7 @@ PROCEDURE INTERNE LogAction(sMessage is string)
         Resume = Resume + CR
     END
     Resume = Resume + sLigne
+    Résumé..Curseur = Taille(Résumé)
     // Rend la main au thread UI pour rafraichir l'affichage pendant la boucle
     Multitask(0)
 END
@@ -558,3 +559,4 @@ SyncAllTables()
 //TestSyncOneTable("recrutement", "CvSource")
 //TestSyncOneTable("divers", "communes_france")
 //TestSyncOneTable("adv", "Partenaire")
+Ferme()
