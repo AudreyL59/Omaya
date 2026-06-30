@@ -32,7 +32,7 @@ interface MenuItem {
 
 const ITEMS: MenuItem[] = [
   { key: 'ctts-a-raccorder', label: 'Ctts à raccorder',
-    icon: CheckSquare,    to: 'ctts-a-raccorder',  implemented: false },
+    icon: CheckSquare,    to: 'ctts-a-raccorder',  implemented: true },
   { key: 'remunerations',    label: 'Rémunérations',
     icon: Euro,           to: 'remunerations',     implemented: false },
   { key: 'ticket-call',      label: 'Ticket CALL SFR',
