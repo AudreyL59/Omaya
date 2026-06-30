@@ -44,16 +44,12 @@ type Etat = 'ouverts' | 'clotures' | 'tous'
 type Onglet = 'liste' | 'analyse' | 'appels' | 'ventes'
 
 const todayIso = (): string => new Date().toISOString().slice(0, 10)
-const monthAgoIso = (): string => {
-  const d = new Date(); d.setMonth(d.getMonth() - 1)
-  return d.toISOString().slice(0, 10)
-}
 const shortDate = (iso: string): string =>
   !iso || iso.length < 10 ? '' : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 
 export default function SfrTicketCallPage() {
   useDocumentTitle('Ticket Call SFR')
-  const [du, setDu] = useState(monthAgoIso())
+  const [du, setDu] = useState(todayIso())
   const [au, setAu] = useState(todayIso())
   const [etat, setEtat] = useState<Etat>('clotures')
   const [onglet, setOnglet] = useState<Onglet>('liste')
