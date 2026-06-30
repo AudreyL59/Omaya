@@ -924,11 +924,13 @@ def planning_appels(
             continue
         deb = r.get("date_deb_prise_en_charge")
         fin = r.get("date_fin_prise_en_charge")
-        app = r.get("date_h_appel")
 
+        # Col_DelaiAvPriseCharge cf code WinDev :
+        # DateHeureDifference(DH_crea, DH_Deb) -> delai = deb - crea
+        # (et non deb - date_h_appel comme on avait initialement).
         delai = 0.0
-        if isinstance(deb, datetime) and isinstance(app, datetime):
-            delai = (deb - app).total_seconds() / 60.0
+        if isinstance(deb, datetime) and isinstance(crea, datetime):
+            delai = (deb - crea).total_seconds() / 60.0
             if delai < 0:
                 delai = 0.0
         delai_lbl = _delai_label(delai)
