@@ -64,6 +64,7 @@ export default function SfrExtractionPage() {
   const [rows, setRows] = useState<Row[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [onglet, setOnglet] = useState<Onglet>('contrats')
 
   useEffect(() => {
@@ -145,7 +146,8 @@ export default function SfrExtractionPage() {
 
   const exportXlsx = async () => {
     // Export backend (openpyxl) avec couleurs de fond par ligne
-    // selon TypeEtatContrat.
+    // selon TypeEtatContrat. Spinner pendant la generation.
+    setExporting(true)
     try {
       const r = await fetch(
         `${API_BASE}/suivi-sfr/extraction-sfr/export.xlsx?du=${du}&au=${au}&mode=${mode}&id_etat_sfr=${idEtatSfr}`,
@@ -163,7 +165,7 @@ export default function SfrExtractionPage() {
       document.body.removeChild(a); URL.revokeObjectURL(url)
     } catch (e) {
       showToast(`Erreur export : ${(e as Error).message}`, 'error')
-    }
+    } finally { setExporting(false) }
   }
 
   return (
@@ -236,9 +238,11 @@ export default function SfrExtractionPage() {
             <div className="flex-1" />
 
             {rows.length > 0 && (
-              <button type="button" onClick={exportXlsx}
-                className="flex items-center gap-1.5 px-2.5 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft h-7">
-                <FileDown className="w-3.5 h-3.5" /> XLSX
+              <button type="button" onClick={exportXlsx} disabled={exporting}
+                className="flex items-center gap-1.5 px-2.5 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft h-7 disabled:opacity-50 disabled:cursor-wait">
+                {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                           : <FileDown className="w-3.5 h-3.5" />}
+                {exporting ? 'Génération…' : 'XLSX'}
               </button>
             )}
           </div>
