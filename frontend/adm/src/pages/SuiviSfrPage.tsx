@@ -36,7 +36,7 @@ const ITEMS: MenuItem[] = [
   { key: 'remunerations',    label: 'Rémunérations',
     icon: Euro,           to: 'remunerations',     implemented: true },
   { key: 'ticket-call',      label: 'Ticket CALL SFR',
-    icon: PhoneCall,      to: 'ticket-call',       implemented: false },
+    icon: PhoneCall,      to: 'ticket-call',       implemented: true },
   { key: 'extraction',       label: 'Extraction SFR',
     icon: Download,       to: 'extraction',        implemented: false },
   { key: 'parcours-chaines', label: 'Parcours Chaînés',

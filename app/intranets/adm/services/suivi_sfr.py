@@ -397,6 +397,270 @@ def delete_remun(id_sfr_remun: int, op_id: int) -> bool:
     return True
 
 
+# ====================================================================
+# 3. TICKET CALL SFR (Fen_TicketCallSFR)
+# ====================================================================
+
+
+class TicketCallItem(BaseModel):
+    id_tk_call_sfr: str
+    id_tk_liste: str
+    nb_ctt: int = 0                      # nb lignes panier (NB Ctt dans le panier)
+    nb_ctt_avec_num: int = 0             # nb lignes panier avec NumBS (NB Ctt avec Num BS)
+    contenu_panier: str = ""             # multi-ligne resume des paniers
+    date_crea: str = ""
+    nom_vendeur: str = ""
+    agence: str = ""                     # affectation cf vendeur (TODO)
+    equipe: str = ""
+    nom_client: str = ""
+    prenom_client: str = ""
+    cp: str = ""
+    ville: str = ""
+    nom_operateur: str = ""              # OPCrea (qui a fait le ticket)
+    date_deb_prise_en_charge: str = ""
+    date_fin_prise_en_charge: str = ""
+    delai_av_prise_charge_min: float = 0.0   # date_deb - date_h_appel en minutes
+    lib_statut: str = ""
+    cloturee: bool = False
+    nb_valide: int = 0                   # nb panier statut=1 ou 3
+
+
+class AnalyseTrancheItem(BaseModel):
+    tranche_horaire: str
+    nb_ticket: int = 0
+    moins_3min: int = 0
+    entre_3_5min: int = 0
+    entre_5_7min: int = 0
+    plus_de_7min: int = 0
+
+
+class AnalyseVentesItem(BaseModel):
+    delai: str
+    ventes_valides: int = 0
+    ventes_annulees: int = 0
+
+
+class AnalyseVentesTotaux(BaseModel):
+    pas_encore_statuees: int = 0
+    ventes_validees: int = 0
+    ventes_annulees: int = 0
+    par_delai: list[AnalyseVentesItem] = []
+
+
+def _delai_label(min_value: float) -> str:
+    """Categorie de delai (cf code WinDev) : <3m / 3-5m / 5-7m / >7m."""
+    if min_value < 3:
+        return "< 3 min"
+    if min_value < 5:
+        return "Entre 3 et 5 min"
+    if min_value < 7:
+        return "Entre 5 et 7 min"
+    return "> 7 min"
+
+
+def _load_ticket_call_sfr(
+    du: date, au: date, etat: str,
+) -> list[dict]:
+    """Helper : execute la requete principale TK_CallSFR + JOIN.
+    etat : 'ouverts' / 'clotures' / 'tous'."""
+    where_cloture = ""
+    if etat == "ouverts":
+        where_cloture = "AND tl.cloturee = FALSE"
+    elif etat == "clotures":
+        where_cloture = "AND tl.cloturee = TRUE"
+
+    db = get_pg_connection("ticket_bo")
+    rows = db.query(
+        f"""
+        SELECT DISTINCT
+               tc.id_tk_call_sfr, tc.id_tk_liste, tc.id_salarie,
+               tc.nom_client, tc.prenom_client,
+               tc.cp, tc.ville,
+               tc.date_h_appel, tc.ope_appel,
+               tc.date_deb_prise_en_charge, tc.date_fin_prise_en_charge,
+               tl.date_crea, tl.id_tk_statut, tl.cloturee,
+               tl.date_cloture, tl.op_crea,
+               ts.lib_statut,
+               s.nom AS sa_nom, s.prenom AS sa_prenom
+          FROM ticket_bo.pgt_tk_call_sfr tc
+          JOIN ticket.pgt_tk_liste tl ON tl.id_tk_liste = tc.id_tk_liste
+          LEFT JOIN ticket.pgt_tk_statut ts ON ts.id_tk_statut = tl.id_tk_statut
+          LEFT JOIN rh.pgt_salarie s ON s.id_salarie = tl.op_crea
+         WHERE (tc.modif_elem IS NULL OR tc.modif_elem NOT LIKE '%suppr%')
+           AND tl.date_crea BETWEEN ? AND ?
+           AND tl.op_crea <> 6
+           {where_cloture}
+         ORDER BY tl.date_crea DESC
+         LIMIT 5000
+        """,
+        (du, au),
+    ) or []
+    return rows
+
+
+def _load_paniers_by_tickets(ids_tickets: list[int]) -> dict[int, list[dict]]:
+    """Charge tous les paniers d'un coup, retourne dict {id_tk_call_sfr: [paniers]}."""
+    if not ids_tickets:
+        return {}
+    db = get_pg_connection("ticket_bo")
+    ids_sql = ",".join(str(i) for i in ids_tickets)
+    rows = db.query(
+        f"""SELECT p.id_tk_call_sfr_panier, p.id_tk_call_sfr, p.num,
+                   p.id_offres_sfr, p.type, p.statut_prod, p.num_date_saisie,
+                   o.lib_offre
+              FROM ticket_bo.pgt_tk_call_sfr_panier p
+              LEFT JOIN adv.pgt_sfr_offres_provad o
+                     ON o.id_offres_sfr = p.id_offres_sfr
+             WHERE p.id_tk_call_sfr IN ({ids_sql})
+               AND (p.modif_elem IS NULL OR p.modif_elem NOT LIKE '%suppr%')""",
+    ) or []
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        out.setdefault(int(r["id_tk_call_sfr"]), []).append(r)
+    return out
+
+
+def _statut_prod_label(s: int) -> str:
+    return {1: "Validé", 2: "Annulé", 3: "Num BS ajouté"}.get(int(s or 0), "Pas statué")
+
+
+def list_ticket_call_sfr(
+    du: date, au: date, etat: str = "tous",
+) -> list[TicketCallItem]:
+    """Onglet Liste : un ligne par ticket TK_CallSFR + resume des paniers."""
+    rows = _load_ticket_call_sfr(du, au, etat)
+    ids = [int(r["id_tk_call_sfr"]) for r in rows]
+    paniers_by_id = _load_paniers_by_tickets(ids)
+
+    out: list[TicketCallItem] = []
+    for r in rows:
+        id_tc = int(r["id_tk_call_sfr"])
+        paniers = paniers_by_id.get(id_tc, [])
+
+        # Compteurs panier
+        nb_valide = sum(1 for p in paniers if int(p.get("statut_prod") or 0) in (1, 3))
+        nb_avec_num = sum(1 for p in paniers if (p.get("num") or "").strip())
+
+        # Texte de resume panier (multiligne)
+        contenu_lines = []
+        for p in paniers:
+            num = p.get("num") or ""
+            etat_p = _statut_prod_label(p.get("statut_prod"))
+            line = num
+            d = p.get("num_date_saisie")
+            if d:
+                line += f" ({_date_str(d)})"
+            line += f" - {etat_p}"
+            contenu_lines.append(line)
+
+        # Delai (date_deb_prise_en_charge - date_h_appel) en minutes
+        delai = 0.0
+        deb = r.get("date_deb_prise_en_charge")
+        app = r.get("date_h_appel")
+        if isinstance(deb, datetime) and isinstance(app, datetime):
+            delai = (deb - app).total_seconds() / 60.0
+            if delai < 0: delai = 0.0
+
+        out.append(TicketCallItem(
+            id_tk_call_sfr=str(id_tc),
+            id_tk_liste=str(r.get("id_tk_liste") or ""),
+            nb_ctt=len(paniers),
+            nb_ctt_avec_num=nb_avec_num,
+            contenu_panier="\n".join(contenu_lines),
+            date_crea=_date_str(r.get("date_crea")),
+            nom_vendeur=" ".join(filter(None, [
+                (r.get("sa_nom") or "").strip(),
+                _capitalize((r.get("sa_prenom") or "").strip()),
+            ])),
+            nom_client=(r.get("nom_client") or "").strip(),
+            prenom_client=_capitalize((r.get("prenom_client") or "").strip()),
+            cp=r.get("cp") or "",
+            ville=r.get("ville") or "",
+            nom_operateur="",      # OPCrea deja resolu via sa_nom/sa_prenom mais c'est l'OP du ticket
+            date_deb_prise_en_charge=_date_str(deb),
+            date_fin_prise_en_charge=_date_str(r.get("date_fin_prise_en_charge")),
+            delai_av_prise_charge_min=round(delai, 2),
+            lib_statut=r.get("lib_statut") or "",
+            cloturee=bool(r.get("cloturee")),
+            nb_valide=nb_valide,
+        ))
+    return out
+
+
+def analyse_tk_call_sfr(
+    du: date, au: date, etat: str = "tous",
+) -> list[AnalyseTrancheItem]:
+    """Onglet Analyse : regroupement par 'tranche horaire' (cree le).
+    Format tranche : 'Jjj JJ AAAA HH:mm' (cf WinDev DateHeureVersChaine)."""
+    rows = _load_ticket_call_sfr(du, au, etat)
+    jours_fr = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
+    buckets: dict[str, AnalyseTrancheItem] = {}
+    for r in rows:
+        deb = r.get("date_deb_prise_en_charge")
+        app = r.get("date_h_appel")
+        crea = r.get("date_crea")
+        delai = 0.0
+        if isinstance(deb, datetime) and isinstance(app, datetime):
+            delai = (deb - app).total_seconds() / 60.0
+            if delai < 0: delai = 0.0
+        if not isinstance(crea, datetime):
+            continue
+
+        # Tranche horaire : on tronque a la minute (sans secondes)
+        crea_minute = crea.replace(second=0, microsecond=0)
+        label = (f"{jours_fr[crea_minute.weekday()]} "
+                 f"{crea_minute.strftime('%d %Y %H:%M')}")
+        b = buckets.setdefault(label, AnalyseTrancheItem(tranche_horaire=label))
+        b.nb_ticket += 1
+        if delai < 3: b.moins_3min += 1
+        elif delai < 5: b.entre_3_5min += 1
+        elif delai < 7: b.entre_5_7min += 1
+        else: b.plus_de_7min += 1
+
+    return sorted(buckets.values(), key=lambda x: x.tranche_horaire)
+
+
+def analyse_ventes_tk_call_sfr(
+    du: date, au: date, etat: str = "tous",
+) -> AnalyseVentesTotaux:
+    """Onglet 'Analyse des ventes' : compteurs validees/annulees/pas_statuees
+    + repartition par delai (<3m, 3-5m, 5-7m, >7m)."""
+    rows = _load_ticket_call_sfr(du, au, etat)
+    ids = [int(r["id_tk_call_sfr"]) for r in rows]
+    paniers_by_id = _load_paniers_by_tickets(ids)
+
+    totaux = AnalyseVentesTotaux()
+    par_delai: dict[str, AnalyseVentesItem] = {}
+    delai_order = ["< 3 min", "Entre 3 et 5 min", "Entre 5 et 7 min", "> 7 min"]
+    for d in delai_order:
+        par_delai[d] = AnalyseVentesItem(delai=d)
+
+    for r in rows:
+        id_tc = int(r["id_tk_call_sfr"])
+        deb = r.get("date_deb_prise_en_charge")
+        app = r.get("date_h_appel")
+        delai = 0.0
+        if isinstance(deb, datetime) and isinstance(app, datetime):
+            delai = (deb - app).total_seconds() / 60.0
+            if delai < 0: delai = 0.0
+        delai_lbl = _delai_label(delai)
+
+        for p in paniers_by_id.get(id_tc, []):
+            s = int(p.get("statut_prod") or 0)
+            if s in (1, 3):
+                totaux.ventes_validees += 1
+                par_delai[delai_lbl].ventes_valides += 1
+            elif s == 2:
+                totaux.ventes_annulees += 1
+                par_delai[delai_lbl].ventes_annulees += 1
+            else:
+                totaux.pas_encore_statuees += 1
+
+    totaux.par_delai = [par_delai[d] for d in delai_order]
+    return totaux
+
+
 def send_mails_to_bos(
     ids_contrats: list[int], op_id: int, test_mode: bool = False,
 ) -> list[SendMailsResult]:

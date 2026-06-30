@@ -106,3 +106,37 @@ def delete_remun(
 ):
     svc.delete_remun(id_sfr_remun, u.id_salarie)
     return {"ok": True}
+
+
+# -- Fen_TicketCallSFR : tickets call SFR avec 4 onglets -------------
+
+
+@router.get("/ticket-call", response_model=list[svc.TicketCallItem])
+def get_ticket_call(
+    du: date,
+    au: date,
+    etat: str = "tous",   # 'ouverts' | 'clotures' | 'tous'
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_ticket_call_sfr(du, au, etat)
+
+
+@router.get("/ticket-call/analyse", response_model=list[svc.AnalyseTrancheItem])
+def get_ticket_call_analyse(
+    du: date,
+    au: date,
+    etat: str = "tous",
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.analyse_tk_call_sfr(du, au, etat)
+
+
+@router.get("/ticket-call/analyse-ventes",
+            response_model=svc.AnalyseVentesTotaux)
+def get_ticket_call_analyse_ventes(
+    du: date,
+    au: date,
+    etat: str = "tous",
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.analyse_ventes_tk_call_sfr(du, au, etat)
