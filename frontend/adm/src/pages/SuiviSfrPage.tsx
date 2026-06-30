@@ -38,7 +38,7 @@ const ITEMS: MenuItem[] = [
   { key: 'ticket-call',      label: 'Ticket CALL SFR',
     icon: PhoneCall,      to: 'ticket-call',       implemented: true },
   { key: 'extraction',       label: 'Extraction SFR',
-    icon: Download,       to: 'extraction',        implemented: false },
+    icon: Download,       to: 'extraction',        implemented: true },
   { key: 'parcours-chaines', label: 'Parcours Chaînés',
     icon: GitBranch,      to: 'parcours-chaines',  implemented: false },
   { key: 'cluster',          label: 'Cluster',

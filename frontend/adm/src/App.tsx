@@ -45,6 +45,7 @@ import SuiviSfrPage from '@/pages/SuiviSfrPage'
 import SfrCttsARaccorderPage from '@/pages/SfrCttsARaccorderPage'
 import SfrRemunerationsPage from '@/pages/SfrRemunerationsPage'
 import SfrTicketCallPage from '@/pages/SfrTicketCallPage'
+import SfrExtractionPage from '@/pages/SfrExtractionPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -78,6 +79,7 @@ function App() {
           <Route path="suivi-sfr/ctts-a-raccorder" element={<SfrCttsARaccorderPage />} />
           <Route path="suivi-sfr/remunerations" element={<SfrRemunerationsPage />} />
           <Route path="suivi-sfr/ticket-call" element={<SfrTicketCallPage />} />
+          <Route path="suivi-sfr/extraction" element={<SfrExtractionPage />} />
           <Route path="recherche-rh" element={<PlaceholderPage />} />
           <Route path="stat-rh" element={<StatRHPage />} />
           <Route path="stat-rh/saisie-cv" element={<StatRHSaisieCvPage />} />

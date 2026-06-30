@@ -899,6 +899,292 @@ def resolve_cin_url(id_call_sfr: int, source: str = "normal") -> str:
 
 
 # ====================================================================
+# 4. EXTRACTION SFR (Fen_ExtractionSFR)
+# ====================================================================
+
+
+class EtatSfrItem(BaseModel):
+    id_etat: int
+    lib_etat: str
+
+
+def list_etats_sfr() -> list[EtatSfrItem]:
+    """Combo 'Etat vente SFR' (Fen_ExtractionSFR)."""
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT id_etat, lib_etat FROM adv.pgt_sfr_etat_contrat
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY lib_etat""",
+    ) or []
+    return [EtatSfrItem(id_etat=int(r["id_etat"]),
+                         lib_etat=r.get("lib_etat") or "") for r in rows]
+
+
+class ExtractionSfrRow(BaseModel):
+    id_contrat: str
+    num_bs: str = ""
+    lib_produit: str = ""
+    type_prod: str = ""           # famille_produit
+    type_vente: int = 0
+    date_signature: str = ""
+    type_etat: str = ""           # lib_type
+    etat_contrat: str = ""        # lib_etat
+    etat_sfr: int = 0
+    couleur_hex: str = ""         # couleur ligne (cf TypeEtatContrat.Couleur_*)
+    # Vendeur
+    nom_vendeur: str = ""
+    agence: str = ""
+    equipe: str = ""
+    # Client
+    client_nom: str = ""
+    client_adr: str = ""
+    client_cp: str = ""
+    client_ville: str = ""
+    client_mail: str = ""
+    client_mobile: str = ""
+    # SFR
+    box8: bool = False
+    box8_verif: bool = False
+    cluster_code: str = ""
+    cluster_nom: str = ""
+    date_portabilite: str = ""
+    date_racc_valid: str = ""
+    date_rdv_tech: str = ""
+    date_resil: str = ""
+    date_validation: str = ""
+    internet_garanti: bool = False
+    remise: float = 0.0
+    self_install: str = ""
+    technologie: int = 0
+    infos_internes: str = ""
+    infos_partagees: str = ""
+
+
+def search_extraction_sfr(
+    du: date, au: date, mode: str = "date_racc",
+    id_etat_sfr: int = 0,
+) -> list[ExtractionSfrRow]:
+    """Recherche contrats SFR pour Fen_ExtractionSFR.
+    mode : 'date_racc' / 'rdv_tech' / 'churn'.
+    Pour 'churn' : id_etat_sfr ignore (force a tous) + filtre
+    id_type_etat=4 (resiliation) + date_resil non vide + nb jours
+    (date_racc -> date_resil) <= 30."""
+    db = get_pg_connection("adv")
+
+    where = [
+        "(c.modif_elem IS NULL OR c.modif_elem NOT LIKE '%suppr%')",
+    ]
+    params: list = []
+
+    if mode == "rdv_tech":
+        where.append("c.date_rdv_tech BETWEEN ? AND ?")
+        params.extend([du, au])
+    elif mode == "churn":
+        where.append("c.date_resil BETWEEN ? AND ?")
+        where.append("c.date_resil IS NOT NULL")
+        where.append("e.id_type_etat = 4")
+        params.extend([du, au])
+    else:   # date_racc (default)
+        where.append("c.date_racc_activ BETWEEN ? AND ?")
+        params.extend([du, au])
+
+    if id_etat_sfr and mode != "churn":
+        where.append("c.id_etat_sfr = ?")
+        params.append(int(id_etat_sfr))
+
+    rows = db.query(
+        f"""SELECT c.id_contrat, c.id_salarie, c.id_client,
+                   c.num_bs, c.date_signature, c.box8, c.box8_verif,
+                   c.id_sfr_cluster, c.date_portabilite, c.date_racc_activ,
+                   c.date_rdv_tech, c.date_resil, c.date_validation,
+                   c.id_etat_sfr, c.internet_garanti, c.remise,
+                   c.self_install, c.technologie, c.type_vente,
+                   c.info_interne, c.info_vente_sfr,
+                   p.lib_produit, p.famille,
+                   e.lib_etat, e.id_type_etat,
+                   t.lib_type, t.couleur_r, t.couleur_v, t.couleur_b
+              FROM adv.pgt_sfr_contrat c
+              LEFT JOIN adv.pgt_sfr_produit p ON p.id_produit = c.id_produit
+              LEFT JOIN adv.pgt_sfr_etat_contrat e
+                     ON e.id_etat = c.id_etat_contrat
+              LEFT JOIN adv.pgt_type_etat_contrat t
+                     ON t.id_type_etat = e.id_type_etat
+             WHERE {' AND '.join(where)}
+             ORDER BY c.date_signature DESC
+             LIMIT 5000""",
+        tuple(params),
+    ) or []
+
+    # Filtre Churn : nb_jours date_racc -> date_resil <= 30
+    if mode == "churn":
+        from datetime import date as date_cls
+        kept = []
+        for r in rows:
+            dra = r.get("date_racc_activ"); drs = r.get("date_resil")
+            if isinstance(dra, date_cls) and isinstance(drs, date_cls):
+                if (drs - dra).days <= 30:
+                    kept.append(r)
+        rows = kept
+
+    # Resolution clients (batch) et vendeurs + clusters
+    id_clients = list({int(r["id_client"]) for r in rows if r.get("id_client")})
+    id_sals    = list({int(r["id_salarie"]) for r in rows if r.get("id_salarie")})
+    id_clus    = list({int(r["id_sfr_cluster"]) for r in rows if r.get("id_sfr_cluster")})
+
+    clients_map: dict[int, dict] = {}
+    if id_clients:
+        ids = ",".join(str(i) for i in id_clients)
+        cs = db.query(
+            f"""SELECT id_client, nom, prenom, adresse1, cp, ville, mail, gsm
+                  FROM adv.pgt_client WHERE id_client IN ({ids})""",
+        ) or []
+        clients_map = {int(c["id_client"]): c for c in cs}
+
+    db_rh = get_pg_connection("rh")
+    sals_map: dict[int, dict] = {}
+    if id_sals:
+        ids = ",".join(str(i) for i in id_sals)
+        ss = db_rh.query(
+            f"""SELECT id_salarie, nom, prenom FROM rh.pgt_salarie
+                 WHERE id_salarie IN ({ids})""",
+        ) or []
+        sals_map = {int(s["id_salarie"]): s for s in ss}
+
+    clus_map: dict[int, dict] = {}
+    if id_clus:
+        ids = ",".join(str(i) for i in id_clus)
+        cls = db.query(
+            f"""SELECT id_sfr_cluster, code_vad, nom_cluster
+                  FROM adv.pgt_sfr_cluster
+                 WHERE id_sfr_cluster IN ({ids})""",
+        ) or []
+        clus_map = {int(c["id_sfr_cluster"]): c for c in cls}
+
+    out: list[ExtractionSfrRow] = []
+    for r in rows:
+        id_sal = int(r.get("id_salarie") or 0)
+        sal = sals_map.get(id_sal, {})
+        nom_v = (f"{(sal.get('nom') or '').strip()} "
+                 f"{_capitalize((sal.get('prenom') or '').strip())}").strip()
+
+        id_clt = int(r.get("id_client") or 0)
+        cli = clients_map.get(id_clt, {})
+
+        clu = clus_map.get(int(r.get("id_sfr_cluster") or 0), {})
+
+        # Couleur ligne (hex from R/V/B)
+        cr = int(r.get("couleur_r") or 0)
+        cv = int(r.get("couleur_v") or 0)
+        cb = int(r.get("couleur_b") or 0)
+        couleur_hex = ""
+        if cr or cv or cb:
+            couleur_hex = f"#{cr:02x}{cv:02x}{cb:02x}"
+
+        out.append(ExtractionSfrRow(
+            id_contrat=str(r["id_contrat"]),
+            num_bs=r.get("num_bs") or "",
+            lib_produit=r.get("lib_produit") or "",
+            type_prod=r.get("famille") or "",
+            type_vente=int(r.get("type_vente") or 0),
+            date_signature=_date_str(r.get("date_signature")),
+            type_etat=r.get("lib_type") or "",
+            etat_contrat=r.get("lib_etat") or "",
+            etat_sfr=int(r.get("id_etat_sfr") or 0),
+            couleur_hex=couleur_hex,
+            nom_vendeur=nom_v,
+            client_nom=" ".join(filter(None, [
+                (cli.get("nom") or "").strip(),
+                _capitalize((cli.get("prenom") or "").strip()),
+            ])),
+            client_adr=cli.get("adresse1") or "",
+            client_cp=cli.get("cp") or "",
+            client_ville=cli.get("ville") or "",
+            client_mail=cli.get("mail") or "",
+            client_mobile=cli.get("gsm") or "",
+            box8=bool(r.get("box8")),
+            box8_verif=bool(r.get("box8_verif")),
+            cluster_code=clu.get("code_vad") or "",
+            cluster_nom=clu.get("nom_cluster") or "",
+            date_portabilite=_date_str(r.get("date_portabilite")),
+            date_racc_valid=_date_str(r.get("date_racc_activ")),
+            date_rdv_tech=_date_str(r.get("date_rdv_tech")),
+            date_resil=_date_str(r.get("date_resil")),
+            date_validation=_date_str(r.get("date_validation")),
+            internet_garanti=bool(r.get("internet_garanti")),
+            remise=float(r.get("remise") or 0),
+            self_install=str(r.get("self_install") or ""),
+            technologie=int(r.get("technologie") or 0),
+            infos_internes=r.get("info_interne") or "",
+            infos_partagees=r.get("info_vente_sfr") or "",
+        ))
+    return out
+
+
+def _create_tk_liste(db_tk, id_tk_liste: int, op_id: int,
+                      id_type_demande: int) -> None:
+    """Cree une entree TK_Liste (cf code WinDev TK_Liste.* dans
+    Convertir en Ticket Call RET RDV TECH / Racc)."""
+    db_tk.query(
+        """INSERT INTO ticket.pgt_tk_liste
+              (id_tk_liste, id_tk_liste_auto, date_crea, op_crea, op_dest,
+               op_traitement_staff, ordre_traitement_staff,
+               service, id_tk_type_demande, id_tk_statut,
+               cloturee, modif_date, modif_op, modif_elem)
+           VALUES (?, ?, NOW(), ?, ?, 0, 0, 'BO', ?, 1,
+                   FALSE, NOW(), ?, 'new')""",
+        (int(id_tk_liste), int(id_tk_liste), int(op_id), int(op_id),
+         int(id_type_demande), int(op_id)),
+    )
+
+
+def convert_to_ret_rdv_tech(id_contrats: list[int], op_id: int) -> dict:
+    """Pour chaque contrat selectionne, cree TK_Liste (IDTK_TypeDemande=26)
+    + TK_CallSFR_RetRDVTech."""
+    db_tk = get_pg_connection("ticket")
+    db_bo = get_pg_connection("ticket_bo")
+    nb_ok = 0; nb_ko = 0
+    for id_c in id_contrats:
+        try:
+            id_tk = _new_id()
+            _create_tk_liste(db_tk, id_tk, op_id, id_type_demande=26)
+            db_bo.query(
+                """INSERT INTO ticket_bo.pgt_tk_call_sfr_ret_rdv_tech
+                      (id_tk_call_sfr_ret_rdv_tech, id_tk_liste, id_contrat,
+                       id_sfr_statut_rdv, ope_traitement,
+                       modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, 0, 0, NOW(), ?, 'new')""",
+                (_new_id(), int(id_tk), int(id_c), int(op_id)),
+            )
+            nb_ok += 1
+        except Exception:
+            nb_ko += 1
+    return {"nb_ok": nb_ok, "nb_ko": nb_ko}
+
+
+def convert_to_ret_racc(id_contrats: list[int], op_id: int) -> dict:
+    """Idem mais IDTK_TypeDemande=32 + TK_CallSFR_RetRacc."""
+    db_tk = get_pg_connection("ticket")
+    db_bo = get_pg_connection("ticket_bo")
+    nb_ok = 0; nb_ko = 0
+    for id_c in id_contrats:
+        try:
+            id_tk = _new_id()
+            _create_tk_liste(db_tk, id_tk, op_id, id_type_demande=32)
+            db_bo.query(
+                """INSERT INTO ticket_bo.pgt_tk_call_sfr_ret_racc
+                      (id_tk_call_sfr_ret_racc, id_tk_liste, id_contrat,
+                       id_etat_call_ret, ope_traitement,
+                       modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, 0, 0, NOW(), ?, 'new')""",
+                (_new_id(), int(id_tk), int(id_c), int(op_id)),
+            )
+            nb_ok += 1
+        except Exception:
+            nb_ko += 1
+    return {"nb_ok": nb_ok, "nb_ko": nb_ko}
+
+
+# ====================================================================
 # Convertir / Cloturer la selection (Fen_TicketCallSFR boutons)
 # ====================================================================
 

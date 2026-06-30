@@ -174,6 +174,45 @@ class SelectionTicketsPayload(BaseModel):
     ids_tk_liste: list[int]
 
 
+# -- Fen_ExtractionSFR --------------------------------------------------
+
+
+@router.get("/extraction-sfr/etats", response_model=list[svc.EtatSfrItem])
+def get_extraction_sfr_etats(_u: UserToken = Depends(get_current_user)):
+    return svc.list_etats_sfr()
+
+
+@router.get("/extraction-sfr/search", response_model=list[svc.ExtractionSfrRow])
+def get_extraction_sfr_search(
+    du: date,
+    au: date,
+    mode: str = "date_racc",   # 'date_racc' | 'rdv_tech' | 'churn'
+    id_etat_sfr: int = 0,
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.search_extraction_sfr(du, au, mode, id_etat_sfr)
+
+
+class ConvertContratsPayload(BaseModel):
+    id_contrats: list[int]
+
+
+@router.post("/extraction-sfr/convert-rdv-tech")
+def post_convert_rdv_tech(
+    payload: ConvertContratsPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    return svc.convert_to_ret_rdv_tech(payload.id_contrats, u.id_salarie)
+
+
+@router.post("/extraction-sfr/convert-racc")
+def post_convert_racc(
+    payload: ConvertContratsPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    return svc.convert_to_ret_racc(payload.id_contrats, u.id_salarie)
+
+
 @router.post("/ticket-call/convert-selection",
              response_model=list[svc.ConversionResultItem])
 def post_convert_selection(
