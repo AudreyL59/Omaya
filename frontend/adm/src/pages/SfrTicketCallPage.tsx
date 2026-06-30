@@ -40,11 +40,6 @@ interface Ticket {
   row_color_alert: boolean
   lib_statut: string; cloturee: boolean; nb_valide: number
 }
-interface Tranche {
-  tranche_horaire: string; nb_ticket: number
-  moins_3min: number; entre_3_5min: number
-  entre_5_7min: number; plus_de_7min: number
-}
 interface AnalyseVentes {
   pas_encore_statuees: number; ventes_validees: number; ventes_annulees: number
   par_delai: Array<{ delai: string; ventes_valides: number; ventes_annulees: number }>
@@ -71,7 +66,6 @@ export default function SfrTicketCallPage() {
   const [etat, setEtat] = useState<Etat>('tous')
   const [onglet, setOnglet] = useState<Onglet>('liste')
   const [tickets, setTickets] = useState<Ticket[]>([])
-  const [tranches, setTranches] = useState<Tranche[]>([])
   const [ventes, setVentes] = useState<AnalyseVentes | null>(null)
   const [planning, setPlanning] = useState<PlanningRdv[]>([])
   const [contenuTicketId, setContenuTicketId] = useState<string>('')
@@ -85,14 +79,12 @@ export default function SfrTicketCallPage() {
     try {
       const h = { Authorization: `Bearer ${getToken()}` }
       const params = `du=${du}&au=${au}&etat=${etat}`
-      const [t, an, ven, pl] = await Promise.all([
+      const [t, ven, pl] = await Promise.all([
         fetch(`${API_BASE}/suivi-sfr/ticket-call?${params}`, { headers: h }).then(r => r.json()),
-        fetch(`${API_BASE}/suivi-sfr/ticket-call/analyse?${params}`, { headers: h }).then(r => r.json()),
         fetch(`${API_BASE}/suivi-sfr/ticket-call/analyse-ventes?${params}`, { headers: h }).then(r => r.json()),
         fetch(`${API_BASE}/suivi-sfr/ticket-call/planning?${params}`, { headers: h }).then(r => r.json()),
       ])
       setTickets(Array.isArray(t) ? t : [])
-      setTranches(Array.isArray(an) ? an : [])
       setVentes(ven)
       setPlanning(Array.isArray(pl) ? pl : [])
     } catch (e) {
@@ -354,43 +346,6 @@ function OngletListe({
   )
 }
 
-// =================== Onglet 2 : Analyse =========================
-function OngletAnalyse({ tranches }: { tranches: Tranche[] }) {
-  return (
-    <div className="h-full overflow-auto">
-      <table className="w-full text-xs">
-        <thead className="bg-c-surface-soft text-c-ink-faint uppercase tracking-wide sticky top-0">
-          <tr>
-            <th className="px-2 py-2 text-left">Tranche horaire</th>
-            <th className="px-2 py-2 text-right">Nb Ticket</th>
-            <th className="px-2 py-2 text-right" style={{ color: '#16a34a' }}>&lt; 3 m</th>
-            <th className="px-2 py-2 text-right" style={{ color: '#ca8a04' }}>Entre 3 et 5 m</th>
-            <th className="px-2 py-2 text-right" style={{ color: '#ea580c' }}>Entre 5 et 7 m</th>
-            <th className="px-2 py-2 text-right" style={{ color: '#dc2626' }}>&gt; 7 m</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-c-line-soft">
-          {tranches.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="text-center py-12 text-c-ink-faint-2 italic">
-                Aucune donnée.
-              </td>
-            </tr>
-          ) : tranches.map(t => (
-            <tr key={t.tranche_horaire}>
-              <td className="px-2 py-1.5">{t.tranche_horaire}</td>
-              <td className="px-2 py-1.5 text-right font-semibold">{t.nb_ticket}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: '#16a34a' }}>{t.moins_3min || ''}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: '#ca8a04' }}>{t.entre_3_5min || ''}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: '#ea580c' }}>{t.entre_5_7min || ''}</td>
-              <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: '#dc2626' }}>{t.plus_de_7min || ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 // =================== Onglet 4 : Analyse des ventes ==============
 function OngletVentes({ ventes }: { ventes: AnalyseVentes }) {
