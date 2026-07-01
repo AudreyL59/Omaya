@@ -461,12 +461,20 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
         END
     DO
         // affectation impossible (exception WLangage : DateVersChaine sur annee
-        // 0000, type mismatch...) -> on force Null.
-        WHEN EXCEPTION IN
-            {sFilePG + "." + sColPG} = Null
-        DO
-            // Meme le Null a echoue (rarissime, ex. colonne renommee) -> tant pis.
-        END
+        // 0000, type mismatch...) -> on delegue le fallback Null a une proc
+        // dediee (WLangage interdit d'imbriquer WHEN EXCEPTION dans un DO).
+        SafeAssignNull(sFilePG, sColPG)
+    END
+END
+
+// -- Fallback : force Null sur une rubrique (utilise en cas d'exception dans
+//    TryAssignDate). Isole dans sa propre proc pour permettre un WHEN EXCEPTION
+//    interne (WLangage interdit l'imbrication dans le DO d'un autre WHEN).
+PROCEDURE INTERNE SafeAssignNull(LOCAL sFilePG, sColPG is string)
+    WHEN EXCEPTION IN
+        {sFilePG + "." + sColPG} = Null
+    DO
+        // Meme le Null a echoue (rarissime, ex. colonne renommee) -> tant pis.
     END
 END
 
