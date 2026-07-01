@@ -20,6 +20,7 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import GroupeRemFicheModal from './GroupeRemFicheModal'
+import SocieteDistribPicker from './SocieteDistribPicker'
 
 const API_BASE = '/api/adm'
 
@@ -58,6 +59,7 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
   const [selEdition, setSelEdition] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [ficheGroupe, setFicheGroupe] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
+  const [showDistribPicker, setShowDistribPicker] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -149,11 +151,13 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 text-xs">
                   <Pencil className="w-3.5 h-3.5" /> Éditer le groupe
                 </button>
-                <button type="button" onClick={notImpl('Dupliquer pour un autre distrib')} disabled={!selGroupe}
+                <button type="button"
+                  onClick={() => selGroupe && setShowDistribPicker(true)}
+                  disabled={!selGroupe}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 text-xs">
                   <Copy className="w-3.5 h-3.5" /> Dupliquer pour un autre distrib
                 </button>
-                <button type="button" onClick={notImpl('Générer le contrat')} disabled={!selGroupe}
+                <button type="button" onClick={notImpl('Générer le contrat (Fen_SociétéDocCourtage)')} disabled={!selGroupe}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-c-brand text-white hover:opacity-90 disabled:opacity-30 text-xs">
                   <Play className="w-3.5 h-3.5" /> Générer le contrat
                 </button>
@@ -277,6 +281,27 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
           idGroupeRem={ficheGroupe.id}
           onClose={() => setFicheGroupe({ open: false, id: null })}
           onSaved={() => { void load() }} />
+      )}
+      {showDistribPicker && selGroupe && (
+        <SocieteDistribPicker
+          excludeIdSte={idSte}
+          onClose={() => setShowDistribPicker(false)}
+          onSelect={async (idTargetSte, label) => {
+            setShowDistribPicker(false)
+            try {
+              const r = await fetch(
+                `${API_BASE}/distrib-courtage/groupe-rem/${selGroupe}/duplicate-to?id_target_distrib=${idTargetSte}`,
+                {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${getToken()}` },
+                },
+              )
+              if (!r.ok) throw new Error(String(r.status))
+              showToast(`Groupe dupliqué vers ${label}`, 'success')
+            } catch (e) {
+              showToast(`Erreur : ${(e as Error).message}`, 'error')
+            }
+          }} />
       )}
     </div>
   )

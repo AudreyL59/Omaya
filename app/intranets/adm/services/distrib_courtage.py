@@ -626,6 +626,119 @@ def move_y(id_y: int, direction: str, id_groupe_rem: int, op_id: int) -> bool:
     return True
 
 
+def duplicate_groupe_rem_to(
+    id_source: int, id_target_distrib: int, op_id: int,
+) -> str:
+    """Duplique un groupe REM vers un autre distributeur.
+    cf btn 'Dupliquer pour un autre distrib' WinDev :
+    copie groupe metadata + toutes les X + Y + Tab avec mapping des IDs."""
+    db = get_pg_connection("adv")
+
+    # Charge le groupe source
+    src = db.query_one(
+        """SELECT id_groupe_operateur, lib_groupe, famille, ss_fam,
+                  nb_col, nb_ligne, ordre, date_deb, date_fin, is_actif
+             FROM adv.pgt_groupe_rem WHERE id_groupe_rem = ? LIMIT 1""",
+        (int(id_source),),
+    )
+    if not src:
+        raise ValueError("Groupe REM source introuvable")
+
+    id_new_gr = _new_id()
+    db.query(
+        """INSERT INTO adv.pgt_groupe_rem
+              (id_groupe_rem, id_distrib, id_groupe_operateur, lib_groupe,
+               famille, ss_fam, nb_col, nb_ligne, ordre,
+               date_deb, date_fin, is_actif,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (id_new_gr, int(id_target_distrib),
+         int(src.get("id_groupe_operateur") or 0),
+         src.get("lib_groupe") or "",
+         int(src.get("famille") or 0),
+         src.get("ss_fam") or "",
+         int(src.get("nb_col") or 0),
+         int(src.get("nb_ligne") or 0),
+         int(src.get("ordre") or 0),
+         src.get("date_deb"), src.get("date_fin"),
+         bool(src.get("is_actif")), int(op_id)),
+    )
+
+    # Copie X avec mapping
+    src_xs = db.query(
+        """SELECT * FROM adv.pgt_groupe_rem_x
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_source),),
+    ) or []
+    map_x: dict[int, int] = {}
+    for i, x in enumerate(src_xs, start=1):
+        id_new_x = _new_id() + i
+        db.query(
+            """INSERT INTO adv.pgt_groupe_rem_x
+                  (id_groupe_rem_x, id_groupe_rem, lib, code_interne,
+                   date_deb, date_fin, is_actif, ordre,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+            (id_new_x, id_new_gr, x.get("lib") or "",
+             x.get("code_interne") or "",
+             x.get("date_deb"), x.get("date_fin"),
+             bool(x.get("is_actif")), int(x.get("ordre") or 0),
+             int(op_id)),
+        )
+        map_x[int(x["id_groupe_rem_x"])] = id_new_x
+
+    # Copie Y avec mapping
+    src_ys = db.query(
+        """SELECT * FROM adv.pgt_groupe_rem_y
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_source),),
+    ) or []
+    map_y: dict[int, int] = {}
+    for i, y in enumerate(src_ys, start=1):
+        id_new_y = _new_id() + 1000 + i
+        db.query(
+            """INSERT INTO adv.pgt_groupe_rem_y
+                  (id_groupe_rem_y, id_groupe_rem, lib, code_interne,
+                   date_deb, date_fin, is_actif, ordre,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+            (id_new_y, id_new_gr, y.get("lib") or "",
+             y.get("code_interne") or "",
+             y.get("date_deb"), y.get("date_fin"),
+             bool(y.get("is_actif")), int(y.get("ordre") or 0),
+             int(op_id)),
+        )
+        map_y[int(y["id_groupe_rem_y"])] = id_new_y
+
+    # Copie Tab (cellules) avec les 2 mappings
+    src_tabs = db.query(
+        """SELECT * FROM adv.pgt_groupe_rem_tab
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_source),),
+    ) or []
+    for i, t in enumerate(src_tabs, start=1):
+        old_x = int(t.get("id_groupe_rem_x") or 0)
+        old_y = int(t.get("id_groupe_rem_y") or 0)
+        if old_x not in map_x or old_y not in map_y:
+            continue    # cellule orpheline (X ou Y supprime) -> skip
+        db.query(
+            """INSERT INTO adv.pgt_groupe_rem_tab
+                  (id_groupe_rem_tab, id_groupe_rem, id_groupe_rem_x,
+                   id_groupe_rem_y, montant, date_deb, date_fin,
+                   is_actif, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+            (_new_id() + i, id_new_gr, map_x[old_x], map_y[old_y],
+             float(t.get("montant") or 0),
+             t.get("date_deb"), t.get("date_fin"),
+             bool(t.get("is_actif")), int(op_id)),
+        )
+
+    return str(id_new_gr)
+
+
 def update_cellule(id_x: int, id_y: int, montant: float, op_id: int) -> bool:
     """Modifie le montant d'une cellule (cf WinDev EditerCellule autre cas)."""
     db = get_pg_connection("adv")

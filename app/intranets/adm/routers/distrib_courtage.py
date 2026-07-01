@@ -205,3 +205,19 @@ def put_cellule(
 ):
     svc.update_cellule(id_x, id_y, payload.montant, u.id_salarie)
     return {"ok": True}
+
+
+@router.post("/groupe-rem/{id_source}/duplicate-to")
+def post_duplicate_groupe_rem(
+    id_source: int,
+    id_target_distrib: int,   # en query : bigint 17 chiffres
+    u: UserToken = Depends(get_current_user),
+):
+    """Duplique un groupe REM vers un autre distributeur."""
+    try:
+        id_new = svc.duplicate_groupe_rem_to(
+            id_source, id_target_distrib, u.id_salarie,
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True, "id_groupe_rem": id_new}
