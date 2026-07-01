@@ -25,7 +25,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   useTableSortFilter, SortableTh, FilterInput,
 } from '@shared/production/_tableHelpers'
-import TicketCallContenuModal from '@/components/sfr/TicketCallContenuModal'
+import RdvTechContenuModal from '@/components/sfr/RdvTechContenuModal'
 
 const API_BASE = '/api/adm'
 
@@ -52,7 +52,7 @@ export default function SfrRdvTechPage() {
   const [etat, setEtat] = useState<'ouverts' | 'clotures' | 'tous'>('clotures')
   const [rows, setRows] = useState<Row[]>([])
   const [selected, setSelected] = useState<string>('')
-  const [contenuTicketId, setContenuTicketId] = useState<string>('')
+  const [contenuRow, setContenuRow] = useState<Row | null>(null)
   const [loading, setLoading] = useState(false)
 
   const rechercher = async () => {
@@ -84,7 +84,7 @@ export default function SfrRdvTechPage() {
 
   const voirTicket = () => {
     if (!sel) { showToast('Sélectionne une ligne d\'abord.', 'info'); return }
-    setContenuTicketId(sel.id_tk_liste)
+    setContenuRow(sel)
   }
 
   const voirContrat = () => {
@@ -179,7 +179,7 @@ export default function SfrRdvTechPage() {
                 return (
                   <tr key={r.id_tk_retour_rdv_tech_fibre}
                     onClick={() => setSelected(r.id_tk_liste)}
-                    onDoubleClick={() => setContenuTicketId(r.id_tk_liste)}
+                    onDoubleClick={() => setContenuRow(r)}
                     className={`cursor-pointer ${isSel ? 'bg-c-brand/10' : 'hover:bg-c-surface-soft'}`}>
                     <td className="px-2 py-1.5">{shortDate(r.date_crea)}</td>
                     <td className="px-2 py-1.5">{shortDate(r.date_cloture)}</td>
@@ -202,9 +202,10 @@ export default function SfrRdvTechPage() {
         </div>
       </div>
 
-      {contenuTicketId && (
-        <TicketCallContenuModal idTkListe={contenuTicketId}
-          onClose={() => setContenuTicketId('')} />
+      {contenuRow && (
+        <RdvTechContenuModal row={contenuRow}
+          onClose={() => setContenuRow(null)}
+          onChanged={() => { void rechercher() }} />
       )}
     </div>
   )

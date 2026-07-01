@@ -368,6 +368,21 @@ def get_suivi_rdv_tech(
     return svc.search_suivi_rdv_tech(du, au, etat)
 
 
+@router.get("/rdv-tech/statuts", response_model=list[svc.SfrStatutRdv])
+def get_sfr_statuts_rdv(_u: UserToken = Depends(get_current_user)):
+    return svc.list_sfr_statuts_rdv()
+
+
+@router.put("/rdv-tech/{id_retour}")
+def put_rdv_tech(
+    id_retour: int,
+    payload: svc.RdvTechUpdatePayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_rdv_tech(id_retour, payload, u.id_salarie)
+    return {"ok": True}
+
+
 # -- Fen_ParcoursChaine ------------------------------------------------
 
 

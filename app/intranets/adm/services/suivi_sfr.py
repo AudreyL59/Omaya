@@ -1548,6 +1548,46 @@ class SuiviRdvTechRow(BaseModel):
     info_cplt: str = ""
 
 
+class SfrStatutRdv(BaseModel):
+    id_sfr_statut_rdv: int
+    lib_statut: str = ""
+
+
+class RdvTechUpdatePayload(BaseModel):
+    id_fibre_statut_rdv: int = 0
+    info_cplt: str = ""
+
+
+def list_sfr_statuts_rdv() -> list[SfrStatutRdv]:
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT id_sfr_statut_rdv, lib_statut FROM adv.pgt_sfr_statut_rdv
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY lib_statut""",
+    ) or []
+    return [SfrStatutRdv(
+        id_sfr_statut_rdv=int(r["id_sfr_statut_rdv"]),
+        lib_statut=r.get("lib_statut") or "",
+    ) for r in rows]
+
+
+def update_rdv_tech(
+    id_retour: int, p: RdvTechUpdatePayload, op_id: int,
+) -> bool:
+    """Met a jour le statut RDV + info complementaire d'un retour
+    RDV Tech (pgt_tk_retour_rdv_tech_fibre)."""
+    db = get_pg_connection("ticket_bo")
+    db.query(
+        """UPDATE ticket_bo.pgt_tk_retour_rdv_tech_fibre
+              SET id_fibre_statut_rdv=?, info_cplt=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_tk_retour_rdv_tech_fibre=?""",
+        (int(p.id_fibre_statut_rdv), p.info_cplt or "",
+         int(op_id), int(id_retour)),
+    )
+    return True
+
+
 def search_suivi_rdv_tech(du: date, au: date, etat: str = "tous",
                           ) -> list[SuiviRdvTechRow]:
     """cf requete SQL Fen_SuiviRDVTECH : JOIN TK_RetourRdvTechFIBRE
