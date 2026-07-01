@@ -124,6 +124,8 @@ class SocieteDetail(BaseModel):
     iban: str = ""
     bic: str = ""
     idorganigramme: int = 0
+    orga_lib: str = ""                # libelle de l'organigramme
+    gerant_display: str = ""          # nom + prenom du salarie gerant
     # Flags de presence des images (les blobs sont recuperes via
     # GET /societes/{id}/image/{champ}) :
     has_logo: bool = False
@@ -196,6 +198,28 @@ def get_societe(id_societe_auto: int) -> SocieteDetail | None:
     )
     if not r:
         return None
+
+    # Resolution libelle organigramme + nom du gerant
+    orga_lib = ""
+    if r.get("idorganigramme"):
+        orow = db.query_one(
+            "SELECT lib_orga FROM rh.pgt_organigramme WHERE idorganigramme = ? LIMIT 1",
+            (int(r["idorganigramme"]),),
+        )
+        orga_lib = (orow or {}).get("lib_orga") or ""
+    gerant_display = ""
+    id_g = int(r.get("id_gerant") or 0)
+    if id_g:
+        srow = db.query_one(
+            "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1",
+            (id_g,),
+        )
+        if srow:
+            nom = (srow.get("nom") or "").upper()
+            prenom = (srow.get("prenom") or "").lower()
+            prenom = prenom[:1].upper() + prenom[1:] if prenom else ""
+            gerant_display = f"{nom} {prenom}".strip()
+
     return SocieteDetail(
         id_societe_auto=str(r["id_societe_auto"]),
         id_ste=str(r.get("id_ste") or 0),
@@ -225,6 +249,8 @@ def get_societe(id_societe_auto: int) -> SocieteDetail | None:
         iban=r.get("iban") or "",
         bic=r.get("bic") or "",
         idorganigramme=int(r.get("idorganigramme") or 0),
+        orga_lib=orga_lib,
+        gerant_display=gerant_display,
         has_logo=bool(r.get("has_logo")),
         has_guimmick=bool(r.get("has_guimmick")),
         has_cachet_cial=bool(r.get("has_cachet_cial")),

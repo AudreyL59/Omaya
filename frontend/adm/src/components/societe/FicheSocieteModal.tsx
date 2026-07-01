@@ -21,6 +21,8 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import SocieteImageSlot from './SocieteImageSlot'
+import PersonnePicker from '@/components/PersonnePicker'
+import OrgaPicker from '@/components/OrgaPicker'
 
 const API_BASE = '/api/adm'
 
@@ -37,6 +39,7 @@ interface SocieteDetail {
   adresse1: string; adresse2: string; cp: string; ville: string
   tel: string; mail: string; url: string
   iban: string; bic: string; idorganigramme: number
+  orga_lib: string; gerant_display: string
   has_logo: boolean; has_guimmick: boolean; has_cachet_cial: boolean
   has_gerant_paraphe: boolean; has_gerant_signature: boolean
 }
@@ -58,6 +61,7 @@ const EMPTY: SocieteDetail = {
   adresse1: '', adresse2: '', cp: '', ville: '',
   tel: '', mail: '', url: '',
   iban: '', bic: '', idorganigramme: 0,
+  orga_lib: '', gerant_display: '',
   has_logo: false, has_guimmick: false, has_cachet_cial: false,
   has_gerant_paraphe: false, has_gerant_signature: false,
 }
@@ -72,6 +76,8 @@ export default function FicheSocieteModal({
   const [saving, setSaving] = useState(false)
   const [showIdentite, setShowIdentite] = useState(false)
   const [showSignature, setShowSignature] = useState(false)
+  const [showGerantPicker, setShowGerantPicker] = useState(false)
+  const [showOrgaPicker, setShowOrgaPicker] = useState(false)
 
   const reloadImages = () => {
     if (isNew || !idSocieteAuto) return
@@ -330,10 +336,21 @@ export default function FicheSocieteModal({
                   <Input value={d.gerant_type} onChange={v => update({ gerant_type: v })}
                     placeholder="Président, Gérant..." />
                 </Field>
-                <Field label="ID Gérant (salarié)">
-                  <input type="number" value={d.id_gerant || ''}
-                    onChange={e => update({ id_gerant: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-2 py-1 border border-c-line rounded text-xs h-7 tabular-nums" />
+                <Field label="Choisir le gérant">
+                  <button type="button" onClick={() => setShowGerantPicker(true)}
+                    className="w-full px-2 py-1 border border-c-line rounded text-xs h-7 text-left truncate hover:bg-c-surface-soft flex items-center gap-1">
+                    <span className="flex-1 truncate">
+                      {d.gerant_display || (d.id_gerant ? `ID ${d.id_gerant}` : '— aucun —')}
+                    </span>
+                  </button>
+                </Field>
+                <Field label="Choisir l'équipe" cols={2}>
+                  <button type="button" onClick={() => setShowOrgaPicker(true)}
+                    className="w-full px-2 py-1 border border-c-line rounded text-xs h-7 text-left truncate hover:bg-c-surface-soft flex items-center gap-1">
+                    <span className="flex-1 truncate">
+                      {d.orga_lib || (d.idorganigramme ? `ID ${d.idorganigramme}` : '— aucune —')}
+                    </span>
+                  </button>
                 </Field>
               </div>
             </section>
@@ -399,6 +416,40 @@ export default function FicheSocieteModal({
           </button>
         </div>
       </div>
+
+      {showGerantPicker && (
+        <PersonnePicker
+          title="Choisir le gérant"
+          onClose={() => setShowGerantPicker(false)}
+          onSelect={(s) => {
+            const id = parseInt(s.id_salarie, 10) || 0
+            const nom = (s.nom || '').toUpperCase()
+            const prenom = s.prenom ? s.prenom[0].toUpperCase() + s.prenom.slice(1).toLowerCase() : ''
+            update({
+              id_gerant: id,
+              gerant_display: `${nom} ${prenom}`.trim(),
+              gerant_nom: `${nom} ${prenom}`.trim(),
+            })
+            setShowGerantPicker(false)
+          }}
+        />
+      )}
+      {showOrgaPicker && (
+        <OrgaPicker
+          title="Choisir l'équipe"
+          onClose={() => setShowOrgaPicker(false)}
+          onSelect={(orgas) => {
+            const o = orgas[0]
+            if (o) {
+              update({
+                idorganigramme: parseInt(o.id_orga, 10) || 0,
+                orga_lib: o.lib_orga,
+              })
+            }
+            setShowOrgaPicker(false)
+          }}
+        />
+      )}
     </div>
   )
 }
