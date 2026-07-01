@@ -1,6 +1,7 @@
 """Router Fen_DistribCttCourtage (Docs Dematerialises d'une societe)."""
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -97,4 +98,110 @@ def put_groupe_rem(
     if id_distrib is not None:
         payload.id_distrib = int(id_distrib)
     svc.update_groupe_rem(id_groupe_rem, payload, u.id_salarie)
+    return {"ok": True}
+
+
+# ---- Grille X/Y/Tab ----
+
+@router.get("/groupe-rem/{id_groupe_rem}/grille",
+            response_model=svc.GrilleGroupeRem)
+def get_grille(
+    id_groupe_rem: int,
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.get_grille(id_groupe_rem)
+
+
+@router.post("/groupe-rem/{id_groupe_rem}/colonne")
+def post_colonne(
+    id_groupe_rem: int,
+    u: UserToken = Depends(get_current_user),
+):
+    id_x = svc.add_colonne(id_groupe_rem, u.id_salarie)
+    return {"ok": True, "id_groupe_rem_x": id_x}
+
+
+@router.post("/groupe-rem/{id_groupe_rem}/ligne")
+def post_ligne(
+    id_groupe_rem: int,
+    u: UserToken = Depends(get_current_user),
+):
+    id_y = svc.add_ligne(id_groupe_rem, u.id_salarie)
+    return {"ok": True, "id_groupe_rem_y": id_y}
+
+
+@router.put("/groupe-rem-x/{id_x}")
+def put_x(
+    id_x: int,
+    payload: svc.EditColonnePayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_x(id_x, payload, u.id_salarie)
+    return {"ok": True}
+
+
+@router.put("/groupe-rem-y/{id_y}")
+def put_y(
+    id_y: int,
+    payload: svc.EditColonnePayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_y(id_y, payload, u.id_salarie)
+    return {"ok": True}
+
+
+@router.delete("/groupe-rem-x/{id_x}")
+def delete_x(
+    id_x: int,
+    id_groupe_rem: int,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.delete_x(id_x, id_groupe_rem, u.id_salarie)
+    return {"ok": True}
+
+
+@router.delete("/groupe-rem-y/{id_y}")
+def delete_y(
+    id_y: int,
+    id_groupe_rem: int,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.delete_y(id_y, id_groupe_rem, u.id_salarie)
+    return {"ok": True}
+
+
+@router.post("/groupe-rem-x/{id_x}/move")
+def move_x(
+    id_x: int,
+    id_groupe_rem: int,
+    direction: str,   # 'left' | 'right'
+    u: UserToken = Depends(get_current_user),
+):
+    svc.move_x(id_x, direction, id_groupe_rem, u.id_salarie)
+    return {"ok": True}
+
+
+@router.post("/groupe-rem-y/{id_y}/move")
+def move_y(
+    id_y: int,
+    id_groupe_rem: int,
+    direction: str,   # 'up' | 'down'
+    u: UserToken = Depends(get_current_user),
+):
+    svc.move_y(id_y, direction, id_groupe_rem, u.id_salarie)
+    return {"ok": True}
+
+
+class CellulePayload(BaseModel):
+    montant: float
+
+
+@router.put("/groupe-rem-tab/{id_x}/{id_y}")
+def put_cellule(
+    id_x: int,
+    id_y: int,
+    payload: CellulePayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_cellule(id_x, id_y, payload.montant, u.id_salarie)
     return {"ok": True}

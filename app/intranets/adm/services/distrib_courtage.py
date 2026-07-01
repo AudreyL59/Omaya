@@ -328,6 +328,354 @@ def update_groupe_rem(
     return True
 
 
+# ====================================================================
+# GRILLE X/Y/Tab du groupe REM (partie 2 + 3)
+# ====================================================================
+
+
+class GrilleXItem(BaseModel):
+    id_groupe_rem_x: str
+    lib: str = ""
+    code_interne: str = ""
+    ordre: int = 0
+
+
+class GrilleYItem(BaseModel):
+    id_groupe_rem_y: str
+    lib: str = ""
+    code_interne: str = ""
+    ordre: int = 0
+
+
+class CelluleItem(BaseModel):
+    id_groupe_rem_tab: str
+    id_groupe_rem_x: str
+    id_groupe_rem_y: str
+    montant: float = 0.0
+
+
+class GrilleGroupeRem(BaseModel):
+    id_groupe_rem: str
+    colonnes: list[GrilleXItem] = []
+    lignes: list[GrilleYItem] = []
+    cellules: list[CelluleItem] = []
+
+
+class EditColonnePayload(BaseModel):
+    lib: str = ""
+    code_interne: str = ""
+
+
+def get_grille(id_groupe_rem: int) -> GrilleGroupeRem:
+    """Charge la grille complete (X + Y + cellules Tab) d'un groupe REM."""
+    db = get_pg_connection("adv")
+    cols = db.query(
+        """SELECT id_groupe_rem_x, lib, code_interne, ordre
+             FROM adv.pgt_groupe_rem_x
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY ordre""",
+        (int(id_groupe_rem),),
+    ) or []
+    lignes = db.query(
+        """SELECT id_groupe_rem_y, lib, code_interne, ordre
+             FROM adv.pgt_groupe_rem_y
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY ordre""",
+        (int(id_groupe_rem),),
+    ) or []
+    cellules = db.query(
+        """SELECT id_groupe_rem_tab, id_groupe_rem_x, id_groupe_rem_y, montant
+             FROM adv.pgt_groupe_rem_tab
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_groupe_rem),),
+    ) or []
+    return GrilleGroupeRem(
+        id_groupe_rem=str(id_groupe_rem),
+        colonnes=[GrilleXItem(
+            id_groupe_rem_x=str(r["id_groupe_rem_x"]),
+            lib=r.get("lib") or "",
+            code_interne=r.get("code_interne") or "",
+            ordre=int(r.get("ordre") or 0),
+        ) for r in cols],
+        lignes=[GrilleYItem(
+            id_groupe_rem_y=str(r["id_groupe_rem_y"]),
+            lib=r.get("lib") or "",
+            code_interne=r.get("code_interne") or "",
+            ordre=int(r.get("ordre") or 0),
+        ) for r in lignes],
+        cellules=[CelluleItem(
+            id_groupe_rem_tab=str(r["id_groupe_rem_tab"]),
+            id_groupe_rem_x=str(r["id_groupe_rem_x"]),
+            id_groupe_rem_y=str(r["id_groupe_rem_y"]),
+            montant=float(r.get("montant") or 0),
+        ) for r in cellules],
+    )
+
+
+def _get_groupe_rem_dates(db, id_groupe_rem: int) -> tuple:
+    """Recupere date_deb/date_fin/is_actif du groupe (utilise a l'ajout
+    d'une colonne/ligne pour copier ces valeurs par defaut)."""
+    r = db.query_one(
+        """SELECT date_deb, date_fin, is_actif FROM adv.pgt_groupe_rem
+            WHERE id_groupe_rem = ? LIMIT 1""",
+        (int(id_groupe_rem),),
+    ) or {}
+    return (r.get("date_deb"), r.get("date_fin"), bool(r.get("is_actif")))
+
+
+def add_colonne(id_groupe_rem: int, op_id: int) -> str:
+    """Ajoute une colonne X + cellules Tab pour chaque ligne Y."""
+    db = get_pg_connection("adv")
+    dd, df, act = _get_groupe_rem_dates(db, id_groupe_rem)
+    # Nouvel ordre = MAX + 1
+    max_r = db.query_one(
+        """SELECT COALESCE(MAX(ordre), 0) + 1 AS n FROM adv.pgt_groupe_rem_x
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_groupe_rem),),
+    )
+    new_ordre = int((max_r or {}).get("n") or 1)
+    id_x = _new_id()
+    db.query(
+        """INSERT INTO adv.pgt_groupe_rem_x
+              (id_groupe_rem_x, id_groupe_rem, lib, code_interne,
+               date_deb, date_fin, is_actif, ordre,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, '', ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (id_x, int(id_groupe_rem), f"Colonne {new_ordre}",
+         dd, df, act, new_ordre, int(op_id)),
+    )
+    # Cellules pour chaque ligne Y active
+    lignes = db.query(
+        """SELECT id_groupe_rem_y FROM adv.pgt_groupe_rem_y
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_groupe_rem),),
+    ) or []
+    for y in lignes:
+        db.query(
+            """INSERT INTO adv.pgt_groupe_rem_tab
+                  (id_groupe_rem_tab, id_groupe_rem, id_groupe_rem_x,
+                   id_groupe_rem_y, montant, date_deb, date_fin,
+                   is_actif, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, 0, ?, ?, ?, NOW(), ?, 'new')""",
+            (_new_id() + int(y["id_groupe_rem_y"]),
+             int(id_groupe_rem), id_x, int(y["id_groupe_rem_y"]),
+             dd, df, act, int(op_id)),
+        )
+    _remise_ordre(db, id_groupe_rem, op_id)
+    return str(id_x)
+
+
+def add_ligne(id_groupe_rem: int, op_id: int) -> str:
+    """Ajoute une ligne Y + cellules Tab pour chaque colonne X."""
+    db = get_pg_connection("adv")
+    dd, df, act = _get_groupe_rem_dates(db, id_groupe_rem)
+    max_r = db.query_one(
+        """SELECT COALESCE(MAX(ordre), 0) + 1 AS n FROM adv.pgt_groupe_rem_y
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_groupe_rem),),
+    )
+    new_ordre = int((max_r or {}).get("n") or 1)
+    id_y = _new_id()
+    db.query(
+        """INSERT INTO adv.pgt_groupe_rem_y
+              (id_groupe_rem_y, id_groupe_rem, lib, code_interne,
+               date_deb, date_fin, is_actif, ordre,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, '', ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (id_y, int(id_groupe_rem), f"Ligne {new_ordre}",
+         dd, df, act, new_ordre, int(op_id)),
+    )
+    colonnes = db.query(
+        """SELECT id_groupe_rem_x FROM adv.pgt_groupe_rem_x
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(id_groupe_rem),),
+    ) or []
+    for x in colonnes:
+        db.query(
+            """INSERT INTO adv.pgt_groupe_rem_tab
+                  (id_groupe_rem_tab, id_groupe_rem, id_groupe_rem_x,
+                   id_groupe_rem_y, montant, date_deb, date_fin,
+                   is_actif, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, 0, ?, ?, ?, NOW(), ?, 'new')""",
+            (_new_id() + int(x["id_groupe_rem_x"]),
+             int(id_groupe_rem), int(x["id_groupe_rem_x"]), id_y,
+             dd, df, act, int(op_id)),
+        )
+    _remise_ordre(db, id_groupe_rem, op_id)
+    return str(id_y)
+
+
+def update_x(id_x: int, p: EditColonnePayload, op_id: int) -> bool:
+    """Modifie lib + code_interne d'une colonne."""
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_x
+              SET lib=?, code_interne=?, modif_date=NOW(),
+                  modif_op=?, modif_elem='modif'
+            WHERE id_groupe_rem_x=?""",
+        (p.lib, p.code_interne, int(op_id), int(id_x)),
+    )
+    return True
+
+
+def update_y(id_y: int, p: EditColonnePayload, op_id: int) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_y
+              SET lib=?, code_interne=?, modif_date=NOW(),
+                  modif_op=?, modif_elem='modif'
+            WHERE id_groupe_rem_y=?""",
+        (p.lib, p.code_interne, int(op_id), int(id_y)),
+    )
+    return True
+
+
+def delete_x(id_x: int, id_groupe_rem: int, op_id: int) -> bool:
+    """Soft-delete colonne + toutes ses cellules Tab (cf WinDev reqUp + reqUpTab)."""
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_x
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_groupe_rem_x=?""",
+        (int(op_id), int(id_x)),
+    )
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_tab
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_groupe_rem_x=?""",
+        (int(op_id), int(id_x)),
+    )
+    _remise_ordre(db, id_groupe_rem, op_id)
+    return True
+
+
+def delete_y(id_y: int, id_groupe_rem: int, op_id: int) -> bool:
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_y
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_groupe_rem_y=?""",
+        (int(op_id), int(id_y)),
+    )
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_tab
+              SET modif_elem='suppr', modif_date=NOW(), modif_op=?
+            WHERE id_groupe_rem_y=?""",
+        (int(op_id), int(id_y)),
+    )
+    _remise_ordre(db, id_groupe_rem, op_id)
+    return True
+
+
+def move_x(id_x: int, direction: str, id_groupe_rem: int, op_id: int) -> bool:
+    """Deplace la colonne : direction = 'left' (ordre-1) ou 'right' (+1).
+    Reproduit WinDev : swap avec la colonne voisine puis remise_ordre."""
+    db = get_pg_connection("adv")
+    r = db.query_one(
+        "SELECT ordre FROM adv.pgt_groupe_rem_x WHERE id_groupe_rem_x = ? LIMIT 1",
+        (int(id_x),),
+    )
+    if not r: return False
+    cur = int(r["ordre"] or 0)
+    new = cur - 1 if direction == "left" else cur + 1
+    if new <= 0: return False
+    # Swap : la colonne actuellement a l'ordre `new` recoit `cur`
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_x SET ordre=?, modif_date=NOW(), modif_op=?
+            WHERE id_groupe_rem=? AND ordre=? AND id_groupe_rem_x <> ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (cur, int(op_id), int(id_groupe_rem), new, int(id_x)),
+    )
+    db.query(
+        "UPDATE adv.pgt_groupe_rem_x SET ordre=?, modif_date=NOW(), modif_op=? WHERE id_groupe_rem_x=?",
+        (new, int(op_id), int(id_x)),
+    )
+    _remise_ordre(db, id_groupe_rem, op_id)
+    return True
+
+
+def move_y(id_y: int, direction: str, id_groupe_rem: int, op_id: int) -> bool:
+    """direction = 'up' (ordre-1) ou 'down' (+1)."""
+    db = get_pg_connection("adv")
+    r = db.query_one(
+        "SELECT ordre FROM adv.pgt_groupe_rem_y WHERE id_groupe_rem_y = ? LIMIT 1",
+        (int(id_y),),
+    )
+    if not r: return False
+    cur = int(r["ordre"] or 0)
+    new = cur - 1 if direction == "up" else cur + 1
+    if new <= 0: return False
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_y SET ordre=?, modif_date=NOW(), modif_op=?
+            WHERE id_groupe_rem=? AND ordre=? AND id_groupe_rem_y <> ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (cur, int(op_id), int(id_groupe_rem), new, int(id_y)),
+    )
+    db.query(
+        "UPDATE adv.pgt_groupe_rem_y SET ordre=?, modif_date=NOW(), modif_op=? WHERE id_groupe_rem_y=?",
+        (new, int(op_id), int(id_y)),
+    )
+    _remise_ordre(db, id_groupe_rem, op_id)
+    return True
+
+
+def update_cellule(id_x: int, id_y: int, montant: float, op_id: int) -> bool:
+    """Modifie le montant d'une cellule (cf WinDev EditerCellule autre cas)."""
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_groupe_rem_tab
+              SET montant=?, modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_groupe_rem_x=? AND id_groupe_rem_y=?""",
+        (float(montant), int(op_id), int(id_x), int(id_y)),
+    )
+    return True
+
+
+def _remise_ordre(db, id_groupe_rem: int, op_id: int) -> None:
+    """Renumerote les colonnes X et lignes Y de 1..N + met a jour
+    nb_col et nb_ligne dans pgt_groupe_rem. cf procedure remiseOrdre WinDev."""
+    # Renumerote colonnes X
+    x_rows = db.query(
+        """SELECT id_groupe_rem_x FROM adv.pgt_groupe_rem_x
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY ordre""",
+        (int(id_groupe_rem),),
+    ) or []
+    for i, r in enumerate(x_rows, start=1):
+        db.query(
+            "UPDATE adv.pgt_groupe_rem_x SET ordre=?, modif_date=NOW() WHERE id_groupe_rem_x=?",
+            (i, int(r["id_groupe_rem_x"])),
+        )
+    # Renumerote lignes Y
+    y_rows = db.query(
+        """SELECT id_groupe_rem_y FROM adv.pgt_groupe_rem_y
+            WHERE id_groupe_rem = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY ordre""",
+        (int(id_groupe_rem),),
+    ) or []
+    for i, r in enumerate(y_rows, start=1):
+        db.query(
+            "UPDATE adv.pgt_groupe_rem_y SET ordre=?, modif_date=NOW() WHERE id_groupe_rem_y=?",
+            (i, int(r["id_groupe_rem_y"])),
+        )
+    # Maj nb_col / nb_ligne dans le groupe
+    db.query(
+        """UPDATE adv.pgt_groupe_rem
+              SET nb_col=?, nb_ligne=?, modif_date=NOW(), modif_op=?
+            WHERE id_groupe_rem=?""",
+        (len(x_rows), len(y_rows), int(op_id), int(id_groupe_rem)),
+    )
+
+
 def list_editions_ctt(id_distrib: int) -> list[EditionCttItem]:
     """cf ReqEditCtt WinDev :
        JOIN societe_doc_courtage + salarie + doc_courtage.

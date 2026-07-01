@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { X, Save, Loader2, Layers } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
+import GroupeRemGrille from './GroupeRemGrille'
 
 const API_BASE = '/api/adm'
 
@@ -255,9 +256,9 @@ export default function GroupeRemFicheModal({
               </div>
             </div>
 
-            {!isNew && (
-              <div className="mt-4 p-3 bg-c-surface-soft rounded text-xs text-c-ink-soft italic">
-                Grille éditable ({d.nb_col} colonnes × {d.nb_ligne} lignes) : à venir dans le prochain commit.
+            {!isNew && idGroupeRem && (
+              <div className="mt-4">
+                <GroupeRemGrille idGroupeRem={idGroupeRem} />
               </div>
             )}
           </div>
