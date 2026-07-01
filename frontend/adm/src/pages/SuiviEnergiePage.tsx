@@ -24,7 +24,7 @@ const ITEMS: MenuItem[] = [
   { key: 'extraction',  label: 'Extraction Call',
     icon: Download,     to: 'extraction',   implemented: true },
   { key: 'ticket-call', label: 'Ticket CALL',
-    icon: PhoneCall,    to: 'ticket-call',  implemented: false },
+    icon: PhoneCall,    to: 'ticket-call',  implemented: true },
 ]
 
 export default function SuiviEnergiePage() {

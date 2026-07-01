@@ -25,6 +25,41 @@ def get_extraction_energie(
     return svc.search_extraction_energie(du, au, statut)
 
 
+# -- Fen_TicketCall Energie -------------------------------------------
+
+
+@router.get("/ticket-call", response_model=list[svc.TicketCallItem])
+def get_ticket_call_energie(
+    du: date,
+    au: date,
+    etat: str = "tous",   # 'ouverts' | 'clotures' | 'tous'
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_ticket_call_energie(du, au, etat)
+
+
+@router.get("/ticket-call/analyse-ventes",
+            response_model=svc.AnalyseVentesTotaux)
+def get_ticket_call_analyse_ventes(
+    du: date,
+    au: date,
+    etat: str = "tous",
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.analyse_ventes_tk_call_energie(du, au, etat)
+
+
+@router.get("/ticket-call/planning",
+            response_model=list[svc.PlanningRdvItem])
+def get_ticket_call_planning(
+    du: date,
+    au: date,
+    etat: str = "tous",
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.planning_appels_energie(du, au, etat)
+
+
 @router.get("/extraction/export.xlsx")
 def get_extraction_energie_export(
     du: date,
