@@ -473,29 +473,66 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
     END
 END
 
-// -- Force NULL sur une rubrique, avec fallback sentinelle 1900-01-01
-//    si l'analyse WinDev ne declare pas la rubrique comme nullable.
+// -- Force une sentinelle 1900-01-01 sur une rubrique date/timestamp.
+//    On n'utilise PLUS ..NULL car il est trop capricieux avec le
+//    driver PG WinDev : meme quand ..NULL semble applique, le buffer
+//    est parfois re-serialise en '0000-01-01' a l'INSERT. Le seul
+//    moyen fiable est d'ecraser explicitement avec un objet Date/
+//    DateHeure typé et rempli par membres (evite les conversions
+//    string qui peuvent silencieusement echouer).
 PROCEDURE INTERNE ForceNullOuSentinelle(LOCAL sFilePG, sColPG is string)
-    // 1. Tente NULL
-    {sFilePG + "." + sColPG}..NULL = True
-    // 2. Verifie si NULL a vraiment ete applique. Si l'analyse WinDev ne
-    //    declare pas la rubrique comme nullable, ..NULL = True est
-    //    silencieusement ignore et la rubrique garde sa valeur par defaut
-    //    (00000000). On force alors une date sentinelle valide.
-    IF NOT {sFilePG + "." + sColPG}..NULL THEN
-        // 1900-01-01 : PG-valide, distinctive, filtrable cote app
-        {sFilePG + "." + sColPG} = ChaineVersDate("19000101")
+    // 1. Tente comme Date (rubrique de type "date" cote PG)
+    IF TryAssignSentinelleDate(sFilePG, sColPG) THEN
+        RETURN
+    END
+    // 2. Fallback DateHeure (rubrique de type "timestamp" cote PG)
+    TryAssignSentinelleDateHeure(sFilePG, sColPG)
+END
+
+// -- Tente d'affecter une Date sentinelle typee.
+//    Retourne True si affectation OK, False si exception.
+PROCEDURE INTERNE TryAssignSentinelleDate(LOCAL sFilePG, sColPG is string) : boolean
+    bOK is boolean = True
+    WHEN EXCEPTION IN
+        // Objet Date typé avec membres explicites : evite les
+        // conversions string qui peuvent silencieusement ne pas
+        // s'appliquer sur le driver PG WinDev.
+        dtSentinelle is Date
+        dtSentinelle..Annee = 1900
+        dtSentinelle..Mois = 1
+        dtSentinelle..Jour = 1
+        {sFilePG + "." + sColPG} = dtSentinelle
+    DO
+        bOK = False
+    END
+    RESULT bOK
+END
+
+// -- Fallback pour les rubriques timestamp (DateHeure) qui n'acceptent
+//    pas un objet Date pur.
+PROCEDURE INTERNE TryAssignSentinelleDateHeure(LOCAL sFilePG, sColPG is string)
+    WHEN EXCEPTION IN
+        dhSentinelle is DateHeure
+        dhSentinelle..Annee = 1900
+        dhSentinelle..Mois = 1
+        dhSentinelle..Jour = 1
+        dhSentinelle..Heure = 0
+        dhSentinelle..Minute = 0
+        dhSentinelle..Seconde = 0
+        {sFilePG + "." + sColPG} = dhSentinelle
+    DO
+        // Meme le DateHeure echoue -> tant pis, cette ligne sera KO au
+        // HAdd. Le log de UpsertRow signalera l'echec.
     END
 END
 
-// -- Version defensive (WHEN EXCEPTION IN pour proteger l'affectation
-//    dans le cas ou meme la sentinelle plante - rare, mais tant pis).
+// -- Version defensive (utilisee dans le DO du WHEN EXCEPTION externe de
+//    TryAssignDate ou WHEN EXCEPTION IN imbrique est interdit).
 PROCEDURE INTERNE SafeForceNullOuSentinelle(LOCAL sFilePG, sColPG is string)
     WHEN EXCEPTION IN
         ForceNullOuSentinelle(sFilePG, sColPG)
     DO
-        // Meme la sentinelle a echoue (rarissime, ex. colonne renommee)
-        // -> tant pis, on laisse le HAdd echouer sur cette ligne.
+        // Tant pis
     END
 END
 
