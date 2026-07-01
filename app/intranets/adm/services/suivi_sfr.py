@@ -1283,6 +1283,125 @@ def delete_cluster_periode(id_periode: int, op_id: int) -> bool:
 
 
 # ====================================================================
+# 7. OFFRES EZY (Fen_OffresEZY)
+# ====================================================================
+
+
+class OffreEzy(BaseModel):
+    id_offres_sfr: str
+    type: str = ""
+    lib_offre: str = ""
+    debit_down: str = ""
+    debit_up: str = ""
+    prix_offre: float = 0.0
+    recurrence: str = ""
+    prix_pro_ttc: str = ""
+    engagement: str = ""
+    en_promo: bool = False
+    info_promo: str = ""
+    service_inclus: str = ""
+    id_produit: int = 0
+    lib_produit: str = ""      # jointure sfr_produit
+    online: bool = False
+
+
+class ProduitSfr(BaseModel):
+    id_produit: int
+    lib_produit: str = ""
+    famille: str = ""
+
+
+class OffreEzyPayload(BaseModel):
+    id_produit: int = 0
+    online: bool = False
+
+
+def list_offres_ezy(cat: str, pro: bool = False) -> list[OffreEzy]:
+    """Liste les offres SFR Provad par categorie (FIBRE / MOBILE) et
+    version Part (defaut) ou Pro. cf code WinDev :
+      - FIBRE + Part -> type='FIBRE'
+      - FIBRE + Pro  -> type='FIB PRO'
+      - MOBILE + Part -> type='MOBILE'
+      - MOBILE + Pro  -> type='MOB PRO'
+    """
+    cat = cat.upper()
+    if cat == "FIBRE":
+        type_val = "FIB PRO" if pro else "FIBRE"
+    elif cat == "MOBILE":
+        type_val = "MOB PRO" if pro else "MOBILE"
+    else:
+        return []
+
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT o.id_offres_sfr, o.type, o.lib_offre,
+                  o.debit_down, o.debit_up, o.prix_offre, o.recurrence,
+                  o.prix_pro_ttc, o.engagement,
+                  o.en_promo, o.info_promo, o.service_inclus,
+                  o.id_produit, o.online,
+                  p.lib_produit
+             FROM adv.pgt_sfr_offres_provad o
+             LEFT JOIN adv.pgt_sfr_produit p ON p.id_produit = o.id_produit
+            WHERE o.type = ?
+              AND (o.modif_elem IS NULL OR o.modif_elem NOT LIKE '%suppr%')
+            ORDER BY o.lib_offre""",
+        (type_val,),
+    ) or []
+    return [OffreEzy(
+        id_offres_sfr=str(r["id_offres_sfr"]),
+        type=r.get("type") or "",
+        lib_offre=r.get("lib_offre") or "",
+        debit_down=r.get("debit_down") or "",
+        debit_up=r.get("debit_up") or "",
+        prix_offre=float(r.get("prix_offre") or 0),
+        recurrence=r.get("recurrence") or "",
+        prix_pro_ttc=str(r.get("prix_pro_ttc") or ""),
+        engagement=str(r.get("engagement") or ""),
+        en_promo=bool(r.get("en_promo")),
+        info_promo=str(r.get("info_promo") or ""),
+        service_inclus=str(r.get("service_inclus") or ""),
+        id_produit=int(r.get("id_produit") or 0),
+        lib_produit=r.get("lib_produit") or "",
+        online=bool(r.get("online")),
+    ) for r in rows]
+
+
+def list_produits_offres_ezy(famille: str) -> list[ProduitSfr]:
+    """Liste des produits SFR pour la combo 'Produit associé'
+    (ReqProduitFibre / ReqProduitMobile WinDev)."""
+    famille = famille.upper()
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT id_produit, lib_produit, famille
+             FROM adv.pgt_sfr_produit
+            WHERE famille = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY lib_produit""",
+        (famille,),
+    ) or []
+    return [ProduitSfr(
+        id_produit=int(r["id_produit"]),
+        lib_produit=r.get("lib_produit") or "",
+        famille=r.get("famille") or "",
+    ) for r in rows]
+
+
+def update_offre_ezy(id_offres_sfr: int, p: OffreEzyPayload, op_id: int) -> bool:
+    """Met a jour l'association produit + le flag online sur une offre.
+    Cf code WinDev 'Sortie d'une ligne' : seuls IDproduit + Online sont
+    modifiables."""
+    db = get_pg_connection("adv")
+    db.query(
+        """UPDATE adv.pgt_sfr_offres_provad
+              SET id_produit=?, online=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_offres_sfr=?""",
+        (int(p.id_produit), bool(p.online), int(op_id), int(id_offres_sfr)),
+    )
+    return True
+
+
+# ====================================================================
 # 5. PARCOURS CHAINES (Fen_ParcoursChaine)
 # ====================================================================
 

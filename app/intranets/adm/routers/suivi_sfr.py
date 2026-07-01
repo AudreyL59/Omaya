@@ -309,6 +309,36 @@ def delete_cluster_periode(
     return {"ok": True}
 
 
+# -- Fen_OffresEZY : Liste des offres SFR Provad ----------------------
+
+
+@router.get("/offres-ezy", response_model=list[svc.OffreEzy])
+def get_offres_ezy(
+    cat: str = "FIBRE",       # 'FIBRE' | 'MOBILE'
+    pro: bool = False,        # True = 'FIB PRO' / 'MOB PRO'
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_offres_ezy(cat, pro)
+
+
+@router.get("/offres-ezy/produits", response_model=list[svc.ProduitSfr])
+def get_offres_ezy_produits(
+    famille: str = "FIBRE",   # 'FIBRE' | 'MOBILE'
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_produits_offres_ezy(famille)
+
+
+@router.put("/offres-ezy/{id_offres_sfr}")
+def put_offre_ezy(
+    id_offres_sfr: int,
+    payload: svc.OffreEzyPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_offre_ezy(id_offres_sfr, payload, u.id_salarie)
+    return {"ok": True}
+
+
 # -- Fen_ParcoursChaine ------------------------------------------------
 
 

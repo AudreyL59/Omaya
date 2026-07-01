@@ -44,7 +44,7 @@ const ITEMS: MenuItem[] = [
   { key: 'cluster',          label: 'Cluster',
     icon: Boxes,          to: 'cluster',           implemented: true },
   { key: 'offres-ezy',       label: 'Offres EZY',
-    icon: ShoppingBag,    to: 'offres-ezy',        implemented: false },
+    icon: ShoppingBag,    to: 'offres-ezy',        implemented: true },
   { key: 'rdv-tech',         label: 'RDV Tech',
     icon: CalendarClock,  to: 'rdv-tech',          implemented: false },
   { key: 'extraction-etp',   label: 'Extraction ETP',
