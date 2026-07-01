@@ -422,16 +422,23 @@ END
 //   - un texte mal formate ("24/01/20") -> DateVersChaine plante avec une exception
 //   - "0000-01-01" deja en chaine, ou autres surprises
 //
-// COMPORTEMENT : on FORCE toujours une affectation (Null si date vide/pourrie,
-// valeur reelle sinon). Ne PAS skip l'affectation, sinon la colonne du buffer
-// HFSQL garde sa valeur par defaut ("00000000") qui est envoyee telle quelle a
-// PG au HAdd/HModify -> PG refuse "L'an zero n'est pas une annee valide" et
+// COMPORTEMENT : on FORCE toujours une valeur (NULL si date vide/pourrie,
+// valeur reelle sinon). Ne PAS skip l'affectation, sinon le buffer HFSQL PG
+// garde sa valeur par defaut ("00000000") qui est envoyee telle quelle a PG
+// au HAdd/HModify -> PG refuse "L'an zero n'est pas une annee valide" et
 // l'enregistrement complet est perdu.
+//
+// PIEGE WLANGAGE : "{file + '.' + col} = Null" N'AFFECTE PAS NULL a la
+// rubrique -> ca affecte la VALEUR PAR DEFAUT du type (00000000 pour date,
+// 0 pour entier, "" pour string). Pour forcer un vrai NULL en base, il
+// FAUT utiliser la propriete ..NULL :
+//     {file + "." + col}..NULL = True
+// Cf memo reference_wlanguage_gotchas 'Dates vides HFSQL'.
 
 PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string)
     WHEN EXCEPTION IN
         // Premier filtre brut sur la chaine (sans appeler DateVersChaine qui plante
-        // sur l'annee 0000). Si on detecte un marqueur de date vide -> Null explicite.
+        // sur l'annee 0000). Si on detecte un marqueur de date vide -> NULL explicite.
         sValSrc is string = "" + {sFileHF + "." + sColHF}
         bEmpty is boolean = (sValSrc = "" ...
                           OR sValSrc = "00000000" ...
@@ -441,11 +448,11 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
                           OR sValSrc = "01/01/0000" ...
                           OR Gauche(sValSrc, 4) = "0000")
         IF bEmpty THEN
-            // FORCE Null : sans ca, le buffer HFSQL PG garde "00000000"
-            // (valeur par defaut apres HReset) qui plante l'insert PG.
-            // Sur un HModify, ca ecrase aussi une eventuelle ancienne
-            // valeur PG (coherent avec la source qui a ete videe).
-            {sFilePG + "." + sColPG} = Null
+            // FORCE NULL via ..NULL. Sans ca, le buffer HFSQL PG garde
+            // "00000000" (valeur par defaut apres HReset) qui plante
+            // l'insert PG. Sur un HModify, ca ecrase aussi une eventuelle
+            // ancienne valeur PG (coherent avec la source videe).
+            {sFilePG + "." + sColPG}..NULL = True
         ELSE
             {sFilePG + "." + sColPG} = {sFileHF + "." + sColHF}
             // Si l'affectation a leve une erreur HFSQL silencieuse (ex. erreur 80
@@ -456,25 +463,25 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
             // perdre tout l'enregistrement a cause d'une date pas vitale (cas
             // CVtheque.DateNaissance).
             IF ErrorOccurred THEN
-                {sFilePG + "." + sColPG} = Null
+                {sFilePG + "." + sColPG}..NULL = True
             END
         END
     DO
         // affectation impossible (exception WLangage : DateVersChaine sur annee
-        // 0000, type mismatch...) -> on delegue le fallback Null a une proc
+        // 0000, type mismatch...) -> on delegue le fallback NULL a une proc
         // dediee (WLangage interdit d'imbriquer WHEN EXCEPTION dans un DO).
         SafeAssignNull(sFilePG, sColPG)
     END
 END
 
-// -- Fallback : force Null sur une rubrique (utilise en cas d'exception dans
+// -- Fallback : force NULL sur une rubrique (utilise en cas d'exception dans
 //    TryAssignDate). Isole dans sa propre proc pour permettre un WHEN EXCEPTION
 //    interne (WLangage interdit l'imbrication dans le DO d'un autre WHEN).
 PROCEDURE INTERNE SafeAssignNull(LOCAL sFilePG, sColPG is string)
     WHEN EXCEPTION IN
-        {sFilePG + "." + sColPG} = Null
+        {sFilePG + "." + sColPG}..NULL = True
     DO
-        // Meme le Null a echoue (rarissime, ex. colonne renommee) -> tant pis.
+        // Meme le NULL a echoue (rarissime, ex. colonne renommee) -> tant pis.
     END
 END
 
