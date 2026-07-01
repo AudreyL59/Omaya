@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
+import SocieteImageSlot from './SocieteImageSlot'
 
 const API_BASE = '/api/adm'
 
@@ -36,6 +37,8 @@ interface SocieteDetail {
   adresse1: string; adresse2: string; cp: string; ville: string
   tel: string; mail: string; url: string
   iban: string; bic: string; idorganigramme: number
+  has_logo: boolean; has_guimmick: boolean; has_cachet_cial: boolean
+  has_gerant_paraphe: boolean; has_gerant_signature: boolean
 }
 
 interface Props {
@@ -55,6 +58,8 @@ const EMPTY: SocieteDetail = {
   adresse1: '', adresse2: '', cp: '', ville: '',
   tel: '', mail: '', url: '',
   iban: '', bic: '', idorganigramme: 0,
+  has_logo: false, has_guimmick: false, has_cachet_cial: false,
+  has_gerant_paraphe: false, has_gerant_signature: false,
 }
 
 export default function FicheSocieteModal({
@@ -65,6 +70,26 @@ export default function FicheSocieteModal({
   const [formes, setFormes] = useState<FormeJuri[]>([])
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
+  const [showIdentite, setShowIdentite] = useState(false)
+  const [showSignature, setShowSignature] = useState(false)
+
+  const reloadImages = () => {
+    if (isNew || !idSocieteAuto) return
+    fetch(`${API_BASE}/societes/${idSocieteAuto}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((f: SocieteDetail | null) => {
+        if (!f) return
+        setD(prev => ({
+          ...prev,
+          has_logo: f.has_logo, has_guimmick: f.has_guimmick,
+          has_cachet_cial: f.has_cachet_cial,
+          has_gerant_paraphe: f.has_gerant_paraphe,
+          has_gerant_signature: f.has_gerant_signature,
+        }))
+      })
+  }
 
   useEffect(() => {
     // Charge combo formes juri
@@ -188,14 +213,22 @@ export default function FicheSocieteModal({
                 ))}
               </div>
               <div className="flex-1" />
-              <button type="button"
-                onClick={() => showToast('Identité visuelle : à venir', 'info')}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
+              <button type="button" disabled={isNew}
+                onClick={() => { setShowIdentite(v => !v); setShowSignature(false) }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs disabled:opacity-30 disabled:cursor-not-allowed ${
+                  showIdentite ? 'bg-c-brand text-white border-c-brand'
+                                : 'border-c-line text-c-ink-soft hover:bg-c-surface-soft'
+                }`}
+                title={isNew ? 'Enregistrez la société d\'abord' : ''}>
                 <ImageIcon className="w-3.5 h-3.5" /> Identité visuelle
               </button>
-              <button type="button"
-                onClick={() => showToast('Signature Démat : à venir', 'info')}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
+              <button type="button" disabled={isNew}
+                onClick={() => { setShowSignature(v => !v); setShowIdentite(false) }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs disabled:opacity-30 disabled:cursor-not-allowed ${
+                  showSignature ? 'bg-c-brand text-white border-c-brand'
+                                 : 'border-c-line text-c-ink-soft hover:bg-c-surface-soft'
+                }`}
+                title={isNew ? 'Enregistrez la société d\'abord' : ''}>
                 <PenTool className="w-3.5 h-3.5" /> Signature Démat
               </button>
               {!isNew && (
@@ -206,6 +239,26 @@ export default function FicheSocieteModal({
                 </button>
               )}
             </div>
+
+            {/* Overlays uploads d'images */}
+            {showIdentite && !isNew && idSocieteAuto && (
+              <section className="border border-c-brand bg-c-brand/5 rounded-lg p-3 flex gap-3">
+                <SocieteImageSlot idSociete={idSocieteAuto} champ="logo"
+                  label="Logo" hasImage={d.has_logo} onChanged={reloadImages} />
+                <SocieteImageSlot idSociete={idSocieteAuto} champ="guimmick"
+                  label="Guimmick" hasImage={d.has_guimmick} onChanged={reloadImages} />
+              </section>
+            )}
+            {showSignature && !isNew && idSocieteAuto && (
+              <section className="border border-c-brand bg-c-brand/5 rounded-lg p-3 flex gap-3">
+                <SocieteImageSlot idSociete={idSocieteAuto} champ="cachet_cial"
+                  label="Cachet Cial" hasImage={d.has_cachet_cial} onChanged={reloadImages} />
+                <SocieteImageSlot idSociete={idSocieteAuto} champ="gerant_paraphe"
+                  label="Paraphe" hasImage={d.has_gerant_paraphe} onChanged={reloadImages} />
+                <SocieteImageSlot idSociete={idSocieteAuto} champ="gerant_signature"
+                  label="Signature" hasImage={d.has_gerant_signature} onChanged={reloadImages} />
+              </section>
+            )}
 
             {/* Bloc INFOS JURIDIQUES */}
             <section className="border border-c-line rounded-lg p-3">

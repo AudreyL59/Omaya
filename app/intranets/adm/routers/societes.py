@@ -1,6 +1,7 @@
 """Router ADM > Fen_ListeSociete (icone building du header)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -54,6 +55,41 @@ def put_societe(
     if not d:
         raise HTTPException(404, "Société introuvable")
     return d
+
+
+@router.get("/{id_societe_auto}/image/{champ}")
+def get_societe_image(
+    id_societe_auto: int,
+    champ: str,
+    _u: UserToken = Depends(get_current_user),
+):
+    """Renvoie l'image (bytes + Content-Type detecte).
+    champ ∈ {logo, guimmick, cachet_cial, gerant_paraphe, gerant_signature}."""
+    if champ not in svc.IMAGE_COLS:
+        raise HTTPException(400, "Champ image invalide")
+    res = svc.get_societe_image(id_societe_auto, champ)
+    if not res:
+        raise HTTPException(404, "Image absente")
+    raw, mime = res
+    return Response(content=raw, media_type=mime,
+                     headers={"Cache-Control": "no-cache"})
+
+
+@router.post("/{id_societe_auto}/image/{champ}")
+async def post_societe_image(
+    id_societe_auto: int,
+    champ: str,
+    file: UploadFile = File(...),
+    u: UserToken = Depends(get_current_user),
+):
+    """Upload une image dans une des 5 colonnes bytea de pgt_societe."""
+    if champ not in svc.IMAGE_COLS:
+        raise HTTPException(400, "Champ image invalide")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "Fichier vide")
+    svc.update_societe_image(id_societe_auto, champ, raw, u.id_salarie)
+    return {"ok": True, "champ": champ, "size": len(raw)}
 
 
 @router.post("/{id_societe_auto}/duplicate")

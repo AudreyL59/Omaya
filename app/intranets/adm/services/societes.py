@@ -40,6 +40,56 @@ class SocieteItem(BaseModel):
     date_creation: str = ""
 
 
+# Colonnes bytea de pgt_societe qui acceptent une image (cf boutons
+# Logo/Guimmick/Cachet Cial/Paraphe/Signature WinDev)
+IMAGE_COLS: set[str] = {
+    "logo", "guimmick", "cachet_cial",
+    "gerant_paraphe", "gerant_signature",
+}
+
+
+def _detect_mime(raw: bytes) -> str:
+    """Detecte le MIME depuis la signature du fichier."""
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"): return "image/png"
+    if raw.startswith(b"\xff\xd8\xff"):       return "image/jpeg"
+    if raw.startswith(b"GIF87a") or raw.startswith(b"GIF89a"): return "image/gif"
+    if raw.startswith(b"RIFF") and len(raw) > 12 and raw[8:12] == b"WEBP":
+        return "image/webp"
+    if raw.startswith(b"<svg") or raw.startswith(b"<?xml"): return "image/svg+xml"
+    return "application/octet-stream"
+
+
+def get_societe_image(id_societe_auto: int, champ: str) -> tuple[bytes, str] | None:
+    """Retourne (bytes, mime) ou None si absent / champ invalide."""
+    if champ not in IMAGE_COLS: return None
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        f"SELECT {champ} AS img FROM rh.pgt_societe WHERE id_societe_auto = ? LIMIT 1",
+        (int(id_societe_auto),),
+    )
+    if not r or not r.get("img"): return None
+    raw = r["img"]
+    if isinstance(raw, memoryview): raw = bytes(raw)
+    return raw, _detect_mime(raw)
+
+
+def update_societe_image(
+    id_societe_auto: int, champ: str, raw: bytes, op_id: int,
+) -> bool:
+    """Update une des 5 colonnes bytea. Cf boutons Logo/Guimmick/etc.
+    WinDev : societe.<champ> = image + modif_elem='modif'."""
+    if champ not in IMAGE_COLS:
+        raise ValueError(f"Champ image invalide : {champ}")
+    db = get_pg_connection("rh")
+    db.query(
+        f"""UPDATE rh.pgt_societe
+              SET {champ}=?, modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_societe_auto=?""",
+        (raw, int(op_id), int(id_societe_auto)),
+    )
+    return True
+
+
 class FormeJuri(BaseModel):
     id_societe_form_juri: int
     lib_form_juri: str = ""
@@ -74,6 +124,13 @@ class SocieteDetail(BaseModel):
     iban: str = ""
     bic: str = ""
     idorganigramme: int = 0
+    # Flags de presence des images (les blobs sont recuperes via
+    # GET /societes/{id}/image/{champ}) :
+    has_logo: bool = False
+    has_guimmick: bool = False
+    has_cachet_cial: bool = False
+    has_gerant_paraphe: bool = False
+    has_gerant_signature: bool = False
 
 
 class SocietePayload(BaseModel):
@@ -127,7 +184,12 @@ def get_societe(id_societe_auto: int) -> SocieteDetail | None:
                   siren, siret, num_orias, rcs, code_ape, capital, num_tva,
                   id_gerant, gerant_nom, gerant_type,
                   adresse1, adresse2, cp, ville, tel, mail, url,
-                  iban, bic, idorganigramme
+                  iban, bic, idorganigramme,
+                  (logo IS NOT NULL AND octet_length(logo) > 0) AS has_logo,
+                  (guimmick IS NOT NULL AND octet_length(guimmick) > 0) AS has_guimmick,
+                  (cachet_cial IS NOT NULL AND octet_length(cachet_cial) > 0) AS has_cachet_cial,
+                  (gerant_paraphe IS NOT NULL AND octet_length(gerant_paraphe) > 0) AS has_gerant_paraphe,
+                  (gerant_signature IS NOT NULL AND octet_length(gerant_signature) > 0) AS has_gerant_signature
              FROM rh.pgt_societe
             WHERE id_societe_auto = ? LIMIT 1""",
         (int(id_societe_auto),),
@@ -163,6 +225,11 @@ def get_societe(id_societe_auto: int) -> SocieteDetail | None:
         iban=r.get("iban") or "",
         bic=r.get("bic") or "",
         idorganigramme=int(r.get("idorganigramme") or 0),
+        has_logo=bool(r.get("has_logo")),
+        has_guimmick=bool(r.get("has_guimmick")),
+        has_cachet_cial=bool(r.get("has_cachet_cial")),
+        has_gerant_paraphe=bool(r.get("has_gerant_paraphe")),
+        has_gerant_signature=bool(r.get("has_gerant_signature")),
     )
 
 
