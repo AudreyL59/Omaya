@@ -61,8 +61,6 @@ interface PlanningRdv {
 type Onglet = 'liste' | 'planning' | 'ventes'
 
 const todayIso = (): string => new Date().toISOString().slice(0, 10)
-const shortDate = (iso: string): string =>
-  !iso || iso.length < 10 ? '' : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 const fmtDuree = (sec: number): string => {
   if (!sec) return ''
   const m = Math.floor(sec / 60); const s = Math.floor(sec % 60)
