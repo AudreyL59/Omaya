@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
+import GroupeRemFicheModal from './GroupeRemFicheModal'
 
 const API_BASE = '/api/adm'
 
@@ -56,6 +57,7 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
   const [selGroupe, setSelGroupe] = useState<string>('')
   const [selEdition, setSelEdition] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [ficheGroupe, setFicheGroupe] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -137,11 +139,13 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
                   Groupes de rémunération
                 </h3>
                 <div className="flex-1" />
-                <button type="button" onClick={notImpl('Nouveau Groupe')}
+                <button type="button" onClick={() => setFicheGroupe({ open: true, id: null })}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded text-c-brand hover:bg-c-brand/10 text-xs">
                   <Plus className="w-3.5 h-3.5" /> Nouveau Groupe
                 </button>
-                <button type="button" onClick={notImpl('Éditer le groupe')} disabled={!selGroupe}
+                <button type="button"
+                  onClick={() => selGroupe && setFicheGroupe({ open: true, id: selGroupe })}
+                  disabled={!selGroupe}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 text-xs">
                   <Pencil className="w-3.5 h-3.5" /> Éditer le groupe
                 </button>
@@ -180,7 +184,7 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
                         {list.map(g => (
                           <tr key={g.id_groupe_rem}
                             onClick={() => setSelGroupe(g.id_groupe_rem)}
-                            onDoubleClick={notImpl('Éditer le groupe')}
+                            onDoubleClick={() => setFicheGroupe({ open: true, id: g.id_groupe_rem })}
                             className={`cursor-pointer border-t border-c-line-soft ${
                               selGroupe === g.id_groupe_rem
                                 ? 'bg-c-brand/10' : 'hover:bg-c-surface-soft'
@@ -266,6 +270,14 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
           </div>
         )}
       </div>
+
+      {ficheGroupe.open && (
+        <GroupeRemFicheModal
+          idDistrib={idSte}
+          idGroupeRem={ficheGroupe.id}
+          onClose={() => setFicheGroupe({ open: false, id: null })}
+          onSaved={() => { void load() }} />
+      )}
     </div>
   )
 }
