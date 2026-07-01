@@ -422,23 +422,28 @@ END
 //   - un texte mal formate ("24/01/20") -> DateVersChaine plante avec une exception
 //   - "0000-01-01" deja en chaine, ou autres surprises
 //
-// COMPORTEMENT : on FORCE toujours une valeur (NULL si date vide/pourrie,
-// valeur reelle sinon). Ne PAS skip l'affectation, sinon le buffer HFSQL PG
-// garde sa valeur par defaut ("00000000") qui est envoyee telle quelle a PG
-// au HAdd/HModify -> PG refuse "L'an zero n'est pas une annee valide" et
-// l'enregistrement complet est perdu.
+// COMPORTEMENT : on FORCE toujours une valeur (NULL si supporte par la
+// rubrique de l'analyse, sinon date sentinelle 1900-01-01 valide pour PG).
 //
-// PIEGE WLANGAGE : "{file + '.' + col} = Null" N'AFFECTE PAS NULL a la
-// rubrique -> ca affecte la VALEUR PAR DEFAUT du type (00000000 pour date,
-// 0 pour entier, "" pour string). Pour forcer un vrai NULL en base, il
-// FAUT utiliser la propriete ..NULL :
-//     {file + "." + col}..NULL = True
+// PIEGE 1 : "{file + '.' + col} = Null" N'AFFECTE PAS NULL a la rubrique.
+// Ca affecte la VALEUR PAR DEFAUT du type (00000000 pour date, 0 pour
+// entier, "" pour string). Pour forcer NULL il FAUT ..NULL = True.
+//
+// PIEGE 2 : "..NULL = True" est SILENCIEUSEMENT IGNORE si la rubrique de
+// l'analyse WinDev n'a PAS la case "Supporte la valeur NULL" cochee. Le
+// buffer garde alors sa valeur par defaut ("00000000") -> WinDev serialise
+// en '0000-01-01' pour PG -> ERREUR:  valeur du champ date/time en dehors
+// des limites : «0000-01-01». Il faut verifier ..NULL apres l'affectation
+// et, si non applique, forcer une date sentinelle valide.
+//
+// SENTINELLE : 1900-01-01 est PG-valide, distinctive et facile a filtrer
+// cote app ("if date >= '1901-01-01' alors la date est significative").
 // Cf memo reference_wlanguage_gotchas 'Dates vides HFSQL'.
 
 PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string)
     WHEN EXCEPTION IN
         // Premier filtre brut sur la chaine (sans appeler DateVersChaine qui plante
-        // sur l'annee 0000). Si on detecte un marqueur de date vide -> NULL explicite.
+        // sur l'annee 0000).
         sValSrc is string = "" + {sFileHF + "." + sColHF}
         bEmpty is boolean = (sValSrc = "" ...
                           OR sValSrc = "00000000" ...
@@ -448,40 +453,49 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
                           OR sValSrc = "01/01/0000" ...
                           OR Gauche(sValSrc, 4) = "0000")
         IF bEmpty THEN
-            // FORCE NULL via ..NULL. Sans ca, le buffer HFSQL PG garde
-            // "00000000" (valeur par defaut apres HReset) qui plante
-            // l'insert PG. Sur un HModify, ca ecrase aussi une eventuelle
-            // ancienne valeur PG (coherent avec la source videe).
-            {sFilePG + "." + sColPG}..NULL = True
+            ForceNullOuSentinelle(sFilePG, sColPG)
         ELSE
             {sFilePG + "." + sColPG} = {sFileHF + "." + sColHF}
             // Si l'affectation a leve une erreur HFSQL silencieuse (ex. erreur 80
             // = format date invalide cote source : "24/01/20", textes pourris...),
             // ErrorOccurred est positionne mais aucune exception WLangage n'est
-            // levee -> ce DO n'attrape rien. On force la rubrique a NULL pour ne
-            // pas que ErrorOccurred persiste sur le HAdd/HModify suivant et fasse
-            // perdre tout l'enregistrement a cause d'une date pas vitale (cas
-            // CVtheque.DateNaissance).
+            // levee -> ce DO n'attrape rien. On force NULL/sentinelle pour ne
+            // pas que ErrorOccurred persiste sur le HAdd/HModify suivant.
             IF ErrorOccurred THEN
-                {sFilePG + "." + sColPG}..NULL = True
+                ForceNullOuSentinelle(sFilePG, sColPG)
             END
         END
     DO
-        // affectation impossible (exception WLangage : DateVersChaine sur annee
-        // 0000, type mismatch...) -> on delegue le fallback NULL a une proc
-        // dediee (WLangage interdit d'imbriquer WHEN EXCEPTION dans un DO).
-        SafeAssignNull(sFilePG, sColPG)
+        // exception WLangage (DateVersChaine sur annee 0000, type mismatch...)
+        // -> delegue a la proc de fallback (WLangage interdit d'imbriquer
+        // WHEN EXCEPTION dans un DO).
+        SafeForceNullOuSentinelle(sFilePG, sColPG)
     END
 END
 
-// -- Fallback : force NULL sur une rubrique (utilise en cas d'exception dans
-//    TryAssignDate). Isole dans sa propre proc pour permettre un WHEN EXCEPTION
-//    interne (WLangage interdit l'imbrication dans le DO d'un autre WHEN).
-PROCEDURE INTERNE SafeAssignNull(LOCAL sFilePG, sColPG is string)
+// -- Force NULL sur une rubrique, avec fallback sentinelle 1900-01-01
+//    si l'analyse WinDev ne declare pas la rubrique comme nullable.
+PROCEDURE INTERNE ForceNullOuSentinelle(LOCAL sFilePG, sColPG is string)
+    // 1. Tente NULL
+    {sFilePG + "." + sColPG}..NULL = True
+    // 2. Verifie si NULL a vraiment ete applique. Si l'analyse WinDev ne
+    //    declare pas la rubrique comme nullable, ..NULL = True est
+    //    silencieusement ignore et la rubrique garde sa valeur par defaut
+    //    (00000000). On force alors une date sentinelle valide.
+    IF NOT {sFilePG + "." + sColPG}..NULL THEN
+        // 1900-01-01 : PG-valide, distinctive, filtrable cote app
+        {sFilePG + "." + sColPG} = ChaineVersDate("19000101")
+    END
+END
+
+// -- Version defensive (WHEN EXCEPTION IN pour proteger l'affectation
+//    dans le cas ou meme la sentinelle plante - rare, mais tant pis).
+PROCEDURE INTERNE SafeForceNullOuSentinelle(LOCAL sFilePG, sColPG is string)
     WHEN EXCEPTION IN
-        {sFilePG + "." + sColPG}..NULL = True
+        ForceNullOuSentinelle(sFilePG, sColPG)
     DO
-        // Meme le NULL a echoue (rarissime, ex. colonne renommee) -> tant pis.
+        // Meme la sentinelle a echoue (rarissime, ex. colonne renommee)
+        // -> tant pis, on laisse le HAdd echouer sur cette ligne.
     END
 END
 
