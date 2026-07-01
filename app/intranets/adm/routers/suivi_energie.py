@@ -116,6 +116,35 @@ def post_cloture_ticket(
     return {"ok": True}
 
 
+class SelectionTicketsPayload(BaseModel):
+    ids_tk_liste: list[int]
+
+
+@router.post("/ticket-call/convert-selection-tickets",
+             response_model=list[svc.ConvertTicketResult])
+def post_convert_selection_tickets(
+    payload: SelectionTicketsPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    """Bouton 'Convertir la selection' au niveau liste : update les
+    contrats existants + cloture (sans creer de nouveaux contrats)."""
+    return svc.convert_tickets_selection_energie(
+        payload.ids_tk_liste, u.id_salarie,
+    )
+
+
+@router.post("/ticket-call/cloture-selection-tickets",
+             response_model=list[svc.ConvertTicketResult])
+def post_cloture_selection_tickets(
+    payload: SelectionTicketsPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    """Bouton 'Cloturer sans convertir' : UPDATE cloturee=TRUE."""
+    return svc.cloture_selection_tickets_energie(
+        payload.ids_tk_liste, u.id_salarie,
+    )
+
+
 @router.get("/ticket-call/{id_tk_call}/justif-url")
 def get_ticket_call_justif_url(
     id_tk_call: int,

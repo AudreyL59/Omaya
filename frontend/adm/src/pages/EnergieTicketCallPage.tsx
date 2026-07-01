@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   useTableSortFilter, SortableTh, FilterInput,
@@ -177,7 +177,74 @@ export default function EnergieTicketCallPage() {
         {onglet === 'liste' && (
           <OngletListe tickets={tickets} selected={selected}
             toggle={toggle} toggleAll={toggleAll}
-            onVoirTicket={(id) => setContenuTicketId(id)} />
+            onVoirTicket={(id) => setContenuTicketId(id)}
+            onConvertir={async () => {
+              const ids = tickets
+                .filter(t => selected.has(t.id_tk_call))
+                .map(t => parseInt(t.id_tk_liste, 10))
+              if (ids.length === 0) return
+              const ok = await showConfirm({
+                title: 'Convertir la sélection en contrat',
+                message: `Vous êtes sur le point de convertir ${ids.length} ticket(s) en contrat. Voulez-vous continuer ?`,
+              })
+              if (!ok) return
+              try {
+                const r = await fetch(
+                  `${API_BASE}/suivi-energie/ticket-call/convert-selection-tickets`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${getToken()}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ids_tk_liste: ids }),
+                  },
+                )
+                if (!r.ok) throw new Error(String(r.status))
+                const res: Array<{ nb_updates: number; nb_skipped: number; nb_erreurs: number }> = await r.json()
+                const totals = res.reduce((acc, x) => ({
+                  u: acc.u + x.nb_updates,
+                  s: acc.s + x.nb_skipped,
+                  e: acc.e + x.nb_erreurs,
+                }), { u: 0, s: 0, e: 0 })
+                showToast(`Conversion : ${totals.u} maj, ${totals.s} skip${totals.e ? `, ${totals.e} erreur(s)` : ''}`, 'success')
+                await rechercher()
+              } catch (e) {
+                showToast(`Erreur : ${(e as Error).message}`, 'error')
+              }
+            }}
+            onClore={async () => {
+              const ids = tickets
+                .filter(t => selected.has(t.id_tk_call))
+                .map(t => parseInt(t.id_tk_liste, 10))
+              if (ids.length === 0) return
+              const ok = await showConfirm({
+                title: 'Clôturer sans convertir',
+                message: `Vous êtes sur le point de clôturer ${ids.length} ticket(s) SANS convertir en contrat. Continuer ?`,
+              })
+              if (!ok) return
+              try {
+                const r = await fetch(
+                  `${API_BASE}/suivi-energie/ticket-call/cloture-selection-tickets`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${getToken()}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ids_tk_liste: ids }),
+                  },
+                )
+                if (!r.ok) throw new Error(String(r.status))
+                const res: Array<{ cloture_ok: boolean }> = await r.json()
+                const ok_count = res.filter(x => x.cloture_ok).length
+                showToast(`${ok_count}/${res.length} ticket(s) clôturé(s)`, 'success')
+                await rechercher()
+              } catch (e) {
+                showToast(`Erreur : ${(e as Error).message}`, 'error')
+              }
+            }}
+          />
         )}
         {onglet === 'planning' && (
           <TicketCallPlanning rdvs={rdvs} initialDate={du} />
@@ -197,11 +264,14 @@ export default function EnergieTicketCallPage() {
 }
 
 function OngletListe({
-  tickets, selected, toggle, toggleAll, onVoirTicket,
+  tickets, selected, toggle, toggleAll,
+  onVoirTicket, onConvertir, onClore,
 }: {
   tickets: Ticket[]; selected: Set<string>
   toggle: (id: string) => void; toggleAll: () => void
   onVoirTicket: (idTkListe: string) => void
+  onConvertir: () => void
+  onClore: () => void
 }) {
   const tsf = useTableSortFilter(
     tickets as unknown as Array<Record<string, unknown>>,
@@ -222,13 +292,13 @@ function OngletListe({
         <button type="button"
           className="px-2 py-1 rounded bg-c-brand text-white disabled:opacity-30"
           disabled={selected.size === 0}
-          onClick={() => showToast('Convertir la sélection : à venir', 'info')}>
+          onClick={onConvertir}>
           Convertir la sélection
         </button>
         <button type="button"
           className="px-2 py-1 rounded text-red-600 hover:bg-red-50 disabled:opacity-30"
           disabled={selected.size === 0}
-          onClick={() => showToast('Clôturer sans convertir : à venir', 'info')}>
+          onClick={onClore}>
           Clôturer sans convertir
         </button>
         <div className="flex-1" />

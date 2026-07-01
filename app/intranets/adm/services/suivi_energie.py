@@ -939,8 +939,32 @@ def _get_etat_contrat_eni(statut_prod: int, num_bs: str) -> int:
     return 37
 
 
+def _get_etat_contrat_pro(statut_prod: int, num_bs: str) -> int:
+    """cf WinDev partenaire PRO :
+      2 (annule)     -> 6
+      TK dans NUM    -> 7
+      autre          -> 5"""
+    if statut_prod == 2: return 6
+    if "TK" in (num_bs or "").upper(): return 7
+    return 5
+
+
+def _get_etat_contrat_oen_v2(statut_prod: int, num_bs: str) -> int:
+    """Version bouton 'Convertir la selection' au niveau liste :
+      0 (non defini) + TK -> 51 (Ticket non finalise et non call)
+      0 (non defini) + autre -> 42 (Rejet BO NON CALL)
+      2 (annule)     -> 38
+      TK dans NUM    -> 39
+      autre          -> 40"""
+    has_tk = "TK" in (num_bs or "").upper()
+    if statut_prod == 0:
+        return 51 if has_tk else 42
+    if statut_prod == 2: return 38
+    return 39 if has_tk else 40
+
+
 def _get_etat_contrat_default(statut_prod: int, num_bs: str) -> int:
-    """Autres partenaires (VAL, STR, PRO...) : meme mapping que ENI."""
+    """Autres partenaires (VAL, STR...) : meme mapping que ENI."""
     return _get_etat_contrat_eni(statut_prod, num_bs)
 
 
@@ -1329,6 +1353,258 @@ def convert_selection_energie(
         result.results.append(res)
 
     return result
+
+
+class ConvertTicketResult(BaseModel):
+    id_tk_liste: str
+    nb_paniers: int = 0
+    nb_updates: int = 0
+    nb_skipped: int = 0
+    nb_erreurs: int = 0
+    cloture_ok: bool = False
+    message: str = ""
+
+
+def convert_tickets_selection_energie(
+    ids_tk_liste: list[int], op_id: int,
+) -> list[ConvertTicketResult]:
+    """Bouton 'Convertir la selection' au niveau liste Fen_TicketCall.
+
+    ATTENTION : cf code WinDev, cette version NE CREE PAS de nouveaux
+    contrats (le bloc EnregistrerCtt est commente). Elle fait uniquement
+    des updates sur les contrats existants + cloture le ticket a la fin.
+
+    Regles par partenaire pour l'update d'etat :
+      - PRO : si etat_courant=1  -> nouvel etat selon PRO (5/6/7)
+      - ENI : si etat_courant=51 -> nouvel etat selon ENI (37/66/67)
+      - OEN : si type_etat <= 2  -> nouvel etat selon OEN v2
+              (40/38/39/42/51 selon statut_prod + TK) +
+              update option OPT_VteAdd_Part
+    """
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    db_adv = get_pg_connection("adv")
+    out: list[ConvertTicketResult] = []
+
+    for id_tl in ids_tk_liste:
+        res = ConvertTicketResult(id_tk_liste=str(id_tl))
+
+        tc = db_bo.query_one(
+            """SELECT id_tk_call, id_salarie, id_client, civilite_client,
+                      nom_client, prenom_client, nom_marital_client,
+                      date_naiss, adresse1, adresse2, cp, ville,
+                      mobile1, adr_mail, opt_partenaire
+                 FROM ticket_bo.pgt_tk_call
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (int(id_tl),),
+        )
+        if not tc:
+            res.message = "TK_Call introuvable"
+            out.append(res); continue
+
+        # Vendeur du ticket (via TK_Call ou op_crea)
+        id_salarie_ticket = int(tc.get("id_salarie") or 0)
+        if id_salarie_ticket == 0:
+            tl = db_tk.query_one(
+                "SELECT op_crea FROM ticket.pgt_tk_liste WHERE id_tk_liste = ?",
+                (int(id_tl),),
+            )
+            if tl: id_salarie_ticket = int(tl.get("op_crea") or 0)
+
+        # Tous les paniers
+        pans = db_bo.query(
+            """SELECT id_tk_call_panier, id_produit, partenaire, num_bs,
+                      statut_prod, motif_annulation, opt_mail,
+                      opt_e_facture, opt_e_communication,
+                      opt_optin_commercial, opt_consent_consult_distri,
+                      opt_accept_com_parte, opt_mandat,
+                      opt_energie_verte_gaz, opt_reforestation,
+                      format_numerique
+                 FROM ticket_bo.pgt_tk_call_panier
+                WHERE id_tk_call = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (int(tc["id_tk_call"]),),
+        ) or []
+        res.nb_paniers = len(pans)
+
+        test_vte_add_oen = any((p.get("partenaire") or "").upper() == "OEN"
+                                for p in pans)
+        vte_add_part = ";".join(
+            f"{(p.get('partenaire') or '').upper()}-{int(p.get('id_produit') or 0)}"
+            for p in pans
+        )
+
+        for panier in pans:
+            id_p = int(panier["id_tk_call_panier"])
+            partenaire = (panier.get("partenaire") or "").upper()
+            num_bs = (panier.get("num_bs") or "").upper()
+            statut_prod = int(panier.get("statut_prod") or 0)
+
+            try:
+                # Skip si OEN present et panier != OEN
+                if test_vte_add_oen and partenaire != "OEN":
+                    res.nb_skipped += 1
+                    continue
+
+                # Genere NUM si vide (TK + id_panier)
+                if not num_bs:
+                    num_bs = f"TK{id_p}"
+                    db_bo.query(
+                        """UPDATE ticket_bo.pgt_tk_call_panier
+                              SET num_bs=?, num_date_saisie=NOW(),
+                                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+                            WHERE id_tk_call_panier=?""",
+                        (num_bs, int(op_id), id_p),
+                    )
+
+                # Cherche doublon dans adv.pgt_{part}_contrat
+                part_lower = partenaire.lower()
+                table_ctt = f"pgt_{part_lower}_contrat"
+                try:
+                    existing = db_adv.query_one(
+                        f"""SELECT id_contrat, id_salarie, id_client,
+                                   id_etat_contrat
+                              FROM adv.{table_ctt}
+                             WHERE UPPER(num_bs) = UPPER(?)
+                               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                             LIMIT 1""",
+                        (num_bs,),
+                    )
+                except Exception:
+                    existing = None
+
+                if not existing:
+                    # Bouton liste : PAS de creation nouveau contrat (WinDev commente)
+                    res.nb_skipped += 1
+                    continue
+
+                # DOUBLON : update selon partenaire
+                # Reaffecte vendeur si generic (WinDev : if IDSalarie=0)
+                cur_sal = int(existing.get("id_salarie") or 0)
+                if cur_sal == 0 and id_salarie_ticket > 0:
+                    db_adv.query(
+                        f"""UPDATE adv.{table_ctt}
+                              SET id_salarie=?, modif_date=NOW(), modif_op=?,
+                                  modif_elem='modif'
+                            WHERE id_contrat=?""",
+                        (id_salarie_ticket, int(op_id),
+                         int(existing["id_contrat"])),
+                    )
+
+                # Update fiche client si vide
+                _modif_fiche_client(db_adv,
+                                     int(existing.get("id_client") or 0),
+                                     tc, op_id)
+
+                # Update etat_contrat selon partenaire
+                cur_etat = int(existing.get("id_etat_contrat") or 0)
+                new_etat = None
+                if partenaire == "PRO" and cur_etat == 1:
+                    new_etat = _get_etat_contrat_pro(statut_prod, num_bs)
+                elif partenaire == "ENI" and cur_etat == 51:
+                    new_etat = _get_etat_contrat_eni(statut_prod, num_bs)
+                elif partenaire == "OEN":
+                    # Regle OEN : verifie IDTypeEtat <= 2 via pgt_oen_etat_contrat
+                    try:
+                        oen_etat = db_adv.query_one(
+                            """SELECT id_type_etat FROM adv.pgt_oen_etat_contrat
+                                WHERE id_etat = ? LIMIT 1""",
+                            (cur_etat,),
+                        )
+                        if oen_etat and int(oen_etat.get("id_type_etat") or 0) <= 2:
+                            new_etat = _get_etat_contrat_oen_v2(statut_prod, num_bs)
+                    except Exception:
+                        pass
+
+                if new_etat is not None:
+                    db_adv.query(
+                        f"""UPDATE adv.{table_ctt}
+                              SET id_etat_contrat=?, modif_date=NOW(),
+                                  modif_op=?, modif_elem='modif'
+                            WHERE id_contrat=?""",
+                        (new_etat, int(op_id), int(existing["id_contrat"])),
+                    )
+
+                # OEN : update ou insert opt_vte_add_part
+                if partenaire == "OEN":
+                    opt_exists = db_adv.query_one(
+                        """SELECT id_contrat_option_auto
+                             FROM adv.pgt_oen_contrat_option
+                            WHERE id_contrat = ? LIMIT 1""",
+                        (int(existing["id_contrat"]),),
+                    )
+                    if opt_exists:
+                        db_adv.query(
+                            """UPDATE adv.pgt_oen_contrat_option
+                                  SET opt_vte_add_part=?, modif_date=NOW(),
+                                      modif_op=?, modif_elem='modif'
+                                WHERE id_contrat=?""",
+                            (vte_add_part, int(op_id),
+                             int(existing["id_contrat"])),
+                        )
+                    else:
+                        auto = db_adv.query_one(
+                            "SELECT COALESCE(MAX(id_contrat_option_auto), 0) + 1 AS n FROM adv.pgt_oen_contrat_option"
+                        )
+                        auto_n = int(auto["n"]) if auto else 1
+                        db_adv.query(
+                            """INSERT INTO adv.pgt_oen_contrat_option
+                                  (id_contrat_option_auto, id_contrat, num_bs,
+                                   opt_vte_add_part, opt_energie_verte_elec,
+                                   modif_op, modif_date, modif_elem)
+                               VALUES (?, ?, ?, ?, FALSE, ?, NOW(), 'new')""",
+                            (auto_n, int(existing["id_contrat"]), num_bs,
+                             vte_add_part, int(op_id)),
+                        )
+
+                res.nb_updates += 1
+            except Exception as e:
+                res.nb_erreurs += 1
+                if not res.message:
+                    res.message = f"Erreur panier {id_p} : {e}"
+
+        # Cloture le ticket (equivalent au reqUdateTicket final WinDev)
+        try:
+            db_tk.query(
+                """UPDATE ticket.pgt_tk_liste
+                      SET cloturee=TRUE, date_cloture=NOW(),
+                          modif_date=NOW(), modif_op=?, modif_elem='modif'
+                    WHERE id_tk_liste=?""",
+                (int(op_id), int(id_tl)),
+            )
+            res.cloture_ok = True
+        except Exception as e:
+            res.message = (res.message + " | " if res.message else "") + f"Cloture KO : {e}"
+
+        if not res.message:
+            res.message = f"{res.nb_updates} maj, {res.nb_skipped} skip"
+        out.append(res)
+    return out
+
+
+def cloture_selection_tickets_energie(
+    ids_tk_liste: list[int], op_id: int,
+) -> list[ConvertTicketResult]:
+    """Bouton 'Cloturer sans convertir' : UPDATE cloturee=TRUE sur
+    tous les tickets selectionnes."""
+    db_tk = get_pg_connection("ticket")
+    out: list[ConvertTicketResult] = []
+    for id_tl in ids_tk_liste:
+        res = ConvertTicketResult(id_tk_liste=str(id_tl))
+        try:
+            db_tk.query(
+                """UPDATE ticket.pgt_tk_liste
+                      SET cloturee=TRUE, date_cloture=NOW(),
+                          modif_date=NOW(), modif_op=?, modif_elem='modif'
+                    WHERE id_tk_liste=?""",
+                (int(op_id), int(id_tl)),
+            )
+            res.cloture_ok = True
+            res.message = "Clôturé"
+        except Exception as e:
+            res.message = f"KO : {e}"
+        out.append(res)
+    return out
 
 
 def cloturer_ticket_call_energie(id_tk_liste: int, op_id: int) -> bool:
