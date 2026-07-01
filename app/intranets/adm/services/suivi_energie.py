@@ -1626,17 +1626,15 @@ def resolve_call_justif_url(
     """Voir le justif (Fen_ContenuTicketCall) :
     - Si partenaire OEN : {IDTK_Call_Panier}_Clarification.pdf
     - Sinon : {idCall}_Justif.jpg
-    source : 'normal' -> groupe-exo, 'sos' -> sos.groupe-exo."""
-    import requests
+    source : 'normal' -> groupe-exo, 'sos' -> sos.groupe-exo.
+
+    Pas de HEAD ici : URL unique (pas de fallback jpg->pdf comme pour
+    les CIN SFR), donc pas besoin de la lib 'requests'."""
     base = ("https://sos.groupe-exo.omaya.fr" if source == "sos"
             else "https://groupe-exo.omaya.fr")
     if (partenaire or "").upper() == "OEN":
-        url = f"{base}/DocOmaya/{id_panier}_Clarification.pdf"
-    else:
-        url = f"{base}/DocOmaya/{id_tk_call}_Justif.jpg"
-    # Pas de HEAD ici (unique path, pas de fallback)
-    _ = requests
-    return url
+        return f"{base}/DocOmaya/{id_panier}_Clarification.pdf"
+    return f"{base}/DocOmaya/{id_tk_call}_Justif.jpg"
 
 
 def export_extraction_energie_xlsx(

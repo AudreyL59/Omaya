@@ -882,14 +882,21 @@ def resolve_cin_url(id_call_sfr: int, source: str = "normal") -> str:
 
     source : 'normal' -> https://groupe-exo.omaya.fr
              'sos'    -> https://sos.groupe-exo.omaya.fr
-    Retourne l'URL a ouvrir cote front."""
-    import requests
+    Retourne l'URL a ouvrir cote front. Utilise urllib.request pour
+    eviter la dependance a 'requests' (non installee sur les servs)."""
+    import urllib.request
+    import urllib.error
     base = ("https://sos.groupe-exo.omaya.fr" if source == "sos"
             else "https://groupe-exo.omaya.fr")
     url_jpg = f"{base}/DocOmaya/{id_call_sfr}_CIN.jpg"
     try:
-        r = requests.head(url_jpg, timeout=5, allow_redirects=True)
-        if r.status_code == 404:
+        req = urllib.request.Request(url_jpg, method="HEAD")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status == 404:
+                return f"{base}/DocOmaya/{id_call_sfr}_PieceIdentite.pdf"
+            return url_jpg
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
             return f"{base}/DocOmaya/{id_call_sfr}_PieceIdentite.pdf"
         return url_jpg
     except Exception:
