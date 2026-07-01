@@ -6,7 +6,7 @@
  * fSelecteurImage + confirmation 'Voulez-vous associer cette image ?'
  * -> UPDATE colonne bytea.
  */
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ImageIcon, Loader2, Upload } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
@@ -40,10 +40,34 @@ export default function SocieteImageSlot({
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [rev, setRev] = useState(0)   // busts cache apres upload
+  const [blobUrl, setBlobUrl] = useState<string>('')
 
-  const url = (hasImage || rev > 0)
-    ? `${API_BASE}/societes/${idSociete}/image/${champ}?v=${rev}`
-    : ''
+  // Charge l'image via fetch() authentifie (JWT dans header Authorization)
+  // et cree un blob URL local. <img src=...> ne peut pas envoyer de
+  // header Authorization tout seul, donc si on met l'URL API en direct
+  // le serveur repond 401 et le browser affiche un defi Basic Auth.
+  const loadImage = useCallback(async () => {
+    if (!hasImage && rev === 0) { setBlobUrl(''); return }
+    try {
+      const r = await fetch(
+        `${API_BASE}/societes/${idSociete}/image/${champ}?v=${rev}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) { setBlobUrl(''); return }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      setBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url })
+    } catch {
+      setBlobUrl('')
+    }
+  }, [idSociete, champ, hasImage, rev])
+
+  useEffect(() => {
+    void loadImage()
+    return () => {
+      setBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return '' })
+    }
+  }, [loadImage])
 
   const upload = async (file: File) => {
     const ok = await showConfirm({
@@ -80,8 +104,8 @@ export default function SocieteImageSlot({
       <div className="w-32 h-24 bg-white border border-c-line rounded flex items-center justify-center overflow-hidden">
         {uploading ? (
           <Loader2 className="w-5 h-5 animate-spin text-c-brand" />
-        ) : url ? (
-          <img src={url} alt={label}
+        ) : blobUrl ? (
+          <img src={blobUrl} alt={label}
             className="max-w-full max-h-full object-contain" />
         ) : (
           <ImageIcon className="w-8 h-8 text-c-ink-faint-2" />
