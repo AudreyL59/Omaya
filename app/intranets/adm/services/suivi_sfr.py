@@ -1525,6 +1525,141 @@ def update_offre_ezy(id_offres_sfr: int, p: OffreEzyPayload, op_id: int) -> bool
 
 
 # ====================================================================
+# 8. SUIVI RDV TECH (Fen_SuiviRDVTECH)
+# ====================================================================
+
+
+class SuiviRdvTechRow(BaseModel):
+    id_tk_liste: str
+    id_contrat: str
+    id_tk_retour_rdv_tech_fibre: str
+    date_crea: str = ""
+    date_cloture: str = ""
+    cloturee: bool = False
+    lib_statut: str = ""
+    vendeur: str = ""
+    num_bs: str = ""              # depuis TK_RetourRdvTechFIBRE
+    num_bs_sfr: str = ""          # depuis SFR_contrat
+    date_rdv_tech: str = ""
+    periode_rdv_tech: str = ""
+    date_signature: str = ""
+    id_fibre_statut_rdv: int = 0
+    lib_statut_rdv: str = ""
+    info_cplt: str = ""
+
+
+def search_suivi_rdv_tech(du: date, au: date, etat: str = "tous",
+                          ) -> list[SuiviRdvTechRow]:
+    """cf requete SQL Fen_SuiviRDVTECH : JOIN TK_RetourRdvTechFIBRE
+    + TK_Liste + TK_Statut + salarie + SFR_contrat.
+    etat : 'ouverts' | 'clotures' | 'tous'.
+    """
+    db_bo = get_pg_connection("ticket_bo")
+
+    where = [
+        "(r.modif_elem IS NULL OR r.modif_elem NOT LIKE '%suppr%')",
+        "l.date_crea >= ?",
+        "l.date_crea < (?::date + INTERVAL '1 day')",
+    ]
+    params: list = [du, au]
+    if etat == "ouverts":
+        where.append("(l.cloturee IS NULL OR l.cloturee = FALSE)")
+    elif etat == "clotures":
+        where.append("l.cloturee = TRUE")
+
+    rows = db_bo.query(
+        f"""SELECT r.id_tk_retour_rdv_tech_fibre, r.id_tk_liste, r.id_contrat,
+                   r.num_bs, r.id_fibre_statut_rdv, r.info_cplt,
+                   l.date_crea, l.date_cloture, l.cloturee, l.op_crea,
+                   l.id_tk_statut
+              FROM ticket_bo.pgt_tk_retour_rdv_tech_fibre r
+              JOIN ticket.pgt_tk_liste l ON l.id_tk_liste = r.id_tk_liste
+             WHERE {' AND '.join(where)}
+             ORDER BY l.date_crea DESC
+             LIMIT 5000""",
+        tuple(params),
+    ) or []
+    if not rows:
+        return []
+
+    # Resolutions batch : SFR_contrat + salarie + tk_statut + fibre_statut_rdv
+    id_contrats = list({int(r["id_contrat"]) for r in rows if r.get("id_contrat")})
+    id_sals     = list({int(r["op_crea"]) for r in rows if r.get("op_crea")})
+    id_statuts  = list({int(r["id_tk_statut"]) for r in rows if r.get("id_tk_statut")})
+    id_rdvsts   = list({int(r["id_fibre_statut_rdv"]) for r in rows
+                        if r.get("id_fibre_statut_rdv")})
+
+    db_adv = get_pg_connection("adv")
+    contrats_map: dict[int, dict] = {}
+    if id_contrats:
+        ids = ",".join(str(i) for i in id_contrats)
+        c = db_adv.query(
+            f"""SELECT id_contrat, num_bs, date_rdv_tech, periode_rdv_tech,
+                       date_signature
+                  FROM adv.pgt_sfr_contrat WHERE id_contrat IN ({ids})""",
+        ) or []
+        contrats_map = {int(x["id_contrat"]): x for x in c}
+
+    rdvsts_map: dict[int, str] = {}
+    if id_rdvsts:
+        ids = ",".join(str(i) for i in id_rdvsts)
+        s = db_adv.query(
+            f"""SELECT id_sfr_statut_rdv, lib_statut FROM adv.pgt_sfr_statut_rdv
+                 WHERE id_sfr_statut_rdv IN ({ids})""",
+        ) or []
+        rdvsts_map = {int(x["id_sfr_statut_rdv"]): x.get("lib_statut") or ""
+                       for x in s}
+
+    db_rh = get_pg_connection("rh")
+    sals_map: dict[int, str] = {}
+    if id_sals:
+        ids = ",".join(str(i) for i in id_sals)
+        s = db_rh.query(
+            f"""SELECT id_salarie, nom, prenom FROM rh.pgt_salarie
+                 WHERE id_salarie IN ({ids})""",
+        ) or []
+        for x in s:
+            nom = (x.get("nom") or "").strip().upper()
+            prenom = _capitalize((x.get("prenom") or "").strip().lower())
+            sals_map[int(x["id_salarie"])] = f"{prenom} {nom}".strip()
+
+    db_tk = get_pg_connection("ticket")
+    statuts_map: dict[int, str] = {}
+    if id_statuts:
+        ids = ",".join(str(i) for i in id_statuts)
+        s = db_tk.query(
+            f"""SELECT id_tk_statut, lib_statut FROM ticket.pgt_tk_statut
+                 WHERE id_tk_statut IN ({ids})""",
+        ) or []
+        statuts_map = {int(x["id_tk_statut"]): x.get("lib_statut") or ""
+                        for x in s}
+
+    out: list[SuiviRdvTechRow] = []
+    for r in rows:
+        id_c = int(r.get("id_contrat") or 0)
+        ctt = contrats_map.get(id_c, {})
+        out.append(SuiviRdvTechRow(
+            id_tk_liste=str(r["id_tk_liste"]),
+            id_contrat=str(r["id_contrat"]),
+            id_tk_retour_rdv_tech_fibre=str(r["id_tk_retour_rdv_tech_fibre"]),
+            date_crea=_date_str(r.get("date_crea")),
+            date_cloture=_date_str(r.get("date_cloture")),
+            cloturee=bool(r.get("cloturee")),
+            lib_statut=statuts_map.get(int(r.get("id_tk_statut") or 0), ""),
+            vendeur=sals_map.get(int(r.get("op_crea") or 0), ""),
+            num_bs=r.get("num_bs") or "",
+            num_bs_sfr=ctt.get("num_bs") or "",
+            date_rdv_tech=_date_str(ctt.get("date_rdv_tech")),
+            periode_rdv_tech=ctt.get("periode_rdv_tech") or "",
+            date_signature=_date_str(ctt.get("date_signature")),
+            id_fibre_statut_rdv=int(r.get("id_fibre_statut_rdv") or 0),
+            lib_statut_rdv=rdvsts_map.get(int(r.get("id_fibre_statut_rdv") or 0), ""),
+            info_cplt=r.get("info_cplt") or "",
+        ))
+    return out
+
+
+# ====================================================================
 # 5. PARCOURS CHAINES (Fen_ParcoursChaine)
 # ====================================================================
 

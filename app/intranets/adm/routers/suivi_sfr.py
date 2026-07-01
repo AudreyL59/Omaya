@@ -355,6 +355,19 @@ def put_offre_ezy(
     return {"ok": True}
 
 
+# -- Fen_SuiviRDVTECH -------------------------------------------------
+
+
+@router.get("/rdv-tech", response_model=list[svc.SuiviRdvTechRow])
+def get_suivi_rdv_tech(
+    du: date,
+    au: date,
+    etat: str = "tous",   # 'ouverts' | 'clotures' | 'tous'
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.search_suivi_rdv_tech(du, au, etat)
+
+
 # -- Fen_ParcoursChaine ------------------------------------------------
 
 

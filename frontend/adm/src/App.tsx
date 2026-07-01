@@ -49,6 +49,7 @@ import SfrExtractionPage from '@/pages/SfrExtractionPage'
 import SfrParcoursChainesPage from '@/pages/SfrParcoursChainesPage'
 import SfrClusterPage from '@/pages/SfrClusterPage'
 import SfrOffresEzyPage from '@/pages/SfrOffresEzyPage'
+import SfrRdvTechPage from '@/pages/SfrRdvTechPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
@@ -86,6 +87,7 @@ function App() {
           <Route path="suivi-sfr/parcours-chaines" element={<SfrParcoursChainesPage />} />
           <Route path="suivi-sfr/cluster" element={<SfrClusterPage />} />
           <Route path="suivi-sfr/offres-ezy" element={<SfrOffresEzyPage />} />
+          <Route path="suivi-sfr/rdv-tech" element={<SfrRdvTechPage />} />
           <Route path="recherche-rh" element={<PlaceholderPage />} />
           <Route path="stat-rh" element={<StatRHPage />} />
           <Route path="stat-rh/saisie-cv" element={<StatRHSaisieCvPage />} />
