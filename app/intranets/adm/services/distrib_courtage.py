@@ -626,6 +626,87 @@ def move_y(id_y: int, direction: str, id_groupe_rem: int, op_id: int) -> bool:
     return True
 
 
+# ====================================================================
+# Fen_SocieteDocCourtage : liste des docs de courtage disponibles
+# (Generer le contrat)
+# ====================================================================
+
+# ID_GROUPE_OPERATEUR special 'Autre' cf code WinDev :
+# si docCourtage.IDGroupeOperateur = 281474976710657 (Autre) alors
+# pas besoin de renseigner Secteur ni de Publipostage_Rem/STE
+GROUPE_OP_AUTRE = 281474976710657
+
+
+class DocCourtageItem(BaseModel):
+    id_doc_courtage: str
+    titre: str = ""
+    info_cpl: str = ""
+    id_groupe_operateur: int = 0
+    lib_groupe_operateur: str = ""
+    prioritaire: bool = False
+    id_ste: str = "0"
+    rs_interne_ste: str = ""       # Raison sociale de la STE proprietaire
+    datecrea: str = ""
+    modif_date: str = ""
+
+
+def list_docs_courtage(
+    id_distrib: int, id_ste_gerant_societe: int | None = None,
+) -> list[DocCourtageItem]:
+    """Liste les documents de courtage actifs, regroupes par id_groupe_operateur.
+    cf Fen_SocieteDocCourtage : montre les docs specifiques a la societe
+    d'origine (id_ste = 0 = commun, sinon reserve a cette societe).
+
+    Regroupe visuellement par groupe operateur cote front (le back
+    renvoie juste la liste triee)."""
+    db_rh = get_pg_connection("rh")
+    db_adv = get_pg_connection("adv")
+    rows = db_rh.query(
+        """SELECT id_doc_courtage, titre, info_cpl, id_groupe_operateur,
+                  prioritaire, id_ste, datecrea, modif_date
+             FROM rh.pgt_doc_courtage
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+              AND doc_actif = TRUE
+              AND (id_ste = 0 OR id_ste = ?)
+            ORDER BY id_groupe_operateur, prioritaire DESC, titre""",
+        (int(id_ste_gerant_societe or 0),),
+    ) or []
+
+    # Resolution libelle groupe operateur + raison sociale STE
+    id_gops = list({int(r["id_groupe_operateur"]) for r in rows if r.get("id_groupe_operateur")})
+    id_stes = list({int(r["id_ste"]) for r in rows if r.get("id_ste")})
+
+    gop_map: dict[int, str] = {}
+    if id_gops:
+        ids = ",".join(str(i) for i in id_gops)
+        g = db_adv.query(
+            f"SELECT id_groupe_operateur, lib_groupe FROM adv.pgt_groupe_operateur WHERE id_groupe_operateur IN ({ids})",
+        ) or []
+        gop_map = {int(x["id_groupe_operateur"]): x.get("lib_groupe") or "" for x in g}
+
+    ste_map: dict[int, str] = {}
+    if id_stes:
+        ids = ",".join(str(i) for i in id_stes)
+        s = db_rh.query(
+            f"SELECT id_ste, rs_interne FROM rh.pgt_societe WHERE id_ste IN ({ids})",
+        ) or []
+        ste_map = {int(x["id_ste"]): x.get("rs_interne") or "" for x in s}
+
+    _ = id_distrib   # non utilise dans le back mais garde en signature pour extension future
+    return [DocCourtageItem(
+        id_doc_courtage=str(r["id_doc_courtage"]),
+        titre=r.get("titre") or "",
+        info_cpl=r.get("info_cpl") or "",
+        id_groupe_operateur=int(r.get("id_groupe_operateur") or 0),
+        lib_groupe_operateur=gop_map.get(int(r.get("id_groupe_operateur") or 0), ""),
+        prioritaire=bool(r.get("prioritaire")),
+        id_ste=str(r.get("id_ste") or 0),
+        rs_interne_ste=ste_map.get(int(r.get("id_ste") or 0), ""),
+        datecrea=_date_str(r.get("datecrea")),
+        modif_date=_date_str(r.get("modif_date")),
+    ) for r in rows]
+
+
 def duplicate_groupe_rem_to(
     id_source: int, id_target_distrib: int, op_id: int,
 ) -> str:

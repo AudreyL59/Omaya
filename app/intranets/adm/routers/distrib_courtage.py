@@ -207,6 +207,19 @@ def put_cellule(
     return {"ok": True}
 
 
+@router.get("/{id_distrib}/docs-courtage",
+            response_model=list[svc.DocCourtageItem])
+def get_docs_courtage(
+    id_distrib: int,
+    id_ste_gerant_societe: int | None = None,
+    _u: UserToken = Depends(get_current_user),
+):
+    """Liste des docs de courtage disponibles pour ce distributeur.
+    Cf Fen_SocieteDocCourtage : filtre par id_ste (0=commun, sinon
+    reserve a la societe id_ste_gerant_societe si fourni)."""
+    return svc.list_docs_courtage(id_distrib, id_ste_gerant_societe)
+
+
 @router.post("/groupe-rem/{id_source}/duplicate-to")
 def post_duplicate_groupe_rem(
     id_source: int,

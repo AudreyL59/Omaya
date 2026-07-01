@@ -21,6 +21,7 @@ import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import GroupeRemFicheModal from './GroupeRemFicheModal'
 import SocieteDistribPicker from './SocieteDistribPicker'
+import GenerationContratModal from './GenerationContratModal'
 
 const API_BASE = '/api/adm'
 
@@ -60,6 +61,7 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [ficheGroupe, setFicheGroupe] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
   const [showDistribPicker, setShowDistribPicker] = useState(false)
+  const [showGenerate, setShowGenerate] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -157,7 +159,8 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 text-xs">
                   <Copy className="w-3.5 h-3.5" /> Dupliquer pour un autre distrib
                 </button>
-                <button type="button" onClick={notImpl('Générer le contrat (Fen_SociétéDocCourtage)')} disabled={!selGroupe}
+                <button type="button" onClick={() => setShowGenerate(true)}
+                  disabled={!infos}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-c-brand text-white hover:opacity-90 disabled:opacity-30 text-xs">
                   <Play className="w-3.5 h-3.5" /> Générer le contrat
                 </button>
@@ -281,6 +284,12 @@ export default function DocsDematerModal({ idSte, onClose }: Props) {
           idGroupeRem={ficheGroupe.id}
           onClose={() => setFicheGroupe({ open: false, id: null })}
           onSaved={() => { void load() }} />
+      )}
+      {showGenerate && infos && (
+        <GenerationContratModal
+          idDistrib={idSte}
+          idGerant={infos.id_gerant}
+          onClose={() => setShowGenerate(false)} />
       )}
       {showDistribPicker && selGroupe && (
         <SocieteDistribPicker
