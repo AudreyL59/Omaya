@@ -811,6 +811,539 @@ def update_panier_call_energie(
     return True
 
 
+# ====================================================================
+# 2c. CONVERTIR LA SELECTION EN CONTRAT (multi-partenaire OEN/ENI/etc.)
+# ====================================================================
+
+
+# ID vendeur "generique" cf code WinDev
+CALL_GENERIC_SALARIE_ID = 20200715153948361
+
+
+class ConvertPanierResult(BaseModel):
+    id_panier: str
+    partenaire: str = ""
+    num_bs: str = ""
+    id_statut: int = 0     # cf codes WinDev
+    action: str = ""       # 'created' | 'updated' | 'skipped' | 'error' | 'doublon'
+    message: str = ""
+
+
+class ConvertSelectionResult(BaseModel):
+    nb_crees: int = 0
+    nb_updates: int = 0
+    nb_erreurs: int = 0
+    nb_skipped: int = 0
+    results: list[ConvertPanierResult] = []
+
+
+def _new_id() -> int:
+    """ID entier 8 octets = timestamp au format yyyyMMddHHmmssSSS."""
+    return int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
+
+
+def _enregistrer_client_energie(
+    db, tc_row: dict, op_id: int,
+) -> int:
+    """Cf procedure EnregistrerClient WinDev : dedup par (nom, prenom,
+    adresse, cp, ville, tel, gsm) puis crea si nouveau."""
+    tel1 = (tc_row.get("mobile1") or "").replace(".", "").replace(" ", "").replace("-", "")
+    gsm2 = tel1   # WinDev met gsm et tel identiques (ClientTel = "" en appel)
+    nom = tc_row.get("nom_client") or ""
+    prenom = tc_row.get("prenom_client") or ""
+    cp = tc_row.get("cp") or ""
+    ville = tc_row.get("ville") or ""
+
+    existing = db.query_one(
+        """SELECT id_client FROM adv.pgt_client
+            WHERE UPPER(nom) = UPPER(?) AND UPPER(prenom) = UPPER(?)
+              AND COALESCE(cp, '') = ?
+              AND COALESCE(ville, '') = ?
+              AND (COALESCE(gsm, '') = ? OR COALESCE(tel, '') = ?)
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            LIMIT 1""",
+        (nom, prenom, cp, ville, gsm2, tel1),
+    )
+    if existing:
+        return int(existing["id_client"])
+
+    id_new = _new_id()
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_client_auto), 0) + 1 AS n FROM adv.pgt_client"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+    db.query(
+        """INSERT INTO adv.pgt_client
+              (id_client_auto, id_client, civilite, nom, prenom,
+               date_naiss, adresse1, adresse2, cp, ville, pays,
+               tel, gsm, mail, opt_partenaire,
+               op_saisie, date_saisie, modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FRANCE',
+                   ?, ?, ?, ?, ?, NOW(), NOW(), ?, 'new')""",
+        (auto_n, id_new, int(tc_row.get("civilite_client") or 0),
+         nom, prenom,
+         tc_row.get("date_naiss") if tc_row.get("date_naiss") else None,
+         tc_row.get("adresse1") or "", tc_row.get("adresse2") or "",
+         cp, ville, gsm2, tel1, tc_row.get("adr_mail") or "",
+         bool(tc_row.get("opt_partenaire")),
+         int(op_id), int(op_id)),
+    )
+    return id_new
+
+
+def _modif_fiche_client(db, id_client: int, tc_row: dict, op_id: int) -> None:
+    """cf ModifFicheClient WinDev : maj UNIQUEMENT si client.NOM = ''."""
+    if not id_client: return
+    r = db.query_one(
+        "SELECT nom FROM adv.pgt_client WHERE id_client = ?", (int(id_client),))
+    if not r or (r.get("nom") or "").strip():
+        return
+    tel = (tc_row.get("mobile1") or "").replace(".", "").replace(" ", "")
+    db.query(
+        """UPDATE adv.pgt_client
+              SET nom=?, prenom=?, date_naiss=?, adresse1=?, adresse2=?,
+                  cp=?, ville=?, pays='FRANCE', tel=?, gsm=?, mail=?,
+                  opt_partenaire=?, op_saisie=?, date_saisie=NOW(),
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_client=?""",
+        (tc_row.get("nom_client") or "",
+         tc_row.get("prenom_client") or "",
+         tc_row.get("date_naiss") if tc_row.get("date_naiss") else None,
+         tc_row.get("adresse1") or "", tc_row.get("adresse2") or "",
+         tc_row.get("cp") or "", tc_row.get("ville") or "",
+         tel, tel, tc_row.get("adr_mail") or "",
+         bool(tc_row.get("opt_partenaire")),
+         int(op_id), int(op_id), int(id_client)),
+    )
+
+
+def _get_etat_contrat_oen(statut_prod: int, num_bs: str) -> int:
+    """cf WinDev partenaire OEN :
+      0 (non defini) -> 42 (Rejet BO - NON CALL)
+      2 (annule)     -> 38
+      TK dans NUM    -> 39
+      autre          -> 40"""
+    if statut_prod == 0: return 42
+    if statut_prod == 2: return 38
+    if "TK" in (num_bs or "").upper(): return 39
+    return 40
+
+
+def _get_etat_contrat_eni(statut_prod: int, num_bs: str) -> int:
+    """cf WinDev partenaire ENI :
+      2 (annule)     -> 66
+      TK dans NUM    -> 67
+      autre          -> 37"""
+    if statut_prod == 2: return 66
+    if "TK" in (num_bs or "").upper(): return 67
+    return 37
+
+
+def _get_etat_contrat_default(statut_prod: int, num_bs: str) -> int:
+    """Autres partenaires (VAL, STR, PRO...) : meme mapping que ENI."""
+    return _get_etat_contrat_eni(statut_prod, num_bs)
+
+
+def _insert_contrat(
+    db, partenaire: str, panier: dict, tc_row: dict,
+    id_client: int, id_salarie: int, id_ste: int | None,
+    id_etat_contrat: int, num_bs: str, date_signature,
+    lib_produit: str, famille: str, sous_fam: str, op_id: int,
+) -> tuple[int, float]:
+    """Insere le contrat dans adv.pgt_{partenaire}_contrat.
+    Retourne (id_contrat, nb_points)."""
+    from app.shared.sdtc.bareme import calcul_point_contrat
+
+    part = partenaire.lower()
+    table = f"pgt_{part}_contrat"
+    id_new = _new_id()
+
+    # Calcul nbPoints
+    nbpt = 0.0
+    try:
+        nbpt = calcul_point_contrat(
+            famille or "", sous_fam or "", "",
+            date_signature.strftime("%Y-%m-%d") if isinstance(date_signature, (date, datetime)) else str(date_signature or ""),
+            num_bs, 0,
+        ) or 0.0
+    except Exception:
+        pass
+
+    # Auto n
+    auto = db.query_one(
+        f"SELECT COALESCE(MAX(id_contrat_auto), 0) + 1 AS n FROM adv.{table}"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+
+    # Colonnes communes
+    if part == "oen":
+        db.query(
+            f"""INSERT INTO adv.{table}
+                  (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
+                   num_bs, ref_client, id_produit, id_etat_contrat, date_signature,
+                   date_activation, is_dual,
+                   op_saisie, date_saisie, non_call, nb_points,
+                   modif_op, modif_date, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), FALSE, ?, ?, NOW(), 'new')""",
+            (auto_n, id_new, int(id_client), int(id_salarie), id_ste,
+             num_bs, panier.get("observations") or "",
+             int(panier.get("id_produit") or 0), id_etat_contrat,
+             date_signature,
+             panier.get("date_entree") if panier.get("date_entree") else None,
+             (panier.get("motif_annulation") or "").upper().find("DUAL") >= 0,
+             int(op_id), float(nbpt), int(op_id)),
+        )
+    elif part == "eni":
+        db.query(
+            f"""INSERT INTO adv.{table}
+                  (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
+                   num_bs, id_produit, id_etat_contrat, date_signature,
+                   op_saisie, date_saisie, non_call, nb_points,
+                   modif_op, modif_date, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), FALSE, ?, ?, NOW(), 'new')""",
+            (auto_n, id_new, int(id_client), int(id_salarie), id_ste,
+             num_bs, int(panier.get("id_produit") or 0), id_etat_contrat,
+             date_signature, int(op_id), float(nbpt), int(op_id)),
+        )
+    else:
+        # VAL, STR, PRO... : colonnes minimales communes
+        cols = ["id_contrat_auto", "id_contrat", "id_client", "id_salarie",
+                "id_ste", "num_bs", "id_produit", "id_etat_contrat",
+                "date_signature", "op_saisie", "date_saisie",
+                "non_call", "nb_points", "modif_op", "modif_date", "modif_elem"]
+        vals = [auto_n, id_new, int(id_client), int(id_salarie), id_ste,
+                num_bs, int(panier.get("id_produit") or 0), id_etat_contrat,
+                date_signature, int(op_id), datetime.now(),
+                False, float(nbpt), int(op_id), datetime.now(), "new"]
+        # Colonnes optionnelles specifiques
+        if part == "val" and panier.get("format_numerique"):
+            cols.append("format_numerique"); vals.append(True)
+        if part == "str" and panier.get("opt_mandat"):
+            cols.append("opt_mandat"); vals.append(True)
+        col_sql = ", ".join(cols)
+        ph = ", ".join(["?"] * len(vals))
+        db.query(
+            f"INSERT INTO adv.{table} ({col_sql}) VALUES ({ph})",
+            tuple(vals),
+        )
+
+    return id_new, float(nbpt)
+
+
+def _insert_contrat_option(
+    db, partenaire: str, id_contrat: int, num_bs: str, panier: dict,
+    vte_add_part: str, op_id: int,
+) -> None:
+    """Insere l'option pour OEN ou ENI (les autres n'ont pas d'option)."""
+    part = partenaire.lower()
+    if part not in ("oen", "eni"): return
+    table = f"pgt_{part}_contrat_option"
+    auto = db.query_one(
+        f"SELECT COALESCE(MAX(id_contrat_option_auto), 0) + 1 AS n FROM adv.{table}"
+    )
+    auto_n = int(auto["n"]) if auto else 1
+
+    common = {
+        "opt_mail": bool(panier.get("opt_mail")),
+        "opt_energie_verte_gaz": bool(panier.get("opt_energie_verte_gaz")),
+        "opt_energie_verte_elec": False,
+        "opt_reforestation": bool(panier.get("opt_reforestation")),
+        "opt_optin_commercial": bool(panier.get("opt_optin_commercial")),
+        "opt_e_facture": bool(panier.get("opt_e_facture")),
+        "opt_e_communication": bool(panier.get("opt_e_communication")),
+        "opt_accept_com_parte": bool(panier.get("opt_accept_com_parte")),
+        "opt_consent_consult_distri": bool(panier.get("opt_consent_consult_distri")),
+    }
+    if part == "oen":
+        db.query(
+            f"""INSERT INTO adv.{table}
+                  (id_contrat_option_auto, id_contrat, num_bs,
+                   opt_mail, opt_energie_verte_gaz, opt_energie_verte_elec,
+                   opt_reforestation, opt_optin_commercial,
+                   opt_e_facture, opt_e_communication,
+                   opt_accept_com_parte, opt_consent_consult_distri,
+                   opt_vte_add_part,
+                   modif_op, modif_date, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'new')""",
+            (auto_n, id_contrat, num_bs,
+             common["opt_mail"], common["opt_energie_verte_gaz"],
+             common["opt_energie_verte_elec"],
+             common["opt_reforestation"], common["opt_optin_commercial"],
+             common["opt_e_facture"], common["opt_e_communication"],
+             common["opt_accept_com_parte"], common["opt_consent_consult_distri"],
+             vte_add_part or "", int(op_id)),
+        )
+    else:  # eni
+        db.query(
+            f"""INSERT INTO adv.{table}
+                  (id_contrat_option_auto, id_contrat, num_bs,
+                   opt_mail, opt_energie_verte_gaz, opt_energie_verte_elec,
+                   opt_reforestation, opt_optin_commercial,
+                   opt_e_facture, opt_e_communication,
+                   opt_accept_com_parte, opt_consent_consult_distri,
+                   modif_op, modif_date, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'new')""",
+            (auto_n, id_contrat, num_bs,
+             common["opt_mail"], common["opt_energie_verte_gaz"],
+             common["opt_energie_verte_elec"],
+             common["opt_reforestation"], common["opt_optin_commercial"],
+             common["opt_e_facture"], common["opt_e_communication"],
+             common["opt_accept_com_parte"], common["opt_consent_consult_distri"],
+             int(op_id)),
+        )
+
+
+def convert_selection_energie(
+    id_tk_liste: int, ids_paniers: list[int], op_id: int,
+) -> ConvertSelectionResult:
+    """Convertit les paniers selectionnes en contrats.
+    Cf code WinDev Fen_ContenuTicketCall 'Convertir la selection en contrat'.
+
+    Regle 'testVteAddOen' : si un panier OEN est present dans le ticket,
+    SEULS les paniers OEN sont convertis (les autres sont skippes)."""
+    db_bo = get_pg_connection("ticket_bo")
+    db_adv = get_pg_connection("adv")
+    db_rh = get_pg_connection("rh")
+    result = ConvertSelectionResult()
+
+    # Charge TK_Call pour info client + vendeur
+    tc = db_bo.query_one(
+        """SELECT id_tk_call, id_salarie, id_client, civilite_client,
+                   nom_client, prenom_client, nom_marital_client,
+                   date_naiss, adresse1, adresse2, cp, ville,
+                   mobile1, adr_mail, opt_partenaire
+              FROM ticket_bo.pgt_tk_call
+             WHERE id_tk_liste = ? LIMIT 1""",
+        (int(id_tk_liste),),
+    )
+    if not tc:
+        result.nb_erreurs = 1
+        return result
+
+    id_salarie = int(tc.get("id_salarie") or 0)
+    if id_salarie == 0:
+        # Fallback op_crea du TK_Liste
+        db_tk = get_pg_connection("ticket")
+        tl = db_tk.query_one(
+            "SELECT op_crea, date_crea FROM ticket.pgt_tk_liste WHERE id_tk_liste = ?",
+            (int(id_tk_liste),),
+        )
+        if tl: id_salarie = int(tl.get("op_crea") or 0)
+    else:
+        db_tk = get_pg_connection("ticket")
+        tl = db_tk.query_one(
+            "SELECT date_crea FROM ticket.pgt_tk_liste WHERE id_tk_liste = ?",
+            (int(id_tk_liste),),
+        )
+
+    date_signature = None
+    if tl and tl.get("date_crea"):
+        d = tl["date_crea"]
+        date_signature = d.date() if isinstance(d, datetime) else d
+
+    # Id ste du vendeur
+    id_ste = None
+    if id_salarie:
+        se = db_rh.query_one(
+            "SELECT id_ste FROM rh.pgt_salarie_embauche WHERE id_salarie = ? LIMIT 1",
+            (int(id_salarie),),
+        )
+        if se: id_ste = se.get("id_ste")
+
+    # Charge TOUS les paniers du ticket (pour testVteAddOen)
+    all_pans = db_bo.query(
+        """SELECT id_tk_call_panier, id_produit, partenaire, num_bs,
+                  statut_prod, motif_annulation, date_entree, observations,
+                  opt_mail, opt_e_facture, opt_e_communication,
+                  opt_optin_commercial, opt_consent_consult_distri,
+                  opt_accept_com_parte, opt_mandat,
+                  opt_energie_verte_gaz, opt_reforestation, format_numerique
+             FROM ticket_bo.pgt_tk_call_panier
+            WHERE id_tk_call = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(tc["id_tk_call"]),),
+    ) or []
+    test_vte_add_oen = any((p.get("partenaire") or "").upper() == "OEN"
+                           for p in all_pans)
+    # Construit VteAddPart = liste concatenee
+    vte_add_part = ";".join(
+        f"{(p.get('partenaire') or '').upper()}-{int(p.get('id_produit') or 0)}"
+        for p in all_pans
+    )
+
+    # Filtre sur les paniers demandes
+    ids_pans_set = {int(x) for x in ids_paniers}
+    paniers_to_process = [p for p in all_pans
+                          if int(p["id_tk_call_panier"]) in ids_pans_set]
+
+    for panier in paniers_to_process:
+        id_p = int(panier["id_tk_call_panier"])
+        partenaire = (panier.get("partenaire") or "").upper()
+        num_bs = (panier.get("num_bs") or "").upper()
+        statut_prod = int(panier.get("statut_prod") or 0)
+        res = ConvertPanierResult(id_panier=str(id_p), partenaire=partenaire,
+                                   num_bs=num_bs)
+
+        try:
+            # Regle testVteAddOen : skip si OEN present et panier != OEN
+            if test_vte_add_oen and partenaire != "OEN":
+                res.action = "skipped"
+                res.message = "OEN présent dans le ticket → panier non-OEN skippé"
+                result.nb_skipped += 1
+                result.results.append(res)
+                continue
+
+            # Genere NUM si vide (TK + id_panier)
+            if not num_bs:
+                num_bs = f"TK{id_p}"
+                db_bo.query(
+                    """UPDATE ticket_bo.pgt_tk_call_panier
+                          SET num_bs=?, num_date_saisie=NOW(),
+                              modif_date=NOW(), modif_op=?, modif_elem='modif'
+                        WHERE id_tk_call_panier=?""",
+                    (num_bs, int(op_id), id_p),
+                )
+                res.num_bs = num_bs
+
+            # Table cible
+            part_lower = partenaire.lower()
+            table_ctt = f"pgt_{part_lower}_contrat"
+
+            # Verif doublon
+            try:
+                existing = db_adv.query_one(
+                    f"""SELECT id_contrat, id_salarie, id_client, id_etat_contrat
+                          FROM adv.{table_ctt}
+                         WHERE UPPER(num_bs) = UPPER(?)
+                           AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                         LIMIT 1""",
+                    (num_bs,),
+                )
+            except Exception:
+                existing = None    # Table inconnue -> nouveau partenaire
+
+            if existing:
+                # DOUBLON - reaffecte vendeur si generic
+                cur_sal = int(existing.get("id_salarie") or 0)
+                if cur_sal in (0, CALL_GENERIC_SALARIE_ID) and id_salarie > 0:
+                    db_adv.query(
+                        f"""UPDATE adv.{table_ctt}
+                              SET id_salarie=?, modif_date=NOW(), modif_op=?,
+                                  modif_elem='modif'
+                            WHERE id_contrat=?""",
+                        (id_salarie, int(op_id), int(existing["id_contrat"])),
+                    )
+                    res.action = "updated"
+                    res.id_statut = 4
+                    res.message = "Contrat existant : vendeur réaffecté"
+                    result.nb_updates += 1
+                else:
+                    res.action = "doublon"
+                    res.id_statut = 33
+                    res.message = "Contrat DOUBLON (déjà existant, vendeur ≠ générique)"
+                    result.nb_skipped += 1
+
+                # Update fiche client
+                _modif_fiche_client(db_adv, int(existing.get("id_client") or 0),
+                                     tc, op_id)
+
+                # Update etat_contrat selon regles WinDev
+                cur_etat = int(existing.get("id_etat_contrat") or 0)
+                new_etat = None
+                if partenaire == "OEN" and cur_etat == 8:
+                    new_etat = _get_etat_contrat_oen(statut_prod, num_bs)
+                elif partenaire == "ENI" and cur_etat == 51:
+                    new_etat = _get_etat_contrat_eni(statut_prod, num_bs)
+                if new_etat is not None:
+                    db_adv.query(
+                        f"""UPDATE adv.{table_ctt}
+                              SET id_etat_contrat=?, modif_date=NOW(),
+                                  modif_op=?, modif_elem='modif'
+                            WHERE id_contrat=?""",
+                        (new_etat, int(op_id), int(existing["id_contrat"])),
+                    )
+                # Update VteAddPart pour OEN
+                if partenaire == "OEN":
+                    db_adv.query(
+                        """UPDATE adv.pgt_oen_contrat_option
+                              SET opt_vte_add_part=?, modif_date=NOW(),
+                                  modif_op=?, modif_elem='modif'
+                            WHERE id_contrat=?""",
+                        (vte_add_part, int(op_id), int(existing["id_contrat"])),
+                    )
+            else:
+                # Nouveau contrat
+                # 1. Client
+                id_client = _enregistrer_client_energie(db_adv, tc, op_id)
+                if not id_client:
+                    res.action = "error"
+                    res.message = "Échec création client"
+                    result.nb_erreurs += 1
+                    result.results.append(res)
+                    continue
+
+                # 2. Etat contrat selon partenaire
+                if partenaire == "OEN":
+                    id_etat = _get_etat_contrat_oen(statut_prod, num_bs)
+                elif partenaire == "ENI":
+                    id_etat = _get_etat_contrat_eni(statut_prod, num_bs)
+                else:
+                    id_etat = _get_etat_contrat_default(statut_prod, num_bs)
+
+                # 3. Lookup lib_produit + famille + sous_fam
+                lib = ""; fam = ""; ss_fam = ""
+                pid = int(panier.get("id_produit") or 0)
+                if pid:
+                    table_prod = f"pgt_{part_lower}_produit"
+                    try:
+                        pr = db_adv.query_one(
+                            f"SELECT lib_produit, famille, sous_fam FROM adv.{table_prod} WHERE id_produit = ? LIMIT 1",
+                            (pid,),
+                        )
+                        if pr:
+                            lib = pr.get("lib_produit") or ""
+                            fam = pr.get("famille") or ""
+                            ss_fam = pr.get("sous_fam") or ""
+                    except Exception:
+                        pass
+
+                # 4. INSERT contrat + option
+                id_ctt, nbpt = _insert_contrat(
+                    db_adv, partenaire, panier, tc, id_client, id_salarie,
+                    id_ste, id_etat, num_bs, date_signature,
+                    lib, fam, ss_fam, op_id,
+                )
+                _insert_contrat_option(
+                    db_adv, partenaire, id_ctt, num_bs, panier,
+                    vte_add_part, op_id,
+                )
+
+                res.action = "created"
+                res.id_statut = 4
+                res.message = f"Contrat créé (nbPts={nbpt:.2f})"
+                result.nb_crees += 1
+        except Exception as e:
+            res.action = "error"
+            res.message = f"Erreur : {e}"
+            result.nb_erreurs += 1
+        result.results.append(res)
+
+    return result
+
+
+def cloturer_ticket_call_energie(id_tk_liste: int, op_id: int) -> bool:
+    """Clôture le ticket call (cf 2e OuiNon 'Souhaitez-vous cloturé le ticket ?')."""
+    db = get_pg_connection("ticket")
+    db.query(
+        """UPDATE ticket.pgt_tk_liste
+              SET cloturee=TRUE, date_cloture=NOW(),
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_tk_liste=?""",
+        (int(op_id), int(id_tk_liste)),
+    )
+    return True
+
+
 def resolve_call_justif_url(
     id_tk_call: int, id_panier: int, partenaire: str, source: str = "normal",
 ) -> str:

@@ -17,7 +17,7 @@ import {
   X, Loader2, Save, User, ExternalLink, IdCard, Package,
 } from 'lucide-react'
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showToast, showConfirm } from '@shared/ui/dialog'
 
 const API_BASE = '/api/adm'
 
@@ -155,8 +155,68 @@ export default function TicketCallEnergieContenuModal({
     showToast('Fen_ClientFiche : à venir', 'info')
   }
 
-  const handleConvertir = () => {
-    showToast('Convertir la sélection en contrat : à venir (partie C)', 'info')
+  const [converting, setConverting] = useState(false)
+
+  const handleConvertir = async () => {
+    if (!detail) return
+    const idsPaniers = paniers.filter(p => p.a_creer)
+      .map(p => parseInt(p.id_tk_call_panier, 10))
+    if (idsPaniers.length === 0) {
+      showToast('Aucun panier à créer (NUM non vide + statut Validé).', 'info')
+      return
+    }
+    const ok = await showConfirm({
+      title: 'Convertir la sélection en contrat',
+      message: `Voulez-vous vraiment valider le(s) ${idsPaniers.length} contrat(s) sélectionné(s) ?`,
+    })
+    if (!ok) return
+
+    setConverting(true)
+    try {
+      const r = await fetch(
+        `${API_BASE}/suivi-energie/ticket-call/convert-selection`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id_tk_liste: parseInt(detail.id_tk_liste, 10),
+            ids_paniers: idsPaniers,
+          }),
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      const d: {
+        nb_crees: number; nb_updates: number
+        nb_erreurs: number; nb_skipped: number
+      } = await r.json()
+      showToast(
+        `${d.nb_crees} créé(s), ${d.nb_updates} maj, ${d.nb_skipped} skip${d.nb_erreurs ? `, ${d.nb_erreurs} erreur(s)` : ''}`,
+        d.nb_erreurs > 0 ? 'info' : 'success',
+      )
+
+      // 2e OuiNon : cloture
+      const doClose = await showConfirm({
+        title: 'Clôturer le ticket',
+        message: 'Souhaitez-vous clôturer le ticket ?',
+      })
+      if (doClose) {
+        const r2 = await fetch(
+          `${API_BASE}/suivi-energie/ticket-call/cloture/${detail.id_tk_liste}`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}` },
+          },
+        )
+        if (r2.ok) showToast('Ticket clôturé', 'success')
+      }
+      onChanged?.()
+      await load()
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    } finally { setConverting(false) }
   }
 
   return (
@@ -384,10 +444,12 @@ export default function TicketCallEnergieContenuModal({
               Fermer
             </button>
             <button type="button" onClick={handleConvertir}
-              disabled={!paniers.some(p => p.a_creer)}
+              disabled={!paniers.some(p => p.a_creer) || converting}
               className="flex items-center gap-2 px-4 py-1.5 rounded bg-c-brand text-white text-xs font-medium hover:opacity-90 disabled:opacity-50">
-              <Save className="w-3.5 h-3.5" />
-              Convertir la sélection en contrat
+              {converting
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Save className="w-3.5 h-3.5" />}
+              {converting ? 'Conversion…' : 'Convertir la sélection en contrat'}
             </button>
           </div>
         )}

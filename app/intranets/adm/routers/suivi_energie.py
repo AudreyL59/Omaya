@@ -91,6 +91,31 @@ def put_ticket_call_panier(
     return {"ok": True}
 
 
+class ConvertSelectionPayload(BaseModel):
+    id_tk_liste: int
+    ids_paniers: list[int]
+
+
+@router.post("/ticket-call/convert-selection",
+             response_model=svc.ConvertSelectionResult)
+def post_convert_selection(
+    payload: ConvertSelectionPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    return svc.convert_selection_energie(
+        payload.id_tk_liste, payload.ids_paniers, u.id_salarie,
+    )
+
+
+@router.post("/ticket-call/cloture/{id_tk_liste}")
+def post_cloture_ticket(
+    id_tk_liste: int,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.cloturer_ticket_call_energie(id_tk_liste, u.id_salarie)
+    return {"ok": True}
+
+
 @router.get("/ticket-call/{id_tk_call}/justif-url")
 def get_ticket_call_justif_url(
     id_tk_call: int,
