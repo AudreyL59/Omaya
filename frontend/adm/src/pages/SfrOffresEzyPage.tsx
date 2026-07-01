@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft, ShoppingBag, Loader2, Upload as UploadIcon, FolderOpen,
+  ArrowLeft, ShoppingBag, Loader2, FolderOpen,
   Wifi, Smartphone, ShieldCheck, Building2,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -32,7 +32,6 @@ interface Offre {
 interface Produit { id_produit: number; lib_produit: string; famille: string }
 
 type Onglet = 'liste' | 'import'
-type Famille = 'FIBRE' | 'MOBILE'
 
 export default function SfrOffresEzyPage() {
   useDocumentTitle('Offres EZY')
