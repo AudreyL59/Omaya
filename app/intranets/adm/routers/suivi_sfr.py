@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
@@ -327,6 +327,22 @@ def get_offres_ezy_produits(
     _u: UserToken = Depends(get_current_user),
 ):
     return svc.list_produits_offres_ezy(famille)
+
+
+@router.post("/offres-ezy/import", response_model=svc.ImportOffresEzyResult)
+async def post_offres_ezy_import(
+    source: str,   # 'fibre' | 'mobile' | 'secu' | 'fibre_pro' | 'mobile_pro'
+    file: UploadFile = File(...),
+    u: UserToken = Depends(get_current_user),
+):
+    if file is None:
+        raise HTTPException(400, "Fichier manquant")
+    raw = await file.read()
+    try:
+        html_content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        html_content = raw.decode("latin-1", errors="ignore")
+    return svc.import_offres_ezy(html_content, source, u.id_salarie)
 
 
 @router.put("/offres-ezy/{id_offres_sfr}")

@@ -1386,6 +1386,129 @@ def list_produits_offres_ezy(famille: str) -> list[ProduitSfr]:
     ) for r in rows]
 
 
+class ImportOffresEzyResult(BaseModel):
+    nb_parses: int = 0
+    nb_crees: int = 0
+    nb_updates: int = 0
+    nb_errors: int = 0
+    offres: list[dict] = []
+
+
+def import_offres_ezy(
+    html_content: str, source: str, op_id: int,
+) -> ImportOffresEzyResult:
+    """Parse le HTML Provad puis upsert dans pgt_sfr_offres_provad.
+    Cf 5 boutons WinDev de l'onglet Import :
+      - source='fibre'      -> Import Offres SFR FIBRE
+      - source='mobile'     -> Import Offres SFR Mobile (+ match produit MOBILE)
+      - source='secu'       -> Import Offres SFR Maison SECU (+ match produit SECU)
+      - source='fibre_pro'  -> Import Offres SFR FIBRE Pro
+      - source='mobile_pro' -> Import Offres SFR Mobile Pro (+ match produit MOB PRO)
+    """
+    from app.intranets.adm.services.offres_ezy_parser import parse_html_import
+
+    offres = parse_html_import(html_content, source)
+    res = ImportOffresEzyResult(nb_parses=len(offres), offres=list(offres))
+    if not offres:
+        return res
+
+    db = get_pg_connection("adv")
+
+    # Famille du produit associe a matcher automatiquement selon la source
+    match_famille: str | None = {
+        "mobile":     "MOBILE",
+        "secu":       "SECU",
+        "mobile_pro": "MOB PRO",
+    }.get(source.lower())
+
+    for o in offres:
+        lib = o["lib_offre"]
+        type_val = o["type"]
+        try:
+            # Match auto du produit associe (uniquement pour mobile/secu/mobpro)
+            id_produit = 0
+            if match_famille:
+                prod = db.query_one(
+                    """SELECT id_produit FROM adv.pgt_sfr_produit
+                        WHERE famille = ? AND lib_produit = ? LIMIT 1""",
+                    (match_famille, lib),
+                )
+                if prod:
+                    id_produit = int(prod["id_produit"])
+
+            # Upsert : match par (lib_offre, type) pour eviter collision Part/Pro
+            existing = db.query_one(
+                """SELECT id_offres_sfr FROM adv.pgt_sfr_offres_provad
+                    WHERE lib_offre = ? AND type = ?
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (lib, type_val),
+            )
+            if existing:
+                # UPDATE : on ne touche pas id_produit sauf match auto (mobile/secu/mobpro)
+                params = [
+                    o["debit_down"], o["debit_up"],
+                    float(o["prix_offre"]),
+                    o["recurrence"],
+                    o["prix_pro_ttc"],
+                    o["engagement"],
+                    bool(o["en_promo"]),
+                    o["info_promo"],
+                    o["services_inclus"],
+                    int(op_id),
+                ]
+                if match_famille and id_produit:
+                    db.query(
+                        """UPDATE adv.pgt_sfr_offres_provad SET
+                                  debit_down=?, debit_up=?, prix_offre=?,
+                                  recurrence=?, prix_pro_ttc=?, engagement=?,
+                                  en_promo=?, info_promo=?, service_inclus=?,
+                                  id_produit=?, online=TRUE,
+                                  modif_date=NOW(), modif_op=?, modif_elem='Modif'
+                            WHERE id_offres_sfr=?""",
+                        (*params[:9], id_produit, int(op_id),
+                         int(existing["id_offres_sfr"])),
+                    )
+                else:
+                    db.query(
+                        """UPDATE adv.pgt_sfr_offres_provad SET
+                                  debit_down=?, debit_up=?, prix_offre=?,
+                                  recurrence=?, prix_pro_ttc=?, engagement=?,
+                                  en_promo=?, info_promo=?, service_inclus=?,
+                                  online=TRUE,
+                                  modif_date=NOW(), modif_op=?, modif_elem='Modif'
+                            WHERE id_offres_sfr=?""",
+                        (*params, int(existing["id_offres_sfr"])),
+                    )
+                res.nb_updates += 1
+            else:
+                id_new = _new_id()
+                auto = db.query_one(
+                    "SELECT COALESCE(MAX(id_offres_sfr_auto), 0) + 1 AS n FROM adv.pgt_sfr_offres_provad"
+                )
+                auto_n = int(auto["n"]) if auto else 1
+                db.query(
+                    """INSERT INTO adv.pgt_sfr_offres_provad
+                          (id_offres_sfr_auto, id_offres_sfr, type, lib_offre,
+                           debit_down, debit_up, prix_offre, recurrence,
+                           prix_pro_ttc, engagement,
+                           en_promo, info_promo, service_inclus,
+                           id_produit, online,
+                           modif_date, modif_op, modif_elem)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE,
+                               NOW(), ?, 'Modif')""",
+                    (auto_n, id_new, type_val, lib,
+                     o["debit_down"], o["debit_up"], float(o["prix_offre"]),
+                     o["recurrence"], o["prix_pro_ttc"], o["engagement"],
+                     bool(o["en_promo"]), o["info_promo"], o["services_inclus"],
+                     id_produit, int(op_id)),
+                )
+                res.nb_crees += 1
+        except Exception:
+            res.nb_errors += 1
+    return res
+
+
 def update_offre_ezy(id_offres_sfr: int, p: OffreEzyPayload, op_id: int) -> bool:
     """Met a jour l'association produit + le flag online sur une offre.
     Cf code WinDev 'Sortie d'une ligne' : seuls IDproduit + Online sont

@@ -9,8 +9,11 @@
  *   - Colonnes editables : Produit associe (combo) + Online (checkbox)
  *   - Save au blur/change de chaque ligne
  */
-import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ShoppingBag, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  ArrowLeft, ShoppingBag, Loader2, Upload as UploadIcon, FolderOpen,
+  Wifi, Smartphone, ShieldCheck, Building2,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
@@ -123,11 +126,7 @@ export default function SfrOffresEzyPage() {
         ))}
       </div>
 
-      {onglet === 'import' && (
-        <div className="bg-white rounded-xl border border-c-line p-12 text-center text-sm text-c-ink-faint italic">
-          Onglet Import : à venir.
-        </div>
-      )}
+      {onglet === 'import' && <ImportPanel />}
 
       {onglet === 'liste' && (
         <>
@@ -172,6 +171,153 @@ export default function SfrOffresEzyPage() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+interface ImportResult {
+  nb_parses: number; nb_crees: number
+  nb_updates: number; nb_errors: number
+  offres: Array<{
+    type: string; lib_offre: string
+    debit_down: string; debit_up: string
+    prix_offre: number; recurrence: string
+    prix_pro_ttc: string; engagement: string
+    en_promo: boolean; info_promo: string
+    services_inclus: string
+  }>
+}
+
+type ImportSource = 'fibre' | 'mobile' | 'secu' | 'fibre_pro' | 'mobile_pro'
+
+function ImportPanel() {
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState<ImportSource | null>(null)
+  const [result, setResult] = useState<ImportResult | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const runImport = async (source: ImportSource) => {
+    if (!file) {
+      showToast('Sélectionne un fichier HTML d\'abord.', 'info'); return
+    }
+    setBusy(source); setResult(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const r = await fetch(
+        `${API_BASE}/suivi-sfr/offres-ezy/import?source=${source}`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+          body: fd,
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      const d: ImportResult = await r.json()
+      setResult(d)
+      showToast(
+        `${d.nb_parses} offre(s) parsée(s) : ${d.nb_crees} créée(s), ${d.nb_updates} maj${d.nb_errors ? `, ${d.nb_errors} erreur(s)` : ''}`,
+        d.nb_errors > 0 ? 'info' : 'success',
+      )
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    } finally { setBusy(null) }
+  }
+
+  const btns: Array<{ src: ImportSource; label: string; Icon: typeof Wifi }> = [
+    { src: 'fibre',      label: 'Import Offres SFR FIBRE',      Icon: Wifi },
+    { src: 'mobile',     label: 'Import Offres SFR Mobile',     Icon: Smartphone },
+    { src: 'secu',       label: 'Import Offres SFR Maison',     Icon: ShieldCheck },
+    { src: 'fibre_pro',  label: 'Import Offres SFR FIBRE Pro',  Icon: Building2 },
+    { src: 'mobile_pro', label: 'Import Offres SFR Mobile Pro', Icon: Building2 },
+  ]
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Selecteur fichier */}
+      <div className="flex items-center gap-3 mb-3 bg-white p-3 rounded-xl border border-c-line text-sm">
+        <label className="text-c-ink-faint text-xs shrink-0">Fichier</label>
+        <input ref={inputRef} type="file" accept=".html,.htm,text/html"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          className="hidden" />
+        <div className="flex-1 flex items-center gap-2 px-2 py-1 border border-c-line rounded text-xs bg-c-surface-soft h-7">
+          <span className="truncate flex-1 text-c-ink-soft">
+            {file?.name ?? 'c:\\répertoire\\fichier.ext'}
+          </span>
+        </div>
+        <button type="button" onClick={() => inputRef.current?.click()}
+          className="flex items-center gap-1.5 px-2.5 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft h-7">
+          <FolderOpen className="w-3.5 h-3.5" /> Parcourir
+        </button>
+      </div>
+
+      {/* Boutons d'import */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {btns.map(({ src, label, Icon }) => (
+          <button key={src} type="button"
+            onClick={() => runImport(src)}
+            disabled={!file || busy !== null}
+            className="flex items-center gap-2 px-3 py-2 rounded border border-c-line text-xs text-c-brand hover:bg-c-brand/10 disabled:opacity-40 disabled:hover:bg-transparent bg-white">
+            {busy === src
+              ? <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              : <Icon className="w-4 h-4 shrink-0" />}
+            <span className="truncate">{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Tableau resultat parse */}
+      <div className="bg-white rounded-xl border border-c-line overflow-hidden flex-1 flex flex-col">
+        <div className="px-3 py-1.5 border-b border-c-line-soft text-xs font-medium text-c-ink-faint flex justify-between">
+          <span>Résultat de l'import</span>
+          {result && (
+            <span>
+              {result.nb_parses} parsée(s) · {result.nb_crees} créée(s) ·
+              {' '}{result.nb_updates} maj{result.nb_errors ? ` · ${result.nb_errors} erreur(s)` : ''}
+            </span>
+          )}
+        </div>
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-c-surface-soft text-c-ink-faint uppercase tracking-wide sticky top-0">
+              <tr>
+                <th className="px-2 py-2 text-left">Type</th>
+                <th className="px-2 py-2 text-left">Lib Offre</th>
+                <th className="px-2 py-2 text-right">Download</th>
+                <th className="px-2 py-2 text-right">Upload</th>
+                <th className="px-2 py-2 text-right">Prix Offre</th>
+                <th className="px-2 py-2 text-left">Récurrence</th>
+                <th className="px-2 py-2 text-left">Prix Pro TTC</th>
+                <th className="px-2 py-2 text-center">EnPromo</th>
+                <th className="px-2 py-2 text-left">LibPromo</th>
+                <th className="px-2 py-2 text-left">Engagement</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-c-line-soft">
+              {!result || result.offres.length === 0 ? (
+                <tr><td colSpan={10} className="text-center py-12 text-c-ink-faint-2 italic">
+                  {result ? 'Aucune offre parsée.' : 'Choisis un fichier puis clique sur un bouton d\'import.'}
+                </td></tr>
+              ) : result.offres.map((o, i) => (
+                <tr key={i} className={o.en_promo ? 'bg-yellow-50' : ''}>
+                  <td className="px-2 py-1.5">{o.type}</td>
+                  <td className="px-2 py-1.5">{o.lib_offre}</td>
+                  <td className="px-2 py-1.5 text-right">{o.debit_down}</td>
+                  <td className="px-2 py-1.5 text-right">{o.debit_up}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">
+                    {o.prix_offre ? `${o.prix_offre.toFixed(2)} €` : ''}
+                  </td>
+                  <td className="px-2 py-1.5">{o.recurrence}</td>
+                  <td className="px-2 py-1.5">{o.prix_pro_ttc}</td>
+                  <td className="px-2 py-1.5 text-center">{o.en_promo ? '✓' : ''}</td>
+                  <td className="px-2 py-1.5">{o.info_promo}</td>
+                  <td className="px-2 py-1.5">{o.engagement}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
