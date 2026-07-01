@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
-import { showToast } from '@shared/ui/dialog'
+import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   useTableSortFilter, SortableTh, FilterInput,
@@ -70,11 +70,62 @@ export default function ListeSocietePage() {
 
   const sel = visible.find(r => r.id_societe_auto === selected)
 
+  const requireSel = (): Societe | null => {
+    if (!sel) { showToast('Sélectionne une société d\'abord.', 'info'); return null }
+    return sel
+  }
+
+  const doAction = async (
+    label: string, url: string, method: 'POST' | 'DELETE', ask: string,
+  ) => {
+    const s = requireSel(); if (!s) return
+    const ok = await showConfirm({ title: label, message: ask })
+    if (!ok) return
+    try {
+      const r = await fetch(url, {
+        method,
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      showToast(`${label} OK`, 'success')
+      await load()
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    }
+  }
+
+  const onDupliquer = () => {
+    const s = sel; if (!s) { showToast('Sélectionne une société d\'abord.', 'info'); return }
+    void doAction(
+      'Dupliquer',
+      `${API_BASE}/societes/${s.id_societe_auto}/duplicate`,
+      'POST',
+      'Vous êtes sur le point de dupliquer cette société. Voulez-vous continuer ?',
+    )
+  }
+  const onSupprimer = () => {
+    const s = sel; if (!s) { showToast('Sélectionne une société d\'abord.', 'info'); return }
+    void doAction(
+      'Supprimer',
+      `${API_BASE}/societes/${s.id_societe_auto}`,
+      'DELETE',
+      'Vous êtes sur le point de supprimer cette société. Voulez-vous continuer ?',
+    )
+  }
+  const onArchiver = () => {
+    const s = sel; if (!s) { showToast('Sélectionne une société d\'abord.', 'info'); return }
+    void doAction(
+      'Archiver',
+      `${API_BASE}/societes/${s.id_societe_auto}/archive`,
+      'POST',
+      'Vous êtes sur le point d\'archiver cette société. Voulez-vous continuer ?',
+    )
+  }
   const notImpl = (label: string) => () => {
-    if (!sel && ['Dupliquer', 'Supprimer', 'Modifier', 'Archiver'].includes(label)) {
+    if (!sel && ['Modifier'].includes(label)) {
       showToast('Sélectionne une société d\'abord.', 'info'); return
     }
-    showToast(`${label} : à venir (code WinDev à envoyer)`, 'info')
+    showToast(`${label} : à venir (Fen_FicheSociété)`, 'info')
   }
 
   return (
@@ -96,11 +147,11 @@ export default function ListeSocietePage() {
           className="flex items-center gap-1.5 px-3 py-1 rounded text-c-brand hover:bg-c-brand/10 text-xs">
           <Plus className="w-4 h-4" /> Nouveau
         </button>
-        <button type="button" onClick={notImpl('Dupliquer')} disabled={!sel}
+        <button type="button" onClick={onDupliquer} disabled={!sel}
           className="flex items-center gap-1.5 px-3 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 text-xs">
           <Copy className="w-4 h-4" /> Dupliquer
         </button>
-        <button type="button" onClick={notImpl('Supprimer')} disabled={!sel}
+        <button type="button" onClick={onSupprimer} disabled={!sel}
           className="flex items-center gap-1.5 px-3 py-1 rounded text-red-600 hover:bg-red-50 disabled:opacity-30 text-xs">
           <Trash2 className="w-4 h-4" /> Supprimer
         </button>
@@ -108,7 +159,7 @@ export default function ListeSocietePage() {
           className="flex items-center gap-1.5 px-3 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 text-xs">
           <Pencil className="w-4 h-4" /> Modifier
         </button>
-        <button type="button" onClick={notImpl('Archiver')} disabled={!sel}
+        <button type="button" onClick={onArchiver} disabled={!sel}
           className="flex items-center gap-1.5 px-3 py-1 rounded text-c-ink-soft hover:bg-c-surface-soft disabled:opacity-30 text-xs">
           <Archive className="w-4 h-4" /> Archiver
         </button>
