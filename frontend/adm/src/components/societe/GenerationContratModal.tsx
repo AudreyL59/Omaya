@@ -73,7 +73,9 @@ export default function GenerationContratModal({
 
   const sel = docs.find(d => d.id_doc_courtage === selected)
 
-  const ticketOmaya = () => {
+  const [generating, setGenerating] = useState(false)
+
+  const ticketOmaya = async () => {
     if (!sel) { showToast('Sélectionne un document.', 'info'); return }
     // Cf WinDev : secteur obligatoire sauf pour groupe 'Autre' (id 281474976710657)
     const GROUPE_AUTRE = 281474976710657
@@ -85,12 +87,44 @@ export default function GenerationContratModal({
       showToast('Merci de renseigner une date de signature valide.', 'error')
       return
     }
-    showToast(
-      `Ticket Omaya : à venir (publipostage DOCX + PDF + FTP + ticket TK_Liste). `
-      + `Sélection : "${sel.titre}" - Distrib ${idDistrib} - Gérant ${idGerant} - `
-      + `Secteur "${secteur}" - Date ${dateSign}`,
-      'info',
-    )
+
+    setGenerating(true)
+    try {
+      const r = await fetch(
+        `${API_BASE}/distrib-courtage/generate-contrat`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id_doc_courtage: parseInt(sel.id_doc_courtage, 10),
+            id_distrib: 0,
+            id_gerant: idGerant,
+            secteur, date_signature: dateSign,
+            date_avenant: '',
+            creer_suivi: true,
+          }).replace(
+            // Hack : id_distrib bigint > 2^53, envoyer en string non JSON parsable
+            '"id_distrib":0', `"id_distrib":${idDistrib}`,
+          ),
+        },
+      )
+      if (!r.ok) throw new Error(String(r.status))
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const cd = r.headers.get('content-disposition') || ''
+      const m = /filename="?([^";]+)"?/.exec(cd)
+      a.download = m ? m[1] : `contrat-${sel.id_doc_courtage}-${dateSign}.docx`
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+      showToast('Contrat généré et suivi enregistré', 'success')
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    } finally { setGenerating(false) }
   }
 
   const exportPdf = () => {
@@ -125,9 +159,11 @@ export default function GenerationContratModal({
           <input type="date" value={dateSign} onChange={e => setDateSign(e.target.value)}
             className="px-2 py-1 border border-c-line rounded text-xs h-7" />
           <div className="flex-1" />
-          <button type="button" onClick={ticketOmaya} disabled={!sel}
+          <button type="button" onClick={ticketOmaya} disabled={!sel || generating}
             className="flex items-center gap-1.5 px-3 py-1 rounded bg-c-brand text-white text-xs hover:opacity-90 disabled:opacity-30">
-            <Ticket className="w-3.5 h-3.5" /> Ticket Omaya
+            {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Ticket className="w-3.5 h-3.5" />}
+            Ticket Omaya
           </button>
           <button type="button" onClick={exportPdf} disabled={!sel}
             className="flex items-center gap-1.5 px-3 py-1 rounded border border-c-line text-c-ink-soft text-xs hover:bg-c-surface-soft disabled:opacity-30">

@@ -220,6 +220,57 @@ def get_docs_courtage(
     return svc.list_docs_courtage(id_distrib, id_ste_gerant_societe)
 
 
+class GenerateContratPayload(BaseModel):
+    id_doc_courtage: int
+    id_distrib: int
+    id_gerant: int
+    secteur: str = ""
+    date_signature: str      # 'YYYY-MM-DD'
+    date_avenant: str = ""
+    creer_suivi: bool = True   # cree entree societe_doc_courtage
+
+
+@router.post("/generate-contrat")
+def post_generate_contrat(
+    payload: GenerateContratPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    """Publipostage : genere le DOCX rempli + cree eventuellement
+    l'entree societe_doc_courtage (suivi d'edition)."""
+    from fastapi.responses import Response
+    from app.intranets.adm.services import publipostage_courtage as pub
+    try:
+        docx_bytes = pub.generer_contrat_docx(
+            payload.id_doc_courtage, payload.id_distrib,
+            payload.id_gerant, payload.secteur, payload.date_signature,
+            payload.date_avenant,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    if payload.creer_suivi:
+        doc = svc.get_pg_connection("rh").query_one(
+            "SELECT id_groupe_operateur FROM rh.pgt_doc_courtage WHERE id_doc_courtage = ? LIMIT 1",
+            (int(payload.id_doc_courtage),),
+        ) or {}
+        pub.create_societe_doc_courtage(
+            payload.id_distrib, payload.id_gerant, payload.id_doc_courtage,
+            int(doc.get("id_groupe_operateur") or 0),
+            payload.secteur, u.id_salarie,
+        )
+
+    return Response(
+        content=docx_bytes,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="contrat-{payload.id_doc_courtage}-{payload.date_signature}.docx"',
+        },
+    )
+
+
 @router.post("/groupe-rem/{id_source}/duplicate-to")
 def post_duplicate_groupe_rem(
     id_source: int,
