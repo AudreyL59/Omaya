@@ -39,7 +39,7 @@ def _droit(user: UserToken, code: str | None) -> bool:
 # Items dont la page cible existe déjà côté frontend (Routes explicites dans App.tsx).
 # Tout ce qui n'est pas dans ce set est "non codé" → grisé pour le user de
 # référence (id_salarie=6), masqué pour les autres.
-_CODED_ITEMS: set[str] = {"agenda_rec", "stats_rh", "organigramme", "suivi_production", "registre_rh", "dpae", "ctt_travail", "parc_auto", "ulease_docs", "ulease_recherche", "formations_iag", "mutuelle", "params_rh", "recherche_cv", "recherche_cv_kw", "lieu_rdv", "saisie_cv", "prevision_rec", "cv_presaisis", "villes_favori", "gestion_recruteurs", "params_cvtheque", "import_contrats", "import_masse", "import_colonnes", "import_notations", "suivi_factures", "suivi_sfr", "suivi_energie"}
+_CODED_ITEMS: set[str] = {"agenda_rec", "stats_rh", "organigramme", "suivi_production", "registre_rh", "dpae", "ctt_travail", "parc_auto", "ulease_docs", "ulease_recherche", "formations_iag", "mutuelle", "params_rh", "recherche_cv", "recherche_cv_kw", "lieu_rdv", "saisie_cv", "prevision_rec", "cv_presaisis", "villes_favori", "gestion_recruteurs", "params_cvtheque", "import_contrats", "import_masse", "import_colonnes", "import_notations", "suivi_factures", "suivi_sfr", "suivi_energie", "rech_ville"}
 _CODED_HEADER: set[str] = {"organigramme", "tickets", "search"}
 
 # User de référence pour qui les items non codés restent visibles (en grisé)
@@ -83,7 +83,7 @@ def get_menu(user: UserToken = Depends(get_current_user)):
                 {"key": "suivi_production",  "label": "Suivi Production",         "route": "/production",      "icon": "line-chart","droit": "SuiviProd"},
                 {"key": "suivi_sfr",         "label": "Suivi SFR",                "route": "/suivi-sfr",       "icon": "antenna",   "droit": "SuiviSFR"},
                 {"key": "suivi_energie",     "label": "Suivi Énergie",            "route": "/suivi-energie",   "icon": "zap",       "droit": "SuiviEnergie"},
-                {"key": "rech_ville",        "label": "Rechercher / Ajouter une ville","route":"/villes",     "icon": "map-pin",   "droit": "Menu_Prod"},
+                {"key": "rech_ville",        "label": "Rechercher / Ajouter une ville","route":"/recrutement/villes","icon": "map-pin",   "droit": "Menu_Prod"},
             ],
         },
         {
