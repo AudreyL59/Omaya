@@ -39,7 +39,10 @@ interface EditionCtt {
 }
 
 interface Props {
-  idSte: number
+  // string plutot que number : id_ste est un bigint WinDev (timestamp
+  // 17 chiffres) qui depasse Number.MAX_SAFE_INTEGER (2^53). parseInt()
+  // perd de la precision et charge la mauvaise fiche.
+  idSte: string
   onClose: () => void
 }
 

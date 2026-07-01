@@ -18,7 +18,7 @@ type Champ =
   | 'gerant_paraphe' | 'gerant_signature'
 
 interface Props {
-  idSociete: number
+  idSociete: string        // bigint WinDev -> string pour eviter perte precision JS
   champ: Champ
   label: string
   hasImage: boolean

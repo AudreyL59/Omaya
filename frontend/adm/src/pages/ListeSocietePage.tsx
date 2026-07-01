@@ -45,7 +45,10 @@ export default function ListeSocietePage() {
   const [rows, setRows] = useState<Societe[]>([])
   const [selected, setSelected] = useState<string>('')
   const [loading, setLoading] = useState(false)
-  const [fiche, setFiche] = useState<{ open: boolean; id: number | null }>({ open: false, id: null })
+  // id_societe_auto est un bigint WinDev (timestamp 17 chiffres) > 2^53
+  // -> DOIT rester en string, sinon parseInt perd de la precision et on
+  // ouvre la mauvaise fiche.
+  const [fiche, setFiche] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
 
   const load = useCallback(async () => {
     setLoading(true); setSelected('')
@@ -128,7 +131,7 @@ export default function ListeSocietePage() {
   }
   const onModifier = () => {
     if (!sel) { showToast('Sélectionne une société d\'abord.', 'info'); return }
-    setFiche({ open: true, id: parseInt(sel.id_societe_auto, 10) })
+    setFiche({ open: true, id: sel.id_societe_auto })
   }
 
   return (
@@ -227,7 +230,7 @@ export default function ListeSocietePage() {
                 ) : visible.map(r => (
                   <tr key={r.id_societe_auto}
                     onClick={() => setSelected(r.id_societe_auto)}
-                    onDoubleClick={() => setFiche({ open: true, id: parseInt(r.id_societe_auto, 10) })}
+                    onDoubleClick={() => setFiche({ open: true, id: r.id_societe_auto })}
                     className={`cursor-pointer ${
                       selected === r.id_societe_auto
                         ? 'bg-c-brand/10' : 'hover:bg-c-surface-soft'

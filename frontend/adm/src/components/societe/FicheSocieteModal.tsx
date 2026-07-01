@@ -46,7 +46,10 @@ interface SocieteDetail {
 }
 
 interface Props {
-  idSocieteAuto: number | null    // null = nouveau
+  // string plutot que number : id_societe_auto est un bigint WinDev
+  // (timestamp 17 chiffres) qui depasse Number.MAX_SAFE_INTEGER (2^53).
+  // parseInt() perd de la precision et ouvre la mauvaise fiche.
+  idSocieteAuto: string | null    // null = nouveau
   onClose: () => void
   onSaved?: () => void
 }
@@ -453,7 +456,7 @@ export default function FicheSocieteModal({
         />
       )}
       {showDocsDemater && d.id_ste && d.id_ste !== '0' && (
-        <DocsDematerModal idSte={parseInt(d.id_ste, 10)}
+        <DocsDematerModal idSte={d.id_ste}
           onClose={() => setShowDocsDemater(false)} />
       )}
     </div>
