@@ -24,6 +24,7 @@ import {
   useTableSortFilter, SortableTh, FilterInput,
 } from '@shared/production/_tableHelpers'
 import TicketCallPlanning from '@/components/sfr/TicketCallPlanning'
+import TicketCallEnergieContenuModal from '@/components/energie/TicketCallEnergieContenuModal'
 
 const API_BASE = '/api/adm'
 
@@ -79,6 +80,7 @@ export default function EnergieTicketCallPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [onglet, setOnglet] = useState<Onglet>('liste')
+  const [contenuTicketId, setContenuTicketId] = useState<string>('')
 
   const rechercher = async () => {
     if (du > au) { showToast('Dates incohérentes', 'error'); return }
@@ -174,7 +176,8 @@ export default function EnergieTicketCallPage() {
       <div className="flex-1 overflow-hidden">
         {onglet === 'liste' && (
           <OngletListe tickets={tickets} selected={selected}
-            toggle={toggle} toggleAll={toggleAll} />
+            toggle={toggle} toggleAll={toggleAll}
+            onVoirTicket={(id) => setContenuTicketId(id)} />
         )}
         {onglet === 'planning' && (
           <TicketCallPlanning rdvs={rdvs} initialDate={du} />
@@ -183,15 +186,22 @@ export default function EnergieTicketCallPage() {
           <OngletVentes ventes={ventes} />
         )}
       </div>
+
+      {contenuTicketId && (
+        <TicketCallEnergieContenuModal idTkListe={contenuTicketId}
+          onClose={() => setContenuTicketId('')}
+          onChanged={() => { void rechercher() }} />
+      )}
     </div>
   )
 }
 
 function OngletListe({
-  tickets, selected, toggle, toggleAll,
+  tickets, selected, toggle, toggleAll, onVoirTicket,
 }: {
   tickets: Ticket[]; selected: Set<string>
   toggle: (id: string) => void; toggleAll: () => void
+  onVoirTicket: (idTkListe: string) => void
 }) {
   const tsf = useTableSortFilter(
     tickets as unknown as Array<Record<string, unknown>>,
@@ -263,7 +273,7 @@ function OngletListe({
               return (
                 <tr key={r.id_tk_call}
                   onClick={() => toggle(r.id_tk_call)}
-                  onDoubleClick={() => showToast('Voir le ticket : à venir (commit 2)', 'info')}
+                  onDoubleClick={() => onVoirTicket(r.id_tk_liste)}
                   className={`cursor-pointer ${
                     r.row_color_alert ? 'bg-red-50 hover:bg-red-100'
                                        : isSel ? 'bg-c-brand/10' : 'hover:bg-c-surface-soft'

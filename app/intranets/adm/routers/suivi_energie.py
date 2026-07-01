@@ -3,6 +3,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -58,6 +59,49 @@ def get_ticket_call_planning(
     _u: UserToken = Depends(get_current_user),
 ):
     return svc.planning_appels_energie(du, au, etat)
+
+
+@router.get("/ticket-call/detail/{id_tk_liste}",
+            response_model=svc.TicketCallDetail)
+def get_ticket_call_detail(
+    id_tk_liste: int,
+    _u: UserToken = Depends(get_current_user),
+):
+    from fastapi import HTTPException
+    d = svc.get_ticket_call_detail(id_tk_liste)
+    if not d:
+        raise HTTPException(404, "Ticket introuvable")
+    return d
+
+
+class UpdatePanierPayload(BaseModel):
+    num: str = ""
+    statut_prod: int = 0
+
+
+@router.put("/ticket-call/panier/{id_panier}")
+def put_ticket_call_panier(
+    id_panier: int,
+    payload: UpdatePanierPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.update_panier_call_energie(
+        id_panier, payload.num, payload.statut_prod, u.id_salarie,
+    )
+    return {"ok": True}
+
+
+@router.get("/ticket-call/{id_tk_call}/justif-url")
+def get_ticket_call_justif_url(
+    id_tk_call: int,
+    id_panier: int,
+    partenaire: str,
+    source: str = "normal",   # 'normal' | 'sos'
+    _u: UserToken = Depends(get_current_user),
+):
+    return {"url": svc.resolve_call_justif_url(
+        id_tk_call, id_panier, partenaire, source,
+    )}
 
 
 @router.get("/extraction/export.xlsx")

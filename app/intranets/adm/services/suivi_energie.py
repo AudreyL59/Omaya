@@ -577,6 +577,259 @@ def planning_appels_energie(
     return out
 
 
+class TicketCallPanierItem(BaseModel):
+    id_tk_call_panier: str
+    id_produit: int
+    partenaire: str = ""
+    lib_offre: str = ""
+    num_bs: str = ""
+    num_date_saisie: str = ""
+    statut_prod: int = 0
+    motif_annulation: str = ""
+    date_entree: str = ""             # DateActiv
+    observations: str = ""            # RefClient
+    opt_mail: bool = False
+    opt_e_facture: bool = False
+    opt_e_communication: bool = False
+    opt_optin_commercial: bool = False
+    opt_consent_consult_distri: bool = False
+    opt_accept_com_parte: bool = False
+    opt_mandat: bool = False
+    opt_energie_verte_gaz: bool = False
+    opt_reforestation: bool = False
+    format_numerique: bool = False
+    a_creer: bool = False
+
+
+class TicketCallDetail(BaseModel):
+    id_tk_liste: str
+    id_tk_call: str
+    id_client: str
+    # infos ticket
+    date_crea: str = ""
+    lib_statut: str = ""
+    date_report: str = ""
+    cloturee: bool = False
+    date_cloture: str = ""
+    op_dest: int = 0
+    nom_dest: str = ""
+    # infos client
+    civilite: int = 0
+    nom_client: str = ""
+    prenom_client: str = ""
+    nom_marital_client: str = ""
+    date_naiss: str = ""
+    dep_naiss: str = ""
+    adresse1: str = ""
+    adresse2: str = ""
+    cp: str = ""
+    ville: str = ""
+    type_logement: str = ""
+    mobile1: str = ""
+    adr_mail: str = ""
+    date_sign: str = ""              # date_crea..PartieDate
+    ref_appel: str = ""
+    info_vente: str = ""
+    opt_partenaire: bool = False     # Consent rappel partenaires
+    intervention_vend: bool = False
+    # salarie (auteur)
+    id_salarie: int = 0
+    nom_operateur: str = ""
+    # paniers
+    paniers: list[TicketCallPanierItem] = []
+
+
+def get_ticket_call_detail(id_tk_liste: int) -> TicketCallDetail | None:
+    """Charge le detail complet du ticket Call Energie pour le modal
+    Fen_ContenuTicketCall."""
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    db_rh = get_pg_connection("rh")
+    db_adv = get_pg_connection("adv")
+
+    # TK_Liste
+    tl = db_tk.query_one(
+        """SELECT id_tk_liste, date_crea, op_crea, op_dest, id_tk_statut,
+                   date_report, cloturee, date_cloture
+             FROM ticket.pgt_tk_liste WHERE id_tk_liste = ? LIMIT 1""",
+        (int(id_tk_liste),),
+    )
+    if not tl:
+        return None
+
+    # TK_Call
+    tc = db_bo.query_one(
+        """SELECT id_tk_call, id_salarie, id_client,
+                   civilite_client, nom_client, prenom_client,
+                   nom_marital_client, date_naiss, dep_naiss,
+                   adresse1, adresse2, cp, ville, type_logement,
+                   mobile1, adr_mail, ref_appel, info_vente,
+                   intervention_vend, opt_partenaire
+              FROM ticket_bo.pgt_tk_call
+             WHERE id_tk_liste = ?
+               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+             LIMIT 1""",
+        (int(id_tk_liste),),
+    ) or {}
+
+    # Statut ticket
+    lib_statut = ""
+    if tl.get("id_tk_statut"):
+        s = db_tk.query_one(
+            "SELECT lib_statut FROM ticket.pgt_tk_statut WHERE id_tk_statut = ? LIMIT 1",
+            (int(tl["id_tk_statut"]),),
+        )
+        lib_statut = (s or {}).get("lib_statut") or ""
+
+    # Operateur (id_salarie de TK_Call sinon op_crea)
+    id_sal = int(tc.get("id_salarie") or 0) or int(tl.get("op_crea") or 0)
+    nom_ope = ""
+    id_dest = int(tl.get("op_dest") or 0)
+    nom_dest = ""
+    if id_sal or id_dest:
+        ids = ",".join(str(i) for i in [id_sal, id_dest] if i)
+        if ids:
+            sals = db_rh.query(
+                f"SELECT id_salarie, nom, prenom FROM rh.pgt_salarie WHERE id_salarie IN ({ids})",
+            ) or []
+            for x in sals:
+                prenom = _capitalize((x.get("prenom") or "").lower())
+                lbl = f"{prenom} {(x.get('nom') or '').upper()}".strip()
+                if int(x["id_salarie"]) == id_sal: nom_ope = lbl
+                if int(x["id_salarie"]) == id_dest: nom_dest = lbl
+
+    # Paniers
+    paniers: list[TicketCallPanierItem] = []
+    if tc.get("id_tk_call"):
+        pans = db_bo.query(
+            """SELECT id_tk_call_panier, id_produit, partenaire, num_bs,
+                       num_date_saisie, statut_prod, motif_annulation,
+                       date_entree, observations,
+                       opt_mail, opt_e_facture, opt_e_communication,
+                       opt_optin_commercial, opt_consent_consult_distri,
+                       opt_accept_com_parte, opt_mandat,
+                       opt_energie_verte_gaz, opt_reforestation,
+                       format_numerique
+                  FROM ticket_bo.pgt_tk_call_panier
+                 WHERE id_tk_call = ?
+                   AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (int(tc["id_tk_call"]),),
+        ) or []
+        # Lookup produits par partenaire
+        prods_cache: dict[tuple[str, int], str] = {}
+        for p in pans:
+            part = (p.get("partenaire") or "").upper()
+            pid = int(p.get("id_produit") or 0)
+            lib = ""
+            if part and pid:
+                if (part, pid) not in prods_cache:
+                    try:
+                        table = f"pgt_{part.lower()}_produit"
+                        r = db_adv.query_one(
+                            f"SELECT lib_produit FROM adv.{table} WHERE id_produit = ? LIMIT 1",
+                            (pid,),
+                        )
+                        prods_cache[(part, pid)] = (r or {}).get("lib_produit") or ""
+                    except Exception:
+                        prods_cache[(part, pid)] = ""
+                lib = prods_cache[(part, pid)]
+            num_bs = p.get("num_bs") or ""
+            statut_prod = int(p.get("statut_prod") or 0)
+            paniers.append(TicketCallPanierItem(
+                id_tk_call_panier=str(p["id_tk_call_panier"]),
+                id_produit=pid,
+                partenaire=part,
+                lib_offre=lib,
+                num_bs=num_bs,
+                num_date_saisie=_date_str(p.get("num_date_saisie")),
+                statut_prod=statut_prod,
+                motif_annulation=p.get("motif_annulation") or "",
+                date_entree=_date_str(p.get("date_entree")),
+                observations=p.get("observations") or "",
+                opt_mail=bool(p.get("opt_mail")),
+                opt_e_facture=bool(p.get("opt_e_facture")),
+                opt_e_communication=bool(p.get("opt_e_communication")),
+                opt_optin_commercial=bool(p.get("opt_optin_commercial")),
+                opt_consent_consult_distri=bool(p.get("opt_consent_consult_distri")),
+                opt_accept_com_parte=bool(p.get("opt_accept_com_parte")),
+                opt_mandat=bool(p.get("opt_mandat")),
+                opt_energie_verte_gaz=bool(p.get("opt_energie_verte_gaz")),
+                opt_reforestation=bool(p.get("opt_reforestation")),
+                format_numerique=bool(p.get("format_numerique")),
+                a_creer=(num_bs != "" and statut_prod == 1),
+            ))
+
+    dc = tl.get("date_crea")
+    return TicketCallDetail(
+        id_tk_liste=str(tl["id_tk_liste"]),
+        id_tk_call=str(tc.get("id_tk_call") or ""),
+        id_client=str(tc.get("id_client") or ""),
+        date_crea=(dc.strftime("%Y-%m-%d %H:%M:%S")
+                   if isinstance(dc, datetime) else _date_str(dc)),
+        lib_statut=lib_statut,
+        date_report=_date_str(tl.get("date_report")),
+        cloturee=bool(tl.get("cloturee")),
+        date_cloture=_date_str(tl.get("date_cloture")),
+        op_dest=id_dest,
+        nom_dest=nom_dest,
+        civilite=int(tc.get("civilite_client") or 0),
+        nom_client=tc.get("nom_client") or "",
+        prenom_client=tc.get("prenom_client") or "",
+        nom_marital_client=tc.get("nom_marital_client") or "",
+        date_naiss=_date_str(tc.get("date_naiss")),
+        dep_naiss=str(tc.get("dep_naiss") or ""),
+        adresse1=tc.get("adresse1") or "",
+        adresse2=tc.get("adresse2") or "",
+        cp=tc.get("cp") or "",
+        ville=tc.get("ville") or "",
+        type_logement=str(tc.get("type_logement") or ""),
+        mobile1=tc.get("mobile1") or "",
+        adr_mail=tc.get("adr_mail") or "",
+        date_sign=_date_str(dc.date() if isinstance(dc, datetime) else dc),
+        ref_appel=tc.get("ref_appel") or "",
+        info_vente=tc.get("info_vente") or "",
+        opt_partenaire=bool(tc.get("opt_partenaire")),
+        intervention_vend=bool(tc.get("intervention_vend")),
+        id_salarie=id_sal,
+        nom_operateur=nom_ope,
+        paniers=paniers,
+    )
+
+
+def update_panier_call_energie(
+    id_panier: int, num: str, statut_prod: int, op_id: int,
+) -> bool:
+    """Update NUM + StatutProd d'un panier."""
+    db = get_pg_connection("ticket_bo")
+    db.query(
+        """UPDATE ticket_bo.pgt_tk_call_panier
+              SET num_bs=?, num_date_saisie=NOW(), statut_prod=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_tk_call_panier=?""",
+        (num.upper(), int(statut_prod), int(op_id), int(id_panier)),
+    )
+    return True
+
+
+def resolve_call_justif_url(
+    id_tk_call: int, id_panier: int, partenaire: str, source: str = "normal",
+) -> str:
+    """Voir le justif (Fen_ContenuTicketCall) :
+    - Si partenaire OEN : {IDTK_Call_Panier}_Clarification.pdf
+    - Sinon : {idCall}_Justif.jpg
+    source : 'normal' -> groupe-exo, 'sos' -> sos.groupe-exo."""
+    import requests
+    base = ("https://sos.groupe-exo.omaya.fr" if source == "sos"
+            else "https://groupe-exo.omaya.fr")
+    if (partenaire or "").upper() == "OEN":
+        url = f"{base}/DocOmaya/{id_panier}_Clarification.pdf"
+    else:
+        url = f"{base}/DocOmaya/{id_tk_call}_Justif.jpg"
+    # Pas de HEAD ici (unique path, pas de fallback)
+    _ = requests
+    return url
+
+
 def export_extraction_energie_xlsx(
     rows: list[ExtractionEnergieRow],
 ) -> bytes:
