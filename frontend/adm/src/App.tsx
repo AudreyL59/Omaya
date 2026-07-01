@@ -42,6 +42,7 @@ import ImportAjoutColonnePage from '@/pages/ImportAjoutColonnePage'
 import ImportNotationPage from '@/pages/ImportNotationPage'
 import SuiviFacturesPage from '@/pages/SuiviFacturesPage'
 import SuiviSfrPage from '@/pages/SuiviSfrPage'
+import SuiviEnergiePage from '@/pages/SuiviEnergiePage'
 import SfrCttsARaccorderPage from '@/pages/SfrCttsARaccorderPage'
 import SfrRemunerationsPage from '@/pages/SfrRemunerationsPage'
 import SfrTicketCallPage from '@/pages/SfrTicketCallPage'
@@ -81,6 +82,7 @@ function App() {
           <Route path="envois-sms" element={<PlaceholderPage />} />
           <Route path="factures" element={<SuiviFacturesPage />} />
           <Route path="suivi-sfr" element={<SuiviSfrPage />} />
+          <Route path="suivi-energie" element={<SuiviEnergiePage />} />
           <Route path="suivi-sfr/ctts-a-raccorder" element={<SfrCttsARaccorderPage />} />
           <Route path="suivi-sfr/remunerations" element={<SfrRemunerationsPage />} />
           <Route path="suivi-sfr/ticket-call" element={<SfrTicketCallPage />} />
