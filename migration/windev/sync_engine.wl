@@ -421,13 +421,17 @@ END
 //   - une vraie Date vide ("00000000" interne -> "0000-01-01" en PG -> erreur)
 //   - un texte mal formate ("24/01/20") -> DateVersChaine plante avec une exception
 //   - "0000-01-01" deja en chaine, ou autres surprises
-// On encapsule l'affectation dans un WHEN EXCEPTION isole : si quoi que ce
-// soit echoue, on ne touche pas a la colonne cible -> reste NULL apres HRAZ.
+//
+// COMPORTEMENT : on FORCE toujours une affectation (Null si date vide/pourrie,
+// valeur reelle sinon). Ne PAS skip l'affectation, sinon la colonne du buffer
+// HFSQL garde sa valeur par defaut ("00000000") qui est envoyee telle quelle a
+// PG au HAdd/HModify -> PG refuse "L'an zero n'est pas une annee valide" et
+// l'enregistrement complet est perdu.
 
 PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string)
     WHEN EXCEPTION IN
         // Premier filtre brut sur la chaine (sans appeler DateVersChaine qui plante
-        // sur l'annee 0000). Si on detecte un marqueur de date vide -> skip.
+        // sur l'annee 0000). Si on detecte un marqueur de date vide -> Null explicite.
         sValSrc is string = "" + {sFileHF + "." + sColHF}
         bEmpty is boolean = (sValSrc = "" ...
                           OR sValSrc = "00000000" ...
@@ -436,7 +440,13 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
                           OR sValSrc = "00/00/0000" ...
                           OR sValSrc = "01/01/0000" ...
                           OR Gauche(sValSrc, 4) = "0000")
-        IF NOT bEmpty THEN
+        IF bEmpty THEN
+            // FORCE Null : sans ca, le buffer HFSQL PG garde "00000000"
+            // (valeur par defaut apres HReset) qui plante l'insert PG.
+            // Sur un HModify, ca ecrase aussi une eventuelle ancienne
+            // valeur PG (coherent avec la source qui a ete videe).
+            {sFilePG + "." + sColPG} = Null
+        ELSE
             {sFilePG + "." + sColPG} = {sFileHF + "." + sColHF}
             // Si l'affectation a leve une erreur HFSQL silencieuse (ex. erreur 80
             // = format date invalide cote source : "24/01/20", textes pourris...),
@@ -451,7 +461,12 @@ PROCEDURE INTERNE TryAssignDate(LOCAL sFilePG, sColPG, sFileHF, sColHF is string
         END
     DO
         // affectation impossible (exception WLangage : DateVersChaine sur annee
-        // 0000, type mismatch...) -> on laisse NULL.
+        // 0000, type mismatch...) -> on force Null.
+        WHEN EXCEPTION IN
+            {sFilePG + "." + sColPG} = Null
+        DO
+            // Meme le Null a echoue (rarissime, ex. colonne renommee) -> tant pis.
+        END
     END
 END
 
