@@ -83,7 +83,7 @@ def get_menu(user: UserToken = Depends(get_current_user)):
                 {"key": "suivi_production",  "label": "Suivi Production",         "route": "/production",      "icon": "line-chart","droit": "SuiviProd"},
                 {"key": "suivi_sfr",         "label": "Suivi SFR",                "route": "/suivi-sfr",       "icon": "antenna",   "droit": "SuiviSFR"},
                 {"key": "suivi_energie",     "label": "Suivi Énergie",            "route": "/suivi-energie",   "icon": "zap",       "droit": "SuiviEnergie"},
-                {"key": "rech_ville",        "label": "Rechercher / Ajouter une ville","route":"/recrutement/villes","icon": "map-pin",   "droit": "Menu_Prod"},
+                {"key": "rech_ville",        "label": "Rechercher / Ajouter une ville","route":"/villes",     "icon": "map-pin",   "droit": "Menu_Prod"},
             ],
         },
         {
