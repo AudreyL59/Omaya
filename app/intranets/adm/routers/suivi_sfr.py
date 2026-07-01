@@ -368,6 +368,39 @@ def get_suivi_rdv_tech(
     return svc.search_suivi_rdv_tech(du, au, etat)
 
 
+# -- Fen_ETP -----------------------------------------------------------
+
+
+@router.get("/extraction-etp", response_model=list[svc.ExtractionEtpRow])
+def get_extraction_etp(
+    du: date,
+    au: date,
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.search_extraction_etp(du, au)
+
+
+@router.get("/extraction-etp/export.xlsx")
+def get_extraction_etp_export(
+    du: date,
+    au: date,
+    _u: UserToken = Depends(get_current_user),
+):
+    from fastapi.responses import Response
+    rows = svc.search_extraction_etp(du, au)
+    content = svc.export_extraction_etp_xlsx(rows)
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="extraction-etp-{du}-{au}.xlsx"',
+        },
+    )
+
+
 @router.get("/rdv-tech/statuts", response_model=list[svc.SfrStatutRdv])
 def get_sfr_statuts_rdv(_u: UserToken = Depends(get_current_user)):
     return svc.list_sfr_statuts_rdv()

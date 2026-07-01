@@ -48,7 +48,7 @@ const ITEMS: MenuItem[] = [
   { key: 'rdv-tech',         label: 'RDV Tech',
     icon: CalendarClock,  to: 'rdv-tech',          implemented: true },
   { key: 'extraction-etp',   label: 'Extraction ETP',
-    icon: Users,          to: 'extraction-etp',    implemented: false },
+    icon: Users,          to: 'extraction-etp',    implemented: true },
 ]
 
 export default function SuiviSfrPage() {

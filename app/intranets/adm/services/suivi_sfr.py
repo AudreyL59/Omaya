@@ -1700,6 +1700,108 @@ def search_suivi_rdv_tech(du: date, au: date, etat: str = "tous",
 
 
 # ====================================================================
+# 9. EXTRACTION ETP (Fen_ETP)
+# ====================================================================
+
+
+class ExtractionEtpRow(BaseModel):
+    code_cluster: str
+    libelle_cluster: str
+    courtier: str = "EXOSPHERE"
+    inf_ou_egal_2: int = 0
+    sup_ou_egal_3: int = 0
+
+
+def search_extraction_etp(du: date, au: date) -> list[ExtractionEtpRow]:
+    """Cf code WinDev Fen_ETP :
+    Compte pour chaque cluster combien de vendeurs ont <=2 contrats
+    et combien ont >=3 contrats SUR LA PERIODE, en FIBRE, hors TK
+    et hors HorsCible. Chaque vendeur n'est comptabilise QUE dans
+    son cluster majoritaire (celui ou il a le + de contrats grace
+    au ORDER BY nbCtt DESC + skip si vendeur deja vu)."""
+    db = get_pg_connection("adv")
+    rows = db.query(
+        """SELECT COUNT(c.id_contrat) AS nb_ctt,
+                  cl.code_vad, cl.nom_cluster, c.id_salarie
+             FROM adv.pgt_sfr_contrat c
+             JOIN adv.pgt_sfr_cluster cl ON cl.id_sfr_cluster = c.id_sfr_cluster
+             JOIN adv.pgt_sfr_produit p  ON p.id_produit = c.id_produit
+            WHERE (c.modif_elem IS NULL OR c.modif_elem NOT LIKE '%suppr%')
+              AND c.date_signature BETWEEN ? AND ?
+              AND p.famille = 'FIBRE'
+              AND c.id_sfr_cluster <> 0
+              AND COALESCE(c.hors_cible, FALSE) = FALSE
+              AND c.num_bs NOT ILIKE 'TK%'
+            GROUP BY cl.code_vad, cl.nom_cluster, c.id_salarie
+           HAVING COUNT(c.id_contrat) > 0
+            ORDER BY nb_ctt DESC""",
+        (du, au),
+    ) or []
+
+    # Dedup vendeur + agrege par cluster
+    seen_vendeurs: set[int] = set()
+    by_cluster: dict[str, ExtractionEtpRow] = {}
+    for r in rows:
+        id_sa = int(r.get("id_salarie") or 0)
+        if id_sa in seen_vendeurs:
+            continue
+        seen_vendeurs.add(id_sa)
+
+        code = r.get("code_vad") or ""
+        item = by_cluster.get(code)
+        if item is None:
+            item = ExtractionEtpRow(
+                code_cluster=code,
+                libelle_cluster=r.get("nom_cluster") or "",
+            )
+            by_cluster[code] = item
+
+        nb = int(r.get("nb_ctt") or 0)
+        if nb <= 2:
+            item.inf_ou_egal_2 += 1
+        else:
+            item.sup_ou_egal_3 += 1
+
+    return list(by_cluster.values())
+
+
+def export_extraction_etp_xlsx(rows: list[ExtractionEtpRow]) -> bytes:
+    """XLSX simple sans couleurs."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font
+
+    wb = Workbook()
+    ws = wb.active; ws.title = "Extraction ETP"
+    ws.append(["Code Cluster", "Libellé Cluster", "Courtier",
+                "Inf ou égal à 2", "Sup ou égal à 3"])
+    header_fill = PatternFill(start_color="FF17494E", end_color="FF17494E",
+                               fill_type="solid")
+    header_font = Font(color="FFFFFFFF", bold=True)
+    for cell in ws[1]:
+        cell.fill = header_fill; cell.font = header_font
+
+    total_inf = total_sup = 0
+    for r in rows:
+        ws.append([r.code_cluster, r.libelle_cluster, r.courtier,
+                    r.inf_ou_egal_2, r.sup_ou_egal_3])
+        total_inf += r.inf_ou_egal_2
+        total_sup += r.sup_ou_egal_3
+
+    # Ligne Somme
+    ws.append(["", "Somme", "", total_inf, total_sup])
+    total_font = Font(bold=True)
+    for cell in ws[ws.max_row]:
+        cell.font = total_font
+
+    for i, w in enumerate([14, 32, 12, 14, 14], start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    ws.freeze_panes = "A2"
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return buf.read()
+
+
+# ====================================================================
 # 5. PARCOURS CHAINES (Fen_ParcoursChaine)
 # ====================================================================
 
