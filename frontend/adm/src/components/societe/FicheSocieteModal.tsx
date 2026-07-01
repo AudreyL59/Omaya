@@ -21,6 +21,7 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import SocieteImageSlot from './SocieteImageSlot'
+import DocsDematerModal from './DocsDematerModal'
 import PersonnePicker from '@/components/PersonnePicker'
 import OrgaPicker from '@/components/OrgaPicker'
 
@@ -78,6 +79,7 @@ export default function FicheSocieteModal({
   const [showSignature, setShowSignature] = useState(false)
   const [showGerantPicker, setShowGerantPicker] = useState(false)
   const [showOrgaPicker, setShowOrgaPicker] = useState(false)
+  const [showDocsDemater, setShowDocsDemater] = useState(false)
 
   const reloadImages = () => {
     if (isNew || !idSocieteAuto) return
@@ -237,9 +239,9 @@ export default function FicheSocieteModal({
                 title={isNew ? 'Enregistrez la société d\'abord' : ''}>
                 <PenTool className="w-3.5 h-3.5" /> Signature Démat
               </button>
-              {!isNew && (
+              {!isNew && d.id_ste && d.id_ste !== '0' && (
                 <button type="button"
-                  onClick={() => showToast('Docs Dématérialisés : à venir', 'info')}
+                  onClick={() => setShowDocsDemater(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
                   <FileText className="w-3.5 h-3.5" /> Docs
                 </button>
@@ -449,6 +451,10 @@ export default function FicheSocieteModal({
             setShowOrgaPicker(false)
           }}
         />
+      )}
+      {showDocsDemater && d.id_ste && d.id_ste !== '0' && (
+        <DocsDematerModal idSte={parseInt(d.id_ste, 10)}
+          onClose={() => setShowDocsDemater(false)} />
       )}
     </div>
   )
