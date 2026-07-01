@@ -21,6 +21,7 @@ import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   useTableSortFilter, SortableTh, FilterInput,
 } from '@shared/production/_tableHelpers'
+import FicheSocieteModal from '@/components/societe/FicheSocieteModal'
 
 const API_BASE = '/api/adm'
 
@@ -44,6 +45,7 @@ export default function ListeSocietePage() {
   const [rows, setRows] = useState<Societe[]>([])
   const [selected, setSelected] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [fiche, setFiche] = useState<{ open: boolean; id: number | null }>({ open: false, id: null })
 
   const load = useCallback(async () => {
     setLoading(true); setSelected('')
@@ -121,11 +123,12 @@ export default function ListeSocietePage() {
       'Vous êtes sur le point d\'archiver cette société. Voulez-vous continuer ?',
     )
   }
-  const notImpl = (label: string) => () => {
-    if (!sel && ['Modifier'].includes(label)) {
-      showToast('Sélectionne une société d\'abord.', 'info'); return
-    }
-    showToast(`${label} : à venir (Fen_FicheSociété)`, 'info')
+  const onNouveau = () => {
+    setFiche({ open: true, id: null })
+  }
+  const onModifier = () => {
+    if (!sel) { showToast('Sélectionne une société d\'abord.', 'info'); return }
+    setFiche({ open: true, id: parseInt(sel.id_societe_auto, 10) })
   }
 
   return (
@@ -143,7 +146,7 @@ export default function ListeSocietePage() {
 
       {/* Barre d'actions */}
       <div className="flex items-center gap-2 mb-3 bg-white p-3 rounded-xl border border-c-line text-sm flex-wrap">
-        <button type="button" onClick={notImpl('Nouveau')}
+        <button type="button" onClick={onNouveau}
           className="flex items-center gap-1.5 px-3 py-1 rounded text-c-brand hover:bg-c-brand/10 text-xs">
           <Plus className="w-4 h-4" /> Nouveau
         </button>
@@ -155,7 +158,7 @@ export default function ListeSocietePage() {
           className="flex items-center gap-1.5 px-3 py-1 rounded text-red-600 hover:bg-red-50 disabled:opacity-30 text-xs">
           <Trash2 className="w-4 h-4" /> Supprimer
         </button>
-        <button type="button" onClick={notImpl('Modifier')} disabled={!sel}
+        <button type="button" onClick={onModifier} disabled={!sel}
           className="flex items-center gap-1.5 px-3 py-1 rounded text-c-brand hover:bg-c-brand/10 disabled:opacity-30 text-xs">
           <Pencil className="w-4 h-4" /> Modifier
         </button>
@@ -224,7 +227,7 @@ export default function ListeSocietePage() {
                 ) : visible.map(r => (
                   <tr key={r.id_societe_auto}
                     onClick={() => setSelected(r.id_societe_auto)}
-                    onDoubleClick={notImpl('Modifier')}
+                    onDoubleClick={() => setFiche({ open: true, id: parseInt(r.id_societe_auto, 10) })}
                     className={`cursor-pointer ${
                       selected === r.id_societe_auto
                         ? 'bg-c-brand/10' : 'hover:bg-c-surface-soft'
@@ -250,6 +253,12 @@ export default function ListeSocietePage() {
           )}
         </div>
       </div>
+
+      {fiche.open && (
+        <FicheSocieteModal idSocieteAuto={fiche.id}
+          onClose={() => setFiche({ open: false, id: null })}
+          onSaved={() => { void load() }} />
+      )}
     </div>
   )
 }

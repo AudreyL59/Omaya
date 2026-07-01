@@ -40,6 +40,205 @@ class SocieteItem(BaseModel):
     date_creation: str = ""
 
 
+class FormeJuri(BaseModel):
+    id_societe_form_juri: int
+    lib_form_juri: str = ""
+
+
+class SocieteDetail(BaseModel):
+    id_societe_auto: str = "0"
+    id_ste: str = "0"
+    id_type_orga: int = 1
+    is_actif: bool = True
+    raison_sociale: str = ""
+    rs_interne: str = ""
+    forme_juri: str = ""
+    date_creation: str = ""
+    siren: str = ""
+    siret: str = ""
+    num_orias: str = ""
+    rcs: str = ""
+    code_ape: str = ""
+    capital: float = 0.0
+    num_tva: str = ""
+    id_gerant: int = 0
+    gerant_nom: str = ""
+    gerant_type: str = ""
+    adresse1: str = ""
+    adresse2: str = ""
+    cp: str = ""
+    ville: str = ""
+    tel: str = ""
+    mail: str = ""
+    url: str = ""
+    iban: str = ""
+    bic: str = ""
+    idorganigramme: int = 0
+
+
+class SocietePayload(BaseModel):
+    id_type_orga: int = 1
+    is_actif: bool = True
+    raison_sociale: str = ""
+    rs_interne: str = ""
+    forme_juri: str = ""
+    date_creation: str | None = None
+    siren: str = ""
+    siret: str = ""
+    num_orias: str = ""
+    rcs: str = ""
+    code_ape: str = ""
+    capital: float = 0.0
+    num_tva: str = ""
+    id_gerant: int = 0
+    gerant_nom: str = ""
+    gerant_type: str = ""
+    adresse1: str = ""
+    adresse2: str = ""
+    cp: str = ""
+    ville: str = ""
+    tel: str = ""
+    mail: str = ""
+    url: str = ""
+    iban: str = ""
+    bic: str = ""
+    idorganigramme: int = 0
+
+
+def list_formes_juri() -> list[FormeJuri]:
+    db = get_pg_connection("rh")
+    rows = db.query(
+        """SELECT id_societe_form_juri, lib_form_juri
+             FROM rh.pgt_societe_formjuri
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY lib_form_juri""",
+    ) or []
+    return [FormeJuri(
+        id_societe_form_juri=int(r["id_societe_form_juri"]),
+        lib_form_juri=r.get("lib_form_juri") or "",
+    ) for r in rows]
+
+
+def get_societe(id_societe_auto: int) -> SocieteDetail | None:
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        """SELECT id_societe_auto, id_ste, id_type_orga, is_actif,
+                  raison_sociale, rs_interne, forme_juri, date_creation,
+                  siren, siret, num_orias, rcs, code_ape, capital, num_tva,
+                  id_gerant, gerant_nom, gerant_type,
+                  adresse1, adresse2, cp, ville, tel, mail, url,
+                  iban, bic, idorganigramme
+             FROM rh.pgt_societe
+            WHERE id_societe_auto = ? LIMIT 1""",
+        (int(id_societe_auto),),
+    )
+    if not r:
+        return None
+    return SocieteDetail(
+        id_societe_auto=str(r["id_societe_auto"]),
+        id_ste=str(r.get("id_ste") or 0),
+        id_type_orga=int(r.get("id_type_orga") or 1),
+        is_actif=bool(r.get("is_actif")),
+        raison_sociale=r.get("raison_sociale") or "",
+        rs_interne=r.get("rs_interne") or "",
+        forme_juri=str(r.get("forme_juri") or ""),
+        date_creation=_date_str(r.get("date_creation")),
+        siren=r.get("siren") or "",
+        siret=r.get("siret") or "",
+        num_orias=r.get("num_orias") or "",
+        rcs=r.get("rcs") or "",
+        code_ape=r.get("code_ape") or "",
+        capital=float(r.get("capital") or 0),
+        num_tva=r.get("num_tva") or "",
+        id_gerant=int(r.get("id_gerant") or 0),
+        gerant_nom=r.get("gerant_nom") or "",
+        gerant_type=r.get("gerant_type") or "",
+        adresse1=r.get("adresse1") or "",
+        adresse2=r.get("adresse2") or "",
+        cp=r.get("cp") or "",
+        ville=r.get("ville") or "",
+        tel=r.get("tel") or "",
+        mail=r.get("mail") or "",
+        url=r.get("url") or "",
+        iban=r.get("iban") or "",
+        bic=r.get("bic") or "",
+        idorganigramme=int(r.get("idorganigramme") or 0),
+    )
+
+
+def create_societe(p: SocietePayload, op_id: int) -> int:
+    """Cree une societe. IdSte selon type_orga :
+      - Interne (1) : 300 + count des internes actives (WinDev)
+      - Distrib (3) : timestamp"""
+    db = get_pg_connection("rh")
+    if int(p.id_type_orga) == TYPE_ORGA_INTERNE:
+        cnt = db.query_one(
+            """SELECT COUNT(*) AS n FROM rh.pgt_societe
+                WHERE id_type_orga = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (TYPE_ORGA_INTERNE,),
+        )
+        id_ste = 300 + int((cnt or {}).get("n") or 0)
+    else:
+        id_ste = _new_id()
+
+    auto = db.query_one(
+        "SELECT COALESCE(MAX(id_societe_auto), 0) + 1 AS n FROM rh.pgt_societe"
+    )
+    new_auto = int((auto or {}).get("n") or 1)
+    cle_composite = f"{id_ste}{int(p.id_type_orga)}"
+
+    db.query(
+        """INSERT INTO rh.pgt_societe
+              (id_societe_auto, id_ste, id_type_orga, is_actif,
+               raison_sociale, rs_interne, forme_juri, date_creation,
+               siren, siret, num_orias, rcs, code_ape, capital, num_tva,
+               id_gerant, gerant_nom, gerant_type,
+               adresse1, adresse2, cp, ville, tel, mail, url,
+               iban, bic, idorganigramme,
+               id_ste_id_type_orga,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (new_auto, id_ste, int(p.id_type_orga), bool(p.is_actif),
+         p.raison_sociale, p.rs_interne, p.forme_juri or "",
+         p.date_creation if p.date_creation else None,
+         p.siren, p.siret, p.num_orias, p.rcs, p.code_ape,
+         float(p.capital or 0), p.num_tva,
+         int(p.id_gerant or 0), p.gerant_nom, p.gerant_type,
+         p.adresse1, p.adresse2, p.cp, p.ville, p.tel, p.mail, p.url,
+         p.iban, p.bic, int(p.idorganigramme or 0),
+         cle_composite, int(op_id)),
+    )
+    return new_auto
+
+
+def update_societe(id_societe_auto: int, p: SocietePayload, op_id: int) -> bool:
+    db = get_pg_connection("rh")
+    db.query(
+        """UPDATE rh.pgt_societe
+              SET id_type_orga=?, is_actif=?, raison_sociale=?, rs_interne=?,
+                  forme_juri=?, date_creation=?,
+                  siren=?, siret=?, num_orias=?, rcs=?, code_ape=?,
+                  capital=?, num_tva=?,
+                  id_gerant=?, gerant_nom=?, gerant_type=?,
+                  adresse1=?, adresse2=?, cp=?, ville=?, tel=?, mail=?, url=?,
+                  iban=?, bic=?, idorganigramme=?,
+                  modif_date=NOW(), modif_op=?, modif_elem='modif'
+            WHERE id_societe_auto=?""",
+        (int(p.id_type_orga), bool(p.is_actif),
+         p.raison_sociale, p.rs_interne, p.forme_juri or "",
+         p.date_creation if p.date_creation else None,
+         p.siren, p.siret, p.num_orias, p.rcs, p.code_ape,
+         float(p.capital or 0), p.num_tva,
+         int(p.id_gerant or 0), p.gerant_nom, p.gerant_type,
+         p.adresse1, p.adresse2, p.cp, p.ville, p.tel, p.mail, p.url,
+         p.iban, p.bic, int(p.idorganigramme or 0),
+         int(op_id), int(id_societe_auto)),
+    )
+    return True
+
+
 def _new_id() -> int:
     """ID entier 8 octets = timestamp yyyyMMddHHmmssSSS."""
     return int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
