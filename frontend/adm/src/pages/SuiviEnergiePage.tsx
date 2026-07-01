@@ -22,7 +22,7 @@ interface MenuItem {
 
 const ITEMS: MenuItem[] = [
   { key: 'extraction',  label: 'Extraction Call',
-    icon: Download,     to: 'extraction',   implemented: false },
+    icon: Download,     to: 'extraction',   implemented: true },
   { key: 'ticket-call', label: 'Ticket CALL',
     icon: PhoneCall,    to: 'ticket-call',  implemented: false },
 ]
