@@ -230,6 +230,11 @@ def _affectation_pro(id_salarie: int) -> tuple[str, str, bool]:
 
 
 def _create_pro_contrat(td: dict, op_id: int) -> int:
+    """Cf. WinDev PRO_ajoutFicheContrat + traiterClient.
+
+    Cree le client (via traiter_client) si _tk_client fourni + INSERT
+    contrat + historisation etat initial (cf. WinDev ajouteHistoContrat).
+    """
     db = get_pg_connection("adv")
     id_contrat = _new_id()
     auto = db.query_one(
@@ -238,6 +243,37 @@ def _create_pro_contrat(td: dict, op_id: int) -> int:
     date_sign = td.get("date_signature")
     if isinstance(date_sign, str):
         date_sign = _parse_date_fr(date_sign)
+
+    # 1. Creation client via traiter_client si TkCall fournit des infos
+    id_client = int(td.get("id_client") or 0)
+    tk_client = td.get("_tk_client") or {}
+    if not id_client and tk_client and (
+            tk_client.get("nom") or tk_client.get("mail")):
+        try:
+            from app.intranets.adm.services.import_helpers_common import (
+                traiter_client,
+            )
+            id_client = traiter_client(
+                info_client={
+                    "nom": tk_client.get("nom") or "",
+                    "prenom": tk_client.get("prenom") or "",
+                    "adresse1": tk_client.get("adresse") or "",
+                    "adresse2": tk_client.get("cplt") or "",
+                    "cp": tk_client.get("cp") or "",
+                    "ville": tk_client.get("ville") or "",
+                    "gsm": tk_client.get("gsm") or "",
+                    "mail": tk_client.get("mail") or "",
+                    "date_naiss": tk_client.get("date_naiss"),
+                    "op_saisie": op_id,
+                    "modif_op": op_id,
+                },
+                force_maj=False, op_id=op_id,
+            ) or 0
+        except Exception:
+            id_client = 0
+
+    etat_initial = int(td.get("etat_contrat") or 37)
+    # 2. INSERT contrat
     db.query(
         """INSERT INTO adv.pgt_pro_contrat
               (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
@@ -249,17 +285,27 @@ def _create_pro_contrat(td: dict, op_id: int) -> int:
                    ?, ?, NOW(), ?, ?, '',
                    ?, NOW(), 'new')""",
         (int(auto["n"]) if auto else 1, id_contrat,
-         int(td.get("id_client") or 0),
+         id_client,
          int(td.get("id_salarie") or 0),
          int(td.get("id_ste") or 0),
          td.get("num_bs") or "",
          int(td.get("id_produit") or 0),
-         int(td.get("etat_contrat") or 37),
+         etat_initial,
          date_sign, int(op_id),
-         bool(td.get("non_call", True)),
+         # cf. WinDev PRO_ajoutFicheContrat : NonCALL par defaut FALSE
+         # sauf indication contraire (non_call peut etre override par TkCall)
+         bool(td.get("non_call", False)),
          td.get("commentaire") or "",
          int(op_id)),
     )
+
+    # 3. Historisation etat initial (cf. WinDev ajouteHistoContrat a la
+    # creation du contrat pour tracer l'etat initial 0 -> etat_initial)
+    try:
+        _ajoute_histo_pro_etat(id_contrat, 0, etat_initial, "", op_id)
+    except Exception:
+        pass
+
     return id_contrat
 
 
@@ -365,8 +411,9 @@ def _import_journalier_pro(
                     "id_produit": id_produit,
                     "etat_contrat": etat_initial,
                     "date_signature": date_sign,
-                    "non_call": True,
+                    "non_call": non_call,  # cf. WinDev - FALSE si TkCall trouve
                     "commentaire": signe,
+                    "_tk_client": tk_client,  # cf. WinDev traiterClient
                 },
             })
             if id_vendeur == 0:
