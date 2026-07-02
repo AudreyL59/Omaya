@@ -807,17 +807,23 @@ def _import_thermostat_oen(
     ws = wb.active
     cols = {k: _col_letter_to_index(v) for k, v in COLS_TH_OEN.items()}
     db = get_pg_connection("adv")
+    db_rh = get_pg_connection("rh")
 
     for i in range(2, (ws.max_row or 0) + 1):
         ref_client = _cell(ws, i, cols["num_cm"])
         if not ref_client:
             continue
-        # Cherche le contrat Elec du client
+        # Cherche le contrat Elec du client (cf. WinDev req :
+        # OEN_contrat + OEN_contrat_Option + OEN_produit).
         r = db.query_one(
-            """SELECT c.id_contrat, c.num_bs, c.id_salarie,
-                      p.lib_produit
+            """SELECT c.id_contrat, c.id_client, c.id_salarie,
+                      c.num_bs, c.date_signature, c.date_activation,
+                      c.elec_puissance, c.id_etat_oen,
+                      p.lib_produit, p.sous_fam,
+                      e.lib_etat
                  FROM adv.pgt_oen_contrat c
                  JOIN adv.pgt_oen_produit p ON p.id_produit = c.id_produit
+                 LEFT JOIN adv.pgt_oen_etat_contrat e ON e.id_etat = c.id_etat_oen
                 WHERE c.ref_client = ?
                   AND UPPER(COALESCE(p.sous_fam, '')) LIKE '%ELEC%'
                   AND (c.modif_elem IS NULL OR c.modif_elem NOT LIKE '%suppr%')
@@ -825,30 +831,81 @@ def _import_thermostat_oen(
             (ref_client,),
         )
         if not r:
-            pb_vendeur.append({"RefClient": ref_client,
-                               "Erreur": "CM ou contrat Elec Introuvable"})
+            pb_vendeur.append({
+                "CM Client": ref_client,
+                "Erreur": "CM ou contrat Elec Introuvable",
+            })
             resume.nb_erreurs += 1
             continue
 
         id_contrat = int(r["id_contrat"])
+        id_client = int(r.get("id_client") or 0)
+        id_salarie = int(r.get("id_salarie") or 0)
+
+        # Client (NOM, PRENOM, CP, VILLE)
+        cl = db.query_one(
+            """SELECT nom, prenom, cp, ville FROM adv.pgt_client
+                WHERE id_client = ? LIMIT 1""",
+            (id_client,),
+        ) or {}
+
+        # Vendeur + affectation (agence + equipe)
+        agence, equipe, _is_distrib = _affectation_oen(id_salarie)
+        vendeur = db_rh.query_one(
+            """SELECT nom, prenom FROM rh.pgt_salarie
+                WHERE id_salarie = ? LIMIT 1""",
+            (id_salarie,),
+        ) or {}
+
         ajoutes.append({
-            "RefClient": ref_client, "NumBS": r.get("num_bs"),
-            "LibProduit": r.get("lib_produit"),
+            "CM Client": ref_client,
+            "Vendeur NOM": vendeur.get("nom") or "",
+            "Vendeur Prenom": vendeur.get("prenom") or "",
+            "Lib Produit": r.get("lib_produit") or "",
+            "Num BS": r.get("num_bs") or "",
+            "Puissance": int(r.get("elec_puissance") or 0),
+            "Date Signature": str(r.get("date_signature") or ""),
+            "Date Activation": str(r.get("date_activation") or ""),
+            "Statut contrat": r.get("lib_etat") or "",
+            "Agence": agence, "Équipe": equipe,
+            "Client Nom": cl.get("nom") or "",
+            "Client Prenom": cl.get("prenom") or "",
+            "Client CP": cl.get("cp") or "",
+            "Client Ville": cl.get("ville") or "",
             "_payload_update_option": {"id_contrat": id_contrat},
         })
         resume.nb_ajoutes += 1
 
         if not p.simulation:
+            # Cf. WinDev : OEN_contrat_Option.OPT_Entretien = Vrai +
+            # HModifie(OEN_contrat_Option). En Python : UPDATE + fallback
+            # INSERT si la ligne _option n'existait pas encore.
             try:
-                db.query(
+                r_up = db.query(
                     """UPDATE adv.pgt_oen_contrat_option
                           SET opt_entretien = TRUE,
                               modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
                         WHERE id_contrat = ?""",
                     (int(op_id), id_contrat),
                 )
-            except Exception:
-                pass
+                # Si aucune ligne _option existait, on la cree
+                exists = db.query_one(
+                    "SELECT id_contrat FROM adv.pgt_oen_contrat_option WHERE id_contrat = ? LIMIT 1",
+                    (id_contrat,),
+                )
+                if not exists:
+                    db.query(
+                        """INSERT INTO adv.pgt_oen_contrat_option
+                              (id_contrat, opt_entretien,
+                               modif_date, modif_op, modif_elem)
+                           VALUES (?, TRUE, NOW(), ?, 'new')""",
+                        (id_contrat, int(op_id)),
+                    )
+            except Exception as e:
+                pb_vendeur.append({
+                    "CM Client": ref_client,
+                    "Erreur": f"MAJ OPT_Entretien: {e}",
+                })
     wb.close()
 
 
