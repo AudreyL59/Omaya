@@ -287,7 +287,12 @@ def _ajoute_histo_val_etat(id_contrat: int, old_etat: int, new_etat: int,
 
 
 def _create_val_contrat(td: dict, op_id: int) -> int:
-    """INSERT pgt_val_contrat (avec lookup TK_Call pour le client)."""
+    """Cf. WinDev VAL_ajoutFicheContrat + traiterClient.
+
+    Cree le client via traiter_client si _client fourni + calcule
+    nb_points via calcul_point_contrat + INSERT contrat + historisation
+    etat initial.
+    """
     db = get_pg_connection("adv")
     id_contrat = _new_id()
     auto = db.query_one(
@@ -296,30 +301,96 @@ def _create_val_contrat(td: dict, op_id: int) -> int:
     date_sign = td.get("date_signature")
     if isinstance(date_sign, str):
         date_sign = _parse_date_fr(date_sign)
+
+    # 1. Cree/enrichit le client via traiter_client
+    id_client = int(td.get("id_client") or 0)
+    tk_client = td.get("_client") or {}
+    if not id_client and tk_client and (
+            tk_client.get("nom") or tk_client.get("mail")):
+        try:
+            from app.intranets.adm.services.import_helpers_common import (
+                traiter_client,
+            )
+            id_client = traiter_client(
+                info_client={
+                    "nom": tk_client.get("nom") or "",
+                    "prenom": tk_client.get("prenom") or "",
+                    "adresse1": tk_client.get("adresse") or "",
+                    "adresse2": tk_client.get("cplt") or "",
+                    "cp": tk_client.get("cp") or "",
+                    "ville": tk_client.get("ville") or "",
+                    "gsm": tk_client.get("gsm") or "",
+                    "mail": tk_client.get("mail") or "",
+                    "date_naiss": tk_client.get("date_naiss"),
+                    "op_saisie": op_id, "modif_op": op_id,
+                }, force_maj=False, op_id=op_id,
+            ) or 0
+        except Exception:
+            id_client = 0
+
+    # 2. Calcul nb_points
+    nb_pts = float(td.get("nb_points") or 0)
+    if not nb_pts and date_sign:
+        id_prod = int(td.get("id_produit") or 0)
+        try:
+            from app.shared.sdtc.bareme import calcul_point_contrat
+            fam, ss_fam = "ASSU", "VAL"
+            if id_prod:
+                prod = db.query_one(
+                    """SELECT famille, sous_fam FROM adv.pgt_val_produit
+                        WHERE id_produit = ? LIMIT 1""",
+                    (id_prod,),
+                )
+                if prod:
+                    fam = prod.get("famille") or fam
+                    ss_fam = prod.get("sous_fam") or ss_fam
+            nb_pts = float(calcul_point_contrat(
+                fam=fam, ss_fam=ss_fam, palier=0,
+                date_sign=str(date_sign),
+                info_cplt="", palier2=0,
+            ) or 0)
+        except Exception:
+            nb_pts = 0.0
+
+    etat_initial = int(td.get("etat_contrat") or 1)
+
+    # 3. INSERT contrat complet
     db.query(
         """INSERT INTO adv.pgt_val_contrat
               (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
                num_bs, num_bs_associe, id_produit, id_etat_contrat,
-               date_signature, op_saisie, date_saisie, non_call,
-               format_numerique, info_interne, code_enr,
+               date_signature, info_partagee, info_interne, mois_p, nb_points,
+               op_saisie, date_saisie, non_call, format_numerique, code_enr,
                modif_op, modif_date, modif_elem)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, NOW(), ?, ?, ?, '',
+                   ?, ?, ?, '', ?,
+                   ?, NOW(), ?, ?, '',
                    ?, NOW(), 'new')""",
         (int(auto["n"]) if auto else 1, id_contrat,
-         int(td.get("id_client") or 0),
+         id_client,
          int(td.get("id_salarie") or 0),
          int(td.get("id_ste") or 0),
          td.get("num_bs") or "",
          td.get("num_bs_associe") or "",
          int(td.get("id_produit") or 0),
-         int(td.get("etat_contrat") or 1),
-         date_sign, int(op_id),
-         bool(td.get("non_call", True)),
-         _str(td.get("format_numerique")),
+         etat_initial,
+         date_sign,
+         td.get("info_partagee") or "",
          td.get("info_interne") or "",
+         nb_pts,
+         int(op_id),
+         # cf. WinDev VAL_ajoutFicheContrat : NonCALL=Faux par defaut
+         bool(td.get("non_call", False)),
+         _str(td.get("format_numerique")),
          int(op_id)),
     )
+
+    # 4. Historisation etat initial
+    try:
+        _ajoute_histo_val_etat(id_contrat, 0, etat_initial, "", op_id)
+    except Exception:
+        pass
+
     return id_contrat
 
 
