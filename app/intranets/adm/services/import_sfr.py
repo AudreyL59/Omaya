@@ -1290,12 +1290,40 @@ def _import_run(
                 })
 
             if montant_rem == 0:
+                # ---- BLOC 3 : Montant a 0 (feuille 4 WinDev) ----
                 nb_mont0 += 1
+                nom_vend = ""
+                try:
+                    v = get_pg_connection("rh").query_one(
+                        "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1",
+                        (id_sal,),
+                    ) or {}
+                    nom_vend = (
+                        f"{v.get('nom') or ''} "
+                        f"{(v.get('prenom') or '').title()}"
+                    ).strip()
+                except Exception:
+                    pass
                 modifies.append({
-                    "Onglet": sheet_name, "NumBS": num_bs,
-                    "Erreur": "Montant à 0",
-                    "Offre": offre, "TypeRem": type_rem,
+                    "Onglet": sheet_name,
+                    "NumBS": num_bs,
+                    "DateSign": str(date_sign or ""),
+                    "DateRa": str(date_ra or ""),
+                    "Client": f"{client_nom} {(client_prenom or '').title()}".strip(),
+                    "Offre": offre,
+                    "StatutRa": statut_ra,
+                    "MotifAnnul": motif_annul,
+                    "TypeRem": type_rem,
+                    "LibRem": lib_rem,
+                    "Periode": periode,
+                    "MontantRem": montant_rem,
+                    "Vendeur": nom_vend,
+                    "Agence": agence,
+                    "Equipe": equipe,
+                    "MoisPaiement": mois_p_str,
                     "Statut": statut,
+                    "MotifDero": motif_dero,
+                    "Note": "Montant à 0",
                 })
                 continue
 
