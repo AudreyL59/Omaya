@@ -245,7 +245,12 @@ def _calcul_points_iag(id_produit: int, date_sign: Optional[date]) -> float:
 
 
 def _create_iag_contrat(td: dict, op_id: int) -> int:
-    """Cree un iag_contrat. Retourne id_contrat cree."""
+    """Cf. WinDev IAG_ajoutFicheContrat + traiterClient.
+
+    Cree le client (via traiter_client) si _client fourni + INSERT
+    contrat + historisation etat initial (cf. WinDev ajouteHistoContrat).
+    Utilise date_saisie du TkCall si dispo (WinDev DATECREA), sinon NOW.
+    """
     db = get_pg_connection("adv")
     id_contrat = _new_id()
     auto = db.query_one(
@@ -257,6 +262,37 @@ def _create_iag_contrat(td: dict, op_id: int) -> int:
     if isinstance(date_sign, str):
         date_sign = _parse_date_fr(date_sign)
 
+    # 1. Creation client via traiter_client si _client fourni
+    id_client = int(td.get("id_client") or 0)
+    tk_client = td.get("_client") or {}
+    if not id_client and tk_client and (
+            tk_client.get("nom") or tk_client.get("mail")):
+        try:
+            from app.intranets.adm.services.import_helpers_common import (
+                traiter_client,
+            )
+            id_client = traiter_client(
+                info_client={
+                    "nom": tk_client.get("nom") or "",
+                    "prenom": tk_client.get("prenom") or "",
+                    "adresse1": tk_client.get("adresse") or "",
+                    "adresse2": tk_client.get("cplt") or "",
+                    "cp": tk_client.get("cp") or "",
+                    "ville": tk_client.get("ville") or "",
+                    "gsm": tk_client.get("gsm") or "",
+                    "mail": tk_client.get("mail") or "",
+                    "date_naiss": tk_client.get("date_naiss"),
+                    "op_saisie": op_id, "modif_op": op_id,
+                },
+                force_maj=False, op_id=op_id,
+            ) or 0
+        except Exception:
+            id_client = 0
+
+    etat_initial = int(td.get("etat_contrat") or 37)
+    date_saisie = td.get("date_saisie")  # cf. WinDev DATECREA depuis TkCall
+
+    # 2. INSERT contrat
     db.query(
         """INSERT INTO adv.pgt_iag_contrat
               (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
@@ -265,21 +301,31 @@ def _create_iag_contrat(td: dict, op_id: int) -> int:
                nb_points, code_enr, info_interne,
                modif_op, modif_date, modif_elem)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, NOW(), ?, ?, '', ?,
+                   ?, ?, COALESCE(?, NOW()), ?, ?, '', ?,
                    ?, NOW(), 'new')""",
         (auto_n, id_contrat,
-         int(td.get("id_client") or 0),
+         id_client,
          int(td.get("id_salarie") or 0),
          int(td.get("id_ste") or 0),
          td.get("num_bs") or "",
          int(td.get("id_produit") or 0),
-         int(td.get("etat_contrat") or 37),
+         etat_initial,
          date_sign, int(op_id),
-         bool(td.get("non_call", True)),
+         date_saisie,  # cf. WinDev DateSaisie = TkCall.DATECREA si dispo
+         # cf. WinDev IAG_ajoutFicheContrat : NonCALL=Faux inconditionnel
+         # (peut etre override TRUE par le payload si pas de TkCall)
+         bool(td.get("non_call", False)),
          float(td.get("nb_points") or 0),
          td.get("commentaire") or "",
          int(op_id)),
     )
+
+    # 3. Historisation etat initial (cf. WinDev ajouteHistoContrat)
+    try:
+        _ajoute_histo_iag_etat(id_contrat, 0, etat_initial, "", op_id)
+    except Exception:
+        pass
+
     return id_contrat
 
 
@@ -332,7 +378,7 @@ def _import_journalier_iag(
             tk = db_bo.query_one(
                 """SELECT id_salarie, nom_client, nom_marital_client,
                           prenom_client, adresse1, adresse2, cp, ville,
-                          mobile1, date_naiss, adr_mail
+                          mobile1, date_naiss, adr_mail, date_h_appel
                      FROM ticket_bo.pgt_tk_call
                     WHERE UPPER(num_bs) = UPPER(?)
                       AND UPPER(partenaire) = 'IAG'
@@ -357,6 +403,9 @@ def _import_journalier_iag(
                     "gsm": tk.get("mobile1") or "",
                     "date_naiss": tk.get("date_naiss"),
                     "mail": tk.get("adr_mail") or "",
+                    # cf. WinDev TkCall.DATECREA (l equivalent PG etant
+                    # date_h_appel : timestamp de creation du ticket)
+                    "date_crea": tk.get("date_h_appel"),
                 }
         except Exception:
             pass  # tolere si base BO indispo / table absente
@@ -413,12 +462,17 @@ def _import_journalier_iag(
                     "id_produit": id_prod_assu,
                     "etat_contrat": etat_initial,
                     "date_signature": date_sign,
+                    "date_saisie": tk_client.get("date_crea"),
                     "non_call": non_call,
                     "commentaire": comment,
                     "_client": {
                         "nom": client["nom"], "prenom": client["prenom"],
-                        "adresse": client["adresse"], "cp": client["cp"],
-                        "ville": client["ville"],
+                        "adresse": client["adresse"],
+                        "cplt": tk_client.get("cplt", ""),
+                        "cp": client["cp"], "ville": client["ville"],
+                        "gsm": tk_client.get("gsm", ""),
+                        "mail": tk_client.get("mail", ""),
+                        "date_naiss": tk_client.get("date_naiss"),
                     },
                 },
             })
@@ -712,7 +766,12 @@ def _import_run_iag(
         # -- Action prod : UPDATE + histo --
         if not p.simulation and traitement != "deja_statue":
             old_mois_p_str = str(mois_p_omaya) if mois_p_omaya else ""
+            new_mois_p_str = str(nouveau_mois_p) if nouveau_mois_p else ""
             try:
+                # date_paiement d'histo (cf. WinDev, differe selon cas) :
+                # - valide     -> nouveau MoisP (L271 WinDev)
+                # - decomm     -> ancien MoisP (L290 WinDev - Date_de_paiementOLD)
+                # - resilie    -> "" nouveau MoisP (L349 WinDev - efface)
                 if mode == "valide":
                     db.query(
                         """UPDATE adv.pgt_iag_contrat
@@ -722,6 +781,7 @@ def _import_run_iag(
                             WHERE id_contrat = ?""",
                         (nouvel_etat, nouveau_mois_p, int(op_id), id_contrat),
                     )
+                    date_paiement_histo = new_mois_p_str
                 elif mode == "resil":
                     if traitement == "decomm":
                         db.query(
@@ -734,6 +794,7 @@ def _import_run_iag(
                             (nouvel_etat, nouveau_mois_p, comment,
                              int(op_id), id_contrat),
                         )
+                        date_paiement_histo = old_mois_p_str
                     else:  # resilie
                         db.query(
                             """UPDATE adv.pgt_iag_contrat
@@ -745,9 +806,12 @@ def _import_run_iag(
                                 WHERE id_contrat = ?""",
                             (nouvel_etat, comment, int(op_id), id_contrat),
                         )
+                        date_paiement_histo = ""
+                else:
+                    date_paiement_histo = old_mois_p_str
                 _ajoute_histo_iag_etat(
                     id_contrat, etat_actuel, nouvel_etat,
-                    old_mois_p_str, op_id,
+                    date_paiement_histo, op_id,
                 )
             except Exception as e:
                 row_snap["Erreur"] = str(e)
