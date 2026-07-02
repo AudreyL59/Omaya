@@ -1058,6 +1058,15 @@ def _import_journalier_call(
                 modifies[-1]["Note"] = "Contrat Fibre Inconnu réattribué"
                 if not p.simulation:
                     try:
+                        # cf. WinDev l.366 AjoutHistoriqueAttribution
+                        # avant HModifie sur id_salarie
+                        from app.intranets.adm.services.import_helpers_common import (
+                            ajout_historique_attribution,
+                        )
+                        ajout_historique_attribution(
+                            "SFR", id_contrat, "FIBRE", num_bs,
+                            id_sal_db, id_vendeur, op_id,
+                        )
                         db.query(
                             """UPDATE adv.pgt_sfr_contrat
                                   SET id_salarie = ?, non_call = FALSE,
@@ -2686,7 +2695,7 @@ def _import_callret_ventesadd(
             id_sal_db = int(orig.get("id_salarie") or 0)
 
             if id_sal_db in (0, FIBRE_INCONNU):
-                # Reattribution a ABASSI
+                # Reattribution a ABASSI (cf. WinDev l.166)
                 ajoutes.append({
                     "NumBS": num_bs, "Offre": offre,
                     "LibEtatCall": lib_etat_call,
@@ -2696,6 +2705,15 @@ def _import_callret_ventesadd(
                 resume.nb_modif_vend += 1
                 if not p.simulation:
                     try:
+                        # cf. WinDev l.166 : AjoutHistoriqueAttribution
+                        # avant le UPDATE id_salarie
+                        from app.intranets.adm.services.import_helpers_common import (
+                            ajout_historique_attribution,
+                        )
+                        ajout_historique_attribution(
+                            "SFR", id_orig, "SFR", num_bs,
+                            id_sal_db, int(ABASSI_AHD), op_id,
+                        )
                         db.query(
                             """UPDATE adv.pgt_sfr_contrat
                                   SET id_salarie = ?, modif_date = NOW(),

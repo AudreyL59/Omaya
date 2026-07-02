@@ -260,6 +260,53 @@ def _insert_client(db, id_client: int, info: dict, op_id: int) -> None:
     )
 
 
+def ajout_historique_attribution(
+    partenaire: str, id_contrat: int, type_ctt: str, num_bs: str,
+    vendeur_old: int, vendeur_new: int, op_id: int,
+) -> None:
+    """Cf. WinDev AjoutHistoriqueAttribution(idContrat, typeCtt, num, oldSal, newSal).
+
+    Historise un changement d'attribution vendeur sur un contrat dans la
+    table adv.pgt_{partenaire}_histo_attr_ctt.
+
+    Args:
+        partenaire: 'SFR', 'OEN', 'PRO', 'STR', 'VAL', 'TLC'
+        id_contrat: id du contrat
+        type_ctt: type contrat 'FIBRE', 'SFR', etc.
+        num_bs: numero de contrat
+        vendeur_old, vendeur_new: ids salaries anciens/nouveaux
+        op_id: id de l'operateur qui declenche l'action
+
+    Best-effort : ne bloque pas si la table n'existe pas ou en cas
+    d'erreur SQL.
+    """
+    if not id_contrat: return
+    table = f"pgt_{partenaire.lower()}_histo_attr_ctt"
+    try:
+        db = get_pg_connection("adv")
+        auto = db.query_one(
+            f"SELECT COALESCE(MAX(id_histo_auto), 0) + 1 AS n FROM adv.{table}"
+        )
+        id_new = _new_id()
+        db.query(
+            f"""INSERT INTO adv.{table}
+                  (id_histo_auto, id_histo, type_ctt, id_contrat, num,
+                   op_saisie, date, vendeur_old, vendeur_new,
+                   modif_op, modif_date, modif_elem)
+               VALUES (?, ?, ?, ?, ?,
+                       ?, NOW(), ?, ?,
+                       ?, NOW(), 'new')""",
+            (int(auto["n"]) if auto else 1, id_new,
+             type_ctt or partenaire.upper(),
+             int(id_contrat), num_bs or "",
+             int(op_id),
+             int(vendeur_old or 0), int(vendeur_new or 0),
+             int(op_id)),
+        )
+    except Exception:
+        pass
+
+
 def _update_client(db, id_client: int, info: dict, op_id: int) -> None:
     """UPDATE de adv.pgt_client (cf. WinDev HModifie)."""
     op = int(info.get("modif_op") or info.get("op_saisie") or op_id or 0)
