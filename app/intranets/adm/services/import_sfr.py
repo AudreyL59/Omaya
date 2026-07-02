@@ -945,6 +945,7 @@ def _import_journalier_call(
             (num_bs,),
         )
         if not ctt:
+            # ---- BRANCHE AJOUT (cf. WinDev l.274-306) ----
             ajoutes.append({
                 "NumBS": num_bs, "Vendeur": vendeur_cell,
                 "DateSign": str(date_sign or ""),
@@ -955,9 +956,60 @@ def _import_journalier_call(
                 "Comment": comment,
             })
             resume.nb_ajoutes += 1
+            if not p.simulation:
+                try:
+                    # 1. Cree/trouve le client via traiter_client
+                    from app.intranets.adm.services.import_helpers_common import (
+                        traiter_client,
+                    )
+                    id_client = traiter_client(
+                        info_client={
+                            "nom": client_nom, "prenom": client_prenom,
+                            "adresse1": client_adr, "cp": client_cp,
+                            "ville": client_ville, "gsm": client_mobile,
+                            "op_saisie": op_id, "modif_op": op_id,
+                        }, force_maj=False, op_id=op_id,
+                    ) or 0
+                    # 2. INSERT contrat via ajout_fiche_contrat_sfr
+                    # (cf. WinDev ajoutFicheContrat(monCtt))
+                    from app.intranets.adm.services.sfr_helpers import (
+                        ajout_fiche_contrat_sfr,
+                    )
+                    ctt_data = {
+                        "id_client": id_client,
+                        "id_salarie": id_vendeur,
+                        "num_bs": num_bs,
+                        "date_signature": date_sign,
+                        "date_rdv_tech": date_rdv,
+                        "id_etat_sfr": 1, "id_etat_contrat": 1,
+                        "id_produit": offre,
+                        "technologie": techno,
+                        "type_vente": type_vente,
+                        "box8": box8, "box8_verif": box8,
+                        "hors_cible": False, "option_dec": False,
+                        "option_verif": False,
+                        "motif_annulation": "",
+                        "info_interne": comment,
+                        "non_call": True, "remise": False,
+                        "issu_tk_diff": 0,
+                    }
+                    id_ctt_new = ajout_fiche_contrat_sfr(ctt_data, op_id)
+                    ajoutes[-1]["IdContratCree"] = id_ctt_new
+                    # 3. Historisation etat initial 0 -> 1 (cf. WinDev)
+                    try:
+                        _ajoute_histo_sfr_etat(
+                            id_ctt_new, 0, 1, "", op_id, categorie="Vend",
+                        )
+                    except Exception:
+                        pass
+                except Exception as e:
+                    ajoutes[-1]["Erreur"] = str(e)
         else:
+            # ---- BRANCHE MODIF (cf. WinDev l.308-402) ----
             id_contrat = int(ctt["id_contrat"])
             id_sal_db = int(ctt.get("id_salarie") or 0)
+            id_client_db = int(ctt.get("id_client") or 0)
+            non_call_db = bool(ctt.get("non_call"))
             modifies.append({
                 "NumBS": num_bs, "Vendeur": vendeur_cell,
                 "DateSign": str(date_sign or ""),
@@ -968,7 +1020,40 @@ def _import_journalier_call(
             })
             resume.nb_modifies += 1
 
-            # Reattribution si fibre inconnu et nouveau vendeur trouve
+            # 1. MAJ client existant (cf. WinDev l.336-349)
+            if not p.simulation and id_client_db:
+                try:
+                    from app.intranets.adm.services.sfr_helpers import (
+                        modif_fiche_client_sfr,
+                    )
+                    modif_fiche_client_sfr(
+                        id_client_db,
+                        nom=client_nom, prenom=client_prenom,
+                        date_naiss=None,
+                        adresse1=client_adr, adresse2="",
+                        cp=client_cp, ville=client_ville,
+                        tel="", gsm=client_mobile, mail="",
+                        op_id=op_id,
+                    )
+                except Exception:
+                    pass
+
+            # 2. Repasse NonCALL a FALSE si etait TRUE (cf. WinDev l.351-360)
+            if non_call_db and not p.simulation:
+                try:
+                    db.query(
+                        """UPDATE adv.pgt_sfr_contrat
+                              SET non_call = FALSE,
+                                  modif_date = NOW(), modif_op = ?,
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (int(op_id), id_contrat),
+                    )
+                    modifies[-1]["Note"] = "NonCALL -> False"
+                except Exception:
+                    pass
+
+            # 3. Reattribution si fibre inconnu et nouveau vendeur trouve
             if id_sal_db == FIBRE_INCONNU and id_vendeur != FIBRE_INCONNU:
                 modifies[-1]["Note"] = "Contrat Fibre Inconnu réattribué"
                 if not p.simulation:
@@ -984,7 +1069,7 @@ def _import_journalier_call(
                     except Exception as e:
                         modifies[-1]["ErreurReattrib"] = str(e)
             elif id_sal_db != id_vendeur and id_vendeur != FIBRE_INCONNU:
-                # Vendeur different
+                # Vendeur different -> pas de reattribution, juste rapport
                 erreurs.append({
                     "NumBS": num_bs, "Erreur": "Vendeur différent",
                     "VendeurOmaya": id_sal_db, "VendeurImport": vendeur_cell,
@@ -1080,6 +1165,7 @@ def _import_journalier_hebdo(
             (num_bs,),
         )
         if not ctt:
+            # ---- BRANCHE AJOUT (cf. WinDev l.275-300) ----
             ajoutes.append({
                 "NumBS": num_bs, "DateSign": str(date_sign or ""),
                 "DateVa": str(date_va or ""), "DateRa": str(date_ra or ""),
@@ -1088,24 +1174,201 @@ def _import_journalier_hebdo(
                 "TypeVente": type_vente, "ClusterCode": cluster_code,
             })
             resume.nb_ajoutes += 1
+            if not p.simulation:
+                try:
+                    from app.intranets.adm.services.import_helpers_common import (
+                        traiter_client,
+                    )
+                    from app.intranets.adm.services.sfr_helpers import (
+                        ajout_fiche_contrat_sfr,
+                    )
+                    id_client = traiter_client(
+                        info_client={
+                            "nom": client_nom, "prenom": client_prenom,
+                            "adresse1": client_rue, "cp": client_cp,
+                            "ville": client_ville, "tel": client_tel,
+                            "mail": client_mail,
+                            "op_saisie": op_id, "modif_op": op_id,
+                        }, force_maj=False, op_id=op_id,
+                    ) or 0
+                    ctt_data = {
+                        "id_client": id_client,
+                        "id_salarie": FIBRE_INCONNU,
+                        "num_bs": num_bs,
+                        "date_signature": date_sign,
+                        "date_validation": date_va,
+                        "date_racc_activ": date_ra,
+                        "date_rdv_tech": date_rdv,
+                        "id_etat_sfr": id_etat, "id_etat_contrat": id_etat,
+                        "id_sfr_cluster": int((cluster or {}).get("id_sfr_cluster") or 0),
+                        "id_produit": offre,
+                        "technologie": techno,
+                        "self_install": "SELF" in type_install.upper(),
+                        "type_vente": type_vente,
+                        "box8": box8, "box8_verif": box8,
+                        "motif_annulation": motif_annul,
+                        "non_call": True,
+                        "hors_cible": bool((cluster or {}).get("hors_cible")),
+                        "issu_tk_diff": 0,
+                    }
+                    id_ctt_new = ajout_fiche_contrat_sfr(ctt_data, op_id)
+                    ajoutes[-1]["IdContratCree"] = id_ctt_new
+                    try:
+                        _ajoute_histo_sfr_etat(
+                            id_ctt_new, 0, id_etat, "", op_id,
+                            categorie="Vend",
+                        )
+                    except Exception:
+                        pass
+                except Exception as e:
+                    ajoutes[-1]["Erreur"] = str(e)
         else:
+            # ---- BRANCHE MODIF (cf. WinDev l.301-500) ----
             id_contrat = int(ctt["id_contrat"])
+            id_client_db = int(ctt.get("id_client") or 0)
+            etat_ctt_actuel = int(ctt.get("id_etat_contrat") or 0)
+            tv_db = int(ctt.get("type_vente") or 0)
+            id_prod_db = int(ctt.get("id_produit") or 0)
             modifs = []
-            if int(ctt.get("type_vente") or 0) != type_vente:
-                modifs.append(f"TypeVente -> {type_vente}")
-            if int(ctt.get("id_produit") or 0) != offre and offre:
-                modifs.append(f"Offre -> {offre}")
-            if int(ctt.get("id_etat_contrat") or 0) != id_etat and id_etat:
-                modifs.append(f"Etat -> {id_etat}")
-            if modifs:
+            errs = []
+
+            # 1. Detection erreurs Type Vente + Offre (rapport uniquement)
+            # cf. WinDev l.333-355 : si les 2 < 3, on ignore. Sinon rapport.
+            if tv_db != type_vente and not (tv_db < 3 and type_vente < 3):
+                errs.append(("Type Vente", tv_db, type_vente))
+            if offre and id_prod_db != offre:
+                errs.append(("Offre", id_prod_db, offre))
+
+            # 2. Determine type_etat_old pour la logique WinDev
+            etat_info = db.query_one(
+                """SELECT id_type_etat FROM adv.pgt_sfr_etat_contrat
+                    WHERE id_etat = ? LIMIT 1""",
+                (etat_ctt_actuel,),
+            )
+            type_etat_old = int((etat_info or {}).get("id_type_etat") or 0)
+
+            # 3. MAJ etat contrat WinDev :
+            # - type_etat_old NOT IN (5, 6) :
+            #   * type_etat_old <=2 ou 7/8 -> UPDATE + histo "Vend"
+            # - type_etat_old IN (5, 6) :
+            #   * "Raccordement KO" et type_etat_old=5 -> rapport
+            new_etat_ctt = None
+            if id_etat and etat_ctt_actuel != id_etat:
+                if type_etat_old not in (5, 6):
+                    if type_etat_old <= 2 or type_etat_old in (7, 8):
+                        new_etat_ctt = id_etat
+                        modifs.append(f"Etat -> {id_etat}")
+                else:
+                    if type_etat_old == 5 and (
+                            "Raccordement KO" in lib_statut
+                            or "RESIL" in lib_statut.upper()):
+                        errs.append(("Payé passé en KO",
+                                     etat_ctt_actuel, id_etat))
+
+            # 4. Cluster auto si etat "Temporaire" et cluster inconnu avec "-"
+            # cf. WinDev l.381-397
+            new_cluster_id = None
+            if (etat_ctt_actuel == 1
+                    and not (cluster or {}).get("id_sfr_cluster")
+                    and "-" in cluster_code
+                    and not p.simulation):
+                try:
+                    new_cluster_id = _new_id_sfr()
+                    db.query(
+                        """INSERT INTO adv.pgt_sfr_cluster
+                              (id_sfr_cluster_auto, id_sfr_cluster,
+                               region, code_vad, nom_cluster,
+                               modif_date, modif_op, modif_elem)
+                           VALUES (?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+                        (new_cluster_id, new_cluster_id, cluster_ville,
+                         cluster_code, cluster_ville, int(op_id)),
+                    )
+                    modifs.append(f"Cluster auto -> {cluster_code}")
+                except Exception:
+                    new_cluster_id = None
+
+            # 5. Rapports erreurs
+            for lib_err, val_av, val_ap in errs:
+                erreurs.append({
+                    "NumBS": num_bs, "TypeErreur": lib_err,
+                    "AvantImport": str(val_av), "ApresImport": str(val_ap),
+                    "DateSign": str(ctt.get("date_signature") or ""),
+                    "TypeStatut": type_install, "LibStatut": lib_statut,
+                })
+                resume.nb_erreurs += 1
+
+            if modifs or errs:
                 modifies.append({
-                    "NumBS": num_bs, "Modifs": " | ".join(modifs),
+                    "NumBS": num_bs, "Modifs": " | ".join(modifs) or "-",
                     "DateSign Omaya": str(ctt.get("date_signature") or ""),
                     "ClientCP": client_cp,
+                    "Erreurs": [e[0] for e in errs] if errs else None,
                 })
                 resume.nb_modifies += 1
             else:
                 resume.nb_non_modifies += 1
+
+            # 6. PROD : UPDATE client + UPDATE contrat + histo si etat change
+            if not p.simulation:
+                # 6a. MAJ client (cf. WinDev l.307-320)
+                if id_client_db:
+                    try:
+                        from app.intranets.adm.services.sfr_helpers import (
+                            modif_fiche_client_sfr,
+                        )
+                        modif_fiche_client_sfr(
+                            id_client_db,
+                            nom=client_nom, prenom=client_prenom,
+                            date_naiss=None,
+                            adresse1=client_rue, adresse2="",
+                            cp=client_cp, ville=client_ville,
+                            tel=client_tel, gsm="", mail=client_mail,
+                            op_id=op_id,
+                        )
+                    except Exception:
+                        pass
+
+                # 6b. UPDATE contrat (dates + self_install + techno + cluster)
+                try:
+                    sets = ["date_validation = COALESCE(?, date_validation)",
+                            "date_racc_activ = COALESCE(?, date_racc_activ)",
+                            "date_rdv_tech = COALESCE(?, date_rdv_tech)",
+                            "self_install = ?"]
+                    params: list = [date_va, date_ra, date_rdv,
+                                     "SELF" in type_install.upper()]
+                    if new_etat_ctt is not None:
+                        sets.append("id_etat_contrat = ?")
+                        params.append(new_etat_ctt)
+                        sets.append("motif_annulation = ?")
+                        params.append(motif_annul)
+                    if new_cluster_id is not None:
+                        sets.append("id_sfr_cluster = ?")
+                        params.append(new_cluster_id)
+                        sets.append("technologie = ?")
+                        params.append(techno)
+                    sets.append("modif_date = NOW()")
+                    sets.append("modif_op = ?")
+                    sets.append("modif_elem = 'modif'")
+                    params.append(int(op_id))
+                    params.append(id_contrat)
+                    db.query(
+                        f"UPDATE adv.pgt_sfr_contrat "
+                        f"SET {', '.join(sets)} WHERE id_contrat = ?",
+                        tuple(params),
+                    )
+                except Exception as e:
+                    if modifs and modifies:
+                        modifies[-1]["Erreur"] = str(e)
+
+                # 6c. Historisation etat contrat (cf. WinDev l.447)
+                if new_etat_ctt is not None:
+                    try:
+                        _ajoute_histo_sfr_etat(
+                            id_contrat, etat_ctt_actuel, new_etat_ctt,
+                            "", op_id, categorie="Vend",
+                        )
+                    except Exception:
+                        pass
     wb.close()
 
 
