@@ -238,9 +238,43 @@ def _detect_periode_oen(
 
 
 def _create_oen_contrat(td: dict, op_id: int) -> int:
-    """INSERT pgt_oen_contrat + pgt_oen_contrat_option (defaults)."""
+    """INSERT pgt_oen_contrat + pgt_oen_contrat_option (defaults).
+
+    Cf. WinDev branche creation ImportJournalier OEN : cree le client
+    via traiter_client si un TkCall (`_tk_client`) est fourni, puis
+    INSERT contrat + option.
+    """
     db = get_pg_connection("adv")
     id_contrat = _new_id()
+
+    # 1. Creation client via traiter_client si TkCall fourni (cf. WinDev
+    # branche HNbEnr(reqVerifClient)=0 : lookup TkCall + traiterClient)
+    id_client = int(td.get("id_client") or 0)
+    tk_client = td.get("_tk_client") or {}
+    if not id_client and tk_client and (
+            tk_client.get("nom") or tk_client.get("mail")):
+        try:
+            from app.intranets.adm.services.import_helpers_common import (
+                traiter_client,
+            )
+            id_client = traiter_client(
+                info_client={
+                    "nom": tk_client.get("nom") or "",
+                    "prenom": tk_client.get("prenom") or "",
+                    "adresse1": tk_client.get("adresse") or "",
+                    "adresse2": tk_client.get("cplt") or "",
+                    "cp": tk_client.get("cp") or "",
+                    "ville": tk_client.get("ville") or "",
+                    "gsm": tk_client.get("gsm") or "",
+                    "mail": tk_client.get("mail") or "",
+                    "date_naiss": tk_client.get("date_naiss"),
+                    "op_saisie": op_id, "modif_op": op_id,
+                },
+                force_maj=False, op_id=op_id,
+            ) or 0
+        except Exception:
+            id_client = 0
+
     auto = db.query_one(
         "SELECT COALESCE(MAX(id_contrat_auto), 0) + 1 AS n FROM adv.pgt_oen_contrat"
     )
@@ -256,7 +290,7 @@ def _create_oen_contrat(td: dict, op_id: int) -> int:
                    ?, ?, ?, ?, ?, ?,
                    ?, ?, ?, ?, NOW(), 'new')""",
         (int(auto["n"]) if auto else 1, id_contrat,
-         int(td.get("id_client") or 0),
+         id_client,
          int(td.get("id_salarie") or 0),
          int(td.get("id_ste") or 0),
          td.get("num_bs") or "", td.get("ref_client") or "",
@@ -269,7 +303,9 @@ def _create_oen_contrat(td: dict, op_id: int) -> int:
          int(td.get("puissance") or 0),
          bool(td.get("is_dual")),
          int(op_id), td.get("date_creation") or datetime.now(),
-         bool(td.get("non_call", True)),
+         # cf. WinDev PRO_ajoutFicheContrat : NonCALL=Faux par defaut
+         # (peut etre force TRUE par le payload si pas de TkCall)
+         bool(td.get("non_call", False)),
          int(op_id)),
     )
     # Option
@@ -290,6 +326,48 @@ def _create_oen_contrat(td: dict, op_id: int) -> int:
          int(op_id)),
     )
     return id_contrat
+
+
+def _lookup_tk_call_oen(num_bs: str) -> dict:
+    """Cf. WinDev ReqTkCall_ByNumCM(NumBS+'CM', ...). Best-effort lookup
+    pour recuperer coordonnees client + id_salarie associe au ticket.
+
+    Renvoie dict compatible avec traiter_client (keys nom/prenom/adresse/
+    cplt/cp/ville/gsm/mail/date_naiss) + 'id_salarie' + 'non_call' hint.
+    Dict vide si absent.
+    """
+    if not num_bs:
+        return {}
+    try:
+        db_bo = get_pg_connection("ticket_bo")
+        tk = db_bo.query_one(
+            """SELECT id_salarie, nom_client, nom_marital_client,
+                      prenom_client, adresse1, adresse2, cp, ville,
+                      mobile1, date_naiss, adr_mail
+                 FROM ticket_bo.pgt_tk_call
+                WHERE (UPPER(num_bs) = UPPER(?) OR UPPER(num_bs) = UPPER(?))
+                  AND UPPER(partenaire) IN ('OEN', 'CM')
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_bs, f"{num_bs}CM"),
+        )
+        if not tk:
+            return {}
+        nom = tk.get("nom_client") or ""
+        if tk.get("nom_marital_client"):
+            nom += f" ep {tk['nom_marital_client']}"
+        return {
+            "id_salarie": int(tk.get("id_salarie") or 0),
+            "nom": nom, "prenom": tk.get("prenom_client") or "",
+            "adresse": tk.get("adresse1") or "",
+            "cplt": tk.get("adresse2") or "",
+            "cp": tk.get("cp") or "", "ville": tk.get("ville") or "",
+            "gsm": tk.get("mobile1") or "",
+            "mail": tk.get("adr_mail") or "",
+            "date_naiss": tk.get("date_naiss"),
+        }
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +466,35 @@ def _import_journalier_oen(
 
         id_vendeur = _lookup_vendeur_by_code(vendeur_code)
 
+        # Lookup TkCall pour recuperer info client + eventuellement
+        # override vendeur si celui du XLS est inconnu (cf. WinDev
+        # ReqTkCall_ByNumCM avec plusieurs strategies)
+        tk_client = _lookup_tk_call_oen(num_contrat)
+        non_call = True
+        if tk_client:
+            non_call = False
+            tk_vend = int(tk_client.get("id_salarie") or 0)
+            if id_vendeur == 0 and tk_vend:
+                id_vendeur = tk_vend
+
+        # Detection type energie amelioree :
+        # cf. WinDev pas de suffixe -> Elec par defaut, "Gaz" -> gaz.
+        # opt_energie_verte_elec doit matcher aussi les "EL", "ELEC..."
+        # (pas seulement "elec")
+        te_up = (type_ener or "").upper()
+        is_gaz = "GAZ" in te_up
+        is_elec = (not is_gaz)  # sinon Elec par defaut cf. WinDev
+
+        # id_ste : lookup via vendeur trouve (evite id_ste=0 a la creation)
+        id_ste_vend = 0
+        if id_vendeur:
+            _mv = db.query_one(
+                """SELECT id_ste FROM rh.pgt_salarie
+                    WHERE id_salarie = ? LIMIT 1""",
+                (int(id_vendeur),),
+            )
+            id_ste_vend = int((_mv or {}).get("id_ste") or 0)
+
         if not ctt:
             if id_vendeur == 0:
                 resume.nb_pb_vendeur += 1
@@ -407,13 +514,15 @@ def _import_journalier_oen(
                 "_payload_create": {
                     "num_bs": num_contrat, "ref_client": ref_client,
                     "id_salarie": id_vendeur,
+                    "id_ste": id_ste_vend,
                     "id_produit": id_produit, "etat_contrat": id_etat,
                     "date_signature": date_sign,
                     "car_declaree": car_declaree, "car_relevee": car_relevee,
                     "puissance": puiss, "is_dual": is_dual,
-                    "opt_energie_verte_gaz": opt_verte and "gaz" in type_ener.lower(),
-                    "opt_energie_verte_elec": opt_verte and "elec" in type_ener.lower(),
-                    "non_call": True,
+                    "opt_energie_verte_gaz": opt_verte and is_gaz,
+                    "opt_energie_verte_elec": opt_verte and is_elec,
+                    "non_call": non_call,
+                    "_tk_client": tk_client,
                 },
             })
             resume.nb_ajoutes += 1
@@ -492,11 +601,13 @@ def _import_journalier_oen(
                     "Modifs": " | ".join(modifs),
                     "_payload_update": {
                         "id_contrat": id_contrat_ex,
+                        "id_client": int(ctt.get("id_client") or 0),
                         "id_produit": id_produit, "is_dual": is_dual,
                         "car_relevee": car_relevee, "car_declaree": car_declaree,
                         "puissance": puiss,
-                        "opt_energie_verte_gaz": opt_verte and "gaz" in type_ener.lower(),
-                        "opt_energie_verte_elec": opt_verte and "elec" in type_ener.lower(),
+                        "num_bs": num_contrat,
+                        "opt_energie_verte_gaz": opt_verte and is_gaz,
+                        "opt_energie_verte_elec": opt_verte and is_elec,
                         # Nouveaux champs (peuvent etre None -> pas MAJ dans le UPDATE)
                         "date_signature": new_date_sign,
                         "new_etat_ctt": new_etat_ctt,
@@ -505,6 +616,7 @@ def _import_journalier_oen(
                         "etat_oen_actuel": etat_oen_actuel,
                         "new_id_ste": new_id_ste,
                         "mois_p": mois_p_actuel,
+                        "_tk_client": tk_client,
                     },
                 })
                 resume.nb_modifies += 1
@@ -1017,6 +1129,79 @@ def run_import_oen(
                         int(pl["new_etat_oen"]), "", op_id,
                         categorie="OEN",
                     )
+
+                # MAJ pgt_oen_contrat_option (cf. WinDev l.609-628 :
+                # HLitRecherche OEN_contrat_Option + HModifie sur les
+                # options Energie Verte Gaz/Elec). Insert-or-update.
+                try:
+                    exist_opt = db.query_one(
+                        """SELECT id_contrat_option
+                             FROM adv.pgt_oen_contrat_option
+                            WHERE id_contrat = ? LIMIT 1""",
+                        (int(pl["id_contrat"]),),
+                    )
+                    if exist_opt:
+                        db.query(
+                            """UPDATE adv.pgt_oen_contrat_option
+                                  SET opt_energie_verte_gaz = ?,
+                                      opt_energie_verte_elec = ?,
+                                      modif_op = ?, modif_date = NOW(),
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (bool(pl["opt_energie_verte_gaz"]),
+                             bool(pl["opt_energie_verte_elec"]),
+                             int(op_id), int(pl["id_contrat"])),
+                        )
+                    else:
+                        auto_o = db.query_one(
+                            "SELECT COALESCE(MAX(id_contrat_option_auto), 0)"
+                            " + 1 AS n FROM adv.pgt_oen_contrat_option"
+                        )
+                        db.query(
+                            """INSERT INTO adv.pgt_oen_contrat_option
+                                  (id_contrat_option_auto, id_contrat, num_bs,
+                                   opt_energie_verte_gaz, opt_energie_verte_elec,
+                                   modif_op, modif_date, modif_elem)
+                               VALUES (?, ?, ?, ?, ?, ?, NOW(), 'new')""",
+                            (int(auto_o["n"]) if auto_o else 1,
+                             int(pl["id_contrat"]), pl.get("num_bs") or "",
+                             bool(pl["opt_energie_verte_gaz"]),
+                             bool(pl["opt_energie_verte_elec"]),
+                             int(op_id)),
+                        )
+                except Exception:
+                    pass
+
+                # Enrichissement client existant (cf. WinDev l.462-517 :
+                # si TkCall dispo -> traiter_client sur client existant
+                # pour MAJ NOM/PRENOM/adresse si vides).
+                tk_cli = pl.get("_tk_client") or {}
+                id_cli_ex = int(pl.get("id_client") or 0)
+                if id_cli_ex and tk_cli and (tk_cli.get("nom")
+                                              or tk_cli.get("mail")):
+                    try:
+                        from app.intranets.adm.services.import_helpers_common import (
+                            traiter_client,
+                        )
+                        traiter_client(
+                            info_client={
+                                "id_client": id_cli_ex,
+                                "nom": tk_cli.get("nom") or "",
+                                "prenom": tk_cli.get("prenom") or "",
+                                "adresse1": tk_cli.get("adresse") or "",
+                                "adresse2": tk_cli.get("cplt") or "",
+                                "cp": tk_cli.get("cp") or "",
+                                "ville": tk_cli.get("ville") or "",
+                                "gsm": tk_cli.get("gsm") or "",
+                                "mail": tk_cli.get("mail") or "",
+                                "date_naiss": tk_cli.get("date_naiss"),
+                                "op_saisie": op_id, "modif_op": op_id,
+                            },
+                            force_maj=False, op_id=op_id,
+                        )
+                    except Exception:
+                        pass
+
                 nb_majs += 1
             except Exception as e:
                 row["Erreur"] = str(e)
