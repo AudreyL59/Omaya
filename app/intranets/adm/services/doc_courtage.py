@@ -296,29 +296,142 @@ def _societe_variables_for_test(id_ste: int) -> dict[str, str]:
     }
 
 
-def publipostage_test_pdf(id_doc: int, id_ste: int) -> bytes | None:
-    """Btn 'Tester Mise en page' Fen_EditionDocCourtage : PDF avec
-    donnees fictives + footer auto (logo STE / RS+adr+SIRET / Page X/Y).
+def _tableaux_rem_html(groupes_rem: list[dict]) -> str:
+    """Convertit les grilles REM (list[dict]) en HTML style tableau
+    Omaya (cf. Publipostage_Rem WinDev : libelle du groupe en 1er
+    coin en bleu, en-tetes bold/gris, cellules montants). Utilise
+    inline styles pour compat WeasyPrint."""
+    if not groupes_rem: return ""
+    html_parts = []
+    for grp in groupes_rem:
+        grille = grp.get("grille") or []
+        if not grille: continue
+        n_lignes = len(grille)
+        n_cols = len(grille[0]) if grille else 0
+        rows_html = []
+        for il in range(n_lignes):
+            cells_html = []
+            for ic in range(n_cols):
+                val = grille[il][ic] or ""
+                is_header = (il == 0 or ic == 0)
+                is_corner = (il == 0 and ic == 0)
+                # Coin superieur-gauche : libelle du groupe en bleu
+                if is_corner:
+                    style = (
+                        "border:0.5pt solid #ccc;padding:5pt;"
+                        "color:#3995B3;font-weight:bold;text-align:left;"
+                    )
+                elif is_header:
+                    align = "right" if ic == 0 else "center"
+                    style = (
+                        f"border:0.5pt solid #ccc;padding:5pt;"
+                        f"color:rgb(85,88,89);font-weight:bold;"
+                        f"text-align:{align};"
+                    )
+                else:
+                    align = "right" if ic == 0 else "center"
+                    style = (
+                        f"border:0.5pt solid #ccc;padding:5pt;"
+                        f"text-align:{align};"
+                    )
+                cells_html.append(f'<td style="{style}">{val}</td>')
+            rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+        table_html = (
+            '<table style="border-collapse:collapse;width:100%;'
+            'margin:8pt 0;font-size:10pt;">'
+            + "".join(rows_html)
+            + "</table>"
+        )
+        html_parts.append(table_html)
+    return "".join(html_parts)
 
-    Reutilise generer_pdf_publiposte de ctt_travail pour le footer
-    WeasyPrint standard Omaya."""
+
+def _societe_images(id_ste: int) -> dict[str, str]:
+    """Recupere guimmick / gerant_signature / cachet_cial / gerant_paraphe
+    de la societe editrice, encodes en data: URLs pour WeasyPrint.
+    Retourne un dict {token: data_url} vide si pas d'images."""
+    if not id_ste: return {}
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        """SELECT guimmick, gerant_signature, cachet_cial, gerant_paraphe
+             FROM rh.pgt_societe WHERE id_ste = ? LIMIT 1""",
+        (int(id_ste),),
+    ) or {}
+    from app.intranets.adm.services.ctt_travail import _bytes_to_b64_img
+    return {
+        "GER_SIGN": _bytes_to_b64_img(r.get("gerant_signature")),
+        "STE_CACHET": _bytes_to_b64_img(r.get("cachet_cial")),
+        # STE_LOGO est ajoute automatiquement dans le footer par
+        # generer_pdf_publiposte depuis le guimmick.
+    }
+
+
+def publipostage_test_pdf(id_doc: int, id_distrib: int) -> bytes | None:
+    """Btn 'Tester Mise en page' Fen_EditionDocCourtage : PDF avec
+    publipostage complet (Distrib + Rem + STE) + footer auto.
+
+    Reproduit fidelement Publipostage_Distrib / _Rem / _STE WinDev :
+      1. Vars STE_..._DISTRIB depuis pgt_societe du distrib choisi
+         (id_type_orga=3, id_ste=id_distrib) + vars S_* depuis
+         pgt_salarie du gerant du distrib.
+      2. Vars STE_* (sans DISTRIB) depuis pgt_societe editrice
+         (meta.id_ste).
+      3. Tableaux REM injectes en HTML a la place de TABLEAU_REM :
+         un tableau par groupe REM actif du distrib+groupe_operateur.
+      4. Images GER_SIGN / STE_CACHET de la societe editrice injectees
+         par generer_pdf_publiposte.
+      5. Footer standard Omaya (logo/RS/SIRET/Page X/Y) via WeasyPrint.
+    """
     content = download_content_html(id_doc)
     if not content: return None
     body_html = content.decode("utf-8", errors="ignore")
     meta = get_doc_courtage(id_doc)
-    tags = {**_FAKE_VARS_COURTAGE, **_societe_variables_for_test(id_ste)}
-    if meta:
-        tags["DOCTITRE"] = meta.titre
-    # Substitue les variables (tri par longueur desc pour eviter les
-    # collisions : STE_RS_DISTRIB avant STE_RS, DATE_CTS_INIT avant
-    # DATE_CTS, etc.). STE_LOGO est traite par generer_pdf_publiposte
-    # (footer).
-    for k, v in sorted(tags.items(), key=lambda kv: -len(kv[0])):
-        if k == "STE_LOGO": continue
-        body_html = body_html.replace(k, str(v or ""))
-    # Delegue au helper standard qui ajoute le footer + convertit en PDF
+    if not meta: return None
+
+    from app.intranets.adm.services.publipostage_courtage import (
+        _get_distrib_info, _get_ste_info, _get_groupes_rem_publipostage,
+    )
     from app.intranets.adm.services.ctt_travail import generer_pdf_publiposte
-    return generer_pdf_publiposte(body_html, id_ste=id_ste)
+
+    # 1. Publipostage_Distrib : vars distrib + gerant
+    distrib_vars = _get_distrib_info(int(id_distrib)) if id_distrib else {}
+
+    # 2. Publipostage_STE : vars editrice (id_ste de la meta doc)
+    id_editrice = int(meta.id_ste) if meta.id_ste and int(meta.id_ste) != 0 else 0
+    editrice_vars = _get_ste_info(id_editrice) if id_editrice else {}
+    editrice_vars["DOCTITRE"] = meta.titre
+    editrice_vars["DATE_CTS"] = datetime.now().strftime("%d/%m/%Y")
+
+    # 3. Publipostage_Rem : injecte les tableaux HTML pour chaque
+    # TABLEAU_REM present (un par groupe REM).
+    groupes_rem = _get_groupes_rem_publipostage(
+        int(id_distrib), int(meta.id_groupe_operateur or 0),
+    ) if id_distrib else []
+    tableaux_html = _tableaux_rem_html(groupes_rem)
+    body_html = body_html.replace("TABLEAU_REM", tableaux_html)
+
+    # 4. Vars par defaut (comme WinDev)
+    default_vars = {
+        "SECTEUR_DISTRIB": "01.02.03.04",
+        "DATE_AVENANT": "",
+        "S_MENTION_DISTRIB": "",
+        "S_SIGN_DISTRIB": "",
+    }
+
+    # 5. Substitue toutes les vars (tri par longueur desc pour eviter
+    # collisions : STE_RS_DISTRIB avant STE_RS, DATE_CTS_INIT avant
+    # DATE_CTS, S_NOM_DISTRIB avant S_NOM, etc.)
+    all_vars = {**default_vars, **editrice_vars, **distrib_vars}
+    for k, v in sorted(all_vars.items(), key=lambda kv: -len(kv[0])):
+        # STE_LOGO/GER_SIGN/STE_CACHET traites par generer_pdf_publiposte
+        if k in ("STE_LOGO", "GER_SIGN", "STE_CACHET"): continue
+        body_html = body_html.replace(k, str(v or ""))
+
+    # 6. Images editrice + footer PDF
+    extra_images = _societe_images(id_editrice)
+    return generer_pdf_publiposte(
+        body_html, id_ste=id_editrice, extra_images=extra_images,
+    )
 
 
 class DocCourtageListItem(BaseModel):
