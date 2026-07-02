@@ -621,6 +621,17 @@ def _import_journalier_fibre(
                         )
                     except NameError:
                         pass  # fonction non definie encore (a implementer)
+                # Recalcul nb_points reel (cf. WinDev calculPointContrat)
+                # avec bonus FIB CQ >= 2026-02-01 (+0.2 portabilite, +0.2
+                # prise_saisie, +0.1 si notation*2 >= 8.6)
+                if do_recalc:
+                    try:
+                        from app.intranets.adm.services.sfr_helpers import (
+                            _recalcul_nb_points_sfr,
+                        )
+                        _recalcul_nb_points_sfr(id_contrat)
+                    except Exception:
+                        pass
 
     wb.close()
 
@@ -683,6 +694,41 @@ def _import_journalier_mobile(
             (num_bs,),
         )
         if not ctt:
+            # ---- BRANCHE AJOUT (cf. WinDev l.246-278) ----
+            # Lookup TkCall pour override id_salarie + enrichir infos client
+            # Par defaut : idsalarie=FIBRE_INCONNU.
+            id_salarie_new = FIBRE_INCONNU
+            issu_tk_diff = 0
+            client_from_tk = None
+            tk = _lookup_tk_call_sfr(num_bs)
+            if tk:
+                tk_sal = int(tk.get("id_salarie") or 0)
+                if tk_sal:
+                    id_salarie_new = tk_sal
+                # cf. WinDev IssuTkDiff : indique si le contrat vient d'un
+                # ticket differe (repris plus tard). Colonne dans pgt_tk_liste
+                # mais pas remontee ici -> 1 si TkCall trouve, 0 sinon (proxy)
+                issu_tk_diff = 1 if tk_sal else 0
+                nom_cli = tk.get("nom_client") or ""
+                if tk.get("nom_marital_client"):
+                    nom_cli += f" ep {tk['nom_marital_client']}"
+                client_from_tk = {
+                    "nom": nom_cli or client_nom,
+                    "prenom": tk.get("prenom_client") or client_prenom,
+                    "adresse": tk.get("adresse1") or "",
+                    "cplt": tk.get("adresse2") or "",
+                    "cp": tk.get("cp") or client_cp,
+                    "ville": tk.get("ville") or "",
+                    "gsm": tk.get("mobile1") or client_gsm,
+                    "mail": client_mail or tk.get("adr_mail") or "",
+                    "date_naiss": tk.get("datenaiss"),
+                }
+
+            payload_client = client_from_tk or {
+                "nom": client_nom, "prenom": client_prenom,
+                "cp": client_cp, "gsm": client_gsm,
+                "mail": client_mail,
+            }
             ajoutes.append({
                 "NumBS": num_bs, "DateSign": str(date_sign or ""),
                 "DateAct": str(date_act or ""),
@@ -692,14 +738,77 @@ def _import_journalier_mobile(
                 "Client": f"{client_nom} {client_prenom}".strip(),
                 "LibOffre": lib_offre, "TypeVente": type_vente,
                 "NumMobile": num_mobile, "LibStatut": lib_statut,
+                "_payload_create": {
+                    "num_bs": num_bs,
+                    "id_salarie": id_salarie_new,
+                    "issu_tk_diff": issu_tk_diff,
+                    "id_produit": offre,
+                    "id_etat_contrat": id_etat,
+                    "id_etat_sfr": id_etat,
+                    "type_vente": type_vente,
+                    "date_signature": date_sign,
+                    "date_racc_activ": date_act,
+                    "date_portabilite": date_port,
+                    "date_resil": date_resil,
+                    "info_interne": code_vendeur,
+                    "activ_control": activ_control,
+                    "processing_state": processing_state,
+                    "non_call": True,
+                    "hors_cible": False, "option_dec": False,
+                    "option_verif": False,
+                    "motif_annulation": "",
+                    "id_sfr_cluster": 0,
+                    "_client": payload_client,
+                },
             })
             resume.nb_ajoutes += 1
         else:
             id_contrat = int(ctt["id_contrat"])
             id_etat_sfr_actuel = int(ctt.get("id_etat_sfr") or 0)
             etat_ctt_actuel = int(ctt.get("id_etat_contrat") or 0)
+            id_sal_db_mob = int(ctt.get("id_salarie") or 0)
             modifs = []
             errs = []
+
+            # Reattribution vendeur si Fibre inconnu (cf. WinDev L369-395)
+            # Si SFR_contrat.IDSalarie = 0 ou FIBRE_INCONNU + TkCall trouve
+            # -> reattribuer + valide_tk_call_sfr + ModifFicheClient
+            new_id_salarie = None
+            if id_sal_db_mob in (0, FIBRE_INCONNU):
+                tk_reat = _lookup_tk_call_sfr(num_bs)
+                tk_sal_reat = int((tk_reat or {}).get("id_salarie") or 0)
+                if tk_sal_reat and tk_sal_reat != id_sal_db_mob:
+                    new_id_salarie = tk_sal_reat
+                    modifs.append(f"Vendeur -> {tk_sal_reat}")
+                    if not p.simulation:
+                        try:
+                            from app.intranets.adm.services.sfr_helpers import (
+                                valide_tk_call_sfr, modif_fiche_client_sfr,
+                            )
+                            id_tkl = int(tk_reat.get("id_tk_liste") or 0)
+                            if id_tkl:
+                                valide_tk_call_sfr(id_tkl, num_bs, op_id)
+                            id_cli = int(ctt.get("id_client") or 0)
+                            if id_cli:
+                                nom_full = tk_reat.get("nom_client") or ""
+                                if tk_reat.get("nom_marital_client"):
+                                    nom_full += f" ep {tk_reat['nom_marital_client']}"
+                                modif_fiche_client_sfr(
+                                    id_cli, nom=nom_full,
+                                    prenom=tk_reat.get("prenom_client") or "",
+                                    date_naiss=tk_reat.get("datenaiss"),
+                                    adresse1=tk_reat.get("adresse1") or "",
+                                    adresse2=tk_reat.get("adresse2") or "",
+                                    cp=tk_reat.get("cp") or "",
+                                    ville=tk_reat.get("ville") or "",
+                                    tel=tk_reat.get("mobile2") or "",
+                                    gsm=tk_reat.get("mobile1") or "",
+                                    mail=tk_reat.get("adr_mail") or "",
+                                    op_id=op_id,
+                                )
+                        except Exception:
+                            pass
+
             if int(ctt.get("type_vente") or 0) != type_vente:
                 errs.append(("Type Vente", ctt.get("type_vente"), type_vente))
                 modifs.append(f"TypeVente -> {type_vente}")
@@ -718,13 +827,43 @@ def _import_journalier_mobile(
                     and processing_state):
                 modifs.append(f"ProcessingState -> {processing_state}")
 
-            # MAJ GSM client si num_mobile diff (cf. WinDev)
+            # MAJ GSM client si num_mobile diff (cf. WinDev L481-486)
             id_client_db = int(ctt.get("id_client") or 0)
             if id_client_db and num_mobile:
                 cl = db.query_one(
-                    "SELECT gsm FROM adv.pgt_client WHERE id_client = ? LIMIT 1",
+                    """SELECT gsm, prenom, opt_partenaire
+                         FROM adv.pgt_client WHERE id_client = ? LIMIT 1""",
                     (id_client_db,),
                 )
+                # cf. WinDev L326-354 : si client.PRENOM = "" et TkCall trouve,
+                # MAJ complete du client via ModifFicheClient
+                if cl and not (cl.get("prenom") or "").strip():
+                    tk_mob = _lookup_tk_call_sfr(num_bs)
+                    if tk_mob and not p.simulation:
+                        try:
+                            from app.intranets.adm.services.sfr_helpers import (
+                                modif_fiche_client_sfr,
+                            )
+                            nom_full = tk_mob.get("nom_client") or ""
+                            if tk_mob.get("nom_marital_client"):
+                                nom_full += f" ep {tk_mob['nom_marital_client']}"
+                            modif_fiche_client_sfr(
+                                id_client_db,
+                                nom=nom_full,
+                                prenom=tk_mob.get("prenom_client") or "",
+                                date_naiss=tk_mob.get("datenaiss"),
+                                adresse1=tk_mob.get("adresse1") or "",
+                                adresse2=tk_mob.get("adresse2") or "",
+                                cp=tk_mob.get("cp") or "",
+                                ville=tk_mob.get("ville") or "",
+                                tel=tk_mob.get("mobile2") or "",
+                                gsm=tk_mob.get("mobile1") or "",
+                                mail=tk_mob.get("adr_mail") or "",
+                                op_id=op_id,
+                            )
+                            modifs.append("Client MAJ complete (via TkCall)")
+                        except Exception:
+                            pass
                 if cl and (cl.get("gsm") or "") != num_mobile:
                     modifs.append(f"Client GSM -> {num_mobile}")
                     if not p.simulation:
@@ -825,6 +964,18 @@ def _import_journalier_mobile(
                 })
                 resume.nb_modifies += 1
                 if not p.simulation:
+                    # cf. WinDev L366 AjoutHistoriqueAttribution avant UPDATE
+                    if new_id_salarie is not None:
+                        try:
+                            from app.intranets.adm.services.import_helpers_common import (
+                                ajout_historique_attribution,
+                            )
+                            ajout_historique_attribution(
+                                "SFR", id_contrat, "MOBILE", num_bs,
+                                id_sal_db_mob, new_id_salarie, op_id,
+                            )
+                        except Exception:
+                            pass
                     try:
                         sets = ["type_vente = ?", "id_produit = ?",
                                 "date_portabilite = COALESCE(?, date_portabilite)",
@@ -834,6 +985,9 @@ def _import_journalier_mobile(
                         params: list = [type_vente, offre, date_port,
                                          date_resil, date_act,
                                          activ_control, processing_state]
+                        if new_id_salarie is not None:
+                            sets.append("id_salarie = ?")
+                            params.append(new_id_salarie)
                         if new_etat_sfr is not None:
                             sets.append("id_etat_sfr = ?")
                             params.append(new_etat_sfr)
@@ -2822,6 +2976,55 @@ def run_import_sfr(
         except Exception as e:
             erreurs.append({"Fichier": fname, "Erreur": str(e)})
             resume.nb_erreurs += 1
+
+    # ---- PASSE PROD : creation des contrats depuis _payload_create ----
+    # (cf. WinDev ajoutFicheContrat pour tous les 'ajoutes' Fibre + Mobile
+    # apres extraction du fichier - la branche INSERT etait absente).
+    if not p.simulation:
+        for row in ajoutes:
+            pl = row.get("_payload_create")
+            if not pl:
+                continue
+            try:
+                from app.intranets.adm.services.import_helpers_common import (
+                    traiter_client,
+                )
+                from app.intranets.adm.services.sfr_helpers import (
+                    ajout_fiche_contrat_sfr,
+                )
+                # 1. Cree/trouve le client via traiter_client
+                cli = pl.get("_client") or {}
+                id_client = 0
+                if cli and (cli.get("nom") or cli.get("mail")):
+                    id_client = traiter_client(
+                        info_client={
+                            "nom": cli.get("nom") or "",
+                            "prenom": cli.get("prenom") or "",
+                            "adresse1": cli.get("adresse") or "",
+                            "adresse2": cli.get("cplt") or "",
+                            "cp": cli.get("cp") or "",
+                            "ville": cli.get("ville") or "",
+                            "gsm": cli.get("gsm") or "",
+                            "mail": cli.get("mail") or "",
+                            "date_naiss": cli.get("date_naiss"),
+                            "op_saisie": op_id, "modif_op": op_id,
+                        }, force_maj=False, op_id=op_id,
+                    ) or 0
+                # 2. INSERT contrat via ajout_fiche_contrat_sfr (+ nb_points)
+                ctt_data = {k: v for k, v in pl.items() if not k.startswith("_")}
+                ctt_data["id_client"] = id_client
+                new_id = ajout_fiche_contrat_sfr(ctt_data, op_id)
+                row["IdContratCree"] = new_id
+                # 3. Historisation etat initial
+                etat_init = int(ctt_data.get("id_etat_contrat") or 0)
+                try:
+                    _ajoute_histo_sfr_etat(
+                        new_id, 0, etat_init, "", op_id, categorie="Vend",
+                    )
+                except Exception:
+                    pass
+            except Exception as e:
+                row["Erreur"] = str(e)
 
     # Cleanup payloads
     for row in ajoutes:
