@@ -1002,7 +1002,15 @@ def _import_journalier_hebdo(
     - Dates lues avec [:10] (formats variables)
     - Detection 'FTTB VERS FTTH' pour migrations
     - client_identite splittee par ',' (nom, prenom)
-    - dateref = 20201001 (filtre antiques)."""
+
+    Note WinDev : la variable dateref = '20201001' est declaree ligne
+    197 mais JAMAIS utilisee dans le code effectif (une seule
+    occurrence, a la declaration). Le commentaire WinDev dit "on
+    n'importe pas les contrats anterieures au 01/10/2020" mais le
+    filtrage n'est jamais applique.
+    Ancienne implementation Python appliquait ce filtre a tort ->
+    supprime pour rester fidele WinDev.
+    """
     from openpyxl import load_workbook
     try:
         wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
@@ -1014,7 +1022,6 @@ def _import_journalier_hebdo(
     cols = {k: _col_letter_to_index(v) for k, v in COLS_BJ_HEBDO.items()}
     db = get_pg_connection("adv")
     ligne_depart = p.ligne_depart or 3
-    date_ref = date(2020, 10, 1)
 
     for i in range(ligne_depart, (ws.max_row or 0) + 1):
         num_bs = _cell(ws, i, cols["num_bs"]).upper()
@@ -1047,11 +1054,6 @@ def _import_journalier_hebdo(
         parts = client_identite.split(",", 1)
         client_nom = parts[0].strip() if parts else ""
         client_prenom = parts[1].strip() if len(parts) > 1 else ""
-
-        # Filtre antiques
-        if (not date_sign or date_sign < date_ref) and (
-                not date_ra or date_ra < date_ref):
-            continue
 
         # Detection migration FTTB VERS FTTH
         is_mig = "FTTB VERS FTTH" in lib_offre.upper()
@@ -2013,43 +2015,49 @@ def _create_sfr_contrat_callret(orig: dict, new_bs: str,
                                 date_sign: Optional[date], op_id: int,
                                 info_motif: str) -> int:
     """Cree un nouveau SFR_contrat (rattrape par Call RET) en cascadant les
-    valeurs du contrat origine."""
-    db = get_pg_connection("adv")
-    id_contrat = _new_id()
-    auto = db.query_one(
-        "SELECT COALESCE(MAX(id_contrat_auto), 0) + 1 AS n FROM adv.pgt_sfr_contrat"
+    valeurs du contrat origine.
+
+    Delegue a ajout_fiche_contrat_sfr (sfr_helpers) qui gere ~50 colonnes
+    et le recalcul nb_points fam FIB CQ + bonus. Ajoute ensuite
+    l'historisation de l'etat initial (cf. WinDev ajouteHistoContrat).
+    """
+    from app.intranets.adm.services.sfr_helpers import (
+        ajout_fiche_contrat_sfr,
     )
-    db.query(
-        """INSERT INTO adv.pgt_sfr_contrat
-              (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
-               num_bs, date_signature, id_etat_sfr, id_etat_contrat,
-               id_sfr_cluster, id_produit, technologie, self_install,
-               type_vente, box8, box8_verif, option_dec, option_verif,
-               motif_annulation, info_interne, non_call, remise,
-               hors_cible, issu_tk_diff,
-               op_saisie, date_saisie, modif_op, modif_date, modif_elem)
-           VALUES (?, ?, ?, ?, 0,
-                   ?, ?, 1, 1,
-                   ?, ?, ?, ?,
-                   ?, ?, ?, ?, ?,
-                   '', ?, TRUE, ?,
-                   ?, 0,
-                   ?, NOW(), ?, NOW(), 'new')""",
-        (int(auto["n"]) if auto else 1, id_contrat,
-         int(orig.get("id_client") or 0), int(ABASSI_AHD),
-         new_bs, date_sign,
-         int(orig.get("id_sfr_cluster") or 0),
-         int(orig.get("id_produit") or 0),
-         int(orig.get("technologie") or 0),
-         bool(orig.get("self_install")),
-         int(orig.get("type_vente") or 0),
-         bool(orig.get("box8")), bool(orig.get("box8")),
-         bool(orig.get("option_dec")), bool(orig.get("option_verif")),
-         info_motif,
-         bool(orig.get("remise")),
-         bool(orig.get("hors_cible")),
-         int(op_id), int(op_id)),
-    )
+
+    # Construction dict compatible ST_CONTRAT_SFR
+    ctt = {
+        "id_client": int(orig.get("id_client") or 0),
+        "id_salarie": int(ABASSI_AHD),  # cible Call RET
+        "id_ste": 0,
+        "num_bs": new_bs,
+        "date_signature": date_sign,
+        "id_etat_sfr": 1,
+        "id_etat_contrat": 1,
+        "id_sfr_cluster": int(orig.get("id_sfr_cluster") or 0),
+        "id_produit": int(orig.get("id_produit") or 0),
+        "technologie": int(orig.get("technologie") or 0),
+        "self_install": bool(orig.get("self_install")),
+        "type_vente": int(orig.get("type_vente") or 0),
+        "box8": bool(orig.get("box8")),
+        "box8_verif": bool(orig.get("box8")),
+        "option_dec": bool(orig.get("option_dec")),
+        "option_verif": bool(orig.get("option_verif")),
+        "motif_annulation": "",
+        "info_interne": info_motif,
+        "non_call": True,
+        "remise": bool(orig.get("remise")),
+        "hors_cible": bool(orig.get("hors_cible")),
+        "issu_tk_diff": 0,
+    }
+    id_contrat = ajout_fiche_contrat_sfr(ctt, op_id)
+
+    # Historisation etat initial (cf. WinDev ajouteHistoContrat)
+    try:
+        _ajoute_histo_sfr_etat(id_contrat, 0, 1, "", op_id, categorie="Vend")
+    except Exception:
+        pass
+
     return id_contrat
 
 
@@ -2435,22 +2443,39 @@ def _import_callret_ventesadd(
                     except Exception as e:
                         ajoutes[-1]["Erreur"] = str(e)
             else:
-                # Verifier si deja Distrib Call Retention
-                aff = db.query_one(
-                    """SELECT o.id_parent
-                         FROM rh.pgt_salarie_organigramme so
-                         JOIN rh.pgt_organigramme o
-                              ON o.idorganigramme = so.idorganigramme
-                        WHERE so.id_salarie = ? LIMIT 1""",
-                    (id_sal_db,),
-                ) if False else None
-                # Best effort : on signale juste en erreur 'attribue a vendeur'
-                erreurs.append({
-                    "NumBS": num_bs,
-                    "Erreur": "Contrat attribué à un vendeur",
-                    "Statut": statut, "IdSalarie": id_sal_db,
-                })
-                resume.nb_erreurs += 1
+                # cf. WinDev l.174-183 : verifier si le vendeur est deja
+                # dans l'organigramme Distrib Call Retention (via
+                # id_parent = ID_AFFECT_DISTRIB_CALL_RETENTION).
+                # - Si oui   -> silence (deja OK)
+                # - Si non   -> erreur 'attribue a un vendeur externe'
+                #   (contrat attribue a un autre vendeur, ne pas reattribuer)
+                is_deja_call_ret = False
+                try:
+                    rows = db.query(
+                        """SELECT o.id_parent
+                             FROM rh.pgt_salarie_organigramme so
+                             JOIN rh.pgt_organigramme o
+                                  ON o.idorganigramme = so.idorganigramme
+                            WHERE so.id_salarie = ?
+                              AND (so.modif_elem IS NULL
+                                   OR so.modif_elem NOT LIKE '%suppr%')""",
+                        (id_sal_db,),
+                    ) or []
+                    is_deja_call_ret = any(
+                        int(r.get("id_parent") or 0)
+                            == ID_AFFECT_DISTRIB_CALL_RETENTION
+                        for r in rows
+                    )
+                except Exception:
+                    is_deja_call_ret = False
+
+                if not is_deja_call_ret:
+                    erreurs.append({
+                        "NumBS": num_bs,
+                        "Erreur": "Contrat attribué à un vendeur",
+                        "Statut": statut, "IdSalarie": id_sal_db,
+                    })
+                    resume.nb_erreurs += 1
 
 
 def run_import_sfr(
