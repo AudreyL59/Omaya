@@ -80,6 +80,7 @@ class ImportIagResume(BaseModel):
     nb_ajoutes: int = 0
     nb_valides: int = 0
     nb_resilies: int = 0
+    nb_decommissions: int = 0
     nb_deja_saisis: int = 0           # type 1 : "deja saisi"
     nb_deja_statues: int = 0          # type 2 : "deja statue"
     nb_introuvables: int = 0
@@ -321,18 +322,53 @@ def _import_journalier_iag(
         id_prod_assu, lib_prod = _id_produit_iag(produit_assu, num_contrat)
         etat_initial = _etat_contrat_iag(lib_statut)
 
-        # Lookup vendeur : d'abord TK_Call par num_contrat, sinon par nom
+        # Lookup vendeur : d'abord TK_Call par num_contrat (cf. WinDev
+        # ReqTkCall_ByNumCtt(NumContrat, "IAG")), sinon par nom.
         id_vendeur = 0
         non_call = True
-        tk = db.query_one(
-            """SELECT id_salarie FROM ticket_bo.pgt_tk_call
-                WHERE UPPER(num_contrat) = UPPER(?)
-                  AND partenaire = 'IAG' LIMIT 1""",
-            (num_contrat,),
-        ) if False else None
-        # Verifier l'existence de cette table avant d'y aller -> on saute
-        # ce premier lookup en phase 1 (a faire en phase 2 quand on
-        # confirmera le nom de table). Pour l'instant, fallback nom.
+        tk_client: dict = {}
+        try:
+            db_bo = get_pg_connection("ticket_bo")
+            tk = db_bo.query_one(
+                """SELECT id_salarie, nom_client, nom_marital_client,
+                          prenom_client, adresse1, adresse2, cp, ville,
+                          mobile1, date_naiss, adr_mail
+                     FROM ticket_bo.pgt_tk_call
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND UPPER(partenaire) = 'IAG'
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_contrat,),
+            )
+            if tk:
+                id_vendeur = int(tk.get("id_salarie") or 0)
+                if id_vendeur:
+                    non_call = False
+                nom_cli = tk.get("nom_client") or ""
+                if tk.get("nom_marital_client"):
+                    nom_cli += f" ep {tk['nom_marital_client']}"
+                tk_client = {
+                    "nom": nom_cli,
+                    "prenom": tk.get("prenom_client") or "",
+                    "adresse": tk.get("adresse1") or "",
+                    "cplt": tk.get("adresse2") or "",
+                    "cp": tk.get("cp") or "",
+                    "ville": tk.get("ville") or "",
+                    "gsm": tk.get("mobile1") or "",
+                    "date_naiss": tk.get("date_naiss"),
+                    "mail": tk.get("adr_mail") or "",
+                }
+        except Exception:
+            pass  # tolere si base BO indispo / table absente
+
+        # Enrichit le client avec les infos TkCall si trouvees
+        if tk_client:
+            for k, v in tk_client.items():
+                if v and k in client:
+                    client[k] = v
+                elif v:
+                    client[k] = v
+
         if id_vendeur == 0:
             id_vendeur = _lookup_vendeur_iag(vendeur_cell, p.format_vendeur)
 
@@ -413,6 +449,7 @@ def _import_journalier_iag(
             })
             resume.nb_deja_saisis += 1
             # Vendeur different + un seul match -> reattribution
+            # (cf. WinDev : UPDATE IAG_contrat SET IDSalarie = ...)
             if id_sal_db != id_vendeur and id_vendeur != 0:
                 pb_vendeur.append({
                     "NumCtt": ctt.get("num_bs"),
@@ -423,6 +460,14 @@ def _import_journalier_iag(
                     "NewIdSalarie": id_vendeur,
                     "_id_contrat": id_contrat,
                 })
+                if not p.simulation:
+                    db.query(
+                        """UPDATE adv.pgt_iag_contrat
+                              SET id_salarie = ?, modif_op = ?,
+                                  modif_date = NOW(), modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (id_vendeur, int(op_id), id_contrat),
+                    )
 
     wb.close()
 
@@ -634,12 +679,7 @@ def _import_run_iag(
                 nouvel_etat = 20
                 nouveau_mois_p = mois_p
                 traitement = "decomm"
-                resume.nb_decommissions = (
-                    (resume.nb_decommissions if hasattr(resume, 'nb_decommissions')
-                     else 0) + 1
-                ) if False else 0  # Pas de champ nb_decommissions sur IAG
-                # On utilise nb_resilies pour les decomm aussi
-                resume.nb_resilies += 1
+                resume.nb_decommissions += 1
             elif id_type_etat in (1, 2):  # En attente -> resilie
                 nouvel_etat = 16
                 nouveau_mois_p = None  # mois_p = ""
