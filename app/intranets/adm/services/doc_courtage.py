@@ -175,14 +175,141 @@ def get_contenu(id_doc: int) -> bytes | None:
 
 
 def update_contenu(id_doc: int, raw: bytes, op_id: int) -> bool:
+    """UPDATE bytea contenu. Utilise psycopg2.Binary pour ecrire le
+    bytea correctement (evite les erreurs d'encodage sur les binaires)."""
+    import psycopg2
     db = get_pg_connection("rh")
     db.query(
         """UPDATE rh.pgt_doc_courtage
               SET contenu=?, modif_date=NOW(), modif_op=?, modif_elem='modif'
             WHERE id_doc_courtage=?""",
-        (raw, int(op_id), int(id_doc)),
+        (psycopg2.Binary(raw), int(op_id), int(id_doc)),
     )
     return True
+
+
+def download_content_html(id_doc: int) -> bytes | None:
+    """Renvoie le contenu en HTML. Lazy convert DOCX -> HTML :
+    si le contenu est un DOCX (magic PK\\x03\\x04), on le convertit
+    via mammoth, on persiste le HTML en BDD (write-back)."""
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        "SELECT contenu FROM rh.pgt_doc_courtage WHERE id_doc_courtage = ? LIMIT 1",
+        (int(id_doc),),
+    )
+    if not r: return None
+    c = r.get("contenu")
+    if c is None: return None
+    content = bytes(c) if isinstance(c, memoryview) else c
+    if content[:4] == b"PK\x03\x04":
+        try:
+            import io as _io
+            import mammoth
+            import psycopg2
+            html = mammoth.convert_to_html(_io.BytesIO(content)).value
+            html_bytes = html.encode("utf-8")
+            db.query(
+                """UPDATE rh.pgt_doc_courtage SET contenu = ?
+                    WHERE id_doc_courtage = ?""",
+                (psycopg2.Binary(html_bytes), int(id_doc)),
+            )
+            return html_bytes
+        except Exception:
+            return content
+    return content
+
+
+def upload_content_html(id_doc: int, html: str, op_id: int) -> bool:
+    """Sauvegarde le contenu HTML (depuis l'editeur inline).
+    Le bytea 'contenu' devient le HTML encode UTF-8."""
+    return update_contenu(id_doc, html.encode("utf-8"), op_id)
+
+
+# ---- Publipostage test (donnees fictives) ---------------------------
+
+_FAKE_VARS_COURTAGE = {
+    # Salarie / Gerant
+    "S_TITRE": "Mme",
+    "S_NOM": "MARTIN",
+    "S_PRENOM": "Sophie",
+    "S_LNAISS": "Nantes",
+    "S_DEPNAISS": "44",
+    "S_NUMSS": "283097612345678",
+    "S_DNAISS": "12/03/1980",
+    # Contrat
+    "DATE_CTS": datetime.now().strftime("%d/%m/%Y"),
+    "DATE_AVENANT": datetime.now().strftime("%d/%m/%Y"),
+    "SECTEUR_DISTRIB": "44.72.85",
+    # Placeholders images (vides pour le test)
+    "S_MENTION_DISTRIB": "",
+    "S_SIGN_DISTRIB": "",
+    "STE_LOGO": "",
+    "GER_SIGN": "",
+    "STE_CACHET": "",
+}
+
+
+def _societe_variables_for_test(id_ste: int) -> dict[str, str]:
+    """Recupere les vars STE_..._DISTRIB pour tester la mise en page."""
+    if not id_ste: return {}
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        """SELECT s.raison_sociale, s.code_ape, s.rcs, s.capital, s.siret,
+                  s.siren, s.adresse1, s.cp, s.ville, s.gerant_nom, s.gerant_type,
+                  fj.lib_form_juri
+             FROM rh.pgt_societe s
+             LEFT JOIN rh.pgt_societe_formjuri fj
+                    ON CAST(fj.id_societe_form_juri AS text) = s.forme_juri
+            WHERE s.id_ste = ? LIMIT 1""",
+        (int(id_ste),),
+    ) or {}
+    return {
+        "STE_RS_DISTRIB": r.get("raison_sociale") or "",
+        "STE_APE_DISTRIB": r.get("code_ape") or "",
+        "STE_RCS_DISTRIB": r.get("rcs") or "",
+        "STE_FORMJURI_DISTRIB": r.get("lib_form_juri") or "",
+        "STE_CAPITAL_DISTRIB": f"{r.get('capital') or 0}",
+        "STE_SIRET_DISTRIB": r.get("siret") or "",
+        "STE_SIREN_DISTRIB": r.get("siren") or "",
+        "STE_ADRESSE_DISTRIB": r.get("adresse1") or "",
+        "STE_CP_DISTRIB": r.get("cp") or "",
+        "STE_VILLE_DISTRIB": r.get("ville") or "",
+        "STE_ADR_DISTRIB": " ".join(filter(None, [
+            r.get("adresse1"), r.get("cp"), r.get("ville"),
+        ])),
+        "STE_GERANT_NOM_DISTRIB": r.get("gerant_nom") or "",
+        "STE_GERANT_TYPE_DISTRIB": r.get("gerant_type") or "",
+        # STE editrice (mêmes valeurs pour le test)
+        "STE_RS": r.get("raison_sociale") or "",
+        "STE_APE": r.get("code_ape") or "",
+        "STE_RCS": r.get("rcs") or "",
+        "STE_CAPITAL": f"{r.get('capital') or 0}",
+        "STE_ADR": " ".join(filter(None, [
+            r.get("adresse1"), r.get("cp"), r.get("ville"),
+        ])),
+        "STE_VILLE": r.get("ville") or "",
+        "STE_SIRET": r.get("siret") or "",
+        "STE_SIREN": r.get("siren") or "",
+        "STE_GERANT_NOM": r.get("gerant_nom") or "",
+        "STE_GERANT_TYPE": r.get("gerant_type") or "",
+        "DOCTITRE": "",
+    }
+
+
+def publipostage_test_html(id_doc: int, id_ste: int) -> str | None:
+    """Genere l'apercu HTML de test avec substitution des variables."""
+    content = download_content_html(id_doc)
+    if not content: return None
+    html = content.decode("utf-8", errors="ignore")
+    meta = get_doc_courtage(id_doc)
+    tags = {**_FAKE_VARS_COURTAGE, **_societe_variables_for_test(id_ste)}
+    if meta:
+        tags["DOCTITRE"] = meta.titre
+    # Remplacements simples (les tags sont sans accolades dans le
+    # template WinDev)
+    for k, v in tags.items():
+        html = html.replace(k, v or "")
+    return html
 
 
 class DocCourtageListItem(BaseModel):
@@ -292,6 +419,37 @@ class DistribTestItem(BaseModel):
     id_ste: str
     rs_interne: str
     id_gerant: int = 0
+
+
+class LookupsPayload(BaseModel):
+    groupes_operateur: list[dict] = []
+    societes: list[dict] = []
+    distribs_test: list[dict] = []
+
+
+def get_lookups() -> LookupsPayload:
+    """Combos utilisees par DocCourtageEditModal."""
+    from app.core.database.pg import get_pg_connection as _get
+    db_adv = _get("adv")
+    grps = db_adv.query(
+        """SELECT id_groupe_operateur, lib_groupe FROM adv.pgt_groupe_operateur
+            WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+            ORDER BY lib_groupe""",
+    ) or []
+    return LookupsPayload(
+        groupes_operateur=[{
+            "id_groupe_operateur": int(g["id_groupe_operateur"]),
+            "lib_groupe": g.get("lib_groupe") or "",
+        } for g in grps],
+        societes=[{
+            "id_ste": s.id_ste, "raison_sociale": s.raison_sociale,
+            "rs_interne": s.rs_interne,
+        } for s in list_societes_interne()],
+        distribs_test=[{
+            "id_ste": d.id_ste, "rs_interne": d.rs_interne,
+            "id_gerant": d.id_gerant,
+        } for d in list_distribs_test()],
+    )
 
 
 def list_distribs_test() -> list[DistribTestItem]:

@@ -2,12 +2,27 @@
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.services import doc_courtage as svc
 
 router = APIRouter(prefix="/doc-courtage", tags=["adm-doc-courtage"])
+
+
+@router.get("/lookups")
+def get_lookups(_u: UserToken = Depends(get_current_user)):
+    """Lookups pour DocCourtageEditModal (groupes / societes / distribs test)."""
+    return svc.get_lookups().model_dump()
+
+
+@router.post("/new")
+def post_new_doc(u: UserToken = Depends(get_current_user)):
+    """Cree un doc vide et renvoie son id_doc_courtage."""
+    payload = svc.DocCourtagePayload(titre="Nouveau document")
+    id_new = svc.create_doc_courtage(payload, u.id_salarie)
+    return {"id_doc_courtage": str(id_new)}
 
 
 @router.get("/combos/societes-interne",
@@ -126,3 +141,51 @@ async def upload_contenu(
         raise HTTPException(400, "Fichier non-DOCX (signature ZIP absente)")
     svc.update_contenu(id_doc, raw, u.id_salarie)
     return {"ok": True, "size": len(raw)}
+
+
+@router.get("/{id_doc}/content-html")
+def get_content_html(
+    id_doc: int,
+    _u: UserToken = Depends(get_current_user),
+):
+    """Renvoie le contenu HTML (lazy convert DOCX -> HTML via mammoth)."""
+    html = svc.download_content_html(id_doc)
+    if html is None:
+        raise HTTPException(404, "Contenu absent")
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+class HtmlContentPayload(BaseModel):
+    html: str = ""
+
+
+@router.post("/{id_doc}/content-html")
+def post_content_html(
+    id_doc: int,
+    payload: HtmlContentPayload,
+    u: UserToken = Depends(get_current_user),
+):
+    """Save du contenu HTML (depuis l'editeur inline)."""
+    svc.upload_content_html(id_doc, payload.html, u.id_salarie)
+    return {"ok": True, "size": len(payload.html)}
+
+
+@router.post("/{id_doc}/publipostage-test")
+def post_publipostage_test(
+    id_doc: int,
+    id_ste: int,
+    _u: UserToken = Depends(get_current_user),
+):
+    """Renvoie l'apercu HTML avec substitution des variables (donnees
+    fictives + la societe/distrib choisie)."""
+    html = svc.publipostage_test_html(id_doc, id_ste)
+    if html is None:
+        raise HTTPException(404, "Contenu absent")
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+    )

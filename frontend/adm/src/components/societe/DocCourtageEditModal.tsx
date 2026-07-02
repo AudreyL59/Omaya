@@ -1,453 +1,1342 @@
 /**
- * Fen_EditionDocCourtage - edition d'un template DOCX de courtage.
+ * Fen_EditionDocCourtage (transposition WinDev) - edition d'un doc RH.
  *
- * Version simplifiee (pas d'editeur WYSIWYG DOCX cote web) :
- *   - Metadonnees editables : Groupe, Titre, Société, Info Cplt,
- *     Doc Actif, Favori
- *   - Zone contenu : afficher la taille + boutons Telecharger / Uploader
- *   - Bouton 'Tester mise en page' : combo distrib + genere le DOCX
- *     rempli via l'endpoint publipostage (creer_suivi=false)
- *   - Bouton Enregistrer : PUT metadonnees
+ * V1.2 : metadonnees + editeur inline contentEditable + import/export DOCX.
+ * Btn 'Tester Mise en page' substitue les variables (S_NOM, STE_RS, etc.)
+ * avec des donnees fictives + une societe choisie -> telecharge le
+ * document publiposte (cf. Publipostage_TESTSalarie WinDev).
  *
- * Pour editer le contenu, le user telecharge le DOCX, le modifie
- * dans Word/LibreOffice, puis re-uploade.
+ * V1.3 : insertion images logo/cachet/signatures dans le publipostage.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+
+import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
-  X, Save, Loader2, FileText, Download, Upload, Play,
-  CheckSquare, Star,
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  Download,
+  Eye,
+  Italic,
+  List,
+  ListOrdered,
+  Loader2,
+  RotateCcw,
+  Save,
+  Table as TableIcon,
+  Underline as UnderlineIcon,
+  Upload,
+  X,
 } from 'lucide-react'
+
 import { getToken } from '@/api'
-import { showToast, showConfirm } from '@shared/ui/dialog'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { showConfirm, showPrompt, showToast } from '@shared/ui/dialog'
+import TableContextMenu from '@shared/ui/TableContextMenu'
 
-const API_BASE = '/api/adm'
+const COL_BRUN = '#4E1D17'
+const COL_PRIMARY = '#17494E'
+const COL_BORDER = '#E5DDDC'
+const COL_BG_SOFT = '#F8F5F4'
 
-interface GroupeOpItem { id_groupe_operateur: number; lib_groupe: string }
-interface SocieteInterneItem { id_ste: string; rs_interne: string; raison_sociale: string }
-interface DistribTestItem { id_ste: string; rs_interne: string; id_gerant: number }
-interface Detail {
+interface Lookups {
+  groupes_operateur: { id_groupe_operateur: number; lib_groupe: string }[]
+  societes: {
+    id_ste: string
+    raison_sociale: string
+    rs_interne: string
+  }[]
+  distribs_test: { id_ste: string; rs_interne: string; id_gerant: number }[]
+}
+
+interface DocMeta {
   id_doc_courtage: string
-  titre: string; info_cpl: string
-  id_groupe_operateur: number; lib_groupe_operateur: string
-  id_ste: string; rs_interne_ste: string
-  doc_actif: boolean; prioritaire: boolean
-  datecrea: string; modif_date: string
-  has_contenu: boolean; taille_contenu: number
+  id_groupe_operateur: number
+  titre: string
+  info_cpl: string
+  doc_actif: boolean
+  prioritaire: boolean
+  id_ste: string
+  taille_contenu: number
 }
 
 interface Props {
-  idDoc: string | null    // null = creer nouveau
+  idDocCourtage: string  // '' pour creation
   onClose: () => void
-  onSaved?: () => void
+  onSaved: () => void
 }
 
-const EMPTY: Detail = {
-  id_doc_courtage: '0',
-  titre: '', info_cpl: '',
-  id_groupe_operateur: 0, lib_groupe_operateur: '',
-  id_ste: '0', rs_interne_ste: '',
-  doc_actif: true, prioritaire: false,
-  datecrea: '', modif_date: '',
-  has_contenu: false, taille_contenu: 0,
+const EMPTY: DocMeta = {
+  id_doc_courtage: '',
+  id_groupe_operateur: 0,
+  titre: '',
+  info_cpl: '',
+  doc_actif: true,
+  prioritaire: false,
+  id_ste: '0',
+  taille_contenu: 0,
 }
 
 export default function DocCourtageEditModal({
-  idDoc, onClose, onSaved,
+  idDocCourtage: initialId,
+  onClose,
+  onSaved,
 }: Props) {
-  const isNew = !idDoc || idDoc === '0'
-  const [d, setD] = useState<Detail>(EMPTY)
-  const [groupes, setGroupes] = useState<GroupeOpItem[]>([])
-  const [societes, setSocietes] = useState<SocieteInterneItem[]>([])
-  const [distribsTest, setDistribsTest] = useState<DistribTestItem[]>([])
-  const [selDistribTest, setSelDistribTest] = useState<string>('')
-  const [loading, setLoading] = useState(!isNew)
+  const [docId, setDocId] = useState(initialId)
+  const [meta, setMeta] = useState<DocMeta>(EMPTY)
+  useDocumentTitle(meta.titre ? `Doc courtage — ${meta.titre}` : 'Doc courtage')
+  // Detection des modifications non sauvegardees (champs meta + contenu HTML).
+  const [isDirty, setIsDirty] = useState(false)
+  // True des qu'un Enregistrer a reussi : a la fermeture, on remonte
+  // onSaved() au parent (qui recharge la liste) au lieu d'un onClose
+  // simple.
+  const [hasSaved, setHasSaved] = useState(false)
+  const [lookups, setLookups] = useState<Lookups | null>(null)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [steTest, setSteTest] = useState('')
   const [testing, setTesting] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const editorRef = useRef<HTMLDivElement | null>(null)
+  // Memorise la selection courante avant qu'un controle de la toolbar
+  // (color picker natif, combo) ne fasse perdre le focus du contentEditable.
+  const savedRange = useRef<Range | null>(null)
+  const memorizeSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0) {
+      savedRange.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
 
-  // Combos communes
+  // ---- Synchronisation toolbar -> selection courante -------------------
+  // Quand la selection change dans l'editeur, met a jour les controles
+  // (Police, Taille, Couleur) pour refleter le style du texte selectionne.
+  const [currentFont, setCurrentFont] = useState('')
+  const [currentSize, setCurrentSize] = useState('')
+  const [currentColor, setCurrentColor] = useState('#000000')
+  const [currentLineHeight, setCurrentLineHeight] = useState('')
+
+  // Trouve le bloc englobant (p/div/h1-6/li/blockquote/pre) le plus proche.
+  const findBlockAncestor = (node: Node | null): HTMLElement | null => {
+    if (!node) return null
+    let el: HTMLElement | null =
+      node.nodeType === Node.TEXT_NODE
+        ? node.parentElement
+        : (node as HTMLElement)
+    const BLOCK_TAGS = new Set([
+      'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'blockquote', 'pre', 'td', 'th',
+    ])
+    while (el && editorRef.current?.contains(el)) {
+      if (BLOCK_TAGS.has(el.tagName.toLowerCase())) return el
+      el = el.parentElement
+    }
+    return null
+  }
+
+  // Applique line-height a tous les blocs touches par la selection.
+  const applyLineHeight = (lh: string) => {
+    if (!editorRef.current) return
+    const sel = window.getSelection()
+    let range: Range | null = null
+    if (sel && sel.rangeCount > 0) range = sel.getRangeAt(0)
+    else if (savedRange.current) range = savedRange.current
+    if (!range) {
+      editorRef.current.focus()
+      return
+    }
+    const startBlock = findBlockAncestor(range.startContainer)
+    const endBlock = findBlockAncestor(range.endContainer)
+    const blocks = new Set<HTMLElement>()
+    if (startBlock) blocks.add(startBlock)
+    if (endBlock) blocks.add(endBlock)
+    // Si selection couvre plusieurs blocs : ajouter ceux entre start et end
+    if (startBlock && endBlock && startBlock !== endBlock) {
+      const walker = document.createTreeWalker(
+        editorRef.current,
+        NodeFilter.SHOW_ELEMENT,
+      )
+      let inRange = false
+      let node: Node | null = walker.currentNode
+      while (node) {
+        if (node === startBlock) inRange = true
+        if (inRange && node instanceof HTMLElement) {
+          const t = node.tagName.toLowerCase()
+          if (['p','div','li','h1','h2','h3','h4','h5','h6','blockquote','pre','td','th'].includes(t)) {
+            blocks.add(node)
+          }
+        }
+        if (node === endBlock) break
+        node = walker.nextNode()
+      }
+    }
+    blocks.forEach((b) => (b.style.lineHeight = lh))
+    editorRef.current.focus()
+    setCurrentLineHeight(lh)
+    setIsDirty(true)
+  }
+
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_BASE}/distrib-courtage/combos/groupes-operateur`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }).then(r => r.ok ? r.json() : []),
-      fetch(`${API_BASE}/doc-courtage/combos/societes-interne`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }).then(r => r.ok ? r.json() : []),
-      fetch(`${API_BASE}/doc-courtage/combos/distribs-test`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }).then(r => r.ok ? r.json() : []),
-    ]).then(([g, s, dt]: [GroupeOpItem[], SocieteInterneItem[], DistribTestItem[]]) => {
-      setGroupes(g); setSocietes(s); setDistribsTest(dt)
-    })
+    const rgbToHex = (rgb: string): string => {
+      const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+      if (!m) return '#000000'
+      const [, r, g, b] = m
+      return (
+        '#' +
+        [r, g, b]
+          .map((x) => parseInt(x, 10).toString(16).padStart(2, '0'))
+          .join('')
+      )
+    }
+    const findFontOption = (ff: string): string => {
+      // ff = '"Calibri", "Segoe UI", sans-serif' ou 'Calibri, Segoe UI, ...'
+      const first = ff.split(',')[0].replace(/['"]/g, '').trim().toLowerCase()
+      for (const opt of FONT_OPTIONS) {
+        const optFirst = opt.value.split(',')[0]
+          .replace(/['"]/g, '').trim().toLowerCase()
+        if (optFirst === first) return opt.value
+      }
+      return ''
+    }
+    const handler = () => {
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) return
+      const node = sel.anchorNode
+      if (!node || !editorRef.current?.contains(node)) return
+      // Memorise la range courante : utilise par exec() comme fallback
+      // si l'editeur perd le focus (clic sur un bouton de la toolbar).
+      savedRange.current = sel.getRangeAt(0).cloneRange()
+      const el =
+        node.nodeType === 3
+          ? (node.parentElement as HTMLElement | null)
+          : (node as HTMLElement)
+      if (!el) return
+      const cs = window.getComputedStyle(el)
+      setCurrentFont(findFontOption(cs.fontFamily))
+      const fsPx = parseFloat(cs.fontSize)
+      if (fsPx) setCurrentSize(`${Math.round(fsPx / 1.333)}pt`)
+      setCurrentColor(rgbToHex(cs.color))
+      // Interligne : lit le line-height du bloc parent
+      const block = findBlockAncestor(node)
+      if (block) {
+        const blockCs = window.getComputedStyle(block)
+        const lh = blockCs.lineHeight
+        const fs = parseFloat(blockCs.fontSize)
+        let lhVal = ''
+        if (lh && lh !== 'normal' && fs) {
+          const ratio = parseFloat(lh) / fs
+          // Match contre les options disponibles
+          for (const opt of LINE_HEIGHT_OPTIONS) {
+            if (Math.abs(parseFloat(opt) - ratio) < 0.05) {
+              lhVal = opt
+              break
+            }
+          }
+        }
+        setCurrentLineHeight(lhVal)
+      }
+    }
+    document.addEventListener('selectionchange', handler)
+    return () => document.removeEventListener('selectionchange', handler)
   }, [])
+  const [editorReady, setEditorReady] = useState(false)
+  // HTML a injecter dans l'editeur une fois qu'il est rendu (sinon
+  // editorRef.current est null pendant le useEffect d'init).
+  const [pendingHtml, setPendingHtml] = useState<string | null>(null)
 
-  // Charge le doc si edit
-  const loadDoc = useCallback(async () => {
-    if (isNew) { setD(EMPTY); setLoading(false); return }
-    setLoading(true)
+  const update = (patch: Partial<DocMeta>) => {
+    setMeta((m) => ({ ...m, ...patch }))
+    setIsDirty(true)
+  }
+
+  // ---- Init -------------------------------------------------------------
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      try {
+        const lk = await fetch('/api/adm/doc-courtage/lookups', {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        }).then((r) => r.json())
+        if (cancelled) return
+        setLookups(lk as Lookups)
+
+        let id = initialId
+        if (!id) {
+          const created = await fetch('/api/adm/doc-courtage/new', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}` },
+          }).then((r) => r.json())
+          id = created.id_doc_courtage
+          setDocId(id)
+        }
+        const m = await fetch(`/api/adm/doc-courtage/${id}`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        }).then((r) => r.json())
+        if (cancelled) return
+        setMeta(m as DocMeta)
+
+        // Charge et convertit le contenu pour l'editeur inline
+        if ((m as DocMeta).taille_contenu > 0) {
+          await loadContentToEditor(id)
+        }
+        if (!cancelled) setEditorReady(true)
+      } catch (e) {
+        showToast(`Échec chargement : ${(e as Error).message}`, 'error')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [initialId])
+
+  // ---- Chargement du contenu (DOCX -> HTML via mammoth, ou HTML brut) ---
+  const loadContentToEditor = async (id: string) => {
     try {
-      const r = await fetch(`${API_BASE}/doc-courtage/${idDoc}`, {
+      const r = await fetch(`/api/adm/doc-courtage/${id}/content`, {
         headers: { Authorization: `Bearer ${getToken()}` },
       })
-      if (!r.ok) throw new Error(String(r.status))
-      setD(await r.json())
+      if (!r.ok) {
+        setPendingHtml('')
+        return
+      }
+      const buf = await r.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      // Detect DOCX (magic PK\x03\x04)
+      const isDocx =
+        bytes.length >= 4 &&
+        bytes[0] === 0x50 &&
+        bytes[1] === 0x4b &&
+        bytes[2] === 0x03 &&
+        bytes[3] === 0x04
+      let html = ''
+      if (isDocx) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore - pas de types officiels pour mammoth
+        const mammoth = (await import('mammoth/mammoth.browser.js')).default
+        const res = await mammoth.convertToHtml({ arrayBuffer: buf })
+        html = res.value
+      } else {
+        html = new TextDecoder('utf-8').decode(buf)
+      }
+      // Stocke - sera injecte par le useEffect [pendingHtml, editorReady]
+      // quand le contentEditable sera rendu.
+      setPendingHtml(html)
     } catch (e) {
-      showToast(`Erreur : ${(e as Error).message}`, 'error')
-    } finally { setLoading(false) }
-  }, [idDoc, isNew])
-
-  useEffect(() => { void loadDoc() }, [loadDoc])
-
-  const update = (patch: Partial<Detail>) => setD(p => ({ ...p, ...patch }))
-
-  const enregistrer = async () => {
-    if (!d.titre.trim()) {
-      showToast('Le titre est obligatoire.', 'error'); return
+      console.error('[doc-courtage] loadContent', e)
+      setPendingHtml('')
     }
+  }
+
+  // Injecte le HTML dans l'editeur APRES que contentEditable soit rendu
+  // (editorRef.current est null tant que loading=true et div d'attente est
+  // affiche).
+  useEffect(() => {
+    if (!editorReady || pendingHtml === null) return
+    if (editorRef.current) {
+      editorRef.current.innerHTML = pendingHtml
+      setPendingHtml(null)
+    }
+  }, [editorReady, pendingHtml])
+
+  // ---- Fermeture avec detection modifications -------------------------
+  const handleClose = async () => {
+    if (!isDirty) {
+      if (hasSaved) onSaved()
+      else onClose()
+      return
+    }
+    const yes = await showConfirm({
+      title: 'Modifications non enregistrées',
+      message:
+        'Vous avez des modifications non enregistrées. ' +
+        'Voulez-vous les enregistrer avant de fermer ?',
+      confirmLabel: 'Enregistrer et fermer',
+      cancelLabel: 'Fermer sans enregistrer',
+    })
+    if (yes) {
+      await saveMeta(true)
+      onSaved()
+    } else {
+      if (hasSaved) onSaved()
+      else onClose()
+    }
+  }
+
+  // ---- Toolbar contenteditable -----------------------------------------
+  // Restaure la selection memorisee si elle est dans l'editeur, sinon
+  // focus l'editeur, puis exec la commande. Sinon execCommand est
+  // ignoree si l'activeElement n'est pas dans le contentEditable.
+  const exec = (cmd: string, value?: string) => {
+    const ed = editorRef.current
+    if (!ed) return
+    if (document.activeElement !== ed) {
+      const sel = window.getSelection()
+      if (
+        savedRange.current &&
+        ed.contains(savedRange.current.commonAncestorContainer)
+      ) {
+        if (sel) {
+          sel.removeAllRanges()
+          sel.addRange(savedRange.current)
+        }
+      } else {
+        ed.focus()
+      }
+    }
+    document.execCommand(cmd, false, value)
+    ed.focus()
+  }
+
+  // Liste a puces/numerotee : implementation custom (cf. DocUleaseEditModal
+  // pour le rationale). On evite execCommand qui est capricieux avec
+  // les HTML imbriques ou non-standards.
+  const insertList = (kind: 'ul' | 'ol') => {
+    const ed = editorRef.current
+    if (!ed) return
+    if (document.activeElement !== ed) {
+      const s = window.getSelection()
+      if (
+        savedRange.current &&
+        ed.contains(savedRange.current.commonAncestorContainer)
+      ) {
+        if (s) {
+          s.removeAllRanges()
+          s.addRange(savedRange.current)
+        }
+      } else {
+        ed.focus()
+      }
+    }
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return
+    const range = sel.getRangeAt(0)
+
+    const BLOCK = new Set([
+      'p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'blockquote', 'pre',
+    ])
+    const findBlock = (node: Node | null): HTMLElement | null => {
+      let el: HTMLElement | null =
+        node?.nodeType === Node.TEXT_NODE
+          ? (node.parentElement as HTMLElement | null)
+          : (node as HTMLElement | null)
+      while (el && ed.contains(el)) {
+        if (BLOCK.has(el.tagName.toLowerCase())) return el
+        el = el.parentElement
+      }
+      return null
+    }
+
+    const startBlock = findBlock(range.startContainer)
+    const endBlock = findBlock(range.endContainer)
+    if (!startBlock) {
+      document.execCommand(
+        kind === 'ul' ? 'insertUnorderedList' : 'insertOrderedList',
+      )
+      setIsDirty(true)
+      return
+    }
+
+    const blocks: HTMLElement[] = []
+    if (startBlock === endBlock || !endBlock) {
+      blocks.push(startBlock)
+    } else {
+      const walker = document.createTreeWalker(ed, NodeFilter.SHOW_ELEMENT)
+      let inRange = false
+      let n: Node | null = walker.currentNode
+      while (n) {
+        if (n === startBlock) inRange = true
+        if (inRange && n instanceof HTMLElement) {
+          const t = n.tagName.toLowerCase()
+          if (BLOCK.has(t)) blocks.push(n)
+        }
+        if (n === endBlock) break
+        n = walker.nextNode()
+      }
+      const filtered: HTMLElement[] = []
+      for (const b of blocks) {
+        if (!filtered.some((p) => p.contains(b))) filtered.push(b)
+      }
+      blocks.splice(0, blocks.length, ...filtered)
+    }
+    if (blocks.length === 0) return
+
+    // ----- Toggle off / switch kind (cf. DocUleaseEditModal) ---------
+    const allLi = blocks.every((b) => b.tagName.toLowerCase() === 'li')
+    if (allLi) {
+      const parentList = blocks[0].parentElement
+      const parentTag = parentList?.tagName.toLowerCase() || ''
+      const sameParent = blocks.every((b) => b.parentElement === parentList)
+      if (sameParent && (parentTag === 'ul' || parentTag === 'ol') && parentList) {
+        if (parentTag === kind) {
+          const fragments: HTMLElement[] = []
+          blocks.forEach((li) => {
+            const p = document.createElement('p')
+            p.innerHTML = li.innerHTML || '&nbsp;'
+            fragments.push(p)
+          })
+          fragments.forEach((p) =>
+            parentList.parentNode!.insertBefore(p, parentList),
+          )
+          blocks.forEach((li) => li.remove())
+          if (parentList.children.length === 0) parentList.remove()
+          const newSel = window.getSelection()
+          if (newSel && fragments[0]) {
+            const r = document.createRange()
+            r.selectNodeContents(fragments[0])
+            r.collapse(false)
+            newSel.removeAllRanges()
+            newSel.addRange(r)
+          }
+          setIsDirty(true)
+          ed.focus()
+          return
+        }
+        const newList = document.createElement(kind)
+        newList.style.listStyle = kind === 'ul' ? 'disc' : 'decimal'
+        newList.style.paddingLeft = '40px'
+        newList.style.margin = '8px 0'
+        while (parentList.firstChild) {
+          newList.appendChild(parentList.firstChild)
+        }
+        parentList.parentNode!.replaceChild(newList, parentList)
+        setIsDirty(true)
+        ed.focus()
+        return
+      }
+    }
+
+    // Style inline obligatoire pour overrider le reset Tailwind
+    // (preflight) qui met list-style:none + padding:0.
+    const list = document.createElement(kind)
+    list.style.listStyle = kind === 'ul' ? 'disc' : 'decimal'
+    list.style.paddingLeft = '40px'
+    list.style.margin = '8px 0'
+    // 1 <li> par 'ligne' : on splitte chaque bloc par <br> (mammoth
+    // produit parfois un seul <p> avec des <br/> entre les lignes).
+    blocks.forEach((b) => {
+      const html = b.innerHTML || ''
+      const parts = html
+        .split(/<br\s*\/?>/i)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+      if (parts.length <= 1) {
+        const li = document.createElement('li')
+        li.innerHTML = html || '&nbsp;'
+        list.appendChild(li)
+      } else {
+        parts.forEach((line) => {
+          const li = document.createElement('li')
+          li.innerHTML = line
+          list.appendChild(li)
+        })
+      }
+    })
+    blocks[0].parentNode!.insertBefore(list, blocks[0])
+    blocks.forEach((b) => b.remove())
+
+    const newSel = window.getSelection()
+    if (newSel && list.firstChild) {
+      const r = document.createRange()
+      r.selectNodeContents(list.firstChild)
+      r.collapse(false)
+      newSel.removeAllRanges()
+      newSel.addRange(r)
+    }
+    setIsDirty(true)
+    ed.focus()
+  }
+
+  // Insertion d'un tableau (HTML brut via execCommand insertHTML).
+  // Une fois inseré, le user peut editer les cellules en cliquant dedans
+  // (contentEditable est recursif). Bords visibles et restitues a
+  // l'identique dans WeasyPrint (CSS inline).
+  const insertTable = async () => {
+    memorizeSelection()
+    const v = await showPrompt({
+      title: 'Insérer un tableau',
+      message: 'Dimensions (lignes × colonnes) :',
+      defaultValue: '3x3',
+      placeholder: 'ex: 3x4',
+      validator: (s) =>
+        /^\s*\d+\s*[xX×]\s*\d+\s*$/.test(s) ? null : 'Format : NxM (ex 3x4)',
+    })
+    if (!v) return
+    const m = v.match(/^\s*(\d+)\s*[xX×]\s*(\d+)\s*$/)
+    if (!m) return
+    const rows = Math.min(50, Math.max(1, parseInt(m[1], 10)))
+    const cols = Math.min(20, Math.max(1, parseInt(m[2], 10)))
+    let html =
+      '<table style="border-collapse:collapse;border:1px solid #888;' +
+      'width:100%;margin:8px 0;">'
+    for (let r = 0; r < rows; r++) {
+      html += '<tr>'
+      for (let c = 0; c < cols; c++) {
+        html += '<td style="border:1px solid #888;padding:6px;' +
+          'min-width:40px;">&nbsp;</td>'
+      }
+      html += '</tr>'
+    }
+    html += '</table><p>&nbsp;</p>'
+
+    editorRef.current?.focus()
+    if (savedRange.current) {
+      const sel = window.getSelection()
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(savedRange.current)
+      }
+    }
+    document.execCommand('insertHTML', false, html)
+    setIsDirty(true)
+  }
+
+  // Applique font-family / font-size / color sur la selection via span style.
+  // (execCommand fontSize ne supporte que 1-7 et foreColor produit du
+  // <font color="..."> mal supporte par WeasyPrint.)
+  // Utilise savedRange.current en fallback si la selection courante est
+  // perdue (cas color picker qui vole le focus).
+  const applyInlineStyle = (style: Partial<CSSStyleDeclaration>) => {
+    let range: Range | null = null
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      range = sel.getRangeAt(0)
+    } else if (savedRange.current && !savedRange.current.collapsed) {
+      // Restaure la selection memorisee (cas color picker)
+      range = savedRange.current.cloneRange()
+      editorRef.current?.focus()
+      const s = window.getSelection()
+      s?.removeAllRanges()
+      s?.addRange(range)
+    }
+    if (!range || range.collapsed) {
+      editorRef.current?.focus()
+      return
+    }
+    const span = document.createElement('span')
+    if (style.fontFamily) span.style.fontFamily = String(style.fontFamily)
+    if (style.fontSize) span.style.fontSize = String(style.fontSize)
+    if (style.color) span.style.color = String(style.color)
+    try {
+      span.appendChild(range.extractContents())
+      range.insertNode(span)
+      // Re-select pour garder le visuel
+      const s2 = window.getSelection()
+      s2?.removeAllRanges()
+      const newRange = document.createRange()
+      newRange.selectNodeContents(span)
+      s2?.addRange(newRange)
+      // Met a jour savedRange pour les actions suivantes
+      savedRange.current = newRange.cloneRange()
+      setIsDirty(true)
+    } catch (e) {
+      console.error('[applyInlineStyle]', e)
+    }
+    editorRef.current?.focus()
+  }
+
+  // ---- Save -------------------------------------------------------------
+  const saveMeta = async (silent = false) => {
     setSaving(true)
     try {
-      const payload = {
-        titre: d.titre, info_cpl: d.info_cpl,
-        id_groupe_operateur: d.id_groupe_operateur,
-        id_ste: 0,   // remplace en query pour precision bigint
-        doc_actif: d.doc_actif, prioritaire: d.prioritaire,
-      }
-      // hack pour id_ste bigint via replace() sur JSON stringify
-      const body = JSON.stringify(payload).replace(
-        '"id_ste":0', `"id_ste":${d.id_ste}`,
-      )
-      const url = isNew
-        ? `${API_BASE}/doc-courtage`
-        : `${API_BASE}/doc-courtage/${d.id_doc_courtage}`
-      const method = isNew ? 'POST' : 'PUT'
-      const r = await fetch(url, {
-        method,
+      // 1. Metadonnees
+      const r = await fetch(`/api/adm/doc-courtage/${docId}`, {
+        method: 'PUT',
         headers: {
-          Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`,
         },
-        body,
+        body: JSON.stringify({
+          id_type_doc: Number(meta.id_type_doc) || 0,
+          titre: meta.titre,
+          info_cpl: meta.info_cpl,
+          id_type_produit: Number(meta.id_type_produit) || 1,
+          id_ste: Number(meta.id_ste) || 0,
+          doc_actif: meta.doc_actif,
+          prioritaire: meta.prioritaire,
+          doc_dpae: meta.doc_dpae,
+          doc_dpae_distrib: meta.doc_dpae_distrib,
+          id_tk_type_photo_dpae: Number(meta.id_tk_type_photo_dpae) || 0,
+        }),
       })
       if (!r.ok) throw new Error(String(r.status))
-      if (isNew) {
-        const res = await r.json() as { id_doc_courtage: string }
-        // Reload en mode edit pour l'id nouveau
-        setD(p => ({ ...p, id_doc_courtage: res.id_doc_courtage }))
+
+      // 2. Contenu HTML (si l'editeur a du contenu)
+      const html = editorRef.current?.innerHTML || ''
+      if (html.trim()) {
+        const rh = await fetch(`/api/adm/doc-courtage/${docId}/content-html`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ html }),
+        })
+        if (!rh.ok) throw new Error(`content: ${rh.status}`)
+        const j = await rh.json()
+        update({ taille_contenu: j.taille })
       }
-      showToast(isNew ? 'Document créé' : 'Métadonnées enregistrées', 'success')
-      onSaved?.()
-    } catch (e) {
-      showToast(`Erreur : ${(e as Error).message}`, 'error')
-    } finally { setSaving(false) }
-  }
 
-  const telecharger = async () => {
-    if (!d.has_contenu) { showToast('Aucun contenu à télécharger.', 'info'); return }
-    try {
-      const r = await fetch(`${API_BASE}/doc-courtage/${d.id_doc_courtage}/contenu`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      })
-      if (!r.ok) throw new Error(String(r.status))
-      const blob = await r.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${d.titre || 'doc'}.docx`
-      document.body.appendChild(a); a.click()
-      document.body.removeChild(a); URL.revokeObjectURL(url)
+      setIsDirty(false)
+      setHasSaved(true)
+      if (!silent) {
+        showToast('Doc courtage enregistré.', 'success')
+        // NB : on NE ferme PAS la fenetre. Reload du parent a la
+        // fermeture (handleClose -> onSaved si hasSaved).
+      }
     } catch (e) {
-      showToast(`Erreur : ${(e as Error).message}`, 'error')
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally {
+      setSaving(false)
     }
   }
 
-  const uploader = async (file: File) => {
-    if (isNew && d.id_doc_courtage === '0') {
-      showToast('Enregistre d\'abord les métadonnées.', 'info'); return
-    }
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      showToast('Seuls les fichiers .docx sont acceptés.', 'error'); return
-    }
-    const ok = await showConfirm({
-      title: 'Uploader ce fichier ?',
-      message: `Remplacer le contenu actuel par "${file.name}" ?`,
-    })
-    if (!ok) return
-    setUploading(true)
-    try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const r = await fetch(
-        `${API_BASE}/doc-courtage/${d.id_doc_courtage}/contenu`,
-        {
+  // ---- Upload docx ------------------------------------------------------
+  const uploadDocx = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.docx'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      setSaving(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', f)
+        const r = await fetch(`/api/adm/doc-courtage/${docId}/content`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${getToken()}` },
           body: fd,
-        },
-      )
-      if (!r.ok) throw new Error(String(r.status))
-      const res = await r.json() as { size: number }
-      showToast(`Contenu uploadé (${res.size} octets)`, 'success')
-      await loadDoc()
-      onSaved?.()
-    } catch (e) {
-      showToast(`Erreur : ${(e as Error).message}`, 'error')
-    } finally { setUploading(false) }
+        })
+        const j = await r.json()
+        if (!r.ok) throw new Error(j?.detail || String(r.status))
+        update({ taille_contenu: j.taille })
+        showToast(`Document chargé (${(j.taille / 1024).toFixed(1)} Ko).`, 'success')
+      } catch (e) {
+        showToast(`Échec upload : ${(e as Error).message}`, 'error')
+      } finally {
+        setSaving(false)
+      }
+    }
+    input.click()
   }
 
-  const testerMiseEnPage = async () => {
-    if (!d.has_contenu) {
-      showToast('Uploadez d\'abord un DOCX.', 'info'); return
+  const downloadDocx = () => {
+    const a = document.createElement('a')
+    a.href = `/api/adm/doc-courtage/${docId}/content?_t=${Date.now()}`
+    // L'auth header ne se passe pas via <a>. On force le fetch + blob.
+    fetch(a.href, { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${meta.titre || 'document'}.docx`
+        link.click()
+        URL.revokeObjectURL(url)
+      })
+      .catch(() => showToast('Téléchargement échoué.', 'error'))
+  }
+
+  // ---- Test mise en page ------------------------------------------------
+  const testMep = async () => {
+    if (!steTest) {
+      showToast('Sélectionne une société pour le test.', 'info')
+      return
     }
-    if (!selDistribTest) {
-      showToast('Choisis un distributeur de test.', 'info'); return
-    }
-    const distrib = distribsTest.find(x => x.id_ste === selDistribTest)
-    if (!distrib) return
     setTesting(true)
     try {
-      const payload = {
-        id_doc_courtage: parseInt(d.id_doc_courtage, 10),
-        id_distrib: 0,   // remplacé via replace()
-        id_gerant: distrib.id_gerant,
-        secteur: 'Test secteur',
-        date_signature: new Date().toISOString().slice(0, 10),
-        date_avenant: '',
-        creer_suivi: false,   // test seul, pas de suivi cree
-      }
-      const body = JSON.stringify(payload).replace(
-        '"id_distrib":0', `"id_distrib":${distrib.id_ste}`,
-      )
+      await saveMeta(true)
       const r = await fetch(
-        `${API_BASE}/distrib-courtage/generate-contrat`,
+        `/api/adm/doc-courtage/${docId}/publipostage-test?id_ste=${steTest}`,
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${getToken()}`,
-            'Content-Type': 'application/json',
-          },
-          body,
+          headers: { Authorization: `Bearer ${getToken()}` },
         },
       )
-      if (!r.ok) throw new Error(String(r.status))
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `TEST-${d.titre || 'doc'}-${distrib.rs_interne}.docx`
-      document.body.appendChild(a); a.click()
-      document.body.removeChild(a); URL.revokeObjectURL(url)
-      showToast('DOCX de test généré et téléchargé', 'success')
+      // Ouvre l'apercu HTML dans un nouvel onglet (substitution des vars)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      showToast('Aperçu de test généré.', 'success')
     } catch (e) {
-      showToast(`Erreur : ${(e as Error).message}`, 'error')
-    } finally { setTesting(false) }
-  }
-
-  const formatSize = (n: number): string => {
-    if (n < 1024) return `${n} o`
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} ko`
-    return `${(n / 1024 / 1024).toFixed(2)} Mo`
+      showToast(`Échec test : ${(e as Error).message}`, 'error')
+    } finally {
+      setTesting(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-         onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-[900px] max-w-full max-h-[95vh] flex flex-col"
-           onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-c-line">
-          <h2 className="text-sm font-bold flex items-center gap-2">
-            <FileText className="w-4 h-4 text-c-brand" />
-            {isNew ? 'Nouveau document de courtage' : 'Édition doc courtage'}
-            {!isNew && (
-              <span className="text-xs text-c-ink-faint-2 font-normal">
-                Id : {d.id_doc_courtage}
-              </span>
-            )}
-          </h2>
-          <button onClick={onClose}
-            className="p-1 hover:bg-c-surface-soft rounded text-c-ink-faint">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin text-c-brand" />
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] flex flex-col max-h-[95vh] font-normal"
+        >
+          {/* Header */}
+          <div
+            className="flex items-center justify-between px-4 py-3 border-b"
+            style={{ borderColor: COL_BG_SOFT, backgroundColor: COL_BG_SOFT }}
+          >
+            <h3 className="text-base font-bold" style={{ color: COL_BRUN }}>
+              Édition doc RH
+            </h3>
+            <div className="flex items-center gap-3">
+              {meta.id_doc_courtage && (
+                <span className="text-xs" style={{ color: COL_BRUN }}>
+                  Id Doc courtage : {meta.id_doc_courtage}
+                </span>
+              )}
+              <button
+                onClick={handleClose}
+                className="p-1 hover:bg-white/40 rounded"
+              >
+                <X className="w-4 h-4" style={{ color: COL_BRUN }} />
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="flex-1 overflow-auto p-4 space-y-4">
-            {/* Metadonnees */}
-            <section className="border border-c-line rounded-lg p-3">
-              <h3 className="text-xs font-bold text-c-ink-faint uppercase tracking-wide mb-2">
-                Métadonnées
-              </h3>
-              <div className="grid grid-cols-4 gap-3 text-xs">
+
+          {loading || !lookups ? (
+            <div className="p-10 flex justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-[#A68D8A]" />
+            </div>
+          ) : (
+            <div className="overflow-y-auto p-4">
+              {/* Toggle Actif / Archive + Save */}
+              <div className="flex justify-between items-center mb-4">
+                <ActifToggle
+                  value={meta.doc_actif}
+                  onChange={(v) => update({ doc_actif: v })}
+                />
+                <button
+                  type="button"
+                  onClick={() => saveMeta()}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md text-white text-sm font-medium disabled:opacity-50"
+                  style={{ backgroundColor: COL_PRIMARY }}
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Enregistrer
+                </button>
+              </div>
+
+              {/* Layout 2 colonnes : 33% champs / 66% contenu */}
+              <div className="grid grid-cols-3 gap-6">
+              <div className="col-span-1 space-y-4">
+              {/* Form metadonnees */}
+              <div className="grid grid-cols-1 gap-3">
                 <Field label="Groupe">
-                  <select value={d.id_groupe_operateur}
-                    onChange={e => update({ id_groupe_operateur: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full px-2 py-1 border border-c-line rounded text-xs h-7">
-                    <option value={0}>—</option>
-                    {groupes.map(g => (
+                  <select
+                    value={meta.id_groupe_operateur}
+                    onChange={(e) => update({ id_groupe_operateur: parseInt(e.target.value, 10) || 0 })}
+                    className={inputCls}
+                  >
+                    <option value={0}>-</option>
+                    {lookups.groupes_operateur.map((g) => (
                       <option key={g.id_groupe_operateur} value={g.id_groupe_operateur}>
                         {g.lib_groupe}
                       </option>
                     ))}
                   </select>
                 </Field>
-                <Field label="Titre *" cols={3}>
-                  <Input value={d.titre} onChange={v => update({ titre: v })} />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <Field label="Titre" wide>
+                  <input
+                    type="text"
+                    value={meta.titre}
+                    onChange={(e) => update({ titre: e.target.value })}
+                    className={inputCls}
+                  />
                 </Field>
-                <Field label="Société" cols={2}>
-                  <select value={d.id_ste}
-                    onChange={e => update({ id_ste: e.target.value })}
-                    className="w-full px-2 py-1 border border-c-line rounded text-xs h-7">
-                    <option value="0">— Aucune —</option>
-                    {societes.map(s => (
-                      <option key={s.id_ste} value={s.id_ste}>{s.rs_interne}</option>
+                <Field label="Info Cplt">
+                  <input
+                    type="text"
+                    value={meta.info_cpl}
+                    onChange={(e) => update({ info_cpl: e.target.value })}
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <Field label="Société" wide>
+                  <select
+                    value={meta.id_ste}
+                    onChange={(e) => update({ id_ste: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="0">-</option>
+                    {lookups.societes.map((s) => (
+                      <option key={s.id_ste} value={s.id_ste}>
+                        {s.rs_interne || s.raison_sociale}
+                      </option>
                     ))}
                   </select>
                 </Field>
-                <Field label="Info Cplt" cols={2}>
-                  <Input value={d.info_cpl} onChange={v => update({ info_cpl: v })} />
-                </Field>
-                <div className="col-span-2 flex items-center gap-2 self-end pb-1">
-                  <input type="checkbox" checked={d.doc_actif}
-                    onChange={e => update({ doc_actif: e.target.checked })}
-                    id="doc_actif" />
-                  <label htmlFor="doc_actif" className="flex items-center gap-1">
-                    <CheckSquare className="w-3.5 h-3.5" /> Doc Actif
-                  </label>
-                </div>
-                <div className="col-span-2 flex items-center gap-2 self-end pb-1">
-                  <input type="checkbox" checked={d.prioritaire}
-                    onChange={e => update({ prioritaire: e.target.checked })}
-                    id="prioritaire" />
-                  <label htmlFor="prioritaire" className="flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5" /> Favori
-                  </label>
+                <div className="flex flex-col gap-1 self-end pb-1.5">
+                  <Checkbox
+                    label="Favori (prioritaire)"
+                    value={meta.prioritaire}
+                    onChange={(v) => update({ prioritaire: v })}
+                  />
                 </div>
               </div>
-            </section>
 
-            {/* Contenu DOCX */}
-            <section className="border border-c-line rounded-lg p-3">
-              <h3 className="text-xs font-bold text-c-ink-faint uppercase tracking-wide mb-2">
-                Contenu DOCX
-              </h3>
-              <div className="flex items-center gap-3 text-xs">
-                <div className="flex-1">
-                  {d.has_contenu ? (
-                    <span className="text-c-ink-soft">
-                      Fichier actuel : <b>{d.titre || 'doc'}.docx</b>
-                      <span className="ml-2 text-c-ink-faint">
-                        ({formatSize(d.taille_contenu)})
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="italic text-c-ink-faint">
-                      Aucun contenu. Uploadez un fichier .docx pour commencer.
-                    </span>
-                  )}
+              {/* Test de mise en page */}
+              <div
+                className="mt-5 pt-4 border-t"
+                style={{ borderColor: COL_BORDER }}
+              >
+                <h4
+                  className="text-xs font-bold uppercase mb-2 tracking-wide"
+                  style={{ color: COL_BRUN }}
+                >
+                  Test de mise en page
+                </h4>
+                <div className="flex items-end gap-2">
+                  <Field label="Société test" wide>
+                    <select
+                      value={steTest}
+                      onChange={(e) => setSteTest(e.target.value)}
+                      className={inputCls}
+                    >
+                      <option value="">- Choisir -</option>
+                      {lookups.societes.map((s) => (
+                        <option key={s.id_ste} value={s.id_ste}>
+                          {s.rs_interne || s.raison_sociale}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <button
+                    type="button"
+                    onClick={testMep}
+                    disabled={testing || !steTest || meta.taille_contenu === 0}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md text-white text-sm disabled:opacity-50"
+                    style={{ backgroundColor: COL_PRIMARY }}
+                  >
+                    {testing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                    Tester mise en page
+                  </button>
                 </div>
-                <input ref={fileInputRef} type="file" accept=".docx"
-                  onChange={e => {
-                    const f = e.target.files?.[0]
-                    if (f) void uploader(f)
-                    e.target.value = ''
+                <p
+                  className="text-xs italic mt-1.5"
+                  style={{ color: COL_BRUN }}
+                >
+                  Substitue les variables S_NOM / STE_* avec des données
+                  fictives + la société choisie. Les images (logo / cachet /
+                  signatures) ne sont pas encore traitées en V1.
+                </p>
+              </div>
+
+              </div>
+              {/* === Colonne droite (2/3) : Contenu === */}
+              <div className="col-span-2">
+              {/* Contenu - editeur inline */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4
+                    className="text-xs font-bold uppercase tracking-wide"
+                    style={{ color: COL_BRUN }}
+                  >
+                    Contenu du document
+                  </h4>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={uploadDocx}
+                      title="Charger un DOCX existant (remplace le contenu)"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                      style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Importer DOCX
+                    </button>
+                    {meta.taille_contenu > 0 && (
+                      <button
+                        type="button"
+                        onClick={downloadDocx}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Télécharger
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* Toolbar editeur */}
+                <div
+                  className="flex flex-wrap items-center gap-1 px-2 py-1 border-b border-x rounded-t"
+                  style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}
+                >
+                  {/* Combo Police - refleter la selection courante */}
+                  <select
+                    value={currentFont}
+                    onMouseDown={memorizeSelection}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v) {
+                        applyInlineStyle({ fontFamily: v })
+                        setCurrentFont(v)
+                      }
+                    }}
+                    title="Police (applique a la selection)"
+                    className="text-xs px-1 py-0.5 rounded border bg-white"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  >
+                    <option value="">Police</option>
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value}>{f.label}</option>
+                    ))}
+                  </select>
+                  {/* Combo Taille - refleter la selection courante */}
+                  <select
+                    value={currentSize}
+                    onMouseDown={memorizeSelection}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v) {
+                        applyInlineStyle({ fontSize: v })
+                        setCurrentSize(v)
+                      }
+                    }}
+                    title="Taille (applique a la selection)"
+                    className="text-xs px-1 py-0.5 rounded border bg-white"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  >
+                    <option value="">Taille</option>
+                    {SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={`${n}pt`}>{n}</option>
+                    ))}
+                  </select>
+                  {/* Couleur de police (input type=color) */}
+                  <label
+                    className="flex items-center gap-1 text-xs px-1 py-0.5 rounded border bg-white cursor-pointer"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                    title="Couleur du texte (applique a la selection)"
+                    onMouseDown={(e) => {
+                      memorizeSelection()
+                      e.preventDefault()
+                    }}
+                  >
+                    <span
+                      className="inline-block w-4 h-4 rounded border"
+                      style={{ borderColor: COL_BORDER, backgroundColor: currentColor }}
+                    />
+                    <input
+                      type="color"
+                      value={currentColor}
+                      className="w-0 h-0 opacity-0 absolute"
+                      onChange={(e) => {
+                        const c = e.target.value
+                        setCurrentColor(c)
+                        applyInlineStyle({ color: c })
+                      }}
+                    />
+                  </label>
+                  {/* Combo Interligne (s'applique aux blocs p/div/li/h*) */}
+                  <select
+                    value={currentLineHeight}
+                    onMouseDown={memorizeSelection}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v) applyLineHeight(v)
+                    }}
+                    title="Interligne (applique aux paragraphes)"
+                    className="text-xs px-1 py-0.5 rounded border bg-white"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  >
+                    <option value="">Interligne</option>
+                    {LINE_HEIGHT_OPTIONS.map((lh) => (
+                      <option key={lh} value={lh}>{lh}</option>
+                    ))}
+                  </select>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn onClick={() => exec('bold')} title="Gras">
+                    <Bold className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('italic')} title="Italique">
+                    <Italic className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('underline')} title="Souligné">
+                    <UnderlineIcon className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn
+                    onClick={() => exec('formatBlock', '<h1>')}
+                    title="Titre 1"
+                  >
+                    H1
+                  </ToolBtn>
+                  <ToolBtn
+                    onClick={() => exec('formatBlock', '<h2>')}
+                    title="Titre 2"
+                  >
+                    H2
+                  </ToolBtn>
+                  <ToolBtn
+                    onClick={() => exec('formatBlock', '<p>')}
+                    title="Paragraphe"
+                  >
+                    ¶
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn onClick={() => insertList('ul')} title="Liste">
+                    <List className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => insertList('ol')} title="Liste num">
+                    <ListOrdered className="w-3.5 h-3.5" />
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn
+                    onClick={() => {
+                      // Insere le marqueur SAUTDEPAGE a la position du curseur.
+                      // Au moment de la generation PDF, ce marqueur sera
+                      // remplace par un <div style='page-break-before:always'>.
+                      exec('insertText', 'SAUTDEPAGE')
+                    }}
+                    title="Saut de page (insere 'SAUTDEPAGE')"
+                  >
+                    ⤓
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn
+                    onClick={() => exec('justifyLeft')}
+                    title="Aligner à gauche"
+                  >
+                    <AlignLeft className="w-4 h-4" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('justifyCenter')} title="Centrer">
+                    <AlignCenter className="w-4 h-4" />
+                  </ToolBtn>
+                  <ToolBtn
+                    onClick={() => exec('justifyRight')}
+                    title="Aligner à droite"
+                  >
+                    <AlignRight className="w-4 h-4" />
+                  </ToolBtn>
+                  <ToolBtn onClick={() => exec('justifyFull')} title="Justifier">
+                    <AlignJustify className="w-4 h-4" />
+                  </ToolBtn>
+                  <div className="w-px h-4 bg-[#A68D8A]/30 mx-1" />
+                  <ToolBtn onClick={insertTable} title="Insérer un tableau">
+                    <TableIcon className="w-4 h-4" />
+                  </ToolBtn>
+                </div>
+                {/* Zone d'edition : container gris + 'feuille A4' centree
+                    pour donner un aspect document Word. */}
+                <div
+                  className="border-x border-b overflow-y-auto rounded-b"
+                  style={{
+                    borderColor: COL_BORDER,
+                    backgroundColor: '#E5E5E5',
+                    maxHeight: '60vh',
+                    padding: '16px 0',
                   }}
-                  className="hidden" />
-                <button type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || isNew || d.id_doc_courtage === '0'}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded border border-c-line text-c-ink-soft hover:bg-c-surface-soft text-xs disabled:opacity-30">
-                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                             : <Upload className="w-3.5 h-3.5" />}
-                  Uploader
-                </button>
-                <button type="button" onClick={telecharger} disabled={!d.has_contenu}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded border border-c-line text-c-ink-soft hover:bg-c-surface-soft text-xs disabled:opacity-30">
-                  <Download className="w-3.5 h-3.5" /> Télécharger
-                </button>
-              </div>
-              {isNew && d.id_doc_courtage === '0' && (
-                <div className="mt-2 text-[10px] text-c-ink-faint italic">
-                  Enregistrez d'abord les métadonnées, puis vous pourrez uploader le DOCX.
+                >
+                  <div
+                    ref={editorRef}
+                    contentEditable={editorReady}
+                    suppressContentEditableWarning
+                    onInput={() => setIsDirty(true)}
+                    className="docrh-page focus:outline-none"
+                    style={{
+                      width: '210mm',
+                      minHeight: '297mm',
+                      margin: '0 auto',
+                      padding: '25mm',
+                      backgroundColor: 'white',
+                      boxShadow:
+                        '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+                      color: '#000',
+                      fontFamily: 'Calibri, "Segoe UI", sans-serif',
+                      fontSize: '11pt',
+                      lineHeight: 1.4,
+                    }}
+                  />
                 </div>
-              )}
-            </section>
+                <p
+                  className="text-xs italic mt-1.5"
+                  style={{ color: COL_BRUN }}
+                >
+                  Variables disponibles : S_NOM, S_PRENOM, S_DNAISS, S_ADRESSE,
+                  S_CP, S_VILLE, S_GSM, DATE_CTS, FIN_PER_ESSAI, STE_RS,
+                  STE_SIRET, STE_GERANT_NOM, etc.
+                </p>
 
-            {/* Tester mise en page */}
-            <section className="border border-c-line rounded-lg p-3">
-              <h3 className="text-xs font-bold text-c-ink-faint uppercase tracking-wide mb-2">
-                Tester la mise en page
-              </h3>
-              <div className="flex items-center gap-2 text-xs">
-                <label className="text-c-ink-faint">Test avec</label>
-                <select value={selDistribTest}
-                  onChange={e => setSelDistribTest(e.target.value)}
-                  className="flex-1 px-2 py-1 border border-c-line rounded text-xs h-7">
-                  <option value="">— Choisir un distributeur —</option>
-                  {distribsTest.map(dt => (
-                    <option key={dt.id_ste} value={dt.id_ste}>
-                      {dt.rs_interne}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" onClick={testerMiseEnPage}
-                  disabled={!d.has_contenu || !selDistribTest || testing}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded bg-c-brand text-white hover:opacity-90 text-xs disabled:opacity-30">
-                  {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                           : <Play className="w-3.5 h-3.5" />}
-                  Tester
-                </button>
+                <div
+                  className="mt-3 pt-2 border-t flex"
+                  style={{ borderColor: COL_BORDER }}
+                >
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm border"
+                    style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Fermer
+                  </button>
+                </div>
               </div>
-              <div className="mt-2 text-[10px] text-c-ink-faint italic">
-                Génère un DOCX de test avec les données du distributeur sélectionné (sans créer de suivi).
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="flex justify-end gap-2 px-4 py-3 border-t border-c-line">
-          <button type="button" onClick={onClose}
-            className="px-3 py-1.5 rounded border border-c-line text-xs text-c-ink-soft hover:bg-c-surface-soft">
-            Fermer
-          </button>
-          <button type="button" onClick={enregistrer} disabled={saving || loading}
-            className="flex items-center gap-2 px-4 py-1.5 rounded bg-c-brand text-white text-xs font-medium hover:opacity-90 disabled:opacity-50">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                     : <Save className="w-3.5 h-3.5" />}
-            Enregistrer
-          </button>
-        </div>
-      </div>
-    </div>
+              </div>{/* fin col-span-2 */}
+              </div>{/* fin grid 2 col */}
+            </div>
+          )}
+        </motion.div>
+        <TableContextMenu
+          editorRef={editorRef}
+          onChange={() => setIsDirty(true)}
+        />
+      </motion.div>
+    </AnimatePresence>
   )
 }
 
-function Field({ label, children, cols = 1 }: {
-  label: string; children: React.ReactNode; cols?: number
+// ============================================================================
+// UI helpers
+// ============================================================================
+
+const FONT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Calibri, "Segoe UI", sans-serif', label: 'Calibri' },
+  { value: 'Arial, sans-serif', label: 'Arial' },
+  { value: '"Times New Roman", Times, serif', label: 'Times' },
+  { value: 'Verdana, sans-serif', label: 'Verdana' },
+  { value: '"Trebuchet MS", sans-serif', label: 'Trebuchet' },
+  { value: 'Georgia, serif', label: 'Georgia' },
+  { value: '"Courier New", monospace', label: 'Courier New' },
+]
+
+const SIZE_OPTIONS = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48]
+
+const LINE_HEIGHT_OPTIONS = ['1', '1.15', '1.5', '2', '2.5', '3']
+
+const inputCls =
+  'w-full px-2 py-1.5 border rounded text-sm focus:outline-none focus:ring-1 focus:ring-[#17494E]'
+
+function Field({
+  label,
+  children,
+  wide,
+}: {
+  label: string
+  children: React.ReactNode
+  wide?: boolean
 }) {
   return (
-    <div className={cols === 4 ? 'col-span-4' : cols === 3 ? 'col-span-3' : cols === 2 ? 'col-span-2' : ''}>
-      <label className="text-[10px] text-c-ink-faint block">{label}</label>
+    <div className={wide ? 'col-span-2' : ''}>
+      <label className="block text-xs mb-0.5" style={{ color: COL_BRUN }}>
+        {label}
+      </label>
       {children}
     </div>
   )
 }
 
-function Input({
-  value, onChange, placeholder,
+function Checkbox({
+  label,
+  value,
+  onChange,
 }: {
-  value: string; onChange: (v: string) => void; placeholder?: string
+  label: string
+  value: boolean
+  onChange: (v: boolean) => void
 }) {
   return (
-    <input type="text" value={value ?? ''}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="w-full px-2 py-1 border border-c-line rounded text-xs h-7" />
+    <label
+      className="flex items-center gap-2 text-sm cursor-pointer"
+      style={{ color: COL_BRUN }}
+    >
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      {label}
+    </label>
+  )
+}
+
+function ToolBtn({
+  onClick,
+  title,
+  children,
+}: {
+  onClick: () => void
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseDown={(e) => e.preventDefault()}
+      title={title}
+      className="px-2 py-1 rounded hover:bg-white text-xs"
+      style={{ color: COL_BRUN }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ActifToggle({
+  value,
+  onChange,
+}: {
+  value: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div
+      className="flex items-center rounded overflow-hidden"
+      style={{ border: `1px solid ${COL_BORDER}` }}
+    >
+      {[
+        { v: false, l: 'Doc Archivé' },
+        { v: true, l: 'Doc Actif' },
+      ].map((o) => {
+        const active = value === o.v
+        return (
+          <button
+            key={String(o.v)}
+            type="button"
+            onClick={() => onChange(o.v)}
+            className="px-4 py-1.5 text-sm"
+            style={{
+              backgroundColor: active ? COL_PRIMARY : 'white',
+              color: active ? 'white' : COL_BRUN,
+              fontWeight: active ? 600 : 400,
+            }}
+          >
+            {o.l}
+          </button>
+        )
+      })}
+    </div>
   )
 }

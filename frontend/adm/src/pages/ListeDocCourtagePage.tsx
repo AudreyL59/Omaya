@@ -236,9 +236,9 @@ export default function ListeDocCourtagePage() {
 
       {fiche.open && (
         <DocCourtageEditModal
-          idDoc={fiche.id}
+          idDocCourtage={fiche.id ?? ''}
           onClose={() => setFiche({ open: false, id: null })}
-          onSaved={() => { void load() }} />
+          onSaved={() => { void load(); setFiche({ open: false, id: null }) }} />
       )}
     </div>
   )
