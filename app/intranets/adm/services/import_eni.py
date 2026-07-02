@@ -1297,14 +1297,33 @@ def _import_run_resil(
                     (int(md["nouvel_etat"]), md.get("mois_p"),
                      int(op_id), id_ctt),
                 )
-                # MAJ contrat_option : cf. WinDev, on touche la ligne
-                # options meme si les valeurs restent identiques (declenche
-                # la replication + traca modif date/op).
+                # MAJ contrat_option : cf. WinDev L544-552 (importRUNResil)
+                # Le WinDev copie explicitement OPT_EnergieVerteElec,
+                # OPT_EnergieVerteGaz, OPT_Reforestation, OPT_Protection
+                # dans la MAJ meme si les valeurs sont identiques
+                # (declenche la replication + trace modif date/op +
+                # tolerance schema si trigger sur ces colonnes).
+                opt_actuelles = db.query_one(
+                    """SELECT opt_energie_verte_elec, opt_energie_verte_gaz,
+                              opt_reforestation, opt_protection
+                         FROM adv.pgt_eni_contrat_option
+                        WHERE id_contrat = ? LIMIT 1""",
+                    (id_ctt,),
+                ) or {}
                 db.query(
                     """UPDATE adv.pgt_eni_contrat_option
-                          SET modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                          SET opt_energie_verte_elec = ?,
+                              opt_energie_verte_gaz = ?,
+                              opt_reforestation = ?,
+                              opt_protection = ?,
+                              modif_date = NOW(), modif_op = ?,
+                              modif_elem = 'modif'
                         WHERE id_contrat = ?""",
-                    (int(op_id), id_ctt),
+                    (bool(opt_actuelles.get("opt_energie_verte_elec")),
+                     bool(opt_actuelles.get("opt_energie_verte_gaz")),
+                     bool(opt_actuelles.get("opt_reforestation")),
+                     bool(opt_actuelles.get("opt_protection")),
+                     int(op_id), id_ctt),
                 )
                 _ajoute_histo_eni_etat(
                     id_ctt,
@@ -1516,6 +1535,33 @@ def _create_eni_contrat(td: dict, op_id: int) -> int:
     if isinstance(date_crea, str):
         date_crea = _parse_datetime_fr(date_crea)
 
+    # Calcul nb_points a la creation (cf. WinDev L513 :
+    # ENI_contrat.nbPoints = TableImportCttJournENI[ind].NBPts)
+    nb_pts = 0.0
+    id_produit = int(td.get("id_produit") or 0)
+    if id_produit:
+        prod = db.query_one(
+            """SELECT famille, sous_fam FROM adv.pgt_eni_produit
+                WHERE id_produit = ? LIMIT 1""",
+            (id_produit,),
+        )
+        if prod:
+            note = float(td.get("note") or 0)
+            options_parts = [f"NOTE:{note}"]
+            if td.get("mandat_rib"): options_parts.append("RIB")
+            if td.get("opt_mail"): options_parts.append("MAIL")
+            if td.get("opt_maint"): options_parts.append("MAINT")
+            options_str = "//".join(options_parts) + "//"
+            try:
+                nb_pts = float(_calcul_points_eni(
+                    prod.get("famille") or "", prod.get("sous_fam") or "",
+                    int(td.get("car") or 0),
+                    date_sign, options_str,
+                    int(td.get("puissance") or 0),
+                ) or 0)
+            except Exception:
+                nb_pts = 0.0
+
     db.query(
         """INSERT INTO adv.pgt_eni_contrat
               (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
@@ -1523,14 +1569,14 @@ def _create_eni_contrat(td: dict, op_id: int) -> int:
                date_signature, gaz_car_relevee, gaz_car_declaree,
                elec_puissance, gaz_actif, elec_actif,
                op_saisie, date_saisie, non_call, code_enr,
-               notation, notation_info,
+               notation, notation_info, nb_points, opt_mandat,
                modif_op, modif_date, modif_elem)
            VALUES (?, ?, ?, ?, ?,
                    ?, ?, ?,
                    ?, ?, ?,
                    ?, ?, ?,
                    ?, ?, ?, '',
-                   ?, ?,
+                   ?, ?, ?, ?,
                    ?, NOW(), 'new')""",
         (auto_n, id_contrat,
          int(td.get("id_client") or 0),
@@ -1545,6 +1591,7 @@ def _create_eni_contrat(td: dict, op_id: int) -> int:
          int(op_id), date_crea or datetime.now(),
          bool(td.get("non_call")),
          float(td.get("note") or 0), td.get("info_note") or "",
+         nb_pts, bool(td.get("mandat_rib")),
          int(op_id)),
     )
 
@@ -1807,6 +1854,7 @@ def _import_journalier_eni(
                     "opt_mail": opt_mail,
                     "opt_maint": opt_maint,
                     "opt_hphc": opt_hphc,
+                    "mandat_rib": mandat_rib,
                 },
             })
             nb_creer += 1
