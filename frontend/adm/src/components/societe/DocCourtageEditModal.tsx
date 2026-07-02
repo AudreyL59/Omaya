@@ -845,7 +845,7 @@ export default function DocCourtageEditModal({
               </div>
 
               {/* Layout 2 colonnes : 33% champs / 66% contenu */}
-              <div className="grid grid-cols-3 gap-6">
+              <div className={`grid gap-6 ${testPdfUrl ? 'grid-cols-5' : 'grid-cols-3'}`}>
               <div className="col-span-1 space-y-4">
               {/* Form metadonnees */}
               <div className="grid grid-cols-1 gap-3">
@@ -958,54 +958,10 @@ export default function DocCourtageEditModal({
                   auto : logo + RS + SIRET + numéro de page).
                 </p>
 
-                {/* Apercu PDF inline */}
-                {testPdfUrl && (
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span
-                        className="text-xs font-bold uppercase tracking-wide"
-                        style={{ color: COL_BRUN }}
-                      >
-                        Aperçu du PDF
-                      </span>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => window.open(testPdfUrl, '_blank')}
-                          title="Ouvrir dans un nouvel onglet"
-                          className="p-1 rounded hover:bg-c-surface-soft text-c-ink-soft"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            URL.revokeObjectURL(testPdfUrl.split('#')[0])
-                            setTestPdfUrl(null)
-                          }}
-                          title="Fermer l'aperçu"
-                          className="p-1 rounded hover:bg-c-surface-soft text-c-ink-soft"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <iframe
-                      src={testPdfUrl}
-                      title="Aperçu PDF"
-                      className="w-full rounded border"
-                      style={{
-                        borderColor: COL_BORDER,
-                        height: '500px',
-                        backgroundColor: COL_BG_SOFT,
-                      }}
-                    />
-                  </div>
-                )}
               </div>
 
               </div>
-              {/* === Colonne droite (2/3) : Contenu === */}
+              {/* === Colonne centrale (2/3 ou 2/5) : Contenu === */}
               <div className="col-span-2">
               {/* Contenu - editeur inline */}
               <div>
@@ -1255,8 +1211,58 @@ export default function DocCourtageEditModal({
                   </button>
                 </div>
               </div>
-              </div>{/* fin col-span-2 */}
-              </div>{/* fin grid 2 col */}
+              </div>{/* fin col-span-2 (contenu) */}
+
+              {/* === Colonne droite (2/5) : Apercu PDF === */}
+              {testPdfUrl && (
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4
+                      className="text-xs font-bold uppercase tracking-wide"
+                      style={{ color: COL_BRUN }}
+                    >
+                      Aperçu du PDF
+                    </h4>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => window.open(testPdfUrl, '_blank')}
+                        title="Ouvrir dans un nouvel onglet"
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Nouvel onglet
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          URL.revokeObjectURL(testPdfUrl.split('#')[0])
+                          setTestPdfUrl(null)
+                        }}
+                        title="Fermer l'aperçu"
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Fermer
+                      </button>
+                    </div>
+                  </div>
+                  <iframe
+                    src={testPdfUrl}
+                    title="Aperçu PDF"
+                    className="w-full rounded border"
+                    style={{
+                      borderColor: COL_BORDER,
+                      height: 'calc(100vh - 260px)',
+                      minHeight: '600px',
+                      backgroundColor: COL_BG_SOFT,
+                    }}
+                  />
+                </div>
+              )}
+              </div>{/* fin grid */}
             </div>
           )}
         </motion.div>
