@@ -28,6 +28,43 @@ from .helpers import _capitalize, _esc, _fr_date, _int, _iso, _str
 # ---------------------------------------------------------------------------
 
 
+# Mapping ID -> libelle pour la combo 'Delai de prevenance' (WinDev).
+# Base de valeurs vues en BDD : mix de libelles textuels ('1 mois',
+# '24 heures', 'sans') et d'IDs numeriques (1-6, -1).
+# NOTE: Mapping a confirmer avec le user (a affiner selon combo WinDev
+# reelle). Placeholder base sur l ordre progressif classique.
+_DELAI_PREVENANCE_MAPPING = {
+    "-1": "Sans",
+    "0": "Sans",
+    "1": "24 heures",
+    "2": "48 heures",
+    "3": "1 semaine",
+    "4": "2 semaines",
+    "5": "1 mois",
+    "6": "2 mois",
+}
+
+
+def _fmt_delai_prevenance(raw: str) -> str:
+    """Cf. WinDev ..ValeurAffichee : renvoie le libelle de la combo.
+
+    Si la valeur contient deja un espace ou est explicitement 'sans',
+    on considere qu'elle est deja libellee et on la retourne telle
+    quelle (juste capitalise le 1er caractere).
+    Sinon on cherche dans _DELAI_PREVENANCE_MAPPING (IDs numeriques).
+    """
+    if not raw:
+        return ""
+    v = raw.strip()
+    if not v:
+        return ""
+    # Deja libelle (contient un espace ou texte non-numerique)
+    if " " in v or v.lower() == "sans":
+        return v[:1].upper() + v[1:] if v else ""
+    # ID numerique -> lookup mapping
+    return _DELAI_PREVENANCE_MAPPING.get(v, v)
+
+
 def _normalize_fin_s(lib_sortie: str) -> tuple[str, str]:
     """Cf. WinDev :
       si Contient(finS,'FPE')           -> FIN DE PERIODE D'ESSAI A L'INITIATIVE [SAL/EMP]
@@ -189,7 +226,12 @@ def load(id_salarie: int) -> dict:
         courrier_info = ""
         if kind == "fpe":
             envoi = _fr_date(sortie_row.get("courrier_date_envoi"))
-            delai = _str(sortie_row.get("courrier_delai_prev"))
+            delai_raw = _str(sortie_row.get("courrier_delai_prev"))
+            # cf. WinDev : ..ValeurAffichee renvoie le libelle de la combo.
+            # Notre colonne contient soit un libelle deja formate ('1 mois',
+            # '24 heures', 'sans'...) soit un ID numerique (1-6 ou -1).
+            # -> _fmt_delai_prevenance convertit l'ID en libelle si besoin.
+            delai = _fmt_delai_prevenance(delai_raw)
             if envoi:
                 courrier_info = f"(Courrier envoye le {envoi}"
                 if delai:

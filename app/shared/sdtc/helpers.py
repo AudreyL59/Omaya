@@ -77,16 +77,27 @@ def _fr_date(v: Any) -> str:
 
 
 def _yyyymm(v: Any) -> str:
-    """Date / datetime / 'YYYYMMDD' -> 'YYYY-MM' (mois de paiement)."""
+    """Date / datetime / 'YYYYMMDD' -> 'YYYY-MM-01' (mois de paiement).
+
+    Cf. WinDev afficherContrat : pose `dateP..Jour = 1` pour construire
+    une vraie date. Le format retourne est donc 'YYYY-MM-01' (date ISO
+    valide) au lieu du simple 'YYYY-MM' (qui rendait le tri/parsing
+    incoherent).
+
+    Le format 'YYYY-MM-01' reste compatible frontend fmtMoisFr qui slice
+    les positions 5-7 pour le mois et 0-4 pour l'annee.
+    """
     if v is None or v == "":
         return ""
     if isinstance(v, datetime):
-        return v.strftime("%Y-%m")
+        return v.strftime("%Y-%m-01")
     s = str(v)
     if len(s) >= 7 and s[4] == "-":
-        return s[:7]
+        # 'YYYY-MM' ou 'YYYY-MM-DD' -> 'YYYY-MM-01'
+        return f"{s[:7]}-01"
     if len(s) >= 6 and s.isdigit():
-        return f"{s[0:4]}-{s[4:6]}"
+        # 'YYYYMM' ou 'YYYYMMDD' -> 'YYYY-MM-01'
+        return f"{s[0:4]}-{s[4:6]}-01"
     return ""
 
 
