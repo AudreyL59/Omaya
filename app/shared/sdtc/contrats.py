@@ -170,6 +170,16 @@ def load_contrats(id_salarie: int) -> dict:
                 "remise": bool(sfr_data.get("remise")),
                 "self_install": bool(sfr_data.get("self_install")),
                 "technologie": _int(sfr_data.get("technologie")),
+                # cf. WinDev AfficherOptionSFR/SFR1 : 8 colonnes SFR pour
+                # l'affichage complet de l'onglet SFR
+                "option_dec": bool(sfr_data.get("option_dec")),
+                "option_verif": bool(sfr_data.get("option_verif")),
+                "mois_p_option": _str(sfr_data.get("mois_p_option")),
+                "mois_p_va": _str(sfr_data.get("mois_p_va")),
+                "mois_p_va_distri": _str(sfr_data.get("mois_p_va_distri")),
+                "paye_va_distri": bool(sfr_data.get("paye_va_distri")),
+                "mois_p_ra_distri": _str(sfr_data.get("mois_p_ra_distri")),
+                "paye_ra_distri": bool(sfr_data.get("paye_ra_distri")),
             } if part == "SFR" else {}
 
             # ----- Spécifique ENI -----
@@ -190,37 +200,30 @@ def load_contrats(id_salarie: int) -> dict:
                 "id_etat_oen": _int(oen_data.get("id_etat_oen")),
             } if part == "OEN" else {}
 
-            # ----- Calcul nb_points fidèle WinDev (defensif : fallback
-            # sur la valeur stockee si le recalcul plante) -----
+            # ----- Calcul nb_points -----
+            # cf. WinDev afficherContrat L159-249 : le recalcul + UPDATE
+            # nb_points n'est fait QUE dans la branche 'sinon' (a traiter).
+            # Pour les contrats deja finalises, on affiche la valeur stockee
+            # telle quelle sans risquer d'ecraser un nb_points historique
+            # (evite les corrections retroactives sur simple ouverture).
             nb_points_actuels = _num(r.get("nb_points"))
             date_sign = _iso(r.get("date_signature"))
             nb_points = nb_points_actuels
-            try:
-                nb_points_calcules = _recalcul_nb_points(
-                    part=part,
-                    fam=famille,
-                    ss_fam=sous_fam,
-                    date_sign=date_sign,
-                    num_bs=_str(r.get("num_bs")),
-                    lib_produit=_str(r.get("lib_produit")),
-                    id_contrat=id_contrat,
-                    sfr_extra=sfr_data,
-                    eni_extra=eni_data,
-                    oen_extra=oen_data,
-                )
-                if abs(nb_points_calcules - nb_points_actuels) > 0.001:
-                    try:
-                        _update_nb_points(part, id_contrat, nb_points_calcules)
-                    except Exception:
-                        pass  # lecture-seule autorisee
-                nb_points = nb_points_calcules
-            except Exception as e:
-                import sys
-                print(
-                    f"[SDTC] Recalcul nb_points KO ({part} {id_contrat}): "
-                    f"{type(e).__name__}: {e}",
-                    file=sys.stderr,
-                )
+
+            # cf. WinDev afficherContrat L176-186 : etat_contrat_lib_op
+            # est le libelle interne PAR DEFAUT, mais pour OEN/SFR si
+            # id_etat != id_etat_op -> lookup dans part_etatContrat.
+            etat_contrat_lib_op = _str(r.get("lib_etat"))
+            id_etat_ctt = _int(r.get("id_etat_contrat"))
+            id_etat_op_val = 0
+            if part == "OEN":
+                id_etat_op_val = _int(oen_data.get("id_etat_oen"))
+            elif part == "SFR":
+                id_etat_op_val = _int(sfr_data.get("id_etat_sfr"))
+            if id_etat_op_val and id_etat_op_val != id_etat_ctt:
+                lib_op = _get_lib_etat_op(part, id_etat_op_val)
+                if lib_op:
+                    etat_contrat_lib_op = lib_op
 
             item = {
                 "id_contrat": str(id_contrat),
@@ -233,9 +236,9 @@ def load_contrats(id_salarie: int) -> dict:
                 "type_prod": type_prod,
                 "date_signature": date_sign,
                 "mois_paiement": mois_p_iso,
-                "id_etat_contrat": _int(r.get("id_etat_contrat")),
+                "id_etat_contrat": id_etat_ctt,
                 "etat_contrat_lib": lib_etat,
-                "etat_contrat_lib_op": _str(r.get("lib_etat")),
+                "etat_contrat_lib_op": etat_contrat_lib_op,
                 "id_type_etat": id_type_etat,
                 "type_etat_lib": type_etat_lib,
                 "couleur_fond": te_meta.get("couleur", "#FFFFFF"),
@@ -266,6 +269,36 @@ def load_contrats(id_salarie: int) -> dict:
                     item["mois_paiement"] = ""
                 traites.append(item)
             else:
+                # cf. WinDev afficherContrat L243 : recalcul + UPDATE
+                # nb_points UNIQUEMENT dans la branche 'sinon' (a traiter).
+                # Ne touche pas les contrats deja finalises pour eviter
+                # les corrections retroactives.
+                try:
+                    nb_points_calcules = _recalcul_nb_points(
+                        part=part, fam=famille, ss_fam=sous_fam,
+                        date_sign=date_sign,
+                        num_bs=_str(r.get("num_bs")),
+                        lib_produit=_str(r.get("lib_produit")),
+                        id_contrat=id_contrat,
+                        sfr_extra=sfr_data,
+                        eni_extra=eni_data,
+                        oen_extra=oen_data,
+                    )
+                    if abs(nb_points_calcules - nb_points_actuels) > 0.001:
+                        try:
+                            _update_nb_points(part, id_contrat,
+                                              nb_points_calcules)
+                        except Exception:
+                            pass  # lecture-seule autorisee
+                        item["nb_points"] = nb_points_calcules
+                except Exception as e:
+                    import sys
+                    print(
+                        f"[SDTC] Recalcul nb_points KO "
+                        f"({part} {id_contrat}): "
+                        f"{type(e).__name__}: {e}",
+                        file=sys.stderr,
+                    )
                 a_traiter.append(item)
 
     # Agregats pour l'onglet Resume (cf. WinDev TableEtat + TableValideDecomm)
@@ -371,9 +404,18 @@ def _recalcul_nb_points(
             else _int(eni_extra.get("gaz_car_declaree"))
         )
         elec_puissance = _int(eni_extra.get("elec_puissance"))
-        # nb_options + info options : chargés via _eni_options (TODO si besoin)
-        info_cplt = "0"
-        return calcul_point_contrat(fam, ss_fam, car, date_sign, info_cplt, elec_puissance)
+        # cf. WinDev afficherContrat L236 :
+        # nbOption = OPT_Mail + OPT_Reforestation + OPT_EnergieVerteElec
+        #          + OPT_EnergieVerteGaz
+        nb_options = (
+            int(bool(eni_extra.get("opt_mail")))
+            + int(bool(eni_extra.get("opt_reforestation")))
+            + int(bool(eni_extra.get("opt_energie_verte_elec")))
+            + int(bool(eni_extra.get("opt_energie_verte_gaz")))
+        )
+        return calcul_point_contrat(
+            fam, ss_fam, car, date_sign, str(nb_options), elec_puissance,
+        )
 
     if part == "OEN":
         car = _int(oen_extra.get("gaz_car_relevee"))
@@ -382,6 +424,27 @@ def _recalcul_nb_points(
 
     # Autres partenaires (STR/VAL/IAG/TLC) : info_cplt = num_bs
     return calcul_point_contrat(fam, ss_fam, "", date_sign, num_bs)
+
+
+def _get_lib_etat_op(part: str, id_etat_op: int) -> str:
+    """Cf. WinDev afficherContrat L177-186 : pour OEN/SFR, si l'etat
+    contrat differe de l'etat operateur, lookup le libelle de l'etat
+    operateur dans part_etatContrat.
+
+    Renvoie le lib_etat de l'operateur, ou chaine vide si pas trouve.
+    """
+    if not id_etat_op or part not in ("OEN", "SFR"):
+        return ""
+    try:
+        db = get_pg_connection("adv")
+        r = db.query_one(
+            f"""SELECT lib_etat FROM adv.pgt_{part.lower()}_etat_contrat
+                WHERE id_etat = ? LIMIT 1""",
+            (int(id_etat_op),),
+        )
+        return _str((r or {}).get("lib_etat"))
+    except Exception:
+        return ""
 
 
 def _update_nb_points(part: str, id_contrat: int, nb_points: float) -> None:
@@ -403,7 +466,12 @@ def _update_nb_points(part: str, id_contrat: int, nb_points: float) -> None:
 
 
 def _load_sfr_extra(ids: list[int]) -> dict[int, dict]:
-    """Charge les colonnes spécifiques SFR par lot."""
+    """Charge les colonnes specifiques SFR par lot.
+
+    cf. WinDev AfficherOptionSFR/SFR1 : necessite aussi option_dec,
+    option_verif, mois_p_option, mois_p_va, mois_p_va_distri,
+    paye_va_distri, mois_p_ra_distri, paye_ra_distri pour l'onglet SFR.
+    """
     if not ids:
         return {}
     db = get_pg_connection("adv")
@@ -413,7 +481,10 @@ def _load_sfr_extra(ids: list[int]) -> dict[int, dict]:
                    date_portabilite, date_racc_activ, date_rdv_tech,
                    date_resil, date_validation, id_etat_sfr,
                    internet_garanti, type_vente, remise, self_install,
-                   technologie
+                   technologie,
+                   option_dec, option_verif, mois_p_option,
+                   mois_p_va, mois_p_va_distri, paye_va_distri,
+                   mois_p_ra_distri, paye_ra_distri
               FROM adv.pgt_sfr_contrat
              WHERE id_contrat IN ({placeholders})""",
         tuple(ids),
@@ -422,15 +493,34 @@ def _load_sfr_extra(ids: list[int]) -> dict[int, dict]:
 
 
 def _load_eni_extra(ids: list[int]) -> dict[int, dict]:
+    """Cf. WinDev afficherContrat L235 : HLitRecherche(ENI_contrat_Option,
+    IDcontrat, MonCtt.IDcontrat) + nbOption = OPT_Mail + OPT_Reforestation
+    + OPT_EnergieVerteElec + OPT_EnergieVerteGaz.
+
+    Renvoie contrat + toutes les options ENI pour le calcul de nb_points
+    (JOIN sur pgt_eni_contrat_option).
+    """
     if not ids:
         return {}
     db = get_pg_connection("adv")
     placeholders = ",".join(["?"] * len(ids))
     rows = db.query(
-        f"""SELECT id_contrat, gaz_car_declaree, gaz_car_relevee,
-                   elec_puissance, gaz_actif, elec_actif
-              FROM adv.pgt_eni_contrat
-             WHERE id_contrat IN ({placeholders})""",
+        f"""SELECT c.id_contrat, c.gaz_car_declaree, c.gaz_car_relevee,
+                   c.elec_puissance, c.gaz_actif, c.elec_actif,
+                   o.opt_mail, o.opt_entretien, o.opt_hp_hc,
+                   o.opt_index_gaz, o.opt_index_elec, o.opt_delai_retra,
+                   o.opt_energie_verte_gaz, o.opt_energie_verte_elec,
+                   o.opt_deja_client_eni, o.opt_reforestation,
+                   o.opt_optin_commercial, o.opt_e_facture,
+                   o.opt_e_communication, o.opt_pdc,
+                   o.opt_accept_com_parte, o.opt_consent_consult_distri,
+                   o.opt_protection
+              FROM adv.pgt_eni_contrat c
+              LEFT JOIN adv.pgt_eni_contrat_option o
+                     ON o.id_contrat = c.id_contrat
+                    AND (o.modif_elem IS NULL
+                         OR o.modif_elem NOT LIKE '%suppr%')
+             WHERE c.id_contrat IN ({placeholders})""",
         tuple(ids),
     )
     return {_int(r.get("id_contrat")): r for r in (rows or [])}
