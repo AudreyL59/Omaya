@@ -1242,6 +1242,53 @@ def _import_run(
                 })
                 resume.nb_hors_delai += 1
 
+            # ---- BLOC 2 : MAJ statut contrat -> 76 (Rejet Operateur) ----
+            # cf. WinDev traitementOngletRun :
+            # si Contient(feuille,"Offre") ET Contient(TypeRem,"Offre") ET
+            #    (Statut="NON_VERSABLE" OU (Statut="SUSPENDUE" ET StatutRa_Run="OK"))
+            # Attention precedence WinDev : ET a priorite sur OU, donc :
+            #    (Statut=NON_VERSABLE) OR (Statut=SUSPENDUE AND StatutRa_Run=OK)
+            id_etat_sfr_db = int(ctt.get("id_etat_sfr") or 0)
+            statut_up = statut.upper()
+            statut_ra_up = statut_ra.upper()
+            should_mark_76 = (
+                "OFFRE" in sheet_name.upper()
+                and "OFFRE" in type_rem.upper()
+                and (statut_up == "NON_VERSABLE"
+                     or (statut_up == "SUSPENDUE" and statut_ra_up == "OK"))
+                and id_etat_sfr_db != 76
+            )
+            if should_mark_76:
+                if not p.simulation:
+                    try:
+                        _ajoute_histo_sfr_etat(
+                            id_contrat, id_etat_sfr_db, 76, "",
+                            op_id, categorie="SFR",
+                        )
+                        new_info = (ctt.get("info_vente_sfr") or "")
+                        if motif_dero:
+                            new_info = f"{new_info}\n{motif_dero}"
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET id_etat_sfr = 76,
+                                      info_vente_sfr = ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (new_info, int(op_id), id_contrat),
+                        )
+                    except Exception as e:
+                        erreurs.append({
+                            "Onglet": sheet_name, "NumBS": num_bs,
+                            "Erreur": f"UPDATE etat 76 : {e}",
+                        })
+                modifies.append({
+                    "Onglet": sheet_name, "NumBS": num_bs,
+                    "NouvelEtatSFR": 76,
+                    "AncienEtatSFR": id_etat_sfr_db,
+                    "Info": "Statut SFR mis en Rejet Opérateur - non payable",
+                })
+
             if montant_rem == 0:
                 nb_mont0 += 1
                 modifies.append({
@@ -1423,6 +1470,45 @@ def _iter_sheets(content: bytes):
     for sheet in wb.sheetnames:
         yield wb[sheet], sheet
     wb.close()
+
+
+def _ajoute_histo_sfr_etat(id_contrat: int, old_etat: int, new_etat: int,
+                            date_paiement: str, op_id: int,
+                            categorie: str = "Vend") -> None:
+    """Historise un changement d'etat SFR (cf. WinDev ajouteHistoContrat).
+
+    2 tables selon categorie :
+    - 'Vend' (defaut) -> pgt_sfr_histo_etat_ctt
+    - 'SFR'           -> pgt_sfr_histo_etat_ctt_sfr
+    """
+    if not id_contrat:
+        return
+    db = get_pg_connection("adv")
+    table = ("pgt_sfr_histo_etat_ctt_sfr" if categorie.upper() == "SFR"
+             else "pgt_sfr_histo_etat_ctt")
+    auto = db.query_one(
+        f"SELECT COALESCE(MAX(id_histo_auto), 0) + 1 AS n FROM adv.{table}"
+    )
+    db.query(
+        f"""INSERT INTO adv.{table}
+              (id_histo_auto, id_histo, id_contrat, op_saisie, date,
+               old_etat, new_etat, date_paiement,
+               modif_op, modif_date, modif_elem)
+           VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), 'new')""",
+        (int(auto["n"]) if auto else 1, _new_id_sfr(),
+         int(id_contrat), int(op_id),
+         int(old_etat) if old_etat else 0,
+         int(new_etat) if new_etat else 0,
+         date_paiement or "", int(op_id)),
+    )
+
+
+def _new_id_sfr() -> int:
+    """Id 8 octets construit depuis la date/heure (equivalent
+    idEntierDateHeureSys WinDev)."""
+    from datetime import datetime as _dt
+    n = _dt.now()
+    return int(n.strftime("%Y%m%d%H%M%S")) * 1000 + n.microsecond // 1000
 
 
 def _create_sfr_contrat_callret(orig: dict, new_bs: str,
