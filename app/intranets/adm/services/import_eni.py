@@ -293,6 +293,27 @@ def _affectation_vendeur(id_salarie: int, _date_sign: Optional[date]) -> tuple[s
     return (agence, equipe)
 
 
+def _verif_activite_distrib(id_salarie: int, _date_sign: Optional[date]) -> str:
+    """Cf. WinDev vérifActivitéDistrib(monOpé, DateSignature) : verifie
+    que le salarie est actif dans salarie_embauche. Le code source WinDev
+    n'a pas ete transpose entierement (pas de MAJ de statut, uniquement
+    remontee d'info).
+
+    Renvoie un message d'alerte non vide si le salarie n'est pas actif
+    (a remonter dans pb_vendeur). Renvoie chaine vide si tout OK."""
+    if not id_salarie:
+        return ""
+    db = get_pg_connection("rh")
+    r = db.query_one(
+        """SELECT en_activite FROM rh.pgt_salarie_embauche
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    )
+    if r is not None and r.get("en_activite") is False:
+        return "Salarié inactif à la date de signature"
+    return ""
+
+
 def _info_salarie(id_salarie: int) -> dict:
     if not id_salarie:
         return {}
@@ -447,6 +468,12 @@ def _import_journalier_call(
                 "Vendeur Import": vendeur_cell,
                 "Vendeur OMAYA": nom_db,
             })
+
+        # vérifActivitéDistrib : remonte si salarie inactif a la date sign
+        msg_act = _verif_activite_distrib(id_salarie_db, date_sign)
+        if msg_act:
+            pb_vendeur.append({**row_common, "Vendeur Import": vendeur_cell,
+                                "Alerte": msg_act})
 
         modifs.append(row_common)
         resume.nb_modifications += 1
@@ -684,6 +711,17 @@ def _import_run_valides(
         etat_actuel = int(r.get("id_etat_contrat") or 0)
         car_omaya = int(r.get("gaz_car_relevee") or 0)
         puiss_omaya = int(r.get("elec_puissance") or 0)
+        id_produit = int(r.get("id_produit") or 0)
+
+        # Lookup produit pour SousFAM (cf. WinDev : flagOffre matching
+        # TypeOffre vs ENI_produit.SousFAM)
+        prod_info = db.query_one(
+            """SELECT sous_fam, famille, lib_produit
+                 FROM adv.pgt_eni_produit
+                WHERE id_produit = ? LIMIT 1""",
+            (id_produit,),
+        )
+        sous_fam = (prod_info or {}).get("sous_fam") or ""
 
         # Periode
         mois_paiement = None
@@ -713,22 +751,47 @@ def _import_run_valides(
         )
         id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
 
+        # flagOffre : matching TypeOffre vs sous_fam produit (cf. WinDev)
+        flag_offre = True
+        if type_offre == "Dual" and sous_fam != "GAZ-ELEC":
+            flag_offre = False
+        elif type_offre == "Mono Gaz" and sous_fam != "GAZ":
+            flag_offre = False
+        elif type_offre == "Mono Elec" and sous_fam != "ELEC":
+            flag_offre = False
+        if not flag_offre:
+            resume.nb_erreurs_offres += 1
+
+        # testDualResilPartielle : Dual + IDTypeEtat=4 + au moins un
+        # cote actif -> le contrat peut etre repasse en Valide partiel
+        # (cf. WinDev : si ENI_contrat.IDetatContrat<>59 et TypeOffre=Dual
+        # et IDTypeEtat=4 et (GazValide=1 ou ElecValide=1)).
+        test_dual_resil_partielle = False
+        if (etat_actuel != 59
+                and type_offre == "Dual"
+                and id_type_etat == 4
+                and (b_gaz_actif or b_elec_actif)):
+            test_dual_resil_partielle = True
+
         # Determination du nouvel etat (cf WinDev)
         nouvel_etat = etat_actuel
         gaz_valide_nouv = b_gaz_actif
         elec_valide_nouv = b_elec_actif
         maj_etat_flag = False
 
-        # IDTypeEtat 1 ou 2, ou IDetat 54 -> contrat eligible MAJ
-        eligible = (id_type_etat in (1, 2)) or etat_actuel == 54
-        if eligible:
+        # IDTypeEtat 1 ou 2, ou IDetat 54, ou resil partielle detectee
+        # -> contrat eligible MAJ (cf WinDev)
+        eligible = ((id_type_etat in (1, 2))
+                    or etat_actuel == 54
+                    or test_dual_resil_partielle)
+        if eligible and flag_offre:
             if not offre_reclass:
                 nouvel_etat = 19  # Valide - Paye par l'opérateur
                 if type_offre == "Dual":
                     gaz_valide_nouv = True; elec_valide_nouv = True
-                elif "Gaz" in type_offre.lower() or "gaz" in type_offre.lower():
+                elif "Gaz" in type_offre or "gaz" in type_offre:
                     gaz_valide_nouv = True; elec_valide_nouv = False
-                elif "Elec" in type_offre.lower() or "elec" in type_offre.lower():
+                elif "Elec" in type_offre or "elec" in type_offre:
                     gaz_valide_nouv = False; elec_valide_nouv = True
             else:
                 if offre_reclass == "Solo Elec":
@@ -739,6 +802,10 @@ def _import_run_valides(
                     elec_valide_nouv = False
             maj_etat_flag = True
             resume.nb_valides += 1
+        elif eligible and not flag_offre:
+            # Eligible mais mauvaise offre -> pas de MAJ etat mais
+            # comptage en 'erreurs offre' (deja fait ci-dessus)
+            pass
         else:
             resume.nb_deja_statues += 1
 
@@ -1129,7 +1196,7 @@ def _import_run_resil(
 
     wb.close()
 
-    # -- PASSE PROD : MAJ etat + histo (si pas simulation) --
+    # -- PASSE PROD : MAJ etat + option + histo (si pas simulation) --
     nb_majs = 0
     if not p.simulation:
         for row in contrats_run:
@@ -1137,16 +1204,26 @@ def _import_run_resil(
             if not md or not md.get("maj_etat"):
                 continue
             try:
+                id_ctt = int(md["id_contrat"])
                 db.query(
                     """UPDATE adv.pgt_eni_contrat
                           SET id_etat_contrat = ?, mois_p = ?,
                               modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
                         WHERE id_contrat = ?""",
                     (int(md["nouvel_etat"]), md.get("mois_p"),
-                     int(op_id), int(md["id_contrat"])),
+                     int(op_id), id_ctt),
+                )
+                # MAJ contrat_option : cf. WinDev, on touche la ligne
+                # options meme si les valeurs restent identiques (declenche
+                # la replication + traca modif date/op).
+                db.query(
+                    """UPDATE adv.pgt_eni_contrat_option
+                          SET modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                        WHERE id_contrat = ?""",
+                    (int(op_id), id_ctt),
                 )
                 _ajoute_histo_eni_etat(
-                    int(md["id_contrat"]),
+                    id_ctt,
                     int(md["etat_actuel"]), int(md["nouvel_etat"]),
                     md.get("mois_p_old", ""), op_id,
                 )
@@ -1442,32 +1519,53 @@ def _create_eni_contrat(td: dict, op_id: int) -> int:
 
 def _lookup_vendeur_by_nom_prenom(nom_complet: str) -> tuple[int, int]:
     """Cherche un salarie par 'NOM Prenom' ou variantes.
+    Reproduit les 3 strategies WinDev (ReqVendeurByConcatPrenomNom
+    avec retry '-'->' ', puis ReqVendeurByDebPrenomFinNom).
+
     Retourne (id_salarie, id_ste). 0,0 si introuvable."""
     if not nom_complet or not nom_complet.strip():
         return (0, 0)
 
     db = get_pg_connection("rh")
-    # Normalise : uppercase, remplace tirets/apostrophes/espaces par %
-    s = nom_complet.upper()
-    for c in ("-", "'", " "):
-        s = s.replace(c, "%")
-    s = s.replace("%%", "%")
 
-    # 1. Match exact concat nom+prenom (uppercased)
-    rows = db.query(
-        """SELECT s.id_salarie, e.id_ste
-             FROM rh.pgt_salarie s
-             LEFT JOIN rh.pgt_salarie_embauche e ON e.id_salarie = s.id_salarie
-            WHERE UPPER(CONCAT(s.nom, '%', s.prenom)) LIKE ?
-              AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
-            LIMIT 2""",
-        (f"%{s}%",),
-    ) or []
+    def _query_concat(pattern: str) -> list[dict]:
+        # Match sur CONCAT(nom, prenom) ou CONCAT(prenom, nom) avec pattern LIKE
+        return db.query(
+            """SELECT s.id_salarie, e.id_ste
+                 FROM rh.pgt_salarie s
+                 LEFT JOIN rh.pgt_salarie_embauche e ON e.id_salarie = s.id_salarie
+                WHERE (UPPER(CONCAT(s.nom, '%', s.prenom)) LIKE ?
+                    OR UPPER(CONCAT(s.prenom, '%', s.nom)) LIKE ?)
+                  AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
+                LIMIT 2""",
+            (pattern, pattern),
+        ) or []
+
+    def _normalise_pattern(cell: str) -> str:
+        """Cf. WinDev : Majuscule + Remplace('-','%') + '(' -> '%' etc."""
+        s = cell.upper()
+        for c in ("-", "'", " "):
+            s = s.replace(c, "%")
+        while "%%" in s:
+            s = s.replace("%%", "%")
+        return f"%{s}%"
+
+    # Strategie 1 : concat nom%prenom avec substitutions
+    rows = _query_concat(_normalise_pattern(nom_complet))
     if len(rows) == 1:
         return (int(rows[0]["id_salarie"]),
                 int(rows[0].get("id_ste") or 0))
 
-    # 2. Tentative inverse prenom+nom
+    # Strategie 2 : retry avec remplacement tirets par espaces (cf. WinDev)
+    if "-" in nom_complet:
+        alt = nom_complet.replace("-", " ")
+        rows = _query_concat(_normalise_pattern(alt))
+        if len(rows) == 1:
+            return (int(rows[0]["id_salarie"]),
+                    int(rows[0].get("id_ste") or 0))
+
+    # Strategie 3 : ReqVendeurByDebPrenomFinNom : prenom au debut,
+    # nom en fin (ExtraitChaine DepuisDebut / DepuisFin)
     parts = nom_complet.strip().split()
     if len(parts) >= 2:
         prenom = parts[0].upper()
@@ -1693,11 +1791,15 @@ def _import_journalier_eni(
                 # Payload pour MAJ en prod
                 "_maj_data": {
                     "id_contrat": id_contrat,
+                    "id_produit": id_produit,
                     "date_saisie": date_crea,
+                    "date_signature": r.get("date_signature"),
                     "puissance": puiss,
                     "car": car,
                     "opt_maint": opt_maint,
                     "opt_mail": opt_mail,
+                    "mandat_rib": mandat_rib,
+                    "note": note_s5,
                     "etat_actuel": etat_actuel,
                     "nouvel_etat": nouvel_etat if eligible_etat else etat_actuel,
                     "etat_change": eligible_etat and (nouvel_etat != etat_actuel),
@@ -1752,9 +1854,36 @@ def _import_journalier_eni(
 
 def _apply_maj_eni_journ(md: dict, op_id: int) -> None:
     """MAJ eni_contrat + eni_contrat_option pour un contrat existant
-    (ImportJournalierENI). Historise si l'etat change."""
+    (ImportJournalierENI). Historise si l'etat change + recalcul nb_points."""
     db = get_pg_connection("adv")
     id_contrat = int(md["id_contrat"])
+
+    # Recalcul nb_points (cf. WinDev : ENI_contrat.nbPoints =
+    # calculPointContrat(...))
+    nb_pts = None
+    id_produit = int(md.get("id_produit") or 0)
+    if id_produit:
+        prod = db.query_one(
+            """SELECT famille, sous_fam FROM adv.pgt_eni_produit
+                WHERE id_produit = ? LIMIT 1""",
+            (id_produit,),
+        )
+        if prod:
+            # Options string (cf. WinDev : "NOTE:x//RIB//MAIL//MAINT//")
+            note = float(md.get("note") or 0)
+            options_str_parts = [f"NOTE:{note}"]
+            if md.get("mandat_rib"): options_str_parts.append("RIB")
+            if md.get("opt_mail"): options_str_parts.append("MAIL")
+            if md.get("opt_maint"): options_str_parts.append("MAINT")
+            options_str = "//".join(options_str_parts) + "//"
+            nb_pts = _calcul_points_eni(
+                prod.get("famille") or "", prod.get("sous_fam") or "",
+                int(md.get("car") or 0),
+                md.get("date_signature"),
+                options_str,
+                int(md.get("puissance") or 0),
+            )
+
     sets = []
     params: list = []
     if md.get("date_saisie"):
@@ -1769,6 +1898,13 @@ def _apply_maj_eni_journ(md: dict, op_id: int) -> None:
     if md.get("etat_change"):
         sets.append("id_etat_contrat = ?")
         params.append(int(md["nouvel_etat"]))
+    if md.get("mandat_rib") is not None:
+        # cf. WinDev : ENI_contrat.Opt_Mandat = MandatRib
+        sets.append("opt_mandat = ?")
+        params.append(bool(md["mandat_rib"]))
+    if nb_pts is not None:
+        sets.append("nb_points = ?")
+        params.append(float(nb_pts))
 
     if sets:
         sets.append("modif_date = NOW()")
