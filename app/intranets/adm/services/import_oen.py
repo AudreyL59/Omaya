@@ -581,6 +581,35 @@ def _import_run_valide_oen(
                 "Agence": agence, "Equipe": equipe,
             })
 
+        # Comparaison Puissance / CAR (cf. WinDev : rapport si > omaya
+        # -> erreur, si != -> modif). MAJ effective dans le UPDATE final.
+        car_omaya = int(ctt.get("gaz_car_relevee") or 0)
+        puiss_omaya = int(ctt.get("elec_puissance") or 0)
+        car_i = int(car or 0)
+        puiss_i = int(puiss or 0)
+        if type_ener == "EL":
+            if puiss_omaya > puiss_i:
+                pb_vendeur.append({
+                    "NumCtt": num_contrat, "RefClient": ref_client,
+                    "Erreur": f"Pb Puissance sup dans omaya : {puiss_omaya} > import {puiss_i}",
+                })
+            if puiss_omaya != puiss_i:
+                modifies.append({
+                    "NumCtt": num_contrat, "RefClient": ref_client,
+                    "Modif": f"Puissance modifiée dans omaya : {puiss_omaya} -> {puiss_i}",
+                })
+        else:
+            if car_omaya > car_i:
+                pb_vendeur.append({
+                    "NumCtt": num_contrat, "RefClient": ref_client,
+                    "Erreur": f"Pb CAR sup dans omaya : {car_omaya} > import {car_i}",
+                })
+            if car_omaya != car_i:
+                modifies.append({
+                    "NumCtt": num_contrat, "RefClient": ref_client,
+                    "Modif": f"CAR modifiée dans omaya : {car_omaya} -> {car_i}",
+                })
+
         # Verifier si rem deja enregistree
         existing_rem = db.query_one(
             """SELECT id_oen_contrat_remun FROM adv.pgt_oen_contrat_remun
@@ -622,7 +651,7 @@ def _import_run_valide_oen(
                     "etat_actuel": int(ctt.get("id_etat_contrat") or 0),
                     "mois_p_date": mois_p,
                     "date_activation": date_act,
-                    "car": car, "puiss": puiss,
+                    "car": car_i, "puiss": puiss_i,
                     "type_ener": type_ener,
                 },
             })
@@ -660,19 +689,29 @@ def _import_run_resil_oen(
             continue
         ref_client = _cell(ws, i, cols["ref_client"])
 
-        ctt = db.query_one(
+        # Detection doublons (WinDev : HNbEnr > 1)
+        ctts = db.query(
             """SELECT id_contrat, id_salarie, date_signature,
                       id_etat_contrat, mois_p
                  FROM adv.pgt_oen_contrat
                 WHERE UPPER(num_bs) = UPPER(?)
-                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                LIMIT 1""",
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
             (num_contrat,),
-        )
-        if not ctt:
+        ) or []
+        if len(ctts) == 0:
             non_trouves.append({"NumCtt": num_contrat, "RefClient": ref_client})
             resume.nb_introuvables += 1
             continue
+        if len(ctts) > 1:
+            # Doublon : on remonte l'info et on ne traite pas (cf. WinDev
+            # HNbEnr>1 : boucle vide, comptage seulement).
+            resume.nb_doublons += 1
+            pb_vendeur.append({
+                "NumCtt": num_contrat, "RefClient": ref_client,
+                "Erreur": f"Doublon ({len(ctts)} contrats en base)",
+            })
+            continue
+        ctt = ctts[0]
 
         id_contrat = int(ctt["id_contrat"])
         etat_actuel = int(ctt.get("id_etat_contrat") or 0)
@@ -924,27 +963,73 @@ def run_import_oen(
                 nb_majs += 1
             except Exception as e:
                 row["Erreur"] = str(e)
-        # Type 2 : creations Rem (best-effort, table peut-etre absente)
+        # Type 2 : Run Valide -> UPDATE etat + puiss/CAR + INSERT REM
         for row in runs:
             pl = row.pop("_payload_create_rem", None)
             if not pl:
                 continue
             try:
-                # UPDATE contrat -> etat 43 + mois_p
-                db.query(
-                    """UPDATE adv.pgt_oen_contrat
-                          SET id_etat_contrat = ?, id_etat_oen = 15,
-                              mois_p = ?, date_activation = COALESCE(?, date_activation),
-                              modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
-                        WHERE id_contrat = ?""",
-                    (int(pl["nouvel_etat"]), pl.get("mois_p_date"),
-                     pl.get("date_activation"),
-                     int(op_id), int(pl["id_contrat"])),
-                )
+                # UPDATE contrat -> etat 43 (Vend) + 15 (OEN) + mois_p
+                # + date_activation + puissance ou CAR selon type_ener
+                # (cf. WinDev : OEN_contrat.ElecPuissance = puissElec ou
+                # OEN_contrat.GazCarRelevée = Car).
+                if pl.get("type_ener") == "EL":
+                    db.query(
+                        """UPDATE adv.pgt_oen_contrat
+                              SET id_etat_contrat = ?, id_etat_oen = 15,
+                                  mois_p = ?,
+                                  date_activation = ?,
+                                  elec_puissance = ?,
+                                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (int(pl["nouvel_etat"]), pl.get("mois_p_date"),
+                         pl.get("date_activation"), int(pl["puiss"] or 0),
+                         int(op_id), int(pl["id_contrat"])),
+                    )
+                else:
+                    db.query(
+                        """UPDATE adv.pgt_oen_contrat
+                              SET id_etat_contrat = ?, id_etat_oen = 15,
+                                  mois_p = ?,
+                                  date_activation = ?,
+                                  gaz_car_relevee = ?,
+                                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (int(pl["nouvel_etat"]), pl.get("mois_p_date"),
+                         pl.get("date_activation"), int(pl["car"] or 0),
+                         int(op_id), int(pl["id_contrat"])),
+                    )
                 _ajoute_histo_oen_etat(
                     int(pl["id_contrat"]), int(pl["etat_actuel"]),
                     int(pl["nouvel_etat"]), pl.get("mois_p", ""), op_id,
                     categorie="Vend",
+                )
+                # INSERT dans pgt_oen_contrat_remun (cf. WinDev :
+                # HAjoute(OEN_Contrat_Remun,...))
+                id_rem = _new_id()
+                # Parse le lib_rem WinDev (monetaire = ex "45.5 EUR")
+                # en float
+                lr = str(pl.get("lib_rem") or "0")
+                lr = lr.replace("€", "").replace("EUR", "").replace(",", ".").strip()
+                try: ra_montant = float(lr) if lr else 0.0
+                except ValueError: ra_montant = 0.0
+                db.query(
+                    """INSERT INTO adv.pgt_oen_contrat_remun
+                          (id_oen_contrat_remun_auto, id_oen_contrat_remun,
+                           id_contrat, num, type_rem, lib_option,
+                           validation, va_mois_p, va_montant, va_statut, va_motif,
+                           raccordement, ra_mois_p, ra_montant, ra_statut, ra_motif,
+                           distri_paye_va, distri_paye_ra,
+                           modif_date, modif_op, modif_elem)
+                       VALUES (?, ?, ?, ?, 'Offre', ?,
+                               FALSE, '', 0, '', '',
+                               TRUE, ?, ?, ?, '',
+                               FALSE, FALSE,
+                               NOW(), ?, 'new')""",
+                    (id_rem, id_rem, int(pl["id_contrat"]),
+                     pl.get("num_bs") or "", pl.get("lib_offre") or "",
+                     pl.get("mois_p") or "", ra_montant,
+                     pl.get("lib_statut") or "", int(op_id)),
                 )
                 nb_majs += 1
             except Exception as e:
