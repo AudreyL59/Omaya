@@ -107,6 +107,8 @@ export default function DocRHEditModal({
   const [saving, setSaving] = useState(false)
   const [steTest, setSteTest] = useState('')
   const [testing, setTesting] = useState(false)
+  // URL blob du PDF apercu genere par 'Tester Mise en Page'.
+  const [testPdfUrl, setTestPdfUrl] = useState<string | null>(null)
   const editorRef = useRef<HTMLDivElement | null>(null)
   // Memorise la selection courante avant qu'un controle de la toolbar
   // (color picker natif, combo) ne fasse perdre le focus du contentEditable.
@@ -258,6 +260,13 @@ export default function DocRHEditModal({
     setMeta((m) => ({ ...m, ...patch }))
     setIsDirty(true)
   }
+
+  // ---- Cleanup URL blob apercu PDF au demontage ----------------------
+  useEffect(() => {
+    return () => {
+      if (testPdfUrl) URL.revokeObjectURL(testPdfUrl.split('#')[0])
+    }
+  }, [testPdfUrl])
 
   // ---- Init -------------------------------------------------------------
   useEffect(() => {
@@ -773,10 +782,11 @@ export default function DocRHEditModal({
       }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
-      // Ouvre le PDF dans un nouvel onglet (avec footer auto)
-      window.open(url, '_blank')
-      // Garde l'URL active 60s pour laisser l'onglet la charger
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      // Revoke l'ancienne URL si un apercu precedent existait
+      if (testPdfUrl) URL.revokeObjectURL(testPdfUrl.split('#')[0])
+      // Ajoute #toolbar=1 pour forcer l'affichage de la toolbar PDF
+      // dans l'iframe (viewer natif Chrome/Firefox/Edge).
+      setTestPdfUrl(url + '#toolbar=1&view=FitH')
       showToast('PDF de test généré.', 'success')
     } catch (e) {
       showToast(`Échec test : ${(e as Error).message}`, 'error')
@@ -848,7 +858,7 @@ export default function DocRHEditModal({
               </div>
 
               {/* Layout 2 colonnes : 33% champs / 66% contenu */}
-              <div className="grid grid-cols-3 gap-6">
+              <div className={`grid gap-6 ${testPdfUrl ? 'grid-cols-5' : 'grid-cols-3'}`}>
               <div className="col-span-1 space-y-4">
               {/* Form metadonnees */}
               <div className="grid grid-cols-1 gap-3">
@@ -1266,8 +1276,58 @@ export default function DocRHEditModal({
                   </button>
                 </div>
               </div>
-              </div>{/* fin col-span-2 */}
-              </div>{/* fin grid 2 col */}
+              </div>{/* fin col-span-2 (contenu) */}
+
+              {/* === Colonne droite (2/5) : Apercu PDF === */}
+              {testPdfUrl && (
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4
+                      className="text-xs font-bold uppercase tracking-wide"
+                      style={{ color: COL_BRUN }}
+                    >
+                      Aperçu du PDF
+                    </h4>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => window.open(testPdfUrl, '_blank')}
+                        title="Ouvrir dans un nouvel onglet"
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Nouvel onglet
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          URL.revokeObjectURL(testPdfUrl.split('#')[0])
+                          setTestPdfUrl(null)
+                        }}
+                        title="Fermer l'aperçu"
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Fermer
+                      </button>
+                    </div>
+                  </div>
+                  <iframe
+                    src={testPdfUrl}
+                    title="Aperçu PDF"
+                    className="w-full rounded border"
+                    style={{
+                      borderColor: COL_BORDER,
+                      height: 'calc(100vh - 260px)',
+                      minHeight: '600px',
+                      backgroundColor: COL_BG_SOFT,
+                    }}
+                  />
+                </div>
+              )}
+              </div>{/* fin grid */}
             </div>
           )}
         </motion.div>

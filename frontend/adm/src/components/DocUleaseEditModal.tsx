@@ -405,7 +405,7 @@ export default function DocUleaseEditModal({
   // Cleanup de l'URL blob du preview PDF
   useEffect(() => {
     return () => {
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl)
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl.split('#')[0])
     }
   }, [pdfPreviewUrl])
 
@@ -868,10 +868,10 @@ export default function DocUleaseEditModal({
       }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
-      // Affiche le PDF dans l'iframe + ouvre aussi dans un nouvel onglet
-      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl)
-      setPdfPreviewUrl(url)
-      window.open(url, '_blank')
+      // Affiche le PDF dans l'iframe cote a cote de l'editeur
+      if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl.split('#')[0])
+      // Fragment #toolbar=1&view=FitH : force toolbar + ajuste largeur
+      setPdfPreviewUrl(url + '#toolbar=1&view=FitH')
       showToast('PDF de test généré.', 'success')
     } catch (e) {
       showToast(`Échec test : ${(e as Error).message}`, 'error')
@@ -947,7 +947,7 @@ export default function DocUleaseEditModal({
               </div>
 
               {/* Layout 2 colonnes : 33% champs / 66% contenu */}
-              <div className="grid grid-cols-3 gap-6">
+              <div className={`grid gap-6 ${pdfPreviewUrl ? 'grid-cols-5' : 'grid-cols-3'}`}>
               <div className="col-span-1 space-y-4">
               {/* Form metadonnees */}
               <div className="grid grid-cols-1 gap-3">
@@ -1355,27 +1355,6 @@ export default function DocUleaseEditModal({
                   AUTO_CV, AUTO_KM, DATE_DEB, DATE_FIN.
                 </p>
 
-                {/* Preview PDF dans iframe (apres un test mise en page) */}
-                {pdfPreviewUrl && (
-                  <div
-                    className="mt-3 pt-2 border-t"
-                    style={{ borderColor: COL_BORDER }}
-                  >
-                    <h4
-                      className="text-xs font-bold uppercase mb-2 tracking-wide"
-                      style={{ color: COL_BRUN }}
-                    >
-                      Aperçu PDF
-                    </h4>
-                    <iframe
-                      src={pdfPreviewUrl}
-                      title="Aperçu PDF Ulease"
-                      className="w-full border rounded"
-                      style={{ borderColor: COL_BORDER, height: '70vh' }}
-                    />
-                  </div>
-                )}
-
                 <div
                   className="mt-3 pt-2 border-t flex"
                   style={{ borderColor: COL_BORDER }}
@@ -1391,7 +1370,57 @@ export default function DocUleaseEditModal({
                   </button>
                 </div>
               </div>
-              </div>{/* fin col-span-2 */}
+              </div>{/* fin col-span-2 (contenu) */}
+
+              {/* === Colonne droite (2/5) : Apercu PDF === */}
+              {pdfPreviewUrl && (
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4
+                      className="text-xs font-bold uppercase tracking-wide"
+                      style={{ color: COL_BRUN }}
+                    >
+                      Aperçu du PDF
+                    </h4>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => window.open(pdfPreviewUrl, '_blank')}
+                        title="Ouvrir dans un nouvel onglet"
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Nouvel onglet
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          URL.revokeObjectURL(pdfPreviewUrl.split('#')[0])
+                          setPdfPreviewUrl(null)
+                        }}
+                        title="Fermer l'aperçu"
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs border"
+                        style={{ borderColor: COL_BORDER, color: COL_BRUN }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Fermer
+                      </button>
+                    </div>
+                  </div>
+                  <iframe
+                    src={pdfPreviewUrl}
+                    title="Aperçu PDF Ulease"
+                    className="w-full rounded border"
+                    style={{
+                      borderColor: COL_BORDER,
+                      height: 'calc(100vh - 260px)',
+                      minHeight: '600px',
+                      backgroundColor: COL_BG_SOFT,
+                    }}
+                  />
+                </div>
+              )}
               </div>{/* fin grid 2 col */}
             </div>
           )}
