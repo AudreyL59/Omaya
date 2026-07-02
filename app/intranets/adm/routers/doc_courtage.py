@@ -105,7 +105,7 @@ def delete_doc(
     return {"ok": True}
 
 
-@router.get("/{id_doc}/contenu")
+@router.get("/{id_doc}/content")
 def download_contenu(
     id_doc: int,
     _u: UserToken = Depends(get_current_user),
@@ -127,7 +127,7 @@ def download_contenu(
     )
 
 
-@router.post("/{id_doc}/contenu")
+@router.post("/{id_doc}/content")
 async def upload_contenu(
     id_doc: int,
     file: UploadFile = File(...),
