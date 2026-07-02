@@ -674,7 +674,8 @@ def _import_journalier_mobile(
             """SELECT id_contrat, id_salarie, id_client, id_produit,
                       type_vente, date_signature, date_portabilite,
                       date_resil, date_racc_activ, activ_control,
-                      processing_state, id_etat_sfr, id_etat_contrat
+                      processing_state, id_etat_sfr, id_etat_contrat,
+                      nb_points, info_interne
                  FROM adv.pgt_sfr_contrat
                 WHERE UPPER(num_bs) = UPPER(?)
                   AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
@@ -695,8 +696,12 @@ def _import_journalier_mobile(
             resume.nb_ajoutes += 1
         else:
             id_contrat = int(ctt["id_contrat"])
+            id_etat_sfr_actuel = int(ctt.get("id_etat_sfr") or 0)
+            etat_ctt_actuel = int(ctt.get("id_etat_contrat") or 0)
             modifs = []
+            errs = []
             if int(ctt.get("type_vente") or 0) != type_vente:
+                errs.append(("Type Vente", ctt.get("type_vente"), type_vente))
                 modifs.append(f"TypeVente -> {type_vente}")
             if int(ctt.get("id_produit") or 0) != offre and offre:
                 modifs.append(f"Offre -> {offre}")
@@ -712,29 +717,156 @@ def _import_journalier_mobile(
             if (_str(ctt.get("processing_state")) != processing_state
                     and processing_state):
                 modifs.append(f"ProcessingState -> {processing_state}")
+
+            # MAJ GSM client si num_mobile diff (cf. WinDev)
+            id_client_db = int(ctt.get("id_client") or 0)
+            if id_client_db and num_mobile:
+                cl = db.query_one(
+                    "SELECT gsm FROM adv.pgt_client WHERE id_client = ? LIMIT 1",
+                    (id_client_db,),
+                )
+                if cl and (cl.get("gsm") or "") != num_mobile:
+                    modifs.append(f"Client GSM -> {num_mobile}")
+                    if not p.simulation:
+                        try:
+                            db.query(
+                                """UPDATE adv.pgt_client
+                                      SET gsm = ?, modif_date = NOW(), modif_op = ?
+                                    WHERE id_client = ?""",
+                                (num_mobile, int(op_id), id_client_db),
+                            )
+                        except Exception:
+                            pass
+
+            # Changement etat SFR : IDetatSFR <> id_etat and id_etat<>0 and
+            # IDetatSFR<>76 -> histo "SFR" (cf. WinDev)
+            new_etat_sfr = None
+            if (id_etat and id_etat_sfr_actuel != id_etat
+                    and id_etat_sfr_actuel != 76):
+                new_etat_sfr = id_etat
+                modifs.append(f"EtatSFR -> {id_etat}")
+
+            # Changement etat contrat : logique WinDev
+            # typeOld <=2 ou 7/8 -> MAJ + histo "Vend"
+            # typeOld = 5 -> rapport "Payé passé en KO/Résiliation"
+            new_etat_ctt = None
+            if id_etat and etat_ctt_actuel != id_etat:
+                etat_info = db.query_one(
+                    """SELECT id_type_etat, lib_etat FROM adv.pgt_sfr_etat_contrat
+                        WHERE id_etat = ? LIMIT 1""",
+                    (etat_ctt_actuel,),
+                )
+                type_etat_old = int((etat_info or {}).get("id_type_etat") or 0)
+                if type_etat_old not in (5, 6):
+                    if type_etat_old <= 2 or type_etat_old in (7, 8):
+                        new_etat_ctt = id_etat
+                        modifs.append(f"EtatContrat -> {id_etat}")
+                else:
+                    # Paye/decomm : rapport special
+                    lib_stat_up = lib_statut.upper()
+                    if type_etat_old == 5 and (
+                            "RESIL" in lib_stat_up or "KO" in lib_stat_up):
+                        errs.append((f"Payé passé en {lib_statut}",
+                                     etat_ctt_actuel, id_etat))
+
+            # InfoInterne : append code_vendeur si absent
+            new_info_interne = None
+            if code_vendeur and code_vendeur.upper() not in (
+                    ctt.get("info_interne") or "").upper():
+                new_info_interne = ((ctt.get("info_interne") or "")
+                                    + "\n" + code_vendeur).strip()
+                modifs.append("InfoInterne (code vendeur)")
+
+            # Recalcul nb_points fam=MOBILE si date_sign ou date_ra >= 2022-02-01
+            recalc = ((date_sign and date_sign >= date(2022, 2, 1))
+                      or (date_act and date_act >= date(2022, 2, 1)))
+            nbpt_new = None
+            if recalc and offre:
+                try:
+                    from app.intranets.adm.services.sfr_helpers import (
+                        _donne_fam_prod_sfr,
+                    )
+                    from app.shared.sdtc.bareme import calcul_point_contrat
+                    prod = db.query_one(
+                        "SELECT sous_fam FROM adv.pgt_sfr_produit WHERE id_produit = ? LIMIT 1",
+                        (offre,),
+                    ) or {}
+                    fam = _donne_fam_prod_sfr("MOBILE", type_vente)
+                    nbpt = calcul_point_contrat(
+                        fam=fam, ss_fam=prod.get("sous_fam") or "",
+                        palier=0,
+                        date_sign=str(date_sign) if date_sign else "",
+                        info_cplt="", palier2=0,
+                    )
+                    if float(ctt.get("nb_points") or 0) != nbpt:
+                        nbpt_new = float(nbpt)
+                        modifs.append(f"nb_points -> {nbpt}")
+                except Exception:
+                    pass
+
+            for lib_err, val_av, val_ap in errs:
+                erreurs.append({
+                    "NumBS": num_bs,
+                    "TypeErreur": lib_err,
+                    "InfoAvant": str(val_av),
+                    "InfoApres": str(val_ap),
+                    "DateSign": str(ctt.get("date_signature") or ""),
+                    "NumMobile": num_mobile,
+                })
+                resume.nb_erreurs += 1
+
             if modifs:
                 modifies.append({
                     "NumBS": num_bs, "Modifs": " | ".join(modifs),
                     "Client": f"{client_nom} {client_prenom}".strip(),
                     "NumMobile": num_mobile,
+                    "EtatSFR ap": id_etat_sfr_actuel if new_etat_sfr is None else new_etat_sfr,
+                    "EtatContrat ap": etat_ctt_actuel if new_etat_ctt is None else new_etat_ctt,
                 })
                 resume.nb_modifies += 1
                 if not p.simulation:
                     try:
+                        sets = ["type_vente = ?", "id_produit = ?",
+                                "date_portabilite = COALESCE(?, date_portabilite)",
+                                "date_resil = COALESCE(?, date_resil)",
+                                "date_racc_activ = COALESCE(?, date_racc_activ)",
+                                "activ_control = ?", "processing_state = ?"]
+                        params: list = [type_vente, offre, date_port,
+                                         date_resil, date_act,
+                                         activ_control, processing_state]
+                        if new_etat_sfr is not None:
+                            sets.append("id_etat_sfr = ?")
+                            params.append(new_etat_sfr)
+                        if new_etat_ctt is not None:
+                            sets.append("id_etat_contrat = ?")
+                            params.append(new_etat_ctt)
+                        if new_info_interne is not None:
+                            sets.append("info_interne = ?")
+                            params.append(new_info_interne)
+                        if nbpt_new is not None:
+                            sets.append("nb_points = ?")
+                            params.append(nbpt_new)
+                        sets.append("modif_date = NOW()")
+                        sets.append("modif_op = ?")
+                        sets.append("modif_elem = 'modif'")
+                        params.append(int(op_id))
+                        params.append(id_contrat)
                         db.query(
-                            """UPDATE adv.pgt_sfr_contrat
-                                  SET type_vente = ?, id_produit = ?,
-                                      date_portabilite = COALESCE(?, date_portabilite),
-                                      date_resil = COALESCE(?, date_resil),
-                                      date_racc_activ = COALESCE(?, date_racc_activ),
-                                      activ_control = ?, processing_state = ?,
-                                      modif_date = NOW(), modif_op = ?,
-                                      modif_elem = 'modif'
-                                WHERE id_contrat = ?""",
-                            (type_vente, offre, date_port, date_resil,
-                             date_act, activ_control, processing_state,
-                             int(op_id), id_contrat),
+                            f"UPDATE adv.pgt_sfr_contrat SET {', '.join(sets)} "
+                            f"WHERE id_contrat = ?",
+                            tuple(params),
                         )
+                        # Historisation
+                        if new_etat_sfr is not None:
+                            _ajoute_histo_sfr_etat(
+                                id_contrat, id_etat_sfr_actuel, new_etat_sfr,
+                                "", op_id, categorie="SFR",
+                            )
+                        if new_etat_ctt is not None:
+                            _ajoute_histo_sfr_etat(
+                                id_contrat, etat_ctt_actuel, new_etat_ctt,
+                                "", op_id, categorie="Vend",
+                            )
                     except Exception as e:
                         modifies[-1]["Erreur"] = str(e)
             else:
