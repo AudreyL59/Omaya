@@ -955,7 +955,10 @@ def _import_run_val(
             })
             continue
 
-        is_valide = "VALIDE" in statut.upper()
+        # cf. WinDev L197 : si ChaineCommencePar(monBS.Statut, 'VALID') alors
+        # (traite VALID, VALIDE, VALIDATION mais rejette NON VALIDE)
+        statut_clean = statut.upper().strip().replace(" ", "")
+        is_valide = statut_clean.startswith("VALID")
 
         if is_valide:
             # Cas VALIDE : eligible si type_etat in (1,2) ou etat in (29,30)
@@ -990,7 +993,11 @@ def _import_run_val(
         else:
             # Cas RESILIATION : eligible si type_etat in (1,2)
             if id_type_etat in (1, 2):
-                new_etat = 57 if statut.upper() == "RESILIE" else 16
+                # cf. WinDev importRUN : ne code jamais 57 ici, toujours 16
+                # (Resilie par operateur). Le code 57 (Retractation) est un
+                # bug de la version precedente (probablement copie/colle
+                # depuis un autre pattern).
+                new_etat = 16
                 new_etat_info = db.query_one(
                     """SELECT lib_etat FROM adv.pgt_val_etat_contrat
                         WHERE id_etat = ? LIMIT 1""",
@@ -1132,8 +1139,11 @@ def _import_resil_hebdo_val(
             resume.nb_introuvables += 1
             continue
 
-        # Si statut contient VALIDE -> rien a faire
-        if "VALIDE" in statut.upper():
+        # cf. WinDev L182 : filtre par Contient(Statut, 'RESIL'|'REJET'|'KO')
+        # sinon (VALIDE) rien a faire. On teste le contraire de VALID debut
+        # (idem RUN : ChaineCommencePar 'VALID' = pas a traiter en resil).
+        statut_clean = statut.upper().strip().replace(" ", "")
+        if statut_clean.startswith("VALID"):
             continue
 
         id_contrat = int(ctt["id_contrat"])
@@ -1154,7 +1164,9 @@ def _import_resil_hebdo_val(
 
         if id_type_etat in (1, 2):
             # En attente -> on resilie
-            new_etat = 57 if statut.upper() == "RESILIE" else 16
+            # cf. WinDev : toujours 16 (Resilie par operateur). Le 57
+            # etait un bug (n'existe pas dans importResilHebdo WinDev).
+            new_etat = 16
             new_etat_info = db.query_one(
                 """SELECT lib_etat FROM adv.pgt_val_etat_contrat
                     WHERE id_etat = ? LIMIT 1""",

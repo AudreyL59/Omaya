@@ -158,6 +158,35 @@ def _id_etat_str_by_lib(lib_statut: str) -> int:
     return _int(r.get("id_etat")) if r else 0
 
 
+def _verif_activite_distrib_str(id_salarie: int, date_signature) -> str:
+    """Cf. WinDev verifActiviteDistrib(monOpe, DateSignature)."""
+    if not id_salarie:
+        return ""
+    try:
+        db = get_pg_connection("rh")
+        r = db.query_one(
+            """SELECT en_activite, date_debut, date_fin
+                 FROM rh.pgt_salarie_embauche
+                WHERE id_salarie = ?
+                ORDER BY date_debut DESC LIMIT 1""",
+            (int(id_salarie),),
+        )
+        if not r:
+            return ""
+        if r.get("en_activite") is False:
+            return "Salarié inactif à la date de signature"
+        if date_signature:
+            db_deb = r.get("date_debut")
+            db_fin = r.get("date_fin")
+            if db_deb and date_signature < db_deb:
+                return "Signature avant date d'embauche"
+            if db_fin and date_signature > db_fin:
+                return "Signature après date de fin de contrat"
+        return ""
+    except Exception:
+        return ""
+
+
 def _lookup_vendeur_str_nom_prenom(nom: str, prenom: str) -> int:
     """Lookup salarie via 5 variantes (cf WinDev ReqRechercheSalarieByNomPrenom) :
     1. nom + prenom exacts
