@@ -2571,20 +2571,35 @@ def _import_callret_ko(
                 ajoutes.append(row_a)
                 resume.nb_ajoutes += 1
 
-            # MAJ id_etat_call_ret + obs si different
-            if id_statut and int(orig.get("id_etat_call_ret") or 0) != id_statut:
-                modifs_done.append(f"EtatCallRet -> {id_statut} ({lib_etat_call})")
-                if not p.simulation:
-                    new_obs = (f"{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
-                               f"{lib_etat_call} : {comment}\n")
-                    db.query(
-                        """UPDATE adv.pgt_sfr_contrat
-                              SET id_etat_call_ret = ?, obs_call_ret = ?,
-                                  modif_date = NOW(), modif_op = ?,
-                                  modif_elem = 'modif'
-                            WHERE id_contrat = ?""",
-                        (id_statut, new_obs, int(op_id), id_contrat_orig),
-                    )
+            # MAJ id_etat_call_ret + obs si statut fourni (cf. WinDev
+            # L207-231 : UPDATE meme si id_statut identique - permet
+            # d ajouter le commentaire a l historique obs).
+            # Avant : bloque par id_etat_call_ret != id_statut, donc le
+            # meme statut re-saisi avec un nouveau commentaire etait
+            # perdu.
+            if id_statut:
+                etat_ancien = int(orig.get("id_etat_call_ret") or 0)
+                etat_change = etat_ancien != id_statut
+                if etat_change:
+                    modifs_done.append(
+                        f"EtatCallRet -> {id_statut} ({lib_etat_call})")
+                # Concatenation dans obs_call_ret (historique cumulatif)
+                new_obs = (
+                    (orig.get("obs_call_ret") or "")
+                    + f"\n{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
+                    + f"{lib_etat_call} : {comment}"
+                )
+                if comment or etat_change:
+                    modifs_done.append("Obs actualisee")
+                    if not p.simulation:
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET id_etat_call_ret = ?, obs_call_ret = ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (id_statut, new_obs, int(op_id), id_contrat_orig),
+                        )
 
             if modifs_done:
                 modifies.append({
@@ -2659,6 +2674,18 @@ def _import_callret_racc(
                     sal_db = int(exist.get("id_salarie") or 0)
                     if sal_db in (0, FIBRE_INCONNU):
                         if not p.simulation:
+                            # cf. WinDev L166 style : histo attr avant UPDATE
+                            try:
+                                from app.intranets.adm.services.import_helpers_common import (
+                                    ajout_historique_attribution,
+                                )
+                                ajout_historique_attribution(
+                                    "SFR", int(exist["id_contrat"]),
+                                    "SFR", new_bs,
+                                    sal_db, int(ABASSI_AHD), op_id,
+                                )
+                            except Exception:
+                                pass
                             db.query(
                                 """UPDATE adv.pgt_sfr_contrat
                                       SET id_salarie = ?, modif_date = NOW(),
@@ -2669,7 +2696,11 @@ def _import_callret_racc(
                             )
                         row_a["Note"] = (row_a.get("Note", "")
                                          + " | ID Vendeur mis a jour").strip(" |")
+                    # cf. WinDev L222 : dans les 2 cas (existant ou pas),
+                    # id_contrat_ret sur l'origine pointe vers le nouveau
+                    id_new_bs = int(exist["id_contrat"])
                 else:
+                    id_new_bs = 0
                     if not p.simulation:
                         try:
                             new_id = _create_sfr_contrat_callret(
@@ -2679,11 +2710,27 @@ def _import_callret_racc(
                                 f"Num Origine : {num_bs}",
                             )
                             row_a["NewIdContrat"] = new_id
+                            id_new_bs = new_id
                         except Exception as e:
                             row_a["Erreur"] = str(e)
                 ajoutes.append(row_a)
                 resume.nb_ajoutes += 1
                 liste_bs_add.append(new_bs)
+
+                # cf. WinDev L222, L228-230 : id_contrat_ret sur l'origine
+                # pointe vers le new BS (creation OU existant)
+                if id_new_bs and not p.simulation:
+                    try:
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET id_contrat_ret = ?
+                                WHERE id_contrat = ?
+                                  AND (id_contrat_ret IS NULL
+                                       OR id_contrat_ret = 0)""",
+                            (id_new_bs, id_orig),
+                        )
+                    except Exception:
+                        pass
 
             # MAJ info_interne origine
             if liste_bs_add and not p.simulation:
@@ -2776,11 +2823,22 @@ def _import_callret_rdvtech(
             if id_statut_rdv and new_statut_rdv != id_statut_rdv:
                 modifs_done.append(f"StatutRDV -> {id_statut_rdv} ({lib_statut_rdv})")
                 new_statut_rdv = id_statut_rdv
-            if date_rdv and (not new_rdv or new_rdv < date_rdv):
+            # cf. WinDev L128 : tolere DateRDVTech <> DateRdv (pas seulement <)
+            # -> attrape aussi les corrections de date erronees (antérieures)
+            if date_rdv and new_rdv != date_rdv:
                 old_str = (new_rdv.strftime("%d/%m/%Y") if new_rdv else "")
-                modifs_done.append(f"DateRDV {old_str} -> {date_rdv}")
-                new_info += (f"\nModif RDV du {old_str} au "
-                             f"{date_rdv.strftime('%d/%m/%Y')}")
+                new_str = date_rdv.strftime("%d/%m/%Y")
+                # cf. WinDev L167-172 : 2 libelles differents selon
+                # existence d'une date pre-existante
+                if not old_str:
+                    modifs_done.append(f"Ajout DateRDV {new_str}")
+                    new_info += (f"\n{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
+                                 f"Ajout date de RDV le {new_str}")
+                else:
+                    modifs_done.append(f"DateRDV {old_str} -> {new_str}")
+                    new_info += (f"\n{datetime.now().strftime('%d/%m/%Y %H:%M , ')}"
+                                 f"Modif de la date de RDV du {old_str} "
+                                 f"au {new_str}")
                 new_rdv = date_rdv
 
             row_snap = {
