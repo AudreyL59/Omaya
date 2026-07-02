@@ -98,6 +98,8 @@ export default function DocCourtageEditModal({
   const [saving, setSaving] = useState(false)
   const [steTest, setSteTest] = useState('')
   const [testing, setTesting] = useState(false)
+  // URL blob du PDF apercu genere par 'Tester mise en page'.
+  const [testPdfUrl, setTestPdfUrl] = useState<string | null>(null)
   const editorRef = useRef<HTMLDivElement | null>(null)
   // Memorise la selection courante avant qu'un controle de la toolbar
   // (color picker natif, combo) ne fasse perdre le focus du contentEditable.
@@ -249,6 +251,13 @@ export default function DocCourtageEditModal({
     setMeta((m) => ({ ...m, ...patch }))
     setIsDirty(true)
   }
+
+  // ---- Cleanup URL blob apercu PDF au demontage ----------------------
+  useEffect(() => {
+    return () => {
+      if (testPdfUrl) URL.revokeObjectURL(testPdfUrl.split('#')[0])
+    }
+  }, [testPdfUrl])
 
   // ---- Init -------------------------------------------------------------
   useEffect(() => {
@@ -760,9 +769,11 @@ export default function DocCourtageEditModal({
       }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
-      // Ouvre le PDF de test dans un nouvel onglet (footer auto)
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      // Revoke l'ancienne URL si un apercu precedent existait
+      if (testPdfUrl) URL.revokeObjectURL(testPdfUrl)
+      // Ajoute #toolbar=1 pour forcer l'affichage de la toolbar PDF
+      // dans l'iframe (viewer natif Chrome/Firefox/Edge).
+      setTestPdfUrl(url + '#toolbar=1&view=FitH')
       showToast('PDF de test généré.', 'success')
     } catch (e) {
       showToast(`Échec test : ${(e as Error).message}`, 'error')
@@ -946,6 +957,51 @@ export default function DocCourtageEditModal({
                   substituées + les infos du distributeur choisi (footer
                   auto : logo + RS + SIRET + numéro de page).
                 </p>
+
+                {/* Apercu PDF inline */}
+                {testPdfUrl && (
+                  <div className="mt-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span
+                        className="text-xs font-bold uppercase tracking-wide"
+                        style={{ color: COL_BRUN }}
+                      >
+                        Aperçu du PDF
+                      </span>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => window.open(testPdfUrl, '_blank')}
+                          title="Ouvrir dans un nouvel onglet"
+                          className="p-1 rounded hover:bg-c-surface-soft text-c-ink-soft"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            URL.revokeObjectURL(testPdfUrl.split('#')[0])
+                            setTestPdfUrl(null)
+                          }}
+                          title="Fermer l'aperçu"
+                          className="p-1 rounded hover:bg-c-surface-soft text-c-ink-soft"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <iframe
+                      src={testPdfUrl}
+                      title="Aperçu PDF"
+                      className="w-full rounded border"
+                      style={{
+                        borderColor: COL_BORDER,
+                        height: '500px',
+                        backgroundColor: COL_BG_SOFT,
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               </div>
