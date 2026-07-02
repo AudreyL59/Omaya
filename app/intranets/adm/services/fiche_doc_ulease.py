@@ -22,8 +22,8 @@ from datetime import datetime
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
-from app.intranets.adm.services.fiche_doc_rh_generate import (
 from app.core.utils.sentinel_dates import is_sentinel
+from app.intranets.adm.services.fiche_doc_rh_generate import (
     _docx_to_pdf,
     _load_salarie,
     _load_societe,
