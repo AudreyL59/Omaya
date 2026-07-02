@@ -273,29 +273,61 @@ def _create_pro_contrat(td: dict, op_id: int) -> int:
             id_client = 0
 
     etat_initial = int(td.get("etat_contrat") or 37)
-    # 2. INSERT contrat
+
+    # 2. Calcul nb_points (cf. WinDev L33 ajoutFicheContrat :
+    # calculPointContrat(PRO_produit.Famille, PRO_produit.SousFAM, '',
+    # ctt.DateSignature, ''))
+    nb_pts = 0.0
+    id_prod = int(td.get("id_produit") or 0)
+    if id_prod and date_sign:
+        prod = db.query_one(
+            """SELECT famille, sous_fam FROM adv.pgt_pro_produit
+                WHERE id_produit = ? LIMIT 1""",
+            (id_prod,),
+        )
+        if prod:
+            try:
+                from app.shared.sdtc.bareme import calcul_point_contrat
+                nb_pts = float(calcul_point_contrat(
+                    fam=prod.get("famille") or "",
+                    ss_fam=prod.get("sous_fam") or "",
+                    palier=0,
+                    date_sign=str(date_sign),
+                    info_cplt="", palier2=0,
+                ) or 0)
+            except Exception:
+                nb_pts = 0.0
+
+    # 3. INSERT contrat (cf. WinDev ajoutFicheContrat champs completes)
     db.query(
         """INSERT INTO adv.pgt_pro_contrat
               (id_contrat_auto, id_contrat, id_client, id_salarie, id_ste,
                num_bs, id_produit, id_etat_contrat,
-               date_signature, op_saisie, date_saisie, non_call,
-               info_interne, code_enr,
+               date_signature, date_resil, date_prem,
+               info_partagee, info_interne, mois_p, nb_points,
+               op_saisie, date_saisie, non_call, code_enr,
                modif_op, modif_date, modif_elem)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?,
-                   ?, ?, NOW(), ?, ?, '',
+                   ?, ?, ?,
+                   ?, ?, '', ?,
+                   ?, NOW(), ?, '',
                    ?, NOW(), 'new')""",
         (int(auto["n"]) if auto else 1, id_contrat,
          id_client,
          int(td.get("id_salarie") or 0),
          int(td.get("id_ste") or 0),
          td.get("num_bs") or "",
-         int(td.get("id_produit") or 0),
+         id_prod,
          etat_initial,
-         date_sign, int(op_id),
+         date_sign,
+         td.get("date_resil"),
+         td.get("date_prem"),
+         td.get("info_partagee") or "",
+         td.get("commentaire") or td.get("info_interne") or "",
+         nb_pts,
+         int(op_id),
          # cf. WinDev PRO_ajoutFicheContrat : NonCALL par defaut FALSE
-         # sauf indication contraire (non_call peut etre override par TkCall)
          bool(td.get("non_call", False)),
-         td.get("commentaire") or "",
          int(op_id)),
     )
 
@@ -603,7 +635,13 @@ def _import_run_pro(
             runs.append(row_snap)
 
         if not p.simulation and traitement != "deja_statue":
+            old_mois_p_str = str(mois_p_omaya) if mois_p_omaya else ""
+            new_mois_p_str = str(nouveau_mois_p) if nouveau_mois_p else ""
             try:
+                # date_paiement d histo (cf. WinDev, differe selon cas):
+                # - valide (L271)   -> NOUVEAU MoisP
+                # - decomm (L290)   -> ANCIEN MoisP (Date_de_paiementOLD)
+                # - resilie (L349)  -> "" NOUVEAU MoisP (efface)
                 if mode == "valide":
                     db.query(
                         """UPDATE adv.pgt_pro_contrat
@@ -613,6 +651,7 @@ def _import_run_pro(
                             WHERE id_contrat = ?""",
                         (nouvel_etat, nouveau_mois_p, int(op_id), id_contrat),
                     )
+                    date_paiement_histo = new_mois_p_str
                 elif mode == "resil":
                     if traitement == "decomm":
                         db.query(
@@ -625,7 +664,8 @@ def _import_run_pro(
                             (nouvel_etat, nouveau_mois_p, comment,
                              int(op_id), id_contrat),
                         )
-                    else:
+                        date_paiement_histo = old_mois_p_str
+                    else:  # resilie
                         db.query(
                             """UPDATE adv.pgt_pro_contrat
                                   SET id_etat_contrat = ?, mois_p = NULL,
@@ -636,9 +676,12 @@ def _import_run_pro(
                                 WHERE id_contrat = ?""",
                             (nouvel_etat, comment, int(op_id), id_contrat),
                         )
+                        date_paiement_histo = ""
+                else:
+                    date_paiement_histo = old_mois_p_str
                 _ajoute_histo_pro_etat(
                     id_contrat, etat_actuel, nouvel_etat,
-                    str(mois_p_omaya) if mois_p_omaya else "", op_id,
+                    date_paiement_histo, op_id,
                 )
             except Exception as e:
                 row_snap["Erreur"] = str(e)
