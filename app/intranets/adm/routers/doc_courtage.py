@@ -180,12 +180,14 @@ def post_publipostage_test(
     id_ste: int,
     _u: UserToken = Depends(get_current_user),
 ):
-    """Renvoie l'apercu HTML avec substitution des variables (donnees
-    fictives + la societe/distrib choisie)."""
-    html = svc.publipostage_test_html(id_doc, id_ste)
-    if html is None:
-        raise HTTPException(404, "Contenu absent")
+    """Renvoie le PDF avec substitution des variables (donnees fictives
+    + le distrib choisi) + footer auto (logo/RS/SIRET/Page X/Y) via
+    WeasyPrint (cf. ctt-travail / generer_pdf_publiposte)."""
+    pdf = svc.publipostage_test_pdf(id_doc, id_ste)
+    if pdf is None:
+        raise HTTPException(400, "Pas de contenu a publiposter")
     return Response(
-        content=html,
-        media_type="text/html; charset=utf-8",
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="test_{id_doc}.pdf"'},
     )

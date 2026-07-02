@@ -760,10 +760,10 @@ export default function DocCourtageEditModal({
       }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
-      // Ouvre l'apercu HTML dans un nouvel onglet (substitution des vars)
+      // Ouvre le PDF de test dans un nouvel onglet (footer auto)
       window.open(url, '_blank')
       setTimeout(() => URL.revokeObjectURL(url), 60000)
-      showToast('Aperçu de test généré.', 'success')
+      showToast('PDF de test généré.', 'success')
     } catch (e) {
       showToast(`Échec test : ${(e as Error).message}`, 'error')
     } finally {
@@ -909,16 +909,16 @@ export default function DocCourtageEditModal({
                   Test de mise en page
                 </h4>
                 <div className="flex items-end gap-2">
-                  <Field label="Société test" wide>
+                  <Field label="Distributeur test" wide>
                     <select
                       value={steTest}
                       onChange={(e) => setSteTest(e.target.value)}
                       className={inputCls}
                     >
                       <option value="">- Choisir -</option>
-                      {lookups.societes.map((s) => (
-                        <option key={s.id_ste} value={s.id_ste}>
-                          {s.rs_interne || s.raison_sociale}
+                      {lookups.distribs_test.map((d) => (
+                        <option key={d.id_ste} value={d.id_ste}>
+                          {d.rs_interne}
                         </option>
                       ))}
                     </select>
@@ -942,9 +942,9 @@ export default function DocCourtageEditModal({
                   className="text-xs italic mt-1.5"
                   style={{ color: COL_BRUN }}
                 >
-                  Substitue les variables S_NOM / STE_* avec des données
-                  fictives + la société choisie. Les images (logo / cachet /
-                  signatures) ne sont pas encore traitées en V1.
+                  Génère un PDF de test avec les variables S_NOM / STE_*
+                  substituées + les infos du distributeur choisi (footer
+                  auto : logo + RS + SIRET + numéro de page).
                 </p>
               </div>
 

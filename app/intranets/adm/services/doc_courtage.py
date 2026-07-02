@@ -296,20 +296,29 @@ def _societe_variables_for_test(id_ste: int) -> dict[str, str]:
     }
 
 
-def publipostage_test_html(id_doc: int, id_ste: int) -> str | None:
-    """Genere l'apercu HTML de test avec substitution des variables."""
+def publipostage_test_pdf(id_doc: int, id_ste: int) -> bytes | None:
+    """Btn 'Tester Mise en page' Fen_EditionDocCourtage : PDF avec
+    donnees fictives + footer auto (logo STE / RS+adr+SIRET / Page X/Y).
+
+    Reutilise generer_pdf_publiposte de ctt_travail pour le footer
+    WeasyPrint standard Omaya."""
     content = download_content_html(id_doc)
     if not content: return None
-    html = content.decode("utf-8", errors="ignore")
+    body_html = content.decode("utf-8", errors="ignore")
     meta = get_doc_courtage(id_doc)
     tags = {**_FAKE_VARS_COURTAGE, **_societe_variables_for_test(id_ste)}
     if meta:
         tags["DOCTITRE"] = meta.titre
-    # Remplacements simples (les tags sont sans accolades dans le
-    # template WinDev)
-    for k, v in tags.items():
-        html = html.replace(k, v or "")
-    return html
+    # Substitue les variables (tri par longueur desc pour eviter les
+    # collisions : STE_RS_DISTRIB avant STE_RS, DATE_CTS_INIT avant
+    # DATE_CTS, etc.). STE_LOGO est traite par generer_pdf_publiposte
+    # (footer).
+    for k, v in sorted(tags.items(), key=lambda kv: -len(kv[0])):
+        if k == "STE_LOGO": continue
+        body_html = body_html.replace(k, str(v or ""))
+    # Delegue au helper standard qui ajoute le footer + convertit en PDF
+    from app.intranets.adm.services.ctt_travail import generer_pdf_publiposte
+    return generer_pdf_publiposte(body_html, id_ste=id_ste)
 
 
 class DocCourtageListItem(BaseModel):
