@@ -1328,14 +1328,46 @@ def _import_run(
                 continue
 
             lib_type_rem = type_rem.split(" (")[0]
-            if montant_rem < 0:
+            if test_montant_neg:
                 lib_type_rem += " - Régul"
 
-            # Verifie rem deja enregistree
+            # Rapport commun (18 champs feuille WinDev)
+            def _report_row(feuille_note: str, extra: dict | None = None) -> dict:
+                nom_vend = ""
+                try:
+                    v = get_pg_connection("rh").query_one(
+                        "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1",
+                        (id_sal,),
+                    ) or {}
+                    nom_vend = (
+                        f"{v.get('nom') or ''} "
+                        f"{(v.get('prenom') or '').title()}"
+                    ).strip()
+                except Exception:
+                    pass
+                r = {
+                    "Onglet": sheet_name, "NumBS": num_bs,
+                    "DateSign": str(date_sign or ""),
+                    "DateRa": str(date_ra or ""),
+                    "Client": f"{client_nom} {(client_prenom or '').title()}".strip(),
+                    "Offre": offre, "StatutRa": statut_ra,
+                    "MotifAnnul": motif_annul, "TypeRem": type_rem,
+                    "LibRem": lib_rem, "Periode": periode,
+                    "MontantRem": montant_rem, "Vendeur": nom_vend,
+                    "Agence": agence, "Equipe": equipe,
+                    "MoisPaiement": mois_p_str,
+                    "Statut": statut, "MotifDero": motif_dero,
+                    "Note": feuille_note,
+                }
+                if extra: r.update(extra)
+                return r
+
+            # Verifie rem deja enregistree (cf. WinDev ReqHistoRemSFR_contrat)
             existing_rem = None
             try:
                 existing_rem = db.query_one(
-                    """SELECT id_sfr_contrat_remun, ra_montant, ra_mois_p
+                    """SELECT id_sfr_contrat_remun, ra_montant, ra_mois_p,
+                              raccordement, validation
                          FROM adv.pgt_sfr_contrat_remun
                         WHERE id_contrat = ? AND type_rem = ? AND lib_option = ?
                         LIMIT 1""",
@@ -1344,34 +1376,109 @@ def _import_run(
             except Exception:
                 existing_rem = None
 
+            # -------- BLOC 4 : Techno "ABO" (Mobile) --------
+            if techno.upper() == "ABO":
+                if not existing_rem:
+                    # INSERT + verif REM officielle
+                    nb_paye += 1
+                    ajoutes.append(_report_row("Payé"))
+                    if not p.simulation:
+                        try:
+                            new_id = _new_id_sfr()
+                            db.query(
+                                """INSERT INTO adv.pgt_sfr_contrat_remun
+                                      (id_sfr_contrat_remun_auto,
+                                       id_sfr_contrat_remun,
+                                       id_contrat, num, type_rem, lib_option,
+                                       validation, va_mois_p, va_montant,
+                                       va_statut, va_motif,
+                                       raccordement, ra_mois_p, ra_montant,
+                                       ra_statut, ra_motif,
+                                       modif_date, modif_op, modif_elem)
+                                   VALUES (?, ?, ?, ?, ?, ?,
+                                           FALSE, '', 0, '', '',
+                                           TRUE, ?, ?, ?, ?,
+                                           NOW(), ?, 'new')""",
+                                (new_id, new_id, id_contrat, num_bs,
+                                 lib_type_rem, lib_rem,
+                                 mois_p_str, montant_rem, statut, motif_dero,
+                                 int(op_id)),
+                            )
+                        except Exception as e:
+                            ajoutes[-1]["Erreur"] = str(e)
+                    # Verif REM officielle
+                    mnt_off = _verif_rem_officielle(offre, type_vente_db, date_sign_db)
+                    if mnt_off > 0:
+                        nb_err_rem += 1
+                        if mnt_off > montant_rem:
+                            note_err = "Rem insuffisante"
+                        elif mnt_off < montant_rem:
+                            note_err = "Versement en trop"
+                        else:
+                            note_err = "OK"
+                        erreurs.append(_report_row(
+                            note_err,
+                            {"MontantOfficiel": mnt_off},
+                        ))
+                elif existing_rem.get("raccordement"):
+                    # Deja paye
+                    nb_deja_p += 1
+                    modifies.append(_report_row("Déjà payé", {
+                        "MontantOmaya": float(existing_rem.get("ra_montant") or 0),
+                        "MoisPOmaya": str(existing_rem.get("ra_mois_p") or ""),
+                        "MontantImport": montant_rem,
+                        "MoisPImport": mois_p_str,
+                    }))
+                else:
+                    # Existe mais raccordement=False -> UPDATE + Payé
+                    nb_paye += 1
+                    ajoutes.append(_report_row("Payé (MAJ)"))
+                    if not p.simulation:
+                        try:
+                            db.query(
+                                """UPDATE adv.pgt_sfr_contrat_remun
+                                      SET raccordement = TRUE, ra_mois_p = ?,
+                                          ra_montant = ?, ra_statut = ?,
+                                          ra_motif = ?,
+                                          modif_date = NOW(), modif_op = ?,
+                                          modif_elem = 'modif'
+                                    WHERE id_sfr_contrat_remun = ?""",
+                                (mois_p_str, montant_rem, statut, motif_dero,
+                                 int(op_id),
+                                 int(existing_rem["id_sfr_contrat_remun"])),
+                            )
+                        except Exception as e:
+                            ajoutes[-1]["Erreur"] = str(e)
+                    # Verif REM officielle (idem que la branche INSERT)
+                    mnt_off = _verif_rem_officielle(offre, type_vente_db, date_sign_db)
+                    if mnt_off > 0:
+                        nb_err_rem += 1
+                        if mnt_off > montant_rem: note_err = "Rem insuffisante"
+                        elif mnt_off < montant_rem: note_err = "Versement en trop"
+                        else: note_err = "OK"
+                        erreurs.append(_report_row(
+                            note_err, {"MontantOfficiel": mnt_off},
+                        ))
+                continue
+
+            # -------- BLOC 5 : Techno autre (Internet) - a faire --------
+            # Pour l'instant, garde la logique simplifiee existante en attendant
+            # le refactor du bloc 5 (VV vs Ra, MoisRacc=MoisSign double, etc.)
             if existing_rem:
                 nb_deja_p += 1
-                modifies.append({
-                    "Onglet": sheet_name, "NumBS": num_bs,
-                    "Offre": offre, "TypeRem": type_rem,
-                    "LibRem": lib_rem,
-                    "Montant Omaya": float(existing_rem.get("ra_montant") or 0),
-                    "MoisP Omaya": str(existing_rem.get("ra_mois_p") or ""),
-                    "Montant Import": montant_rem,
-                    "MoisP Import": mois_p_str,
-                    "Statut": statut, "Note": "Déjà payé",
-                })
+                modifies.append(_report_row("Déjà payé", {
+                    "MontantOmaya": float(existing_rem.get("ra_montant") or 0),
+                    "MoisPOmaya": str(existing_rem.get("ra_mois_p") or ""),
+                    "MontantImport": montant_rem,
+                    "MoisPImport": mois_p_str,
+                }))
             else:
                 nb_paye += 1
-                ajoutes.append({
-                    "Onglet": sheet_name, "NumBS": num_bs,
-                    "DateSign": str(date_sign_db or ""),
-                    "DateRa": str(date_ra or ""),
-                    "Client": f"{client_nom} {client_prenom}".strip(),
-                    "Offre": offre, "TypeRem": type_rem, "LibRem": lib_rem,
-                    "Montant": montant_rem, "MoisP": mois_p_str,
-                    "Statut": statut, "MotifDero": motif_dero,
-                    "Agence": agence, "Equipe": equipe,
-                })
+                ajoutes.append(_report_row("Payé"))
                 resume.nb_modifies += 1
                 if not p.simulation:
                     try:
-                        new_id = _new_id()
+                        new_id = _new_id_sfr()
                         is_va = "(VV)" in type_rem
                         db.query(
                             """INSERT INTO adv.pgt_sfr_contrat_remun
@@ -1386,12 +1493,12 @@ def _import_run(
                                        NOW(), ?, 'new')""",
                             (new_id, new_id, id_contrat, num_bs,
                              lib_type_rem, lib_rem,
-                             is_va, mois_p if is_va else None,
-                             montant_rem if is_va else None,
+                             is_va, mois_p_str if is_va else "",
+                             montant_rem if is_va else 0,
                              statut if is_va else "",
                              motif_dero if is_va else "",
-                             not is_va, mois_p if not is_va else None,
-                             montant_rem if not is_va else None,
+                             not is_va, mois_p_str if not is_va else "",
+                             montant_rem if not is_va else 0,
                              statut if not is_va else "",
                              motif_dero if not is_va else "",
                              int(op_id)),
@@ -1498,6 +1605,43 @@ def _iter_sheets(content: bytes):
     for sheet in wb.sheetnames:
         yield wb[sheet], sheet
     wb.close()
+
+
+def _verif_rem_officielle(offre_run: str, type_vente: int,
+                           date_sign: Optional[date]) -> float:
+    """cf. WinDev ReqTrouveRemCttSFR(Offre_Run, typeV, DateSi).
+
+    Cherche la ligne de la grille pgt_sfr_remun matching :
+    - lib_produit LIKE '<offre_run>%' (ou 'Internet Partout%' si commence par)
+    - type_vente = typeV (si TypeVente=2 -> 1)
+    - date_sign entre date_debut et date_fin (grille valide)
+
+    Retourne montant_ra ou 0.0 si pas de correspondance.
+    """
+    if not offre_run or not date_sign:
+        return 0.0
+    # cf. WinDev : si Offre_Run commence par "Internet Partout" -> "Internet Partout"
+    lib_search = offre_run
+    if offre_run.upper().startswith("INTERNET PARTOUT"):
+        lib_search = "Internet Partout"
+    # TypeVente = 2 (Migration) -> traite comme 1 (Vente)
+    tv = 1 if type_vente == 2 else type_vente
+    try:
+        db = get_pg_connection("adv")
+        r = db.query_one(
+            """SELECT g.montant_ra
+                 FROM adv.pgt_sfr_remun g
+                 JOIN adv.pgt_sfr_produit p ON p.id_produit = g.id_produit
+                WHERE p.lib_produit LIKE ?
+                  AND g.type_vente = ?
+                  AND ? BETWEEN g.date_debut AND g.date_fin
+                  AND (g.modif_elem IS NULL OR g.modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (f"{lib_search}%", tv, date_sign),
+        )
+        return float(r.get("montant_ra") or 0) if r else 0.0
+    except Exception:
+        return 0.0
 
 
 def _ajoute_histo_sfr_etat(id_contrat: int, old_etat: int, new_etat: int,
