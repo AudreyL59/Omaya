@@ -29,19 +29,23 @@ from .helpers import _capitalize, _esc, _fr_date, _int, _iso, _str
 
 
 # Mapping ID -> libelle pour la combo 'Delai de prevenance' (WinDev).
-# Base de valeurs vues en BDD : mix de libelles textuels ('1 mois',
-# '24 heures', 'sans') et d'IDs numeriques (1-6, -1).
-# NOTE: Mapping a confirmer avec le user (a affiner selon combo WinDev
-# reelle). Placeholder base sur l ordre progressif classique.
+# Base 1 fidele a la combo WinDev :
+#   1 : (ligne vide)
+#   2 : sans
+#   3 : 24 heures
+#   4 : 48 heures
+#   5 : 2 semaines
+#   6 : 1 mois
+# -1 / 0 : valeur avant selection (aucun libelle).
 _DELAI_PREVENANCE_MAPPING = {
-    "-1": "Sans",
-    "0": "Sans",
-    "1": "24 heures",
-    "2": "48 heures",
-    "3": "1 semaine",
-    "4": "2 semaines",
-    "5": "1 mois",
-    "6": "2 mois",
+    "-1": "",
+    "0": "",
+    "1": "",
+    "2": "sans",
+    "3": "24 heures",
+    "4": "48 heures",
+    "5": "2 semaines",
+    "6": "1 mois",
 }
 
 
