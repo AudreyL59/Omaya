@@ -119,30 +119,120 @@ def _etat_contrat_pro(signe: str, lib_statut: str = "") -> int:
 
 
 def _lookup_vendeur_pro(nom_complet: str, format_v: str) -> int:
-    """Cherche un salarie par nom/prenom selon format. Retourne id ou 0."""
+    """Cherche un salarie par nom/prenom selon format (cf. WinDev
+    ReqVendeurByConcatNomPrenom + fallback ReqVendeurByDebNomFinPrenom).
+
+    Reproduit les 3 strategies WinDev L100-142 :
+    1. Concat nom+prenom avec pattern % (matche cellule normale)
+    2. Meme requete avec '-' remplace par ' ' (matche noms composes)
+    3. Split par espace : premier mot = nom, dernier = prenom
+
+    Retourne id_salarie si UN SEUL match, 0 sinon.
+    """
     if not nom_complet or not nom_complet.strip():
         return 0
     db = get_pg_connection("rh")
-    s = nom_complet.upper()
-    for c in ("-", "'", " "):
-        s = s.replace(c, "%")
-    s = s.replace("%%", "%")
-    pattern = f"%{s}%"
 
-    if format_v == "nom_prenom":
-        sql = """SELECT id_salarie FROM rh.pgt_salarie
-                  WHERE UPPER(CONCAT(nom, '%', prenom)) LIKE ?
-                    AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                  LIMIT 2"""
-    else:
-        sql = """SELECT id_salarie FROM rh.pgt_salarie
-                  WHERE UPPER(CONCAT(prenom, '%', nom)) LIKE ?
-                    AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                  LIMIT 2"""
-    rows = db.query(sql, (pattern,)) or []
+    # Normalisation cf. WinDev L101-107 : SansAccent + Majuscule +
+    # remplacer '-', "'", ' ' par '%' puis '%%' -> '%'
+    try:
+        from app.intranets.adm.services.import_helpers_common import (
+            _sans_accent,
+        )
+        s_base = _sans_accent(nom_complet).upper().replace("Ç", "C")
+    except Exception:
+        s_base = nom_complet.upper()
+
+    def _pattern_like(raw: str) -> str:
+        s = raw
+        for c in ("-", "'", " "):
+            s = s.replace(c, "%")
+        while "%%" in s:
+            s = s.replace("%%", "%")
+        return f"%{s}%"
+
+    def _lookup(pattern: str) -> list:
+        if format_v == "nom_prenom":
+            sql = """SELECT id_salarie FROM rh.pgt_salarie
+                      WHERE UPPER(CONCAT(nom, '%', prenom)) LIKE ?
+                        AND (modif_elem IS NULL
+                             OR modif_elem NOT LIKE '%suppr%')
+                      LIMIT 2"""
+        else:
+            sql = """SELECT id_salarie FROM rh.pgt_salarie
+                      WHERE UPPER(CONCAT(prenom, '%', nom)) LIKE ?
+                        AND (modif_elem IS NULL
+                             OR modif_elem NOT LIKE '%suppr%')
+                      LIMIT 2"""
+        return db.query(sql, (pattern,)) or []
+
+    # Strategie 1 : pattern brut (WinDev L112)
+    rows = _lookup(_pattern_like(s_base))
     if len(rows) == 1:
         return int(rows[0]["id_salarie"])
+
+    # Strategie 2 : remplacer '-' par ' ' puis pattern (WinDev L121-125)
+    s_alt = s_base.replace("-", " ")
+    if s_alt != s_base:
+        rows = _lookup(_pattern_like(s_alt))
+        if len(rows) == 1:
+            return int(rows[0]["id_salarie"])
+
+    # Strategie 3 : split par espace (WinDev L132-141)
+    # nomV = premier mot, prenomV = dernier mot
+    parts = [p for p in s_alt.split(" ") if p]
+    if len(parts) >= 2:
+        nom_v = parts[0]
+        prenom_v = parts[-1]
+        try:
+            sql3 = """SELECT id_salarie FROM rh.pgt_salarie
+                       WHERE UPPER(nom) LIKE ?
+                         AND UPPER(prenom) LIKE ?
+                         AND (modif_elem IS NULL
+                              OR modif_elem NOT LIKE '%suppr%')
+                       LIMIT 2"""
+            rows = db.query(sql3, (f"{nom_v}%", f"%{prenom_v}")) or []
+            if len(rows) == 1:
+                return int(rows[0]["id_salarie"])
+        except Exception:
+            pass
     return 0
+
+
+def _verif_activite_distrib_pro(id_salarie: int,
+                                 date_signature: Optional[date]) -> str:
+    """Cf. WinDev verifActiviteDistrib(monOpé, DateSignature) :
+    verifie que le salarie etait actif dans salarie_embauche a la date
+    de signature.
+
+    Renvoie message d'alerte non vide si inactif, chaine vide sinon.
+    """
+    if not id_salarie:
+        return ""
+    try:
+        db = get_pg_connection("rh")
+        r = db.query_one(
+            """SELECT en_activite, date_debut, date_fin
+                 FROM rh.pgt_salarie_embauche
+                WHERE id_salarie = ?
+                ORDER BY date_debut DESC LIMIT 1""",
+            (int(id_salarie),),
+        )
+        if not r:
+            return ""
+        if r.get("en_activite") is False:
+            return "Salarié inactif à la date de signature"
+        # Verification date_debut <= date_signature <= date_fin
+        if date_signature:
+            db_deb = r.get("date_debut")
+            db_fin = r.get("date_fin")
+            if db_deb and date_signature < db_deb:
+                return "Signature avant date d'embauche"
+            if db_fin and date_signature > db_fin:
+                return "Signature après date de fin de contrat"
+        return ""
+    except Exception:
+        return ""
 
 
 def _info_salarie_pro(id_sal: int) -> dict:
@@ -370,6 +460,19 @@ def _import_journalier_pro(
         id_vendeur = _lookup_vendeur_pro(vendeur_complet, p.format_vendeur)
         id_produit, lib_prod = _id_produit_pro_by_lib(pack)
         etat_initial = _etat_contrat_pro(signe)
+
+        # cf. WinDev L150-152 : verifActiviteDistrib apres lookup vendeur
+        alerte_activite = ""
+        if id_vendeur:
+            alerte_activite = _verif_activite_distrib_pro(id_vendeur, date_sign)
+            if alerte_activite:
+                pb_vendeur.append({
+                    "NumCtt": num_contrat,
+                    "DateSigne": str(date_sign or ""),
+                    "Vendeur Import": vendeur_complet,
+                    "IdSalarie": id_vendeur,
+                    "Erreur": alerte_activite,
+                })
 
         # Lookup TkCall (cf. WinDev ReqTkCall_ByNumCtt(NumContrat, 'PRO'))
         # Enrichit id_vendeur si vide + info client + non_call=False
