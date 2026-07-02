@@ -40,34 +40,75 @@ COLS_BJ_VAL = {
 }
 
 
-# Mapping colonnes Import Resil Hebdo STR (cf groupe _AA1 dans grAlexJournalier)
-# D'apres l'ecran : Date Sign E, Vendeur nom C/prenom D, Num BS S, Statut V,
-# Remarques W, Client Civilite I, Nom J, Prenom K, adr1 L, adr2 M, CP N,
-# VILLE O, Tel P, Mobile Q, DNAISS R
-COLS_RH_VAL = {
-    "vendeur_nom": "C",         "vendeur_prenom": "D",
-    "date_signature": "E",      "client_civilite": "I",
-    "client_nom": "J",          "client_prenom": "K",
-    "client_adr1": "L",         "client_adr2": "M",
-    "client_cp": "N",           "client_ville": "O",
-    "client_tel": "P",          "client_mobile": "Q",
-    "client_naiss": "R",        "num_bs": "S",
-    "statut": "V",              "remarques": "W",
+# Mapping colonnes VAL - Import RUN (screen Import VALANDRE, cf. capture user)
+# Chaque ligne XLS contient 2 BS distincts (Valandre + GoActu) traites
+# separement mais stockes dans la meme table pgt_val_contrat.
+#
+# Client (colonnes H a R):
+#   Civilite H | Nom I | Prenom J | Adr1 K | Adr2 L | CP M | Ville N
+#   Tel O | Mobile P | DNAISS Q | Email R
+# Contrat general:
+#   Vendeur nom C | Vendeur prenom D | Date Signature E
+# Valandre :
+#   Num BS T | Statut vente U | Remarques V
+# GoActu :
+#   Format W | Num BS X | Statut vente Y | Remarques Z
+COLS_RUN_VAL = {
+    # Vendeur + date
+    "vendeur_nom": "C",              "vendeur_prenom": "D",
+    "date_signature": "E",
+    # Client
+    "client_civilite": "H",          "client_nom": "I",
+    "client_prenom": "J",            "client_adr1": "K",
+    "client_adr2": "L",              "client_cp": "M",
+    "client_ville": "N",             "client_tel": "O",
+    "client_mobile": "P",            "client_naiss": "Q",
+    "client_email": "R",
+    # BS Valandre
+    "num_bs_valandre": "T",          "statut_valandre": "U",
+    "remarques_valandre": "V",
+    # BS GoActu
+    "format_goactu": "W",            "num_bs_goactu": "X",
+    "statut_goactu": "Y",            "remarques_goactu": "Z",
+    # Compat pour boucle actuelle (a supprimer apres refonte double BS)
+    "num_bs": "T",                   "statut": "U",
+    "remarques": "V",
 }
 
 
-# Mapping colonnes RUN STR (cf groupe _AA, meme layout que _AA1 du Resil Hebdo
-# mais sans suffixe 1). Pareil que COLS_RH_VAL : C/D vendeur, E dateSign,
-# S NumBS, V Statut, W Remarques, I-R Client.
-COLS_RUN_VAL = {
-    "vendeur_nom": "C",         "vendeur_prenom": "D",
-    "date_signature": "E",      "client_civilite": "I",
-    "client_nom": "J",          "client_prenom": "K",
-    "client_adr1": "L",         "client_adr2": "M",
-    "client_cp": "N",           "client_ville": "O",
-    "client_tel": "P",          "client_mobile": "Q",
-    "client_naiss": "R",        "num_bs": "S",
-    "statut": "V",              "remarques": "W",
+# Mapping colonnes VAL - Import Resil Hebdo (screen Import VALANDRE
+# onglet 'Import Resil Hebdo', cf. 2e capture user).
+# Layout decale d'une colonne vers la gauche par rapport au RUN.
+#
+# Client (colonnes G a Q):
+#   Civilite G | Nom H | Prenom I | Adr1 J | Adr2 K | CP L | Ville M
+#   Tel N | Mobile O | DNAISS P | Email Q
+# Contrat general:
+#   Vendeur nom C | Vendeur prenom D | Date Signature E
+# Valandre :
+#   Num BS S | Statut vente T | Remarques U
+# GoActu :
+#   Num BS W | Statut vente X | Remarques Y | Format Z
+COLS_RH_VAL = {
+    # Vendeur + date
+    "vendeur_nom": "C",              "vendeur_prenom": "D",
+    "date_signature": "E",
+    # Client (attention decalage -1 vs RUN)
+    "client_civilite": "G",          "client_nom": "H",
+    "client_prenom": "I",            "client_adr1": "J",
+    "client_adr2": "K",              "client_cp": "L",
+    "client_ville": "M",             "client_tel": "N",
+    "client_mobile": "O",            "client_naiss": "P",
+    "client_email": "Q",
+    # BS Valandre
+    "num_bs_valandre": "S",          "statut_valandre": "T",
+    "remarques_valandre": "U",
+    # BS GoActu
+    "num_bs_goactu": "W",            "statut_goactu": "X",
+    "remarques_goactu": "Y",         "format_goactu": "Z",
+    # Compat pour boucle actuelle (a supprimer apres refonte double BS)
+    "num_bs": "S",                   "statut": "T",
+    "remarques": "U",
 }
 
 
@@ -882,11 +923,9 @@ def _import_run_val(
     mp_distrib = _dernier_jour_mois(p.mois_paiement_distrib)
 
     for i in range(2, (ws.max_row or 0) + 1):
-        num_bs = _cell(ws, i, cols["num_bs"]).upper()
-        if not num_bs:
-            continue
-        statut = _cell(ws, i, cols["statut"])
-        remarques = _cell(ws, i, cols["remarques"])
+        # cf. WinDev L181-203 : chaque ligne XLS contient 2 BS (Valandre +
+        # GoActu) traites separement mais stockes dans la meme table
+        # pgt_val_contrat. Les champs client/vendeur/date sont partages.
         vendeur_nom = _cell(ws, i, cols["vendeur_nom"])
         vendeur_prenom = _cell(ws, i, cols["vendeur_prenom"])
         client_nom = _cell(ws, i, cols["client_nom"])
@@ -895,143 +934,156 @@ def _import_run_val(
         client_cp = _cell(ws, i, cols["client_cp"])
         client_ville = _cell(ws, i, cols["client_ville"])
 
-        ctt = db.query_one(
-            """SELECT id_contrat, id_salarie, num_bs, date_signature,
-                      id_etat_contrat, info_partagee, mois_p
-                 FROM adv.pgt_val_contrat
-                WHERE UPPER(num_bs) = UPPER(?)
-                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                LIMIT 1""",
-            (num_bs,),
-        )
-        if not ctt:
-            non_trouves.append({
-                "NumBS": num_bs, "ClientNom": client_nom,
-                "ClientPrenom": client_prenom, "ClientCP": client_cp,
-                "ClientVille": client_ville,
-                "Vendeur": f"{vendeur_nom} {capitalise_str(vendeur_prenom)}".strip(),
-                "Statut": statut, "Remarques": remarques,
-            })
-            resume.nb_introuvables += 1
-            continue
-
-        id_contrat = int(ctt["id_contrat"])
-        id_etat_actuel = int(ctt.get("id_etat_contrat") or 0)
-        date_sign_db = ctt.get("date_signature")
-        mois_p_omaya = ctt.get("mois_p")
-        info_existing = ctt.get("info_partagee") or ""
-
-        # Lookup type_etat actuel
-        etat_info = db.query_one(
-            """SELECT id_type_etat, lib_etat FROM adv.pgt_val_etat_contrat
-                WHERE id_etat = ? LIMIT 1""",
-            (id_etat_actuel,),
-        )
-        id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
-        lib_etat_actuel = (etat_info.get("lib_etat") or "") if etat_info else ""
-
-        info_sal = _info_salarie_val(int(ctt.get("id_salarie") or 0))
-        nom_vend_db = f"{_str(info_sal.get('nom'))} {capitalise_str(_str(info_sal.get('prenom')))}".strip()
-
-        # Detection periode
-        agence, equipe, is_distrib = _affectation_val(int(ctt.get("id_salarie") or 0))
-        mois_p, periode_lbl = _detect_periode_val(
-            date_sign_db, is_distrib,
-            p1_du, p1_au, mp1, p2_du, p2_au, mp2, mp_distrib,
-        )
-        mois_p_str = mois_p.strftime("%m-%Y") if mois_p else ""
-
-        if periode_lbl == "HORS_DELAI":
-            resume.nb_hors_delai += 1
-            pb_vendeur.append({
-                "NumBS": num_bs, "ClientNom": client_nom,
-                "ClientPrenom": client_prenom,
-                "DateSign": str(date_sign_db or ""),
-                "Vendeur": nom_vend_db,
-                "TypeEtat actuel": str(id_type_etat),
-                "Lib Etat actuel": lib_etat_actuel,
-                "Agence": agence, "Equipe": equipe,
-                "Statut Import": statut, "Erreur": "Hors Délai",
-            })
-            continue
-
-        # cf. WinDev L197 : si ChaineCommencePar(monBS.Statut, 'VALID') alors
-        # (traite VALID, VALIDE, VALIDATION mais rejette NON VALIDE)
-        statut_clean = statut.upper().strip().replace(" ", "")
-        is_valide = statut_clean.startswith("VALID")
-
-        if is_valide:
-            # Cas VALIDE : eligible si type_etat in (1,2) ou etat in (29,30)
-            if id_type_etat in (1, 2) or id_etat_actuel in (29, 30):
-                # Garde mois_p ancien si etat etait 29/30
-                new_mois_p = mois_p_omaya if id_etat_actuel in (29, 30) else mois_p
-                runs.append({
-                    "NumBS": num_bs, "ClientNom": client_nom,
-                    "ClientPrenom": client_prenom, "ClientAdr": client_adr1,
-                    "ClientCP": client_cp, "ClientVille": client_ville,
-                    "DateSign": str(date_sign_db or ""),
-                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
-                    "Periode": periode_lbl, "MoisP": mois_p_str,
-                    "AncienEtat": lib_etat_actuel,
-                    "NouvelEtat": "Valide - Payé par l'opérateur",
-                    "_id_contrat": id_contrat,
-                    "_old_etat": id_etat_actuel, "_new_etat": 19,
-                    "_new_mois_p": new_mois_p, "_traitement": "valide",
-                })
-                resume.nb_valides += 1
-            else:
-                modifies.append({
+        _bs_pairs = [
+            ("Valandre",
+             _cell(ws, i, cols["num_bs_valandre"]).upper(),
+             _cell(ws, i, cols["statut_valandre"]),
+             _cell(ws, i, cols["remarques_valandre"])),
+            ("GoActu",
+             _cell(ws, i, cols["num_bs_goactu"]).upper(),
+             _cell(ws, i, cols["statut_goactu"]),
+             _cell(ws, i, cols["remarques_goactu"])),
+        ]
+        for _onglet_bs, num_bs, statut, remarques in _bs_pairs:
+            if not num_bs:
+                continue
+            ctt = db.query_one(
+                """SELECT id_contrat, id_salarie, num_bs, date_signature,
+                          id_etat_contrat, info_partagee, mois_p
+                     FROM adv.pgt_val_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
+            )
+            if not ctt:
+                non_trouves.append({
                     "NumBS": num_bs, "ClientNom": client_nom,
                     "ClientPrenom": client_prenom, "ClientCP": client_cp,
                     "ClientVille": client_ville,
-                    "DateSign": str(date_sign_db or ""),
-                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
-                    "Statut Import": statut, "EtatEnregistre": lib_etat_actuel,
-                    "Periode": periode_lbl,
+                    "Vendeur": f"{vendeur_nom} {capitalise_str(vendeur_prenom)}".strip(),
+                    "Statut": statut, "Remarques": remarques,
                 })
-                resume.nb_deja_statues += 1
-        else:
-            # Cas RESILIATION : eligible si type_etat in (1,2)
-            if id_type_etat in (1, 2):
-                # cf. WinDev importRUN : ne code jamais 57 ici, toujours 16
-                # (Resilie par operateur). Le code 57 (Retractation) est un
-                # bug de la version precedente (probablement copie/colle
-                # depuis un autre pattern).
-                new_etat = 16
-                new_etat_info = db.query_one(
-                    """SELECT lib_etat FROM adv.pgt_val_etat_contrat
-                        WHERE id_etat = ? LIMIT 1""",
-                    (new_etat,),
-                )
-                new_etat_lib = ((new_etat_info.get("lib_etat") or "")
-                                if new_etat_info else "")
-                runs.append({
+                resume.nb_introuvables += 1
+                continue
+
+            id_contrat = int(ctt["id_contrat"])
+            id_etat_actuel = int(ctt.get("id_etat_contrat") or 0)
+            date_sign_db = ctt.get("date_signature")
+            mois_p_omaya = ctt.get("mois_p")
+            info_existing = ctt.get("info_partagee") or ""
+
+            # Lookup type_etat actuel
+            etat_info = db.query_one(
+                """SELECT id_type_etat, lib_etat FROM adv.pgt_val_etat_contrat
+                    WHERE id_etat = ? LIMIT 1""",
+                (id_etat_actuel,),
+            )
+            id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
+            lib_etat_actuel = (etat_info.get("lib_etat") or "") if etat_info else ""
+
+            info_sal = _info_salarie_val(int(ctt.get("id_salarie") or 0))
+            nom_vend_db = f"{_str(info_sal.get('nom'))} {capitalise_str(_str(info_sal.get('prenom')))}".strip()
+
+            # Detection periode
+            agence, equipe, is_distrib = _affectation_val(int(ctt.get("id_salarie") or 0))
+            mois_p, periode_lbl = _detect_periode_val(
+                date_sign_db, is_distrib,
+                p1_du, p1_au, mp1, p2_du, p2_au, mp2, mp_distrib,
+            )
+            mois_p_str = mois_p.strftime("%m-%Y") if mois_p else ""
+
+            if periode_lbl == "HORS_DELAI":
+                resume.nb_hors_delai += 1
+                pb_vendeur.append({
                     "NumBS": num_bs, "ClientNom": client_nom,
-                    "ClientPrenom": client_prenom, "ClientAdr": client_adr1,
-                    "ClientCP": client_cp, "ClientVille": client_ville,
+                    "ClientPrenom": client_prenom,
                     "DateSign": str(date_sign_db or ""),
-                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
-                    "Periode": periode_lbl, "MoisP": mois_p_str,
-                    "AncienEtat": lib_etat_actuel,
-                    "NouvelEtat": new_etat_lib,
-                    "_id_contrat": id_contrat,
-                    "_old_etat": id_etat_actuel, "_new_etat": new_etat,
-                    "_remarques": remarques,
-                    "_info_existing": info_existing,
-                    "_traitement": "resil",
+                    "Vendeur": nom_vend_db,
+                    "TypeEtat actuel": str(id_type_etat),
+                    "Lib Etat actuel": lib_etat_actuel,
+                    "Agence": agence, "Equipe": equipe,
+                    "Statut Import": statut, "Erreur": "Hors Délai",
                 })
-                resume.nb_resilies += 1
+                continue
+
+            # cf. WinDev L197 : si ChaineCommencePar(monBS.Statut, 'VALID') alors
+            # (traite VALID, VALIDE, VALIDATION mais rejette NON VALIDE)
+            statut_clean = statut.upper().strip().replace(" ", "")
+            is_valide = statut_clean.startswith("VALID")
+
+            if is_valide:
+                # Cas VALIDE : eligible si type_etat in (1,2) ou etat in (29,30)
+                if id_type_etat in (1, 2) or id_etat_actuel in (29, 30):
+                    # Garde mois_p ancien si etat etait 29/30
+                    new_mois_p = mois_p_omaya if id_etat_actuel in (29, 30) else mois_p
+                    runs.append({
+                        "NumBS": num_bs, "ClientNom": client_nom,
+                        "ClientPrenom": client_prenom, "ClientAdr": client_adr1,
+                        "ClientCP": client_cp, "ClientVille": client_ville,
+                        "DateSign": str(date_sign_db or ""),
+                        "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                        "Periode": periode_lbl, "MoisP": mois_p_str,
+                        "AncienEtat": lib_etat_actuel,
+                        "NouvelEtat": "Valide - Payé par l'opérateur",
+                        "_id_contrat": id_contrat,
+                        "_old_etat": id_etat_actuel, "_new_etat": 19,
+                        "_new_mois_p": new_mois_p, "_traitement": "valide",
+                    })
+                    resume.nb_valides += 1
+                else:
+                    modifies.append({
+                        "NumBS": num_bs, "ClientNom": client_nom,
+                        "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                        "ClientVille": client_ville,
+                        "DateSign": str(date_sign_db or ""),
+                        "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                        "Statut Import": statut, "EtatEnregistre": lib_etat_actuel,
+                        "Periode": periode_lbl,
+                    })
+                    resume.nb_deja_statues += 1
             else:
-                modifies.append({
-                    "NumBS": num_bs, "ClientNom": client_nom,
-                    "ClientPrenom": client_prenom, "ClientCP": client_cp,
-                    "ClientVille": client_ville,
-                    "DateSign": str(date_sign_db or ""),
-                    "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
-                    "Statut Import": statut, "EtatEnregistre": lib_etat_actuel,
-                    "Periode": periode_lbl,
-                })
-                resume.nb_deja_statues += 1
+                # Cas RESILIATION : eligible si type_etat in (1,2)
+                if id_type_etat in (1, 2):
+                    # cf. WinDev importRUN : ne code jamais 57 ici, toujours 16
+                    # (Resilie par operateur). Le code 57 (Retractation) est un
+                    # bug de la version precedente (probablement copie/colle
+                    # depuis un autre pattern).
+                    new_etat = 16
+                    new_etat_info = db.query_one(
+                        """SELECT lib_etat FROM adv.pgt_val_etat_contrat
+                            WHERE id_etat = ? LIMIT 1""",
+                        (new_etat,),
+                    )
+                    new_etat_lib = ((new_etat_info.get("lib_etat") or "")
+                                    if new_etat_info else "")
+                    runs.append({
+                        "NumBS": num_bs, "ClientNom": client_nom,
+                        "ClientPrenom": client_prenom, "ClientAdr": client_adr1,
+                        "ClientCP": client_cp, "ClientVille": client_ville,
+                        "DateSign": str(date_sign_db or ""),
+                        "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                        "Periode": periode_lbl, "MoisP": mois_p_str,
+                        "AncienEtat": lib_etat_actuel,
+                        "NouvelEtat": new_etat_lib,
+                        "_id_contrat": id_contrat,
+                        "_old_etat": id_etat_actuel, "_new_etat": new_etat,
+                        "_remarques": remarques,
+                        "_info_existing": info_existing,
+                        "_traitement": "resil",
+                    })
+                    resume.nb_resilies += 1
+                else:
+                    modifies.append({
+                        "NumBS": num_bs, "ClientNom": client_nom,
+                        "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                        "ClientVille": client_ville,
+                        "DateSign": str(date_sign_db or ""),
+                        "Vendeur": nom_vend_db, "Agence": agence, "Equipe": equipe,
+                        "Statut Import": statut, "EtatEnregistre": lib_etat_actuel,
+                        "Periode": periode_lbl,
+                    })
+                    resume.nb_deja_statues += 1
 
     # PASSE PROD : MAJ etat sur les runs
     if not p.simulation:
@@ -1106,11 +1158,9 @@ def _import_resil_hebdo_val(
     db = get_pg_connection("adv")
 
     for i in range(2, (ws.max_row or 0) + 1):
-        num_bs = _cell(ws, i, cols["num_bs"]).upper()
-        if not num_bs:
-            continue
-        statut = _cell(ws, i, cols["statut"])
-        remarques = _cell(ws, i, cols["remarques"])
+        # cf. WinDev L181-203 : chaque ligne XLS contient 2 BS (Valandre +
+        # GoActu) traites separement mais stockes dans la meme table
+        # pgt_val_contrat. Les champs client/vendeur/date sont partages.
         vendeur_nom = _cell(ws, i, cols["vendeur_nom"])
         vendeur_prenom = _cell(ws, i, cols["vendeur_prenom"])
         client_nom = _cell(ws, i, cols["client_nom"])
@@ -1119,86 +1169,99 @@ def _import_resil_hebdo_val(
         client_cp = _cell(ws, i, cols["client_cp"])
         client_ville = _cell(ws, i, cols["client_ville"])
 
-        ctt = db.query_one(
-            """SELECT id_contrat, id_salarie, num_bs, date_signature,
-                      id_etat_contrat, info_partagee
-                 FROM adv.pgt_val_contrat
-                WHERE UPPER(num_bs) = UPPER(?)
-                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                LIMIT 1""",
-            (num_bs,),
-        )
-        if not ctt:
-            non_trouves.append({
-                "NumBS": num_bs, "ClientNom": client_nom,
-                "ClientPrenom": client_prenom, "ClientCP": client_cp,
-                "ClientVille": client_ville,
-                "Vendeur": f"{vendeur_nom} {capitalise_str(vendeur_prenom)}".strip(),
-                "Statut": statut, "Remarques": remarques,
-            })
-            resume.nb_introuvables += 1
-            continue
-
-        # cf. WinDev L182 : filtre par Contient(Statut, 'RESIL'|'REJET'|'KO')
-        # sinon (VALIDE) rien a faire. On teste le contraire de VALID debut
-        # (idem RUN : ChaineCommencePar 'VALID' = pas a traiter en resil).
-        statut_clean = statut.upper().strip().replace(" ", "")
-        if statut_clean.startswith("VALID"):
-            continue
-
-        id_contrat = int(ctt["id_contrat"])
-        id_etat_actuel = int(ctt.get("id_etat_contrat") or 0)
-        date_sign_db = ctt.get("date_signature")
-
-        # Lookup type_etat actuel
-        etat_info = db.query_one(
-            """SELECT id_type_etat, lib_etat FROM adv.pgt_val_etat_contrat
-                WHERE id_etat = ? LIMIT 1""",
-            (id_etat_actuel,),
-        )
-        id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
-        lib_etat_actuel = (etat_info.get("lib_etat") or "") if etat_info else ""
-
-        info_sal = _info_salarie_val(int(ctt.get("id_salarie") or 0))
-        nom_vend_db = f"{_str(info_sal.get('nom'))} {_str(info_sal.get('prenom'))}".strip()
-
-        if id_type_etat in (1, 2):
-            # En attente -> on resilie
-            # cf. WinDev : toujours 16 (Resilie par operateur). Le 57
-            # etait un bug (n'existe pas dans importResilHebdo WinDev).
-            new_etat = 16
-            new_etat_info = db.query_one(
-                """SELECT lib_etat FROM adv.pgt_val_etat_contrat
-                    WHERE id_etat = ? LIMIT 1""",
-                (new_etat,),
+        _bs_pairs = [
+            ("Valandre",
+             _cell(ws, i, cols["num_bs_valandre"]).upper(),
+             _cell(ws, i, cols["statut_valandre"]),
+             _cell(ws, i, cols["remarques_valandre"])),
+            ("GoActu",
+             _cell(ws, i, cols["num_bs_goactu"]).upper(),
+             _cell(ws, i, cols["statut_goactu"]),
+             _cell(ws, i, cols["remarques_goactu"])),
+        ]
+        for _onglet_bs, num_bs, statut, remarques in _bs_pairs:
+            if not num_bs:
+                continue
+            ctt = db.query_one(
+                """SELECT id_contrat, id_salarie, num_bs, date_signature,
+                          id_etat_contrat, info_partagee
+                     FROM adv.pgt_val_contrat
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_bs,),
             )
-            new_etat_lib = (new_etat_info.get("lib_etat") or "") if new_etat_info else ""
+            if not ctt:
+                non_trouves.append({
+                    "NumBS": num_bs, "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                    "ClientVille": client_ville,
+                    "Vendeur": f"{vendeur_nom} {capitalise_str(vendeur_prenom)}".strip(),
+                    "Statut": statut, "Remarques": remarques,
+                })
+                resume.nb_introuvables += 1
+                continue
 
-            modifies.append({
-                "NumBS": num_bs, "ClientNom": client_nom,
-                "ClientPrenom": client_prenom,
-                "ClientAdr": client_adr1, "ClientCP": client_cp,
-                "ClientVille": client_ville,
-                "DateSign": str(date_sign_db or ""),
-                "Vendeur": nom_vend_db,
-                "AncienEtat": lib_etat_actuel,
-                "NouvelEtat": new_etat_lib,
-                "Remarques": remarques,
-                "_id_contrat": id_contrat, "_old_etat": id_etat_actuel,
-                "_new_etat": new_etat, "_info_existing": ctt.get("info_partagee") or "",
-            })
-            resume.nb_resilies += 1
-        else:
-            # Deja statue
-            runs.append({
-                "NumBS": num_bs, "ClientNom": client_nom,
-                "ClientPrenom": client_prenom, "ClientCP": client_cp,
-                "ClientVille": client_ville,
-                "DateSign": str(date_sign_db or ""),
-                "Vendeur": nom_vend_db,
-                "StatutImport": statut, "EtatEnregistre": lib_etat_actuel,
-            })
-            resume.nb_deja_statues += 1
+            # cf. WinDev L182 : filtre par Contient(Statut, 'RESIL'|'REJET'|'KO')
+            # sinon (VALIDE) rien a faire. On teste le contraire de VALID debut
+            # (idem RUN : ChaineCommencePar 'VALID' = pas a traiter en resil).
+            statut_clean = statut.upper().strip().replace(" ", "")
+            if statut_clean.startswith("VALID"):
+                continue
+
+            id_contrat = int(ctt["id_contrat"])
+            id_etat_actuel = int(ctt.get("id_etat_contrat") or 0)
+            date_sign_db = ctt.get("date_signature")
+
+            # Lookup type_etat actuel
+            etat_info = db.query_one(
+                """SELECT id_type_etat, lib_etat FROM adv.pgt_val_etat_contrat
+                    WHERE id_etat = ? LIMIT 1""",
+                (id_etat_actuel,),
+            )
+            id_type_etat = int(etat_info.get("id_type_etat") or 0) if etat_info else 0
+            lib_etat_actuel = (etat_info.get("lib_etat") or "") if etat_info else ""
+
+            info_sal = _info_salarie_val(int(ctt.get("id_salarie") or 0))
+            nom_vend_db = f"{_str(info_sal.get('nom'))} {_str(info_sal.get('prenom'))}".strip()
+
+            if id_type_etat in (1, 2):
+                # En attente -> on resilie
+                # cf. WinDev : toujours 16 (Resilie par operateur). Le 57
+                # etait un bug (n'existe pas dans importResilHebdo WinDev).
+                new_etat = 16
+                new_etat_info = db.query_one(
+                    """SELECT lib_etat FROM adv.pgt_val_etat_contrat
+                        WHERE id_etat = ? LIMIT 1""",
+                    (new_etat,),
+                )
+                new_etat_lib = (new_etat_info.get("lib_etat") or "") if new_etat_info else ""
+
+                modifies.append({
+                    "NumBS": num_bs, "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom,
+                    "ClientAdr": client_adr1, "ClientCP": client_cp,
+                    "ClientVille": client_ville,
+                    "DateSign": str(date_sign_db or ""),
+                    "Vendeur": nom_vend_db,
+                    "AncienEtat": lib_etat_actuel,
+                    "NouvelEtat": new_etat_lib,
+                    "Remarques": remarques,
+                    "_id_contrat": id_contrat, "_old_etat": id_etat_actuel,
+                    "_new_etat": new_etat, "_info_existing": ctt.get("info_partagee") or "",
+                })
+                resume.nb_resilies += 1
+            else:
+                # Deja statue
+                runs.append({
+                    "NumBS": num_bs, "ClientNom": client_nom,
+                    "ClientPrenom": client_prenom, "ClientCP": client_cp,
+                    "ClientVille": client_ville,
+                    "DateSign": str(date_sign_db or ""),
+                    "Vendeur": nom_vend_db,
+                    "StatutImport": statut, "EtatEnregistre": lib_etat_actuel,
+                })
+                resume.nb_deja_statues += 1
 
     # PASSE PROD : reset etat sur les modifies
     if not p.simulation:
