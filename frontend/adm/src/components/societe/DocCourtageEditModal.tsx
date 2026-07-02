@@ -651,16 +651,12 @@ export default function DocCourtageEditModal({
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          id_type_doc: Number(meta.id_type_doc) || 0,
           titre: meta.titre,
           info_cpl: meta.info_cpl,
-          id_type_produit: Number(meta.id_type_produit) || 1,
+          id_groupe_operateur: meta.id_groupe_operateur,
           id_ste: Number(meta.id_ste) || 0,
           doc_actif: meta.doc_actif,
           prioritaire: meta.prioritaire,
-          doc_dpae: meta.doc_dpae,
-          doc_dpae_distrib: meta.doc_dpae_distrib,
-          id_tk_type_photo_dpae: Number(meta.id_tk_type_photo_dpae) || 0,
         }),
       })
       if (!r.ok) throw new Error(String(r.status))
