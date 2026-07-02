@@ -293,6 +293,75 @@ def _affectation_vendeur(id_salarie: int, _date_sign: Optional[date]) -> tuple[s
     return (agence, equipe)
 
 
+def _lookup_tk_call_eni(num_bs: str) -> dict:
+    """Cf. WinDev ReqTkCall_ByNumCtt(NumCtt, 'ENI') : recupere le
+    ticket call associe au numero de contrat pour peupler les
+    coordonnees client + eventuellement l'id_salarie.
+
+    Renvoie dict compatible traiter_client + 'id_salarie' + hint
+    non_call (implicite : si tk trouve, non_call=FALSE).
+    Dict vide si absent.
+    """
+    if not num_bs:
+        return {}
+    try:
+        db_bo = get_pg_connection("ticket_bo")
+        tk = db_bo.query_one(
+            """SELECT id_salarie, nom_client, nom_marital_client,
+                      prenom_client, adresse1, adresse2, cp, ville,
+                      mobile1, date_naiss, adr_mail
+                 FROM ticket_bo.pgt_tk_call
+                WHERE UPPER(num_bs) = UPPER(?)
+                  AND UPPER(partenaire) = 'ENI'
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (num_bs,),
+        )
+        if not tk:
+            return {}
+        nom = tk.get("nom_client") or ""
+        if tk.get("nom_marital_client"):
+            nom += f" ep {tk['nom_marital_client']}"
+        return {
+            "id_salarie": int(tk.get("id_salarie") or 0),
+            "nom": nom, "prenom": tk.get("prenom_client") or "",
+            "adresse": tk.get("adresse1") or "",
+            "cplt": tk.get("adresse2") or "",
+            "cp": tk.get("cp") or "", "ville": tk.get("ville") or "",
+            "gsm": tk.get("mobile1") or "",
+            "mail": tk.get("adr_mail") or "",
+            "date_naiss": tk.get("date_naiss"),
+        }
+    except Exception:
+        return {}
+
+
+def _is_distrib_eni(id_salarie: int) -> bool:
+    """Cf. WinDev IsDistrib : le vendeur appartient-il a une orga type
+    distributeur (id_type_orga=3) au niveau equipe/agence ?
+
+    Utilise pour ImportRUN Valides et Resils : si distributeur ->
+    mois_paiement = Mois_paiementDistrib (au lieu des periodes 1/2/-1mois).
+    """
+    if not id_salarie:
+        return False
+    try:
+        db = get_pg_connection("rh")
+        rows = db.query(
+            """SELECT o.id_type_orga
+                 FROM rh.pgt_salarie_organigramme so
+                 JOIN rh.pgt_organigramme o
+                   ON o.idorganigramme = so.idorganigramme
+                WHERE so.id_salarie = ?
+                  AND (so.modif_elem IS NULL
+                       OR so.modif_elem NOT LIKE '%suppr%')""",
+            (int(id_salarie),),
+        ) or []
+        return any(int(r.get("id_type_orga") or 0) == 3 for r in rows)
+    except Exception:
+        return False
+
+
 def _verif_activite_distrib(id_salarie: int, _date_sign: Optional[date]) -> str:
     """Cf. WinDev vérifActivitéDistrib(monOpé, DateSignature) : verifie
     que le salarie est actif dans salarie_embauche. Le code source WinDev
@@ -712,6 +781,7 @@ def _import_run_valides(
         car_omaya = int(r.get("gaz_car_relevee") or 0)
         puiss_omaya = int(r.get("elec_puissance") or 0)
         id_produit = int(r.get("id_produit") or 0)
+        id_salarie_contrat = int(r.get("id_salarie") or 0)
 
         # Lookup produit pour SousFAM (cf. WinDev : flagOffre matching
         # TypeOffre vs ENI_produit.SousFAM)
@@ -724,10 +794,17 @@ def _import_run_valides(
         sous_fam = (prod_info or {}).get("sous_fam") or ""
 
         # Periode
+        # cf. WinDev l.248-250 : IsDistrib -> Mois_paiementDistrib
+        # (branche prioritaire avant les periodes 1/2/-1mois).
+        # Sans ce check, les contrats des distributeurs sont classes
+        # "Hors Délai" a tort et jamais payes.
         mois_paiement = None
         periode_lbl = ""
         if date_sign_omaya:
-            if d1_du <= date_sign_omaya <= d1_au:
+            if _is_distrib_eni(id_salarie_contrat):
+                mois_paiement = mp_distrib
+                periode_lbl = "Distrib"
+            elif d1_du <= date_sign_omaya <= d1_au:
                 mois_paiement = mp1; periode_lbl = "Période 1"
             elif d2_du <= date_sign_omaya <= d2_au:
                 mois_paiement = mp2; periode_lbl = "Période 2"
@@ -1041,6 +1118,7 @@ def _import_run_resil(
     d2_au = _parse_date_fr(p.periode2_au) or date(2100, 12, 31)
     mp1 = _dernier_jour_mois(p.periode1_mois_paiement)
     mp2 = _dernier_jour_mois(p.periode2_mois_paiement)
+    mp_distrib = _dernier_jour_mois(p.mois_paiement_distrib)
     d1_du_m1 = (d1_du.replace(month=d1_du.month - 1) if d1_du.month > 1
                 else d1_du.replace(year=d1_du.year - 1, month=12))
     d1_au_m1 = (d1_au.replace(month=d1_au.month - 1) if d1_au.month > 1
@@ -1100,12 +1178,18 @@ def _import_run_resil(
         date_sign_omaya = r.get("date_signature")
         etat_actuel = int(r.get("id_etat_contrat") or 0)
         mois_p_omaya = r.get("mois_p")
+        id_salarie_contrat = int(r.get("id_salarie") or 0)
 
         # Periode + MoisP
+        # cf. WinDev l.196-198 : IsDistrib -> Mois_paiementDistrib
+        # (branche prioritaire avant les periodes standards)
         mois_paiement = None
         periode_lbl = ""
         if date_sign_omaya:
-            if d1_du <= date_sign_omaya <= d1_au:
+            if _is_distrib_eni(id_salarie_contrat):
+                mois_paiement = mp_distrib
+                periode_lbl = "Distrib"
+            elif d1_du <= date_sign_omaya <= d1_au:
                 mois_paiement = mp1; periode_lbl = "Période 1"
             elif d2_du <= date_sign_omaya <= d2_au:
                 mois_paiement = mp2; periode_lbl = "Période 2"
@@ -1378,65 +1462,41 @@ def _ajoute_histo_eni_etat(id_contrat: int, old_etat: int, new_etat: int,
 
 
 def _lookup_or_create_client(info: dict, op_id: int) -> int:
-    """Cherche un client existant par gsm (puis mail si pas de gsm),
-    sinon en cree un nouveau. Retourne l'id_client.
+    """Wrapper autour de traiter_client (cf. WinDev traiterClient).
+
+    Historiquement ce helper faisait une dedup gsm+nom ad hoc. Il
+    delegue maintenant a la procedure commune traiter_client qui
+    fait :
+    - normalisation (mail lower, gsm formate, sans accent...)
+    - geocodage adresse (best-effort api-adresse.data.gouv.fr)
+    - dedup par mail (WinDev : matche si HNbEnr=1)
+    - INSERT si absent (avec force id fourni ou genere)
+
+    Le mapping des cles preserve la compatibilite avec les appelants
+    existants ('adresse' -> 'adresse1', 'cplt' -> 'adresse2').
     """
-    db = get_pg_connection("adv")
-    nom = (info.get("nom") or "").strip().upper()
-    prenom = (info.get("prenom") or "").strip()
-    gsm = "".join(c for c in (info.get("gsm") or "") if c.isdigit())
-    mail = (info.get("mail") or "").strip().lower()
-
-    # 1. Dedup par gsm + nom (le plus discriminant)
-    if gsm and len(gsm) >= 9:
-        r = db.query_one(
-            """SELECT id_client FROM adv.pgt_client
-                WHERE REGEXP_REPLACE(COALESCE(gsm, ''), '[^0-9]', '', 'g') = ?
-                  AND UPPER(COALESCE(nom, '')) = ?
-                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                LIMIT 1""",
-            (gsm, nom),
+    try:
+        from app.intranets.adm.services.import_helpers_common import (
+            traiter_client,
         )
-        if r:
-            return int(r["id_client"])
-
-    # 2. Dedup par mail + nom
-    if mail and nom:
-        r = db.query_one(
-            """SELECT id_client FROM adv.pgt_client
-                WHERE LOWER(COALESCE(mail, '')) = ?
-                  AND UPPER(COALESCE(nom, '')) = ?
-                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                LIMIT 1""",
-            (mail, nom),
-        )
-        if r:
-            return int(r["id_client"])
-
-    # 3. Création
-    new_id = _new_id()
-    date_naiss = info.get("date_naiss")
-    if isinstance(date_naiss, str):
-        date_naiss = _parse_date_fr(date_naiss)
-    db.query(
-        """INSERT INTO adv.pgt_client
-              (id_client, nom, prenom, date_naiss,
-               adresse1, adresse2, cp, ville, pays,
-               tel, gsm, mail,
-               date_saisie, op_saisie,
-               modif_op, modif_date, modif_elem)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'FRANCE',
-                   ?, ?, ?, NOW(), ?, ?, NOW(), 'new')""",
-        (new_id, nom, prenom, date_naiss,
-         (info.get("adresse") or "").strip(),
-         (info.get("cplt") or "").strip(),
-         (info.get("cp") or "").strip(),
-         (info.get("ville") or "").strip(),
-         (info.get("tel") or "").strip(),
-         gsm, mail,
-         int(op_id), int(op_id)),
-    )
-    return new_id
+        return traiter_client(
+            info_client={
+                "nom": info.get("nom") or "",
+                "prenom": info.get("prenom") or "",
+                "adresse1": info.get("adresse1") or info.get("adresse") or "",
+                "adresse2": info.get("adresse2") or info.get("cplt") or "",
+                "cp": info.get("cp") or "",
+                "ville": info.get("ville") or "",
+                "gsm": info.get("gsm") or "",
+                "mail": info.get("mail") or "",
+                "tel": info.get("tel") or "",
+                "date_naiss": info.get("date_naiss"),
+                "op_saisie": op_id, "modif_op": op_id,
+            },
+            force_maj=False, op_id=op_id,
+        ) or 0
+    except Exception:
+        return 0
 
 
 def _create_eni_contrat(td: dict, op_id: int) -> int:
@@ -1669,13 +1729,38 @@ def _import_journalier_eni(
 
         if not r:
             # ---- CONTRAT N'EXISTE PAS : a CREER ----
-            non_call = True  # par defaut
+            # Lookup TkCall pour peupler les coordonnees client + eventuel
+            # override id_vendeur + non_call = FALSE (cf. WinDev
+            # ReqTkCall_ByNumCtt).
+            tk_client = _lookup_tk_call_eni(num_contrat)
+            non_call = True
+            if tk_client:
+                non_call = False
 
             # Recherche vendeur
             id_vendeur, id_ste = _lookup_vendeur_by_nom_prenom(vendeur_nom)
+            # Si XLS ne donne pas de vendeur mais TkCall a un id_salarie,
+            # utilise celui du ticket (cf. WinDev)
+            if id_vendeur == 0 and tk_client.get("id_salarie"):
+                id_vendeur = int(tk_client["id_salarie"])
+
             etat, gaz_actif, elec_actif = _etat_contrat_journ_eni(
                 lib_statut, id_produit, offre, non_call=non_call,
             )
+
+            # Peuple _client_info depuis TkCall (avant : nom/prenom
+            # etaient toujours vides -> clients cree avec nom=null)
+            client_info = {
+                "nom": tk_client.get("nom") or "",
+                "prenom": tk_client.get("prenom") or "",
+                "adresse1": tk_client.get("adresse") or "",
+                "adresse2": tk_client.get("cplt") or "",
+                "cp": tk_client.get("cp") or client_cp,
+                "ville": tk_client.get("ville") or "",
+                "gsm": tk_client.get("gsm") or client_gsm,
+                "mail": tk_client.get("mail") or "",
+                "date_naiss": tk_client.get("date_naiss"),
+            }
 
             journ_eni.append({
                 "NumCtt": num_contrat,
@@ -1703,11 +1788,7 @@ def _import_journalier_eni(
                 "CltCP": client_cp,
                 "CltGSM": client_gsm,
                 # ---- payload pour creation en mode prod ----
-                "_client_info": {
-                    "nom": "", "prenom": "",  # remplis depuis tk_call si possible
-                    "gsm": client_gsm,
-                    "cp": client_cp,
-                },
+                "_client_info": client_info,
                 "_contrat_data": {
                     "num_bs": num_contrat,
                     "id_salarie": id_vendeur,
