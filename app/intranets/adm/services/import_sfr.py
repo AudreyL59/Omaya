@@ -1152,23 +1152,47 @@ def _import_run(
             client_prenom = _cell(ws, i, cols.get("client_prenom", 1))
             techno = _cell(ws, i, cols.get("techno", 1))
             offre = _cell(ws, i, cols.get("offre", 1))
+            type_vente = _cell(ws, i, cols.get("type_vente", 1))
             statut_ra = _cell(ws, i, cols.get("statut_ra", 1))
+            motif_annul = _cell(ws, i, cols.get("motif_annul", 1))
             type_rem = _cell(ws, i, cols.get("type_rem", 1))
+            hors_zone = _cell(ws, i, cols.get("hors_zone", 1))
+
+            # Montant : test numerique + detection montant negatif
             mt_s = _cell(ws, i, cols.get("montant_rem", 1)).replace(",", ".")
+            test_montant_rem = False
+            montant_rem = 0.0
             try:
-                montant_rem = float(mt_s) if mt_s else 0.0
+                if mt_s:
+                    montant_rem = float(mt_s)
+                    test_montant_rem = True
             except ValueError:
-                montant_rem = 0.0
+                test_montant_rem = False
+            test_montant_neg = montant_rem < 0
+
             date_ra = _parse_date_fr(_cell(ws, i, cols.get("date_ra", 1)))
             date_sign = _parse_date_fr(_cell(ws, i, cols.get("date_sign", 1)))
+            # Format MM-YYYY (cf. WinDev DateVersChaine "MM-AAAA")
+            mois_sign = date_sign.strftime("%m-%Y") if date_sign else ""
+            mois_racc = date_ra.strftime("%m-%Y") if date_ra else ""
+
             statut = _cell(ws, i, cols.get("statut", 1))
-            motif_dero = _cell(ws, i, cols.get("motif_dero", 1))
+            # WinDev : Motif_Dero vide si feuille "Volumique"
+            motif_dero = ""
+            if "Volumique" not in sheet_name:
+                motif_dero = _cell(ws, i, cols.get("motif_dero", 1))
+
+            # GesteCo : boolean seulement si feuille "Offre"
+            geste_co = False
+            if "Offre" in sheet_name:
+                geste_co = "GEST" in _cell(ws, i, cols.get("geste_co", 1)).upper()
+
             lib_opt = _cell(ws, i, cols.get("lib_opt", 1)) if "lib_opt" in cols else ""
             type_opt = _cell(ws, i, cols.get("type_opt", 1)) if "type_opt" in cols else ""
             periode = _cell(ws, i, cols.get("periode", 1)) if "periode" in cols else ""
 
             lib_rem = offre
-            if "Option" in sheet_name:
+            if sheet_name == "Option":  # exact match WinDev
                 lib_rem = f"{type_opt} : {lib_opt}"
             elif "Volumique" in sheet_name:
                 lib_rem = periode
