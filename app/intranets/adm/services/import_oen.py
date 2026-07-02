@@ -376,7 +376,7 @@ def _import_journalier_oen(
         # Lookup contrat
         ctt = db.query_one(
             """SELECT id_contrat, id_client, id_salarie, id_produit,
-                      id_etat_contrat, id_etat_oen, date_signature,
+                      id_etat_contrat, id_etat_oen, id_ste, date_signature,
                       gaz_car_relevee, gaz_car_declaree, elec_puissance,
                       is_dual, mois_p
                  FROM adv.pgt_oen_contrat
@@ -420,10 +420,66 @@ def _import_journalier_oen(
         else:
             # Compare et detect modifs
             modifs = []
-            if int(ctt.get("id_produit") or 0) != id_produit and id_produit:
-                modifs.append(f"Produit -> {id_produit}")
+            id_contrat_ex = int(ctt["id_contrat"])
+            etat_ctt_actuel = int(ctt.get("id_etat_contrat") or 0)
+            etat_oen_actuel = int(ctt.get("id_etat_oen") or 0)
+            id_ste_actuel = int(ctt.get("id_ste") or 0)
+            date_sign_actuel = ctt.get("date_signature")
+            mois_p_actuel = ctt.get("mois_p")
+
+            # Date de signature
+            new_date_sign = None
+            if date_sign and date_sign_actuel != date_sign:
+                new_date_sign = date_sign
+                modifs.append(f"Date Sign -> {date_sign}")
+
             if bool(ctt.get("is_dual")) != is_dual:
                 modifs.append(f"Dual -> {is_dual}")
+            if int(ctt.get("id_produit") or 0) != id_produit and id_produit:
+                modifs.append(f"Produit -> {id_produit}")
+
+            # Etat Vendeur : MAJ si etat different + categorie != 'FIXE'
+            # (cf. WinDev Publipostage ImportJournalier OEN : simplification
+            # de la condition IDTypeEtat<=2 ET reqInfoStatut.IDTypeEtat>2
+            # ET Categorie<>'FIXE' -> Categorie<>'FIXE' seul).
+            new_etat_ctt = None
+            if id_etat and etat_ctt_actuel != id_etat:
+                cat_info = db.query_one(
+                    """SELECT categorie FROM adv.pgt_oen_etat_contrat
+                        WHERE id_etat = ? LIMIT 1""",
+                    (etat_ctt_actuel,),
+                )
+                cat_actuel = ((cat_info or {}).get("categorie") or "").upper()
+                if cat_actuel != "FIXE":
+                    new_etat_ctt = id_etat
+                    modifs.append("Etat Vendeur")
+
+            # Etat OEN : idem (compare id_etat_oen)
+            new_etat_oen = None
+            if id_etat and etat_oen_actuel != id_etat:
+                cat_info_o = db.query_one(
+                    """SELECT categorie FROM adv.pgt_oen_etat_contrat
+                        WHERE id_etat = ? LIMIT 1""",
+                    (etat_oen_actuel,),
+                )
+                cat_oen = ((cat_info_o or {}).get("categorie") or "").upper()
+                if cat_oen != "FIXE":
+                    new_etat_oen = id_etat
+                    modifs.append("Etat OEN")
+
+            # id_ste : MAJ si vide (cf. WinDev "si OEN_contrat.IdSte=0")
+            new_id_ste = None
+            if id_ste_actuel == 0 and id_vendeur:
+                mv = db.query_one(
+                    """SELECT id_ste FROM rh.pgt_salarie
+                        WHERE id_salarie = ? LIMIT 1""",
+                    (int(id_vendeur),),
+                )
+                mv_ste = int((mv or {}).get("id_ste") or 0)
+                if mv_ste:
+                    new_id_ste = mv_ste
+                    modifs.append("STE")
+
             if int(ctt.get("gaz_car_relevee") or 0) != car_relevee:
                 modifs.append(f"CAR -> {car_relevee}")
             if int(ctt.get("elec_puissance") or 0) != puiss:
@@ -435,12 +491,20 @@ def _import_journalier_oen(
                     "DateSign OMAYA": str(ctt.get("date_signature") or ""),
                     "Modifs": " | ".join(modifs),
                     "_payload_update": {
-                        "id_contrat": int(ctt["id_contrat"]),
+                        "id_contrat": id_contrat_ex,
                         "id_produit": id_produit, "is_dual": is_dual,
                         "car_relevee": car_relevee, "car_declaree": car_declaree,
                         "puissance": puiss,
                         "opt_energie_verte_gaz": opt_verte and "gaz" in type_ener.lower(),
                         "opt_energie_verte_elec": opt_verte and "elec" in type_ener.lower(),
+                        # Nouveaux champs (peuvent etre None -> pas MAJ dans le UPDATE)
+                        "date_signature": new_date_sign,
+                        "new_etat_ctt": new_etat_ctt,
+                        "etat_ctt_actuel": etat_ctt_actuel,
+                        "new_etat_oen": new_etat_oen,
+                        "etat_oen_actuel": etat_oen_actuel,
+                        "new_id_ste": new_id_ste,
+                        "mois_p": mois_p_actuel,
                     },
                 })
                 resume.nb_modifies += 1
@@ -813,18 +877,50 @@ def run_import_oen(
             if not pl:
                 continue
             try:
-                db.query(
-                    """UPDATE adv.pgt_oen_contrat
-                          SET id_produit = ?, is_dual = ?,
-                              gaz_car_relevee = ?, gaz_car_declaree = ?,
-                              elec_puissance = ?,
-                              modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
-                        WHERE id_contrat = ?""",
-                    (int(pl["id_produit"]), bool(pl["is_dual"]),
-                     int(pl["car_relevee"]), int(pl["car_declaree"]),
-                     int(pl["puissance"]),
-                     int(op_id), int(pl["id_contrat"])),
-                )
+                # Champs de base (toujours MAJ)
+                sets = ["id_produit = ?", "is_dual = ?",
+                        "gaz_car_relevee = ?", "gaz_car_declaree = ?",
+                        "elec_puissance = ?"]
+                params: list = [int(pl["id_produit"]), bool(pl["is_dual"]),
+                                int(pl["car_relevee"]), int(pl["car_declaree"]),
+                                int(pl["puissance"])]
+                # Champs optionnels (MAJ seulement si changement detecte)
+                if pl.get("date_signature"):
+                    sets.append("date_signature = ?")
+                    params.append(pl["date_signature"])
+                if pl.get("new_etat_ctt"):
+                    sets.append("id_etat_contrat = ?")
+                    params.append(int(pl["new_etat_ctt"]))
+                if pl.get("new_etat_oen"):
+                    sets.append("id_etat_oen = ?")
+                    params.append(int(pl["new_etat_oen"]))
+                if pl.get("new_id_ste"):
+                    sets.append("id_ste = ?")
+                    params.append(int(pl["new_id_ste"]))
+                sets.append("modif_date = NOW()")
+                sets.append("modif_op = ?")
+                params.append(int(op_id))
+                sets.append("modif_elem = 'modif'")
+                sql = (f"UPDATE adv.pgt_oen_contrat SET {', '.join(sets)} "
+                       f"WHERE id_contrat = ?")
+                params.append(int(pl["id_contrat"]))
+                db.query(sql, tuple(params))
+
+                # Historisation etats (cf. WinDev ajouteHistoContrat)
+                mois_p = pl.get("mois_p")
+                mois_p_str = str(mois_p) if mois_p else ""
+                if pl.get("new_etat_ctt"):
+                    _ajoute_histo_oen_etat(
+                        int(pl["id_contrat"]), int(pl["etat_ctt_actuel"]),
+                        int(pl["new_etat_ctt"]), mois_p_str, op_id,
+                        categorie="Vend",
+                    )
+                if pl.get("new_etat_oen"):
+                    _ajoute_histo_oen_etat(
+                        int(pl["id_contrat"]), int(pl["etat_oen_actuel"]),
+                        int(pl["new_etat_oen"]), "", op_id,
+                        categorie="OEN",
+                    )
                 nb_majs += 1
             except Exception as e:
                 row["Erreur"] = str(e)
