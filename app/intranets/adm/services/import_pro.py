@@ -55,6 +55,7 @@ class ImportProResume(BaseModel):
     nb_ajoutes: int = 0
     nb_valides: int = 0
     nb_resilies: int = 0
+    nb_decommissions: int = 0
     nb_deja_saisis: int = 0
     nb_deja_statues: int = 0
     nb_introuvables: int = 0
@@ -292,6 +293,45 @@ def _import_journalier_pro(
         id_produit, lib_prod = _id_produit_pro_by_lib(pack)
         etat_initial = _etat_contrat_pro(signe)
 
+        # Lookup TkCall (cf. WinDev ReqTkCall_ByNumCtt(NumContrat, 'PRO'))
+        # Enrichit id_vendeur si vide + info client + non_call=False
+        tk_client: dict = {}
+        non_call = True
+        try:
+            db_bo = get_pg_connection("ticket_bo")
+            tk = db_bo.query_one(
+                """SELECT id_salarie, nom_client, nom_marital_client,
+                          prenom_client, adresse1, adresse2, cp, ville,
+                          mobile1, date_naiss, adr_mail
+                     FROM ticket_bo.pgt_tk_call
+                    WHERE UPPER(num_bs) = UPPER(?)
+                      AND UPPER(partenaire) = 'PRO'
+                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (num_contrat,),
+            )
+            if tk:
+                tk_id_vend = int(tk.get("id_salarie") or 0)
+                if tk_id_vend:
+                    id_vendeur = tk_id_vend  # prime sur lookup nom
+                    non_call = False
+                nom_cli = tk.get("nom_client") or ""
+                if tk.get("nom_marital_client"):
+                    nom_cli += f" ep {tk['nom_marital_client']}"
+                tk_client = {
+                    "nom": nom_cli,
+                    "prenom": tk.get("prenom_client") or "",
+                    "adresse": tk.get("adresse1") or "",
+                    "cplt": tk.get("adresse2") or "",
+                    "cp": tk.get("cp") or "",
+                    "ville": tk.get("ville") or "",
+                    "gsm": tk.get("mobile1") or "",
+                    "mail": tk.get("adr_mail") or "",
+                    "date_naiss": tk.get("date_naiss"),
+                }
+        except Exception:
+            pass
+
         ctt = db.query_one(
             """SELECT id_contrat, id_salarie, num_bs, date_signature, id_produit
                  FROM adv.pgt_pro_contrat
@@ -302,6 +342,10 @@ def _import_journalier_pro(
         )
         info_sal = _info_salarie_pro(id_vendeur) if id_vendeur else {}
         id_ste = int(info_sal.get("id_ste") or 0)
+
+        # Si TkCall vide et contrat pas trouve -> etat = 7 (cf. WinDev)
+        if not ctt and not tk_client:
+            etat_initial = 7
 
         if not ctt:
             ajoutes.append({
@@ -337,14 +381,17 @@ def _import_journalier_pro(
         else:
             id_contrat = int(ctt["id_contrat"])
             id_sal_db = int(ctt.get("id_salarie") or 0)
+            id_produit_db = int(ctt.get("id_produit") or 0)
             modifies.append({
                 "NumCtt": ctt.get("num_bs"),
                 "DateSigne": str(ctt.get("date_signature") or ""),
                 "IdSalarie DB": id_sal_db,
-                "LibProduit DB": int(ctt.get("id_produit") or 0),
+                "LibProduit DB": id_produit_db,
                 "Vendeur Import": vendeur_complet,
             })
             resume.nb_deja_saisis += 1
+            # Reattribution vendeur si different + trouve
+            # (cf. WinDev reqUdpdate)
             if id_sal_db != id_vendeur and id_vendeur != 0:
                 pb_vendeur.append({
                     "NumCtt": ctt.get("num_bs"),
@@ -355,6 +402,24 @@ def _import_journalier_pro(
                     "NewIdSalarie": id_vendeur,
                     "_id_contrat": id_contrat,
                 })
+                if not p.simulation:
+                    db.query(
+                        """UPDATE adv.pgt_pro_contrat
+                              SET id_salarie = ?, modif_op = ?,
+                                  modif_date = NOW(), modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (id_vendeur, int(op_id), id_contrat),
+                    )
+            # MAJ id_produit si different (cf. WinDev :
+            # si PRO_contrat.IDproduit <> idProd -> HModifie).
+            if id_produit and id_produit_db != id_produit and not p.simulation:
+                db.query(
+                    """UPDATE adv.pgt_pro_contrat
+                          SET id_produit = ?, modif_op = ?,
+                              modif_date = NOW(), modif_elem = 'modif'
+                        WHERE id_contrat = ?""",
+                    (id_produit, int(op_id), id_contrat),
+                )
     wb.close()
 
 
@@ -464,7 +529,7 @@ def _import_run_pro(
                 nouvel_etat = 20
                 nouveau_mois_p = mois_p
                 traitement = "decomm"
-                resume.nb_resilies += 1
+                resume.nb_decommissions += 1
             elif id_type_etat in (1, 2):  # En attente -> resil
                 nouvel_etat = 16
                 nouveau_mois_p = None
