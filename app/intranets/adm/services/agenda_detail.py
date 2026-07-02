@@ -22,6 +22,7 @@ from typing import Any
 
 from app.core.database.pg import get_pg_connection
 from app.shared.notifications.sms import envoi_sms
+from app.core.utils.sentinel_dates import is_sentinel
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +44,7 @@ def _int(v: Any) -> int:
 
 
 def _iso(v: Any) -> str:
-    if v is None:
+    if v is None or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%dT%H:%M:%S")
@@ -54,7 +55,7 @@ def _iso(v: Any) -> str:
 
 
 def _iso_date(v: Any) -> str:
-    if v is None:
+    if v is None or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
@@ -476,7 +477,7 @@ def get_salon_visio(id_salon_visio: int) -> dict | None:
 
 def _fr_date(v: Any) -> str:
     """ISO -> DD/MM/YYYY pour le SMS."""
-    if v is None or v == "":
+    if v is None or v == "" or is_sentinel(v):
         return ""
     s = str(v)
     if len(s) >= 10 and s[4] == "-" and s[7] == "-":

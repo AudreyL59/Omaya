@@ -22,6 +22,7 @@ from typing import Any
 
 from app.core.config import FTP_HOST, FTP_PASSWORD, FTP_USER
 from app.core.database.pg import get_pg_connection
+from app.core.utils.sentinel_dates import is_sentinel
 
 
 _INVALID_NAME_RE = re.compile(r"[<>:\"/\\|?*\x00-\x1f]")
@@ -32,7 +33,7 @@ def _str(v: Any) -> str:
 
 
 def _iso(v: Any) -> str:
-    if v is None:
+    if v is None or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")
@@ -43,7 +44,7 @@ def _iso(v: Any) -> str:
 
 
 def _iso_dt(v: Any) -> str:
-    if v is None:
+    if v is None or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d %H:%M:%S")

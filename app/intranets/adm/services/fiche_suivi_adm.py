@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+from app.core.utils.sentinel_dates import is_sentinel
 
 
 def _str(v: Any) -> str:
@@ -28,7 +29,7 @@ def _int(v: Any) -> int:
 
 
 def _iso_dt(v: Any) -> str:
-    if v is None:
+    if v is None or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d %H:%M:%S")

@@ -712,8 +712,9 @@ def _capitalize_first(s: str) -> str:
 
 
 def _date_fr(v: Any) -> str:
-    """Format DD/MM/YYYY (vide si pas de date)."""
-    if v is None or v == "":
+    """Format DD/MM/YYYY (vide si pas de date ou sentinelle 1900-01-01)."""
+    from app.core.utils.sentinel_dates import is_sentinel
+    if v is None or v == "" or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%d/%m/%Y")

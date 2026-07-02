@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+from app.core.utils.sentinel_dates import is_sentinel
 
 
 def _str(v: Any) -> str:
@@ -36,7 +37,7 @@ def _float(v: Any) -> float:
 
 
 def _iso_date(v: Any) -> str:
-    if v is None or v == "":
+    if v is None or v == "" or is_sentinel(v):
         return ""
     if hasattr(v, "strftime"):
         return v.strftime("%Y-%m-%d")
@@ -45,7 +46,7 @@ def _iso_date(v: Any) -> str:
 
 
 def _iso_datetime(v: Any) -> str:
-    if v is None or v == "":
+    if v is None or v == "" or is_sentinel(v):
         return ""
     if hasattr(v, "strftime"):
         return v.strftime("%Y-%m-%dT%H:%M")

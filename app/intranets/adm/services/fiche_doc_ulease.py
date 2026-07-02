@@ -23,6 +23,7 @@ from typing import Any
 
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.services.fiche_doc_rh_generate import (
+from app.core.utils.sentinel_dates import is_sentinel
     _docx_to_pdf,
     _load_salarie,
     _load_societe,
@@ -41,7 +42,7 @@ def _str(v: Any) -> str:
 
 
 def _iso(v: Any) -> str:
-    if v is None:
+    if v is None or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")

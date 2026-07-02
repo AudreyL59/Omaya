@@ -16,11 +16,12 @@ from collections import defaultdict
 from datetime import date, datetime
 
 from app.core.database.pg import get_pg_connection
+from app.core.utils.sentinel_dates import is_sentinel
 
 
 def _iso(v) -> str:
     """PG renvoie des date/datetime natifs ; on serialise en ISO 'YYYY-MM-DD HH:MM:SS'."""
-    if v is None or v == "":
+    if v is None or v == "" or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d %H:%M:%S")

@@ -27,6 +27,7 @@ from html import escape
 from typing import Any
 
 from app.core.database.pg import get_pg_connection
+from app.core.utils.sentinel_dates import is_sentinel
 
 
 _MOIS_FR = [
@@ -58,7 +59,7 @@ def _float(v: Any) -> float:
 
 
 def _iso(v: Any) -> str:
-    if v is None:
+    if v is None or is_sentinel(v):
         return ""
     if isinstance(v, datetime):
         return v.strftime("%Y-%m-%d")

@@ -34,8 +34,10 @@ def _int(v: Any) -> int:
 
 
 def _iso_date(v: Any) -> str:
-    """Date PG (datetime/date/str) -> 'YYYY-MM-DD' ou ''."""
-    if v is None or v == "":
+    """Date PG (datetime/date/str) -> 'YYYY-MM-DD' ou ''. Sentinelle
+    1900-01-01 = ''."""
+    from app.core.utils.sentinel_dates import is_sentinel
+    if v is None or v == "" or is_sentinel(v):
         return ""
     s = str(v)
     if len(s) >= 10 and s[4] == "-" and s[7] == "-":
