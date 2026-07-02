@@ -22,6 +22,35 @@ def get_combo_distribs_test(_u: UserToken = Depends(get_current_user)):
     return svc.list_distribs_test()
 
 
+@router.get("", response_model=list[svc.DocCourtageListItem])
+def get_list_docs(
+    archives: bool = False,
+    _u: UserToken = Depends(get_current_user),
+):
+    return svc.list_docs(archives)
+
+
+@router.post("/{id_doc}/duplicate")
+def post_duplicate(
+    id_doc: int,
+    u: UserToken = Depends(get_current_user),
+):
+    try:
+        id_new = svc.duplicate_doc(id_doc, u.id_salarie)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True, "id_doc_courtage": str(id_new)}
+
+
+@router.post("/{id_doc}/archive")
+def post_archive(
+    id_doc: int,
+    u: UserToken = Depends(get_current_user),
+):
+    svc.archive_doc(id_doc, u.id_salarie)
+    return {"ok": True}
+
+
 @router.get("/{id_doc}", response_model=svc.DocCourtageDetail)
 def get_doc(
     id_doc: int,

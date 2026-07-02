@@ -29,6 +29,7 @@ import CvPresaisisPageAdm from '@/pages/CvPresaisisPage'
 import VillesFavoritesPageAdm from '@/pages/VillesFavoritesPage'
 import RechercheVillePage from '@/pages/RechercheVillePage'
 import ListeSocietePage from '@/pages/ListeSocietePage'
+import ListeDocCourtagePage from '@/pages/ListeDocCourtagePage'
 import GestionRecruteursPageAdm from '@/pages/GestionRecruteursPage'
 import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
@@ -126,6 +127,7 @@ function App() {
           <Route path="recrutement/villes" element={<VillesFavoritesPageAdm />} />
           <Route path="villes" element={<RechercheVillePage />} />
           <Route path="societes" element={<ListeSocietePage />} />
+          <Route path="contrats-courtage" element={<ListeDocCourtagePage />} />
           <Route path="recrutement/recruteurs" element={<GestionRecruteursPageAdm />} />
           <Route path="recrutement/parametres" element={<ParametresCVPage />} />
           <Route path="imports/contrats" element={<ImportsHubPage />} />
