@@ -323,7 +323,25 @@ def _import_journalier_fibre(
         code_offre = _cell(ws, i, cols["code_offre"])
         offre = _type_offre_fibre(code_offre, techno, date_sign)
         lib_statut = _cell(ws, i, cols["lib_statut"])
+        instance = _cell(ws, i, cols["instance"]) if "instance" in cols else ""
+        instance = instance.replace(" ", "").upper()
+        der_motif = _cell(ws, i, cols["der_motif"]) if "der_motif" in cols else ""
         id_etat = _id_etat_fibre(lib_statut)
+        # Ajustements motif d'annulation (cf. WinDev) :
+        # - id=3 + instance=S1 -> 87 (Client Absent S1)
+        # - id in (10, 36) + DerMotif : 14/15/16/86 selon motif
+        if id_etat == 3 and instance == "S1":
+            id_etat = 87
+        if (id_etat == 10 and der_motif != "Nominal") or id_etat == 36:
+            dm_up = der_motif.upper()
+            if "FIN DE" in dm_up:
+                id_etat = 14
+            elif "RENON" in dm_up:
+                id_etat = 15
+            elif "RETRAC" in dm_up:
+                id_etat = 16
+            elif id_etat != 10:
+                id_etat = 86  # Motif incohérent
         cluster_code = _cell(ws, i, cols["cluster_code"]).replace("'", "")
         cluster_ville = _cell(ws, i, cols["cluster_ville"])
         client_cp = _cell(ws, i, cols["client_cp"])
@@ -375,14 +393,21 @@ def _import_journalier_fibre(
         # Lookup contrat existant
         ctt = db.query_one(
             """SELECT id_contrat, id_salarie, id_client, id_produit,
-                      id_etat_contrat, type_vente, date_signature,
-                      num_prise_vend, id_sfr_cluster
+                      id_etat_contrat, id_etat_sfr, type_vente, date_signature,
+                      num_prise_vend, id_sfr_cluster, box8, remise,
+                      offre_speciale, internet_garanti, prise_existante,
+                      prise_saisie, num_prise_sfr, processing_state,
+                      parcours_chaine, parcours_degroupe, date_resil,
+                      motif_annulation
                  FROM adv.pgt_sfr_contrat
                 WHERE UPPER(num_bs) = UPPER(?)
                   AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
                 LIMIT 1""",
             (num_bs,),
         )
+
+        # Detection offre speciale (SCD dans code_offre)
+        offre_speciale = "SCD" in code_offre.upper()
 
         if not ctt:
             tk = _lookup_tk_call_sfr(num_bs)
@@ -426,14 +451,15 @@ def _import_journalier_fibre(
             })
             resume.nb_ajoutes += 1
         else:
-            # Detect modifs
+            # ---- CONTRAT EXISTANT : detection modifs + erreurs ----
             id_contrat = int(ctt["id_contrat"])
             id_sal_db = int(ctt.get("id_salarie") or 0)
+            etat_actuel = int(ctt.get("id_etat_contrat") or 0)
             modifs = []
-            if int(ctt.get("type_vente") or 0) != type_vente:
-                modifs.append(f"TypeVente -> {type_vente}")
-            if int(ctt.get("id_produit") or 0) != offre and offre:
-                modifs.append(f"Offre -> {offre}")
+            errs_detected = []  # Erreurs rapportables (feuille 3)
+            updates: dict = {}  # Champs a UPDATE en PROD
+
+            # -- Reattribution vendeur si Fibre inconnu --
             if id_sal_db in (0, 20200715153948361):
                 tk = _lookup_tk_call_sfr(num_bs)
                 tk_sal = int(tk.get("id_salarie") or 0)
@@ -443,17 +469,158 @@ def _import_journalier_fibre(
                         "NumBS": num_bs, "OldIdSalarie": id_sal_db,
                         "NewIdSalarie": tk_sal,
                     })
+                    updates["id_salarie"] = tk_sal
                     resume.nb_modif_vend += 1
+
+            # -- Detection erreurs / MAJ champs (cf. WinDev testErr) --
+            db_type_vente = int(ctt.get("type_vente") or 0)
+            if db_type_vente != type_vente:
+                # WinDev : si les 2 sont < 3 on ignore
+                if not (db_type_vente < 3 and type_vente < 3):
+                    errs_detected.append(("Type Vente", db_type_vente, type_vente))
+                    updates["type_vente"] = type_vente
+            if offre and int(ctt.get("id_produit") or 0) != offre:
+                errs_detected.append(("Offre", ctt.get("id_produit"), offre))
+                updates["id_produit"] = offre
+            if bool(ctt.get("box8")) != box8:
+                errs_detected.append(("Box 8", bool(ctt.get("box8")), box8))
+                updates["box8"] = box8
+                updates["box8_verif"] = box8
+            if bool(ctt.get("remise")) != remise:
+                errs_detected.append(("Remise", bool(ctt.get("remise")), remise))
+                updates["remise"] = remise
+            if bool(ctt.get("offre_speciale")) != offre_speciale:
+                errs_detected.append(("Offre spéciale",
+                                       bool(ctt.get("offre_speciale")), offre_speciale))
+                updates["offre_speciale"] = offre_speciale
+            if bool(ctt.get("internet_garanti")) != internet_garantie:
+                errs_detected.append(("Internet Garanti",
+                                       bool(ctt.get("internet_garanti")), internet_garantie))
+                updates["internet_garanti"] = internet_garantie
+            # -- Champs silent (pas rapportes dans erreurs) --
+            if bool(ctt.get("prise_existante")) != prise_existante:
+                updates["prise_existante"] = prise_existante
+            if bool(ctt.get("prise_saisie")) != prise_saisie:
+                updates["prise_saisie"] = prise_saisie
+            if (ctt.get("num_prise_sfr") or "") != num_prise:
+                updates["num_prise_sfr"] = num_prise
+            if (ctt.get("processing_state") or "") != lib_statut:
+                updates["processing_state"] = lib_statut
+            if bool(ctt.get("parcours_chaine")) != bool(_cell(ws, i, cols["parcours_chaine"]).strip()):
+                updates["parcours_chaine"] = bool(_cell(ws, i, cols["parcours_chaine"]).strip())
+            if bool(ctt.get("parcours_degroupe")) != bool(_cell(ws, i, cols["parcours_degroupe"]).strip()):
+                updates["parcours_degroupe"] = bool(_cell(ws, i, cols["parcours_degroupe"]).strip())
+            if date_resil and ctt.get("date_resil") != date_resil:
+                updates["date_resil"] = date_resil
+            if motif_annul and motif_annul.upper() not in (ctt.get("motif_annulation") or "").upper():
+                new_ma = (ctt.get("motif_annulation") or "") + motif_annul + "\n"
+                updates["motif_annulation"] = new_ma
+
+            # -- Traitement changement d'etat --
+            etat_change_status = "no_change"  # 'maj', 'no_change', 'non_modifie', 'paye_ko'
+            type_etat_old = 0
+            if etat_actuel and id_etat and etat_actuel != id_etat:
+                etat_info = db.query_one(
+                    """SELECT id_type_etat FROM adv.pgt_sfr_etat_contrat
+                        WHERE id_etat = ? LIMIT 1""",
+                    (etat_actuel,),
+                )
+                type_etat_old = int((etat_info or {}).get("id_type_etat") or 0)
+                # WinDev :
+                # - typeOld <> 5 et <> 6 :
+                #   - typeOld <=2 ou =7 ou =8 -> MAJ etat + histo
+                #   - sinon -> non modifie
+                # - sinon (payé/décomm) : non_modifie + rapport special
+                #   si typeStatut=Raccordement KO et typeOld=5
+                if type_etat_old not in (5, 6):
+                    if type_etat_old <= 2 or type_etat_old in (7, 8):
+                        etat_change_status = "maj"
+                        updates["id_etat_contrat"] = id_etat
+                        updates["date_validation"] = date_va
+                        updates["date_racc_activ"] = date_ra
+                        updates["date_rdv_tech"] = date_rdv
+                        updates["date_resil"] = date_resil
+                        if comment:
+                            new_ii = (ctt.get("info_interne") or "") + "\n" + comment
+                            updates["info_interne"] = new_ii
+                        updates["motif_annulation"] = motif_annul
+                        modifs.append(f"Etat -> {id_etat}")
+                        resume.nb_modifies += 1
+                    else:
+                        etat_change_status = "non_modifie"
+                        resume.nb_non_modifies += 1
+                else:
+                    # Paye/decomm : verifier Raccordement KO
+                    if "Raccordement KO" in lib_statut and type_etat_old == 5:
+                        errs_detected.append(("Payé passé en KO",
+                                               f"etat {etat_actuel}",
+                                               "Racc KO"))
+                        etat_change_status = "paye_ko"
+                    else:
+                        etat_change_status = "non_modifie"
+                        resume.nb_non_modifies += 1
+            elif errs_detected or modifs:
+                resume.nb_modifies += 1
+            else:
+                resume.nb_non_modifies += 1
+
+            # -- Rapport erreurs --
+            for lib_err, val_av, val_ap in errs_detected:
+                erreurs.append({
+                    "NumBS": num_bs,
+                    "TypeErreur": lib_err,
+                    "AvantImport": str(val_av),
+                    "ApresImport": str(val_ap),
+                    "DateSign": str(ctt.get("date_signature") or ""),
+                    "TypeStatut": lib_statut,
+                })
+                resume.nb_erreurs += 1
 
             if modifs:
                 modifies.append({
                     "NumBS": num_bs,
                     "DateSign OMAYA": str(ctt.get("date_signature") or ""),
                     "Modifs": " | ".join(modifs),
+                    "EtatChangeStatus": etat_change_status,
                 })
-                resume.nb_modifies += 1
-            else:
-                resume.nb_non_modifies += 1
+
+            # -- Recalcul nb_points si date sign ou racc >= 2022-02-01 --
+            if (date_sign and date_sign >= date(2022, 2, 1)) or \
+               (date_ra and date_ra >= date(2022, 2, 1)):
+                updates["_recalc_nb_points"] = True
+
+            # -- PASSE PROD : UPDATE effectif --
+            if not p.simulation and updates:
+                do_recalc = updates.pop("_recalc_nb_points", False)
+                sets = []
+                params = []
+                for k, v in updates.items():
+                    sets.append(f"{k} = ?")
+                    params.append(v)
+                if sets:
+                    sets.append("modif_date = NOW()")
+                    sets.append("modif_op = ?")
+                    sets.append("modif_elem = 'modif'")
+                    params.append(int(op_id))
+                    params.append(id_contrat)
+                    try:
+                        db.query(
+                            f"UPDATE adv.pgt_sfr_contrat SET {', '.join(sets)} "
+                            f"WHERE id_contrat = ?",
+                            tuple(params),
+                        )
+                    except Exception as e:
+                        erreurs.append({"NumBS": num_bs,
+                                          "TypeErreur": "UPDATE",
+                                          "AvantImport": str(e)})
+                # Historisation si etat a change
+                if etat_change_status == "maj":
+                    try:
+                        _ajoute_histo_sfr_etat(
+                            id_contrat, etat_actuel, id_etat, "", op_id,
+                        )
+                    except NameError:
+                        pass  # fonction non definie encore (a implementer)
 
     wb.close()
 
