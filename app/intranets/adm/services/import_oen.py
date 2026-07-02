@@ -417,6 +417,11 @@ def _import_journalier_oen(
         lib_offre = _cell(ws, i, cols["lib_offre"])
         vendeur_code = _cell(ws, i, cols["vendeur"]).strip()
         date_sign = _parse_date_fr(_cell(ws, i, cols["date_signature"]))
+        # cf. WinDev L156-158 : si DateSignature invalide -> fallback
+        # sur Date_Crea..PartieDate
+        if not date_sign:
+            date_creation_cell = _cell(ws, i, cols["date_creation"])
+            date_sign = _parse_date_fr(date_creation_cell)
 
         # Filtre brouillons "draft"
         id_etat = _id_etat_oen_by_lib(lib_statut)
@@ -741,11 +746,23 @@ def _import_run_valide_oen(
             existing_rem = None
 
         if existing_rem:
+            # cf. WinDev L310-316 : ajouteHistoContrat + UPDATE etat
+            # etaient appliques INCONDITIONNELLEMENT (meme si rem deja
+            # enregistree). Le Python ne posait plus l etat 43/15 dans
+            # ce cas -> divergence sur les re-imports.
             modifies.append({
                 "NumCtt": num_contrat, "RefClient": ref_client,
                 "Periode": periode_lbl, "MoisP": mois_p_str,
                 "Lib Rem": lib_rem,
-                "Note": "Rem déjà enregistrée",
+                "Note": "Rem déjà enregistrée (état repoussé 43/15)",
+                "_payload_update_etat_only": {
+                    "id_contrat": id_contrat,
+                    "nouvel_etat": 43,
+                    "etat_actuel": int(ctt.get("id_etat_contrat") or 0),
+                    "mois_p": mois_p_str,
+                    "mois_p_date": mois_p,
+                    "date_activation": date_act,
+                },
             })
             resume.nb_deja_statues += 1
         else:
@@ -1205,6 +1222,33 @@ def run_import_oen(
                 nb_majs += 1
             except Exception as e:
                 row["Erreur"] = str(e)
+        # cf. WinDev RunValide L310-316 : UPDATE etat inconditionnel
+        # (meme si rem deja enregistree). Passe dediee sur 'modifies'
+        # qui ont un _payload_update_etat_only.
+        for row in modifies:
+            pl_e = row.pop("_payload_update_etat_only", None)
+            if not pl_e:
+                continue
+            try:
+                db.query(
+                    """UPDATE adv.pgt_oen_contrat
+                          SET id_etat_contrat = ?, id_etat_oen = 15,
+                              mois_p = ?, date_activation = ?,
+                              modif_date = NOW(), modif_op = ?,
+                              modif_elem = 'modif'
+                        WHERE id_contrat = ?""",
+                    (int(pl_e["nouvel_etat"]), pl_e.get("mois_p_date"),
+                     pl_e.get("date_activation"), int(op_id),
+                     int(pl_e["id_contrat"])),
+                )
+                _ajoute_histo_oen_etat(
+                    int(pl_e["id_contrat"]), int(pl_e["etat_actuel"]),
+                    int(pl_e["nouvel_etat"]), pl_e.get("mois_p", ""),
+                    op_id, categorie="Vend",
+                )
+            except Exception as e:
+                row["Erreur"] = str(e)
+
         # Type 2 : Run Valide -> UPDATE etat + puiss/CAR + INSERT REM
         for row in runs:
             pl = row.pop("_payload_create_rem", None)

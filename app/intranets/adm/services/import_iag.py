@@ -155,53 +155,115 @@ def _etat_contrat_iag(lib_statut: str) -> int:
 
 
 def _lookup_vendeur_iag(nom_complet: str, format_v: str) -> int:
-    """Cherche un vendeur par concat selon le format :
-      - 'prenom_nom' : NOM%PRENOM (concat) OU prenom_v + nom_v split
-      - 'nom_prenom' : NOM%PRENOM en sens inverse
-    Retourne id_salarie ou 0 si introuvable / ambigu."""
+    """Cherche un vendeur par 3 strategies WinDev (idem PRO L100-142).
+
+    1. Pattern % brut sur CONCAT(nom, prenom) ou inverse (WinDev L112)
+    2. Retry avec '-' remplace par ' ' (WinDev L121-125)
+    3. Split par espace nom/prenom (WinDev L132-141
+       ReqVendeurByDebNomFinPrenom)
+
+    Retourne id_salarie si UN SEUL match, 0 sinon.
+    """
     if not nom_complet or not nom_complet.strip():
         return 0
     db = get_pg_connection("rh")
 
-    s = nom_complet.upper()
-    for c in ("-", "'", " "):
-        s = s.replace(c, "%")
-    s = s.replace("%%", "%")
-    pattern = f"%{s}%"
+    # Normalisation (WinDev L101-107)
+    try:
+        from app.intranets.adm.services.import_helpers_common import (
+            _sans_accent,
+        )
+        s_base = _sans_accent(nom_complet).upper().replace("Ç", "C")
+    except Exception:
+        s_base = nom_complet.upper()
 
-    if format_v == "nom_prenom":
-        sql = """SELECT id_salarie FROM rh.pgt_salarie
-                  WHERE UPPER(CONCAT(nom, '%', prenom)) LIKE ?
-                    AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                  LIMIT 2"""
-    else:  # prenom_nom
-        sql = """SELECT id_salarie FROM rh.pgt_salarie
-                  WHERE UPPER(CONCAT(prenom, '%', nom)) LIKE ?
-                    AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                  LIMIT 2"""
+    def _pattern_like(raw: str) -> str:
+        s = raw
+        for c in ("-", "'", " "):
+            s = s.replace(c, "%")
+        while "%%" in s:
+            s = s.replace("%%", "%")
+        return f"%{s}%"
 
-    rows = db.query(sql, (pattern,)) or []
+    def _lookup(pattern: str) -> list:
+        if format_v == "nom_prenom":
+            sql = """SELECT id_salarie FROM rh.pgt_salarie
+                      WHERE UPPER(CONCAT(nom, '%', prenom)) LIKE ?
+                        AND (modif_elem IS NULL
+                             OR modif_elem NOT LIKE '%suppr%')
+                      LIMIT 2"""
+        else:
+            sql = """SELECT id_salarie FROM rh.pgt_salarie
+                      WHERE UPPER(CONCAT(prenom, '%', nom)) LIKE ?
+                        AND (modif_elem IS NULL
+                             OR modif_elem NOT LIKE '%suppr%')
+                      LIMIT 2"""
+        return db.query(sql, (pattern,)) or []
+
+    # Strategie 1
+    rows = _lookup(_pattern_like(s_base))
     if len(rows) == 1:
         return int(rows[0]["id_salarie"])
 
-    # Fallback split
-    parts = nom_complet.strip().split()
-    if len(parts) >= 2:
-        a = parts[0].upper(); b = parts[-1].upper()
-        if format_v == "nom_prenom":
-            nom, prenom = a, b
-        else:
-            prenom, nom = a, b
-        rows = db.query(
-            """SELECT id_salarie FROM rh.pgt_salarie
-                WHERE UPPER(nom) LIKE ? AND UPPER(prenom) LIKE ?
-                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                LIMIT 2""",
-            (f"{nom}%", f"{prenom}%"),
-        ) or []
+    # Strategie 2 : '-' -> ' '
+    s_alt = s_base.replace("-", " ")
+    if s_alt != s_base:
+        rows = _lookup(_pattern_like(s_alt))
         if len(rows) == 1:
             return int(rows[0]["id_salarie"])
+
+    # Strategie 3 : split nom/prenom (nomV = premier mot, prenomV = dernier)
+    parts = [p for p in s_alt.split(" ") if p]
+    if len(parts) >= 2:
+        a = parts[0]; b = parts[-1]
+        if format_v == "nom_prenom":
+            nom_v, prenom_v = a, b
+        else:
+            prenom_v, nom_v = a, b
+        try:
+            rows = db.query(
+                """SELECT id_salarie FROM rh.pgt_salarie
+                    WHERE UPPER(nom) LIKE ? AND UPPER(prenom) LIKE ?
+                      AND (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 2""",
+                (f"{nom_v}%", f"%{prenom_v}"),
+            ) or []
+            if len(rows) == 1:
+                return int(rows[0]["id_salarie"])
+        except Exception:
+            pass
     return 0
+
+
+def _verif_activite_distrib_iag(id_salarie: int,
+                                 date_signature) -> str:
+    """Cf. WinDev verifActiviteDistrib(monOpe, DateSignature)."""
+    if not id_salarie:
+        return ""
+    try:
+        db = get_pg_connection("rh")
+        r = db.query_one(
+            """SELECT en_activite, date_debut, date_fin
+                 FROM rh.pgt_salarie_embauche
+                WHERE id_salarie = ?
+                ORDER BY date_debut DESC LIMIT 1""",
+            (int(id_salarie),),
+        )
+        if not r:
+            return ""
+        if r.get("en_activite") is False:
+            return "Salarié inactif à la date de signature"
+        if date_signature:
+            db_deb = r.get("date_debut")
+            db_fin = r.get("date_fin")
+            if db_deb and date_signature < db_deb:
+                return "Signature avant date d'embauche"
+            if db_fin and date_signature > db_fin:
+                return "Signature après date de fin de contrat"
+        return ""
+    except Exception:
+        return ""
 
 
 def _info_salarie_iag(id_sal: int) -> dict:
@@ -420,6 +482,19 @@ def _import_journalier_iag(
 
         if id_vendeur == 0:
             id_vendeur = _lookup_vendeur_iag(vendeur_cell, p.format_vendeur)
+
+        # cf. WinDev IAG L152 : verifActiviteDistrib apres lookup vendeur
+        # (2e passe : d abord lookup TkCall + lookup nom, puis verif ici)
+        if id_vendeur:
+            alerte = _verif_activite_distrib_iag(id_vendeur, date_sign)
+            if alerte:
+                pb_vendeur.append({
+                    "NumCtt": num_contrat,
+                    "DateSigne": date_sign_s,
+                    "Vendeur Import": vendeur_cell,
+                    "IdSalarie": id_vendeur,
+                    "Erreur": alerte,
+                })
 
         # Lookup contrat
         ctt = db.query_one(
