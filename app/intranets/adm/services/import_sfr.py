@@ -1461,31 +1461,91 @@ def _import_run(
                         ))
                 continue
 
-            # -------- BLOC 5 : Techno autre (Internet) - a faire --------
-            # Pour l'instant, garde la logique simplifiee existante en attendant
-            # le refactor du bloc 5 (VV vs Ra, MoisRacc=MoisSign double, etc.)
-            if existing_rem:
-                nb_deja_p += 1
-                modifies.append(_report_row("Déjà payé", {
-                    "MontantOmaya": float(existing_rem.get("ra_montant") or 0),
-                    "MoisPOmaya": str(existing_rem.get("ra_mois_p") or ""),
-                    "MontantImport": montant_rem,
-                    "MoisPImport": mois_p_str,
+            # -------- BLOC 5 : Techno autre (Internet) --------
+            is_vv = "(VV)" in type_rem
+            id_produit_db = int(ctt.get("id_produit") or 0)
+            remise_db = bool(ctt.get("remise"))
+
+            def _do_verif_rem_internet() -> None:
+                """Rapport verif REM Internet (cf. WinDev)."""
+                nonlocal nb_err_rem
+                if test_montant_neg:
+                    # Regul REM (feuille 5)
+                    nb_err_rem += 1
+                    erreurs.append(_report_row("Regul REM", {
+                        "MontantOfficiel": 0.0,
+                        "Remise": remise_db, "GesteCo": geste_co,
+                    }))
+                    return
+                mnt_off = _verif_rem_officielle_internet(
+                    id_produit_db, type_vente_db, date_sign_db,
+                    sheet_name, type_rem, remise_db,
+                    mois_racc, mois_sign,
+                )
+                if mnt_off <= 0:
+                    return
+                nb_err_rem += 1
+                if remise_db != geste_co:
+                    note_err = "Erreur Geste Co"
+                elif mnt_off > montant_rem:
+                    note_err = "Rem insuffisante"
+                elif mnt_off < montant_rem:
+                    note_err = "Versement en trop"
+                else:
+                    note_err = "OK"
+                erreurs.append(_report_row(note_err, {
+                    "MontantOfficiel": mnt_off,
+                    "Remise": remise_db, "GesteCo": geste_co,
                 }))
-            else:
+                # Feuille 'Option' avec mnt_off > 0 -> MAJ OptionVerif
+                if "option" in sheet_name.lower() and not p.simulation:
+                    try:
+                        db.query(
+                            """UPDATE adv.pgt_sfr_contrat
+                                  SET option_verif = TRUE,
+                                      mois_p_option = ?,
+                                      modif_date = NOW(), modif_op = ?,
+                                      modif_elem = 'modif'
+                                WHERE id_contrat = ?""",
+                            (mois_p_str, int(op_id), id_contrat),
+                        )
+                    except Exception:
+                        pass
+
+            if not existing_rem:
+                # ---- INSERT ----
                 nb_paye += 1
                 ajoutes.append(_report_row("Payé"))
                 resume.nb_modifies += 1
+                # cf. WinDev :
+                # - Si (VV) : Validation=True + Va_*, Raccordement=False
+                # - Sinon (Ra) : Raccordement=True + Ra_*
+                #   Si MoisRacc=MoisSign : Validation=True + Va_MoisP + Va_Montant=0
+                validation = is_vv or (not is_vv and mois_racc == mois_sign)
+                va_mois_p = ""; va_montant = 0.0; va_statut = ""; va_motif = ""
+                ra_mois_p = ""; ra_montant = 0.0; ra_statut = ""; ra_motif = ""
+                if is_vv:
+                    va_mois_p, va_montant = mois_p_str, montant_rem
+                    va_statut, va_motif = statut, motif_dero
+                else:
+                    if mois_racc == mois_sign:
+                        va_mois_p, va_montant = mois_p_str, 0.0
+                        va_statut, va_motif = statut, motif_dero
+                    ra_mois_p, ra_montant = mois_p_str, montant_rem
+                    ra_statut, ra_motif = statut, motif_dero
+                raccordement = not is_vv
                 if not p.simulation:
                     try:
                         new_id = _new_id_sfr()
-                        is_va = "(VV)" in type_rem
                         db.query(
                             """INSERT INTO adv.pgt_sfr_contrat_remun
-                                  (id_sfr_contrat_remun_auto, id_sfr_contrat_remun,
+                                  (id_sfr_contrat_remun_auto,
+                                   id_sfr_contrat_remun,
                                    id_contrat, num, type_rem, lib_option,
-                                   validation, va_mois_p, va_montant, va_statut, va_motif,
-                                   raccordement, ra_mois_p, ra_montant, ra_statut, ra_motif,
+                                   validation, va_mois_p, va_montant,
+                                   va_statut, va_motif,
+                                   raccordement, ra_mois_p, ra_montant,
+                                   ra_statut, ra_motif,
                                    modif_date, modif_op, modif_elem)
                                VALUES (?, ?, ?, ?, ?, ?,
                                        ?, ?, ?, ?, ?,
@@ -1493,18 +1553,95 @@ def _import_run(
                                        NOW(), ?, 'new')""",
                             (new_id, new_id, id_contrat, num_bs,
                              lib_type_rem, lib_rem,
-                             is_va, mois_p_str if is_va else "",
-                             montant_rem if is_va else 0,
-                             statut if is_va else "",
-                             motif_dero if is_va else "",
-                             not is_va, mois_p_str if not is_va else "",
-                             montant_rem if not is_va else 0,
-                             statut if not is_va else "",
-                             motif_dero if not is_va else "",
+                             validation, va_mois_p, va_montant,
+                             va_statut, va_motif,
+                             raccordement, ra_mois_p, ra_montant,
+                             ra_statut, ra_motif,
                              int(op_id)),
                         )
                     except Exception as e:
                         ajoutes[-1]["Erreur"] = str(e)
+                _do_verif_rem_internet()
+            elif is_vv:
+                # ---- EXISTE + (VV) ----
+                if existing_rem.get("validation"):
+                    # Déjà payé Va
+                    nb_deja_p += 1
+                    modifies.append(_report_row("Déjà payé (Va)", {
+                        "MontantOmaya": float(existing_rem.get("ra_montant") or 0),
+                        "MontantImport": montant_rem,
+                        "MoisPImport": mois_p_str,
+                    }))
+                else:
+                    # UPDATE validation + Va_*
+                    nb_paye += 1
+                    ajoutes.append(_report_row("Payé (Va MAJ)"))
+                    if not p.simulation:
+                        try:
+                            db.query(
+                                """UPDATE adv.pgt_sfr_contrat_remun
+                                      SET validation = TRUE, va_mois_p = ?,
+                                          va_montant = ?, va_statut = ?,
+                                          va_motif = ?,
+                                          modif_date = NOW(), modif_op = ?,
+                                          modif_elem = 'modif'
+                                    WHERE id_sfr_contrat_remun = ?""",
+                                (mois_p_str, montant_rem, statut, motif_dero,
+                                 int(op_id),
+                                 int(existing_rem["id_sfr_contrat_remun"])),
+                            )
+                        except Exception as e:
+                            ajoutes[-1]["Erreur"] = str(e)
+                    _do_verif_rem_internet()
+            else:
+                # ---- EXISTE + Ra ----
+                # Cas 1 : Validation=False ET MoisSign≠MoisRacc -> nb_va_non_p
+                if (not existing_rem.get("validation")
+                        and mois_sign != mois_racc):
+                    nb_va_non_p += 1
+                    modifies.append(_report_row("Va non payé", {
+                        "MontantExistantRa": float(existing_rem.get("ra_montant") or 0),
+                        "MoisPExistantRa": str(existing_rem.get("ra_mois_p") or ""),
+                    }))
+                # Cas 2 : Raccordement=True -> Déjà payé Ra
+                if existing_rem.get("raccordement"):
+                    nb_deja_p += 1
+                    modifies.append(_report_row("Déjà payé (Ra)", {
+                        "MontantOmaya": float(existing_rem.get("ra_montant") or 0),
+                        "MoisPOmaya": str(existing_rem.get("ra_mois_p") or ""),
+                        "MontantImport": montant_rem,
+                        "MoisPImport": mois_p_str,
+                    }))
+                else:
+                    # Cas 3 : UPDATE Ra + éventuellement Va si MoisRacc=MoisSign
+                    nb_paye += 1
+                    ajoutes.append(_report_row("Payé (Ra MAJ)"))
+                    if not p.simulation:
+                        try:
+                            sets = ["raccordement = TRUE",
+                                    "ra_mois_p = ?", "ra_montant = ?",
+                                    "ra_statut = ?", "ra_motif = ?"]
+                            params: list = [mois_p_str, montant_rem,
+                                            statut, motif_dero]
+                            if mois_racc == mois_sign:
+                                sets = ["validation = TRUE",
+                                        "va_mois_p = ?", "va_montant = 0",
+                                        "va_statut = ?", "va_motif = ?"] + sets
+                                params = [mois_p_str, statut, motif_dero] + params
+                            sets.append("modif_date = NOW()")
+                            sets.append("modif_op = ?")
+                            sets.append("modif_elem = 'modif'")
+                            params.append(int(op_id))
+                            params.append(int(existing_rem["id_sfr_contrat_remun"]))
+                            db.query(
+                                f"UPDATE adv.pgt_sfr_contrat_remun "
+                                f"SET {', '.join(sets)} "
+                                f"WHERE id_sfr_contrat_remun = ?",
+                                tuple(params),
+                            )
+                        except Exception as e:
+                            ajoutes[-1]["Erreur"] = str(e)
+                    _do_verif_rem_internet()
 
     wb.close()
     # Reporting global
@@ -1605,6 +1742,63 @@ def _iter_sheets(content: bytes):
     for sheet in wb.sheetnames:
         yield wb[sheet], sheet
     wb.close()
+
+
+def _verif_rem_officielle_internet(
+    id_produit: int, type_vente: int, date_sign: Optional[date],
+    sheet_name: str, type_rem: str, remise: bool,
+    mois_racc: str, mois_sign: str,
+) -> float:
+    """cf. WinDev bloc 5 (Internet) verif REM officielle.
+
+    Regles :
+    - Feuille contient 'Offre' ET TypeRem contient 'Offre' :
+      * TypeRem contient '(VV)' : montant_va_remise ou montant_va selon remise
+      * sinon : montant_ra(_remise) + montant_va(_remise) si MoisRacc=MoisSign
+    - Feuille contient 'Option' : abonnement_tv
+    - Feuille contient 'Volumique' : prime_volumique
+
+    TypeVente=2 (Migration) -> traite comme 1 (Vente).
+    """
+    if not id_produit or not date_sign:
+        return 0.0
+    tv = 1 if type_vente == 2 else type_vente
+    try:
+        db = get_pg_connection("adv")
+        r = db.query_one(
+            """SELECT montant_va, montant_va_remise, montant_ra,
+                      montant_ra_remise, abonnement_tv, prime_volumique
+                 FROM adv.pgt_sfr_remun
+                WHERE id_produit = ? AND type_vente = ?
+                  AND ? BETWEEN date_debut AND date_fin
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (id_produit, tv, date_sign),
+        )
+        if not r: return 0.0
+        sn = sheet_name.lower()
+        tr = type_rem.lower()
+        mnt = 0.0
+        if "offre" in sn and "offre" in tr:
+            if "(vv)" in tr:
+                mnt = float((r.get("montant_va_remise")
+                              if remise else r.get("montant_va")) or 0)
+            else:
+                if remise:
+                    mnt = float(r.get("montant_ra_remise") or 0)
+                    if mois_racc == mois_sign:
+                        mnt += float(r.get("montant_va_remise") or 0)
+                else:
+                    mnt = float(r.get("montant_ra") or 0)
+                    if mois_racc == mois_sign:
+                        mnt += float(r.get("montant_va") or 0)
+        elif "option" in sn:
+            mnt = float(r.get("abonnement_tv") or 0)
+        elif "volumique" in sn:
+            mnt = float(r.get("prime_volumique") or 0)
+        return mnt
+    except Exception:
+        return 0.0
 
 
 def _verif_rem_officielle(offre_run: str, type_vente: int,
