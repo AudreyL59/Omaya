@@ -214,28 +214,71 @@ def _lookup_etat(partenaire: str, id_etat: int) -> Optional[dict]:
 def _ajoute_histo(partenaire: str, id_contrat: int, old_etat: int,
                    new_etat: int, mois_p: str, op_id: int,
                    categorie: str = "Vend") -> None:
-    """Historise la transition d'etat dans pgt_xxx_histo_etat_ctt."""
+    """Historise la transition d'etat en deleguant aux helpers dedies par
+    partenaire (import_sfr._ajoute_histo_sfr_etat, etc.).
+
+    Cf. audit ImportMasse : l'implementation locale precedente ne
+    beneficiait pas :
+    - Du dispatch SFR (2 tables : pgt_sfr_histo_etat_ctt vs
+      pgt_sfr_histo_etat_ctt_sfr selon categorie 'Vend' ou 'SFR')
+    - Du generateur d'id specifique _new_id_sfr (format YYYYMMDDHHMMSS+ms)
+    - De la coherence de la clef id_histo_auto avec les autres imports
+    """
     p = partenaire.lower()
     if p not in PARTENAIRES_SUPPORTES or not id_contrat:
         return
     try:
-        db = get_pg_connection("adv")
-        auto = db.query_one(
-            f"SELECT COALESCE(MAX(id_histo_auto), 0) + 1 AS n "
-            f"FROM adv.pgt_{p}_histo_etat_ctt"
-        )
-        db.query(
-            f"""INSERT INTO adv.pgt_{p}_histo_etat_ctt
-                  (id_histo_auto, id_histo, id_contrat, op_saisie, date,
-                   old_etat, new_etat, date_paiement,
-                   modif_op, modif_date, modif_elem)
-               VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), 'new')""",
-            (int(auto["n"]) if auto else 1, _new_id(),
-             int(id_contrat), int(op_id),
-             int(old_etat) if old_etat else 0,
-             int(new_etat) if new_etat else 0,
-             mois_p or "", int(op_id)),
-        )
+        if p == "sfr":
+            from app.intranets.adm.services.import_sfr import (
+                _ajoute_histo_sfr_etat,
+            )
+            _ajoute_histo_sfr_etat(
+                id_contrat, old_etat, new_etat, mois_p, op_id,
+                categorie=categorie,
+            )
+        elif p == "eni":
+            from app.intranets.adm.services.import_eni import (
+                _ajoute_histo_eni_etat,
+            )
+            _ajoute_histo_eni_etat(
+                id_contrat, old_etat, new_etat, mois_p, op_id,
+            )
+        elif p == "iag":
+            from app.intranets.adm.services.import_iag import (
+                _ajoute_histo_iag_etat,
+            )
+            _ajoute_histo_iag_etat(
+                id_contrat, old_etat, new_etat, mois_p, op_id,
+            )
+        elif p == "pro":
+            from app.intranets.adm.services.import_pro import (
+                _ajoute_histo_pro_etat,
+            )
+            _ajoute_histo_pro_etat(
+                id_contrat, old_etat, new_etat, mois_p, op_id,
+            )
+        elif p == "oen":
+            from app.intranets.adm.services.import_oen import (
+                _ajoute_histo_oen_etat,
+            )
+            _ajoute_histo_oen_etat(
+                id_contrat, old_etat, new_etat, mois_p, op_id,
+                categorie=categorie,
+            )
+        elif p == "str":
+            from app.intranets.adm.services.import_str import (
+                _ajoute_histo_str_etat,
+            )
+            _ajoute_histo_str_etat(
+                id_contrat, old_etat, new_etat, mois_p, op_id,
+            )
+        elif p == "val":
+            from app.intranets.adm.services.import_val import (
+                _ajoute_histo_val_etat,
+            )
+            _ajoute_histo_val_etat(
+                id_contrat, old_etat, new_etat, mois_p, op_id,
+            )
     except Exception:
         pass
 
@@ -360,8 +403,17 @@ def run_modif_etat(
                         partenaire, id_contrat, p.id_etat_new,
                         mois_p_db, op_id,
                     )
+                # cf. WinDev : historisation dans la table dediee au mode
+                # (Vend vs Ope). Pour SFR/OEN, cela dispatche entre
+                # pgt_{part}_histo_etat_ctt (Vend) et
+                # pgt_{part}_histo_etat_ctt_{part} (mode operateur).
+                categorie_histo = (
+                    partenaire.upper() if p.mode == "operateur"
+                    else "Vend"
+                )
                 _ajoute_histo(partenaire, id_contrat, id_etat_actuel,
-                              p.id_etat_new, mois_p_str, op_id)
+                              p.id_etat_new, mois_p_str, op_id,
+                              categorie=categorie_histo)
                 lignes.append(MasseLigneResult(
                     num_ctt=num_ctt, id_contrat=id_contrat,
                     produit=lib_produit, ancien_etat=lib_etat_actuel,
@@ -463,7 +515,7 @@ def _update_etat_vendeur(
         else:
             db.query(
                 """UPDATE adv.pgt_sfr_contrat
-                      SET id_etat_contrat = ?, mois_p_ra = NULL,
+                      SET id_etat_contrat = ?, mois_p_ra = '',
                           modif_date = NOW(), modif_op = ?,
                           modif_elem = 'modif'
                     WHERE id_contrat = ?""",
@@ -481,9 +533,12 @@ def _update_etat_vendeur(
                 (id_etat_new, mois_p_db, int(op_id), int(id_contrat)),
             )
         else:
+            # cf. WinDev : reset MoisP a chaine vide '' (pas NULL) car les
+            # rubriques HFSQL Texte n'ont pas de NULL et certains WHERE
+            # comparent explicitement mois_p != ''.
             db.query(
                 f"""UPDATE adv.pgt_{p}_contrat
-                      SET id_etat_contrat = ?, mois_p = NULL,
+                      SET id_etat_contrat = ?, mois_p = '',
                           modif_date = NOW(), modif_op = ?,
                           modif_elem = 'modif'
                     WHERE id_contrat = ?""",
@@ -911,6 +966,22 @@ def run_modif_vendeur(
             continue
         if not p.simulation:
             try:
+                # cf. pattern SFR/OEN/PRO : historiser l'attribution
+                # avant l'UPDATE id_salarie pour tracer la reattribution.
+                try:
+                    from app.intranets.adm.services.import_helpers_common import (
+                        ajout_historique_attribution,
+                    )
+                    ajout_historique_attribution(
+                        partenaire.upper(), id_contrat,
+                        partenaire.upper(),
+                        num_ctt,
+                        int(ctt.get("id_salarie") or 0),
+                        int(p.id_salarie_new),
+                        op_id,
+                    )
+                except Exception:
+                    pass
                 db.query(
                     f"""UPDATE adv.pgt_{partenaire}_contrat
                           SET id_salarie = ?,
@@ -948,11 +1019,20 @@ def _recalc_points_eni(id_contrat: int, sous_fam: str, op_id: int) -> None:
     """
     db = get_pg_connection("adv")
 
-    # Recupere les infos contrat necessaires au recalcul
+    # Recupere les infos contrat + options necessaires au recalcul
+    # (JOIN pgt_eni_contrat_option pour les vieux contrats)
     ctt = db.query_one(
-        """SELECT date_signature, gaz_car_relevee, gaz_car_declaree,
-                  elec_puissance, opt_rib, opt_mail, opt_maint, notation
-             FROM adv.pgt_eni_contrat WHERE id_contrat = ?""",
+        """SELECT c.date_signature, c.gaz_car_relevee, c.gaz_car_declaree,
+                  c.elec_puissance, c.opt_rib, c.opt_mail, c.opt_maint,
+                  c.notation,
+                  o.opt_mail AS o_mail, o.opt_reforestation,
+                  o.opt_energie_verte_elec, o.opt_energie_verte_gaz
+             FROM adv.pgt_eni_contrat c
+             LEFT JOIN adv.pgt_eni_contrat_option o
+                    ON o.id_contrat = c.id_contrat
+                   AND (o.modif_elem IS NULL
+                        OR o.modif_elem NOT LIKE '%suppr%')
+            WHERE c.id_contrat = ?""",
         (int(id_contrat),),
     )
 
@@ -971,18 +1051,37 @@ def _recalc_points_eni(id_contrat: int, sous_fam: str, op_id: int) -> None:
         from app.shared.sdtc.bareme import calcul_point_contrat
         car = int(ctt.get("gaz_car_relevee") or ctt.get("gaz_car_declaree") or 0)
         puissance = int(ctt.get("elec_puissance") or 0)
-        # Reconstruit la chaine d'options pour les regles ENI >= 2026-05-01
-        opt_parts = []
-        if ctt.get("opt_rib"): opt_parts.append("RIB//")
-        if ctt.get("opt_mail"): opt_parts.append("MAIL//")
-        if ctt.get("opt_maint"): opt_parts.append("MAINT//")
-        if ctt.get("notation"): opt_parts.append(f"NOTE:{ctt.get('notation')}//")
-        info_cplt = "".join(opt_parts)
+
+        # cf. WinDev : la regle d'options bascule au 2026-05-01
+        # - Post >= 2026-05-01 : chaine 'RIB//MAIL//MAINT//NOTE:X//'
+        # - Pre  <  2026-05-01 : nb d'options actives comme entier
+        #   (opt_mail + opt_reforestation + opt_energie_verte_elec/gaz)
+        date_sign_iso = str(ctt.get("date_signature") or "")
+        is_post_20260501 = date_sign_iso >= "2026-05-01"
+
+        if is_post_20260501:
+            opt_parts = []
+            if ctt.get("opt_rib"): opt_parts.append("RIB//")
+            if ctt.get("opt_mail"): opt_parts.append("MAIL//")
+            if ctt.get("opt_maint"): opt_parts.append("MAINT//")
+            if ctt.get("notation"):
+                opt_parts.append(f"NOTE:{ctt.get('notation')}//")
+            info_cplt = "".join(opt_parts)
+        else:
+            # Compte des 4 options ENI historiques
+            nb_opts = (
+                int(bool(ctt.get("o_mail")))
+                + int(bool(ctt.get("opt_reforestation")))
+                + int(bool(ctt.get("opt_energie_verte_elec")))
+                + int(bool(ctt.get("opt_energie_verte_gaz")))
+            )
+            info_cplt = str(nb_opts)
+
         palier = car if "GAZ" in sf else puissance
         palier2 = puissance if "GAZ" in sf else car
         nb_points = calcul_point_contrat(
             fam="ENI", ss_fam=sous_fam or "",
-            palier=palier, date_sign=str(ctt["date_signature"]),
+            palier=palier, date_sign=date_sign_iso,
             info_cplt=info_cplt, palier2=palier2,
         )
 

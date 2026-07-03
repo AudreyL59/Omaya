@@ -29,10 +29,22 @@ from app.intranets.adm.services.import_eni import _col_letter_to_index, _cell
 PARTENAIRES_SUPPORTES = ["eni", "iag", "oen", "pro", "sfr", "str", "val"]
 
 
-# Mapping par defaut selon partenaire (cf WinDev combo selon MoiMeme)
+# Mapping par defaut selon partenaire (cf. WinDev combo selon MoiMeme).
+# ENI et SFR ont des mappings XLS specifiques ; pour les autres partenaires
+# on utilise le layout standard 'export Provad' (Num A, Note B, Info C)
+# sur 10 par convention. Le user peut override via les params col_*.
+_LAYOUT_STANDARD = {
+    "col_num": "A", "col_note": "B", "col_info": "C", "notes_sur": 10,
+}
 MAPPING_PAR_PARTENAIRE = {
     "eni": {"col_num": "H", "col_note": "F", "col_info": "G", "notes_sur": 5},
     "sfr": {"col_num": "A", "col_note": "B", "col_info": "C", "notes_sur": 10},
+    "iag": dict(_LAYOUT_STANDARD),
+    "pro": dict(_LAYOUT_STANDARD),
+    "oen": dict(_LAYOUT_STANDARD),
+    "str": dict(_LAYOUT_STANDARD),
+    "val": dict(_LAYOUT_STANDARD),
+    "tlc": dict(_LAYOUT_STANDARD),
 }
 
 
