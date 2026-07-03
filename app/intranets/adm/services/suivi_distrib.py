@@ -219,8 +219,8 @@ def _lookup_ticket_for_doc(id_doc_distrib: int, id_doc_courtage: int,
         try:
             r = tk_bo.query_one(
                 """SELECT tl.id_tk_liste, tl.cloturee
-                     FROM pgt_tk_demande_ctt_courtage tcc
-                     JOIN pgt_tk_liste tl
+                     FROM ticket_bo.pgt_tk_demande_ctt_courtage tcc
+                     JOIN ticket.pgt_tk_liste tl
                           ON tl.id_tk_liste = tcc.id_tk_liste
                      JOIN rh.pgt_societe_doc_courtage sdc
                           ON sdc.id_societe_doc_courtage
@@ -240,8 +240,8 @@ def _lookup_ticket_for_doc(id_doc_distrib: int, id_doc_courtage: int,
         try:
             r = tk_bo.query_one(
                 """SELECT tl.id_tk_liste, tl.cloturee
-                     FROM pgt_tk_demande_doc_distrib tdd
-                     JOIN pgt_tk_liste tl
+                     FROM ticket_bo.pgt_tk_demande_doc_distrib tdd
+                     JOIN ticket.pgt_tk_liste tl
                           ON tl.id_tk_liste = tdd.id_tk_liste
                     WHERE tdd.id_doc_distrib = ?
                       AND (tl.modif_elem IS NULL
@@ -329,14 +329,18 @@ def list_facturations(id_ste: int) -> list[dict]:
 
     Cf. WinDev : JOIN salarie + tk_liste + tk_demande_facturation_distrib
     ORDER BY datecrea DESC.
+
+    Cross-schema : pgt_tk_liste est dans le schema `ticket`,
+    pgt_tk_demande_facturation_distrib dans `ticket_bo`. On qualifie
+    explicitement les tables (le search_path pointe sur ticket_bo).
     """
     tk_bo = get_pg_connection("ticket_bo")
     rows = tk_bo.query(
         """SELECT tl.id_tk_liste, tl.date_crea, tl.cloturee, tl.op_crea,
                   fd.id_gerant, fd.fic_facture, fd.fic_preuve_virement,
                   fd.date_virement, fd.montant
-             FROM pgt_tk_liste tl
-             JOIN pgt_tk_demande_facturation_distrib fd
+             FROM ticket.pgt_tk_liste tl
+             JOIN ticket_bo.pgt_tk_demande_facturation_distrib fd
                   ON tl.id_tk_liste = fd.id_tk_liste
             WHERE (tl.modif_elem IS NULL
                    OR tl.modif_elem NOT LIKE '%suppr%')
