@@ -120,6 +120,12 @@ def envoi_mail(
     # Outlook et clients stricts.
     msg["Subject"] = Header(sujet, "utf-8")
     msg["From"] = formataddr(("", display_from))
+    # Header Sender RFC 5322 : quand la boite SMTP authentifiee (from_addr)
+    # differe de l'expediteur affiche (display_from), on ajoute Sender pour
+    # que les validateurs DMARC comprennent la difference sans reecrire le
+    # From. Gmail affichera "audrey@omaya.fr" au lieu de "via gmail.com".
+    if display_from != from_addr:
+        msg["Sender"] = formataddr(("", from_addr))
     msg["To"] = ", ".join(destinataires)
     if cc:
         msg["Cc"] = ", ".join(cc)
@@ -195,7 +201,12 @@ def envoi_mail_rh(
         msg.attach(MIMEText(html, "html", "utf-8"))
     # cf. WinDev ChaineVersUTF8(Mail_Objet) : encodage RFC 2047
     msg["Subject"] = Header(sujet, "utf-8")
-    msg["From"] = expediteur or SMTP_RH_FROM
+    display_from = expediteur or SMTP_RH_FROM
+    msg["From"] = display_from
+    # Header Sender RFC 5322 (cf. envoi_mail) : evite le "via gmail.com"
+    # affiche par Gmail quand From != boite SMTP authentifiee.
+    if display_from != SMTP_RH_FROM:
+        msg["Sender"] = formataddr(("", SMTP_RH_FROM))
     msg["To"] = ", ".join(destinataires)
     if cci:
         msg["Bcc"] = ", ".join(cci)
@@ -205,7 +216,10 @@ def envoi_mail_rh(
     try:
         with smtplib.SMTP_SSL(SMTP_RH_HOST, SMTP_RH_PORT, timeout=15) as smtp:
             smtp.login(SMTP_RH_USER, SMTP_RH_PASSWORD)
-            smtp.sendmail(msg["From"], all_recipients, msg.as_string())
+            # cf. RFC 5321 : envelope-from = boite SMTP authentifiee,
+            # pas le header From. Fixe le comportement "on behalf of"
+            # cote destinataire.
+            smtp.sendmail(SMTP_RH_FROM, all_recipients, msg.as_string())
         logger.info(
             "Mail RH envoye [-> %d dest, %d cci] : %s",
             len(destinataires), len(cci or []), sujet[:80],
