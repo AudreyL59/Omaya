@@ -166,11 +166,16 @@ class ContratRow(BaseModel):
     elec_actif: bool = False       # ENI uniquement
 
     # ENI/OEN options (depuis {prefix}_contrat_Option)
+    # opt_demat = regle WinDev AfficherOptionEnergie :
+    #   - Si DateSign >= 2026-05-01 : opt_mail seul
+    #   - Sinon : opt_mail AND opt_e_facture AND opt_e_communication
+    #     AND opt_optin_commercial
     opt_demat: bool = False
-    opt_maintenance: bool = False
+    opt_maintenance: bool = False   # = opt_entretien (Home Serve)
     opt_energie_verte_gaz: bool = False
     opt_reforestation: bool = False
     opt_protection: bool = False
+    opt_mandat: bool = False        # Mandat SEPA (nbEni_Mandat WinDev)
 
     # STR/VAL option numérique
     opt_num: str = ""

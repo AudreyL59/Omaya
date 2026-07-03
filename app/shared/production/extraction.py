@@ -1063,15 +1063,10 @@ def extract_job_to_parquet(
     # On cache les résultats pour (id_salarie, date_ymd).
     affect_cache: dict[tuple[int, str], dict] = {}
 
-    def get_affect(id_s: int, date_ymd: str) -> dict:
-        if not id_s or not date_ymd:
-            return {}
-        key = (id_s, date_ymd)
-        if key in affect_cache:
-            return affect_cache[key]
+    def _fetch_affect(id_s: int, date_ymd: str) -> dict:
+        """Lookup brut d'affectation (equipe + agence) pour une date."""
         row = _req_equipe_terrain_by_salarie(db_rh, id_s, date_ymd)
         if not row:
-            affect_cache[key] = {}
             return {}
         orga_id = _clean_id(_to_int(row.get("idorganigramme")))
         parent_id = _clean_id(_to_int(row.get("id_parent")))
@@ -1084,11 +1079,48 @@ def extract_job_to_parquet(
             )
             if prow:
                 parent_lib = prow.get("lib_orga") or ""
-        info = {
+        return {
             "orga_id": orga_id,
             "equipe": lib,
             "agence": parent_lib,
         }
+
+    def get_affect(id_s: int, date_ymd: str) -> dict:
+        """Cf. WinDev afficherContrat L198-208 : fallback en 3 etapes
+        si l'affectation renvoie 'Reseau' (vendeur historique perdu) :
+        1. affectationVendeurByDate(date_signature) - defaut
+        2. affectationVendeurByDate(ProdFin) - fin de periode
+        3. affectationTerrainVendeur() - affectation actuelle
+        """
+        if not id_s or not date_ymd:
+            return {}
+        key = (id_s, date_ymd)
+        if key in affect_cache:
+            return affect_cache[key]
+
+        info = _fetch_affect(id_s, date_ymd)
+        pb_detect = ""
+
+        # Fallback 1 : affectation a ProdFin si l'agence est 'Reseau'
+        if info.get("agence", "").lower().strip() == "reseau" or (
+                not info and prod_fin):
+            info2 = _fetch_affect(id_s, prod_fin)
+            if info2 and info2.get("agence", "").lower().strip() != "reseau":
+                info = info2
+                pb_detect = "Utilisation Date Fin Prod"
+            elif info2:
+                # Fallback 2 : affectation actuelle (aujourd'hui)
+                today = datetime.now().strftime("%Y%m%d")
+                info3 = _fetch_affect(id_s, today)
+                if info3 and info3.get("agence", "").lower().strip() != "reseau":
+                    info = info3
+                    pb_detect = "Utilisation aff actuelle"
+                else:
+                    info = info2
+                    pb_detect = "Utilisation Date Fin Prod (Reseau)"
+
+        if info:
+            info["pb_detect_eq"] = pb_detect
         affect_cache[key] = info
         return info
 
@@ -1190,6 +1222,24 @@ def extract_job_to_parquet(
             heure_sign = _heure_from_numbs(num_bs)
         else:
             heure_sign = heure_tk.get(num_bs, "")
+        # cf. WinDev afficherContrat L589 : IAG - extraction de CodeEnr
+        # via 'TIME_HHmmSS' puis conversion UTC -> local. Si aucune
+        # heure TK, on tente cette extraction.
+        if not heure_sign and prefix == "IAG":
+            code_enr = str(r.get("code_enr") or "")
+            if "TIME_" in code_enr:
+                try:
+                    time_part = code_enr.split("TIME_", 1)[1][:6]
+                    if len(time_part) >= 4 and time_part[:4].isdigit():
+                        # HHmmSS -> HH:MM (UTC -> local FR : +1h hiver,
+                        # +2h ete). Approximation +2h par defaut (audit
+                        # ne precise pas la logique heures d'ete).
+                        hh_utc = int(time_part[:2])
+                        mm = time_part[2:4]
+                        hh_local = (hh_utc + 2) % 24
+                        heure_sign = f"{hh_local:02d}:{mm}"
+                except Exception:
+                    pass
         if not heure_sign:
             ds = r.get("date_saisie") or ""
             if ds:
@@ -1277,6 +1327,11 @@ def extract_job_to_parquet(
             "vendeur_prenom": sinfo.get("prenom", ""),
             "agence": affect.get("agence", ""),
             "equipe": affect.get("equipe", ""),
+            # cf. WinDev afficherContrat L265 : PbDetectionEq indique
+            # quelle strategie a permis de recuperer l'affectation
+            # (vide si direct, sinon 'Utilisation Date Fin Prod' ou
+            # 'Utilisation aff actuelle').
+            "pb_detect_eq": affect.get("pb_detect_eq", ""),
             # cf. WinDev VendeurOrganigramme L132 : TypePoste.Categorie
             # = 'STAFF' -> exclu du tableau vendeur (mais garde dans le
             # scope global). Utilise dans _vrow pour filtrer.
@@ -1977,7 +2032,7 @@ def _compute_dashboard_sfr(
 
     # Note moyenne sur l'ensemble SFR (la notation est déjà /10 en rows_out)
     note_moy = round(tot_note_sfr / nb_note_sfr, 2) if nb_note_sfr else 0.0
-    pct_notes = _pct(nb_note_sfr, nb_sfr_fibre) if nb_sfr_fibre else 0.0
+    pct_notes = _pct(nb_note_sfr, nb_sfr_fibre, decimals=1) if nb_sfr_fibre else 0.0
 
     # Calcul nb_sfr_4p (clients "4 Play" : mobile + fixe chez le même client).
     # Règle WinDev : (nbMobVLA>0 ET nbFixCQ>0) OU (nbMobCQ>0 ET (nbFixCQ + nbFixVLA) > 0)
@@ -2177,13 +2232,18 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
     # Règle OEN (sur Lib_produit) :
     #  - contrat avec part Gaz  : Lib_produit contient "gaz"  (mono Gaz + Dual)
     #  - contrat avec part Elec : Lib_produit contient "elec" OU pas "gaz" (mono Elec + Dual)
-    #  → un Dual compte dans les deux dénominateurs.
+    #  → un Dual compte dans les deux dénominateurs (Gaz + Elec) sauf
+    #    si lib_produit ne mentionne QUE Gaz.
     def _has_gaz(r) -> bool:
         return "gaz" in (r.get("lib_produit") or "").lower()
 
     def _has_elec(r) -> bool:
-        lib = (r.get("lib_produit") or "").lower()
-        return "elec" in lib or "gaz" not in lib
+        # cf. WinDev _has_elec = NOT Contient(Lib_Produit, "GAZ")
+        # Un contrat dual 'GAZ ELEC' NE compte PAS dans nb_elec
+        # (le libelle Gaz-first signifie que le contrat est traite
+        # comme Gaz principal). Avant : le OR 'elec' in lib comptait
+        # 2x un dual -> tx_6kva sous-evalue.
+        return "gaz" not in (r.get("lib_produit") or "").lower()
 
     oen_gaz_part = [r for r in oen if _has_gaz(r)]
     oen_elec_part = [r for r in oen if _has_elec(r)]
@@ -2225,9 +2285,17 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
     nb_clients = len(seen_clients)
 
     # Note moyenne
+    # cf. WinDev StatsOEN L112-115 :
+    #   nbNoteOen += coeff (0.5 dual / 1 mono)
+    #   TotNoteOen += Notation (pas de coeff)
+    #   note_moy = TotNoteOen / nbNoteOen
     noted = [r for r in oen if (r.get("notation") or 0) > 0]
-    note_moy = (sum(r.get("notation", 0) for r in noted) / len(noted)) if noted else 0.0
-    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1)
+    tot_note_oen = sum(r.get("notation", 0) for r in noted)
+    nb_note_oen = sum(_coeff(r) for r in noted)
+    note_moy = (tot_note_oen / nb_note_oen) if nb_note_oen > 0 else 0.0
+    # cf. WinDev AffichageProdVendeur/AfficheResultatSFR : Note_Pourcentage
+    # arrondi 1 decimale (concat '% de ctt notes')
+    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1, decimals=1)
 
     # Car moyenne sur le gaz (mono Gaz + Dual), anomalies incluses
     car_vals = [
@@ -2420,7 +2488,30 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
     nb_resil = sum(1 for r in eni if r.get("id_type_etat") == 4)
     nb_attente = sum(1 for r in eni if r.get("id_type_etat") == 2)
     nb_stand_by = sum(1 for r in eni if r.get("id_type_etat") in (1, 9))
+    # cf. WinDev StatsENI L42-44 : nbENI_StdB = ctts en Stand-By (etat 52)
+    nb_stdb = sum(1 for r in eni if r.get("id_etat_contrat") == 52)
     nb_hors_anomalie = nb_ctt - nb_anomalie
+
+    # cf. WinDev StatsENI L38-90 : segmentation Gaz specifique
+    # nbEniG_HorsA (Gaz hors A), nbEniG_A (Gaz anomalie), nbEniG_StdB
+    # (Gaz stand-by = etat 52), nbEniG_R (Gaz resilie)
+    nb_eni_g_hors_a = sum(
+        1 for r in eni_gaz_part
+        if r.get("id_type_etat") not in (3, 1, 9)
+    )
+    nb_eni_g_a = sum(
+        1 for r in eni_gaz_part
+        if r.get("id_type_etat") in (3, 1, 9)
+    )
+    nb_eni_g_stdb = sum(
+        1 for r in eni_gaz_part
+        if r.get("id_etat_contrat") == 52
+    )
+    nb_eni_g_r = sum(
+        1 for r in eni_gaz_part if r.get("id_type_etat") == 4
+    )
+    # cf. WinDev StatsENI L74 : nbEniB1 = Car > 6000 (gros consommateurs)
+    nb_eni_b1 = sum(1 for r in eni if (r.get("car") or 0) > 6000)
 
     # Base = contrats avec car ≤ 1000 parmi ceux ayant une part Gaz
     nb_base = sum(
@@ -2455,7 +2546,9 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
     # Note moyenne
     noted = [r for r in eni if (r.get("notation") or 0) > 0]
     note_moy = (sum(r.get("notation", 0) for r in noted) / len(noted)) if noted else 0.0
-    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1)
+    # cf. WinDev AffichageProdVendeur/AfficheResultatSFR : Note_Pourcentage
+    # arrondi 1 decimale (concat '% de ctt notes')
+    pct_notes = _pct(len(noted), nb_hors_anomalie if nb_hors_anomalie > 0 else 1, decimals=1)
 
     # Car moyenne sur le gaz (mono Gaz + Dual), anomalies incluses
     car_vals = [
@@ -2569,6 +2662,14 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
         "nb_resil": nb_resil,
         "nb_attente": nb_attente,
         "nb_stand_by": nb_stand_by,
+        "nb_stdb": nb_stdb,
+        # Segmentation Gaz specifique (cf. WinDev StatsENI L38-90)
+        "nb_eni_g_hors_a": nb_eni_g_hors_a,
+        "nb_eni_g_a": nb_eni_g_a,
+        "nb_eni_g_stdb": nb_eni_g_stdb,
+        "nb_eni_g_r": nb_eni_g_r,
+        # Gros consommateurs (Car > 6000, cf. WinDev nbEniB1)
+        "nb_eni_b1": nb_eni_b1,
         "nb_base": nb_base,
         "nb_6kva": nb_6kva,
         "tx_anomalie": _pct(nb_anomalie, nb_ctt),
@@ -2616,6 +2717,10 @@ def _compute_dashboard_simple(rows: list[dict], prefix: str) -> dict:
     nb_valide = sum(1 for r in sub if r.get("id_type_etat") in (5, 8))
     nb_resil = sum(1 for r in sub if r.get("id_type_etat") == 4)
     nb_attente = sum(1 for r in sub if r.get("id_type_etat") == 2)
+    # cf. WinDev StatsSTR L9 : nbSTR_StdB = ctts en Stand-By (etat 69).
+    # (VAL/TLC/IAG/PRO n'ont pas de StdB : compteur toujours 0.)
+    id_stdb = 69 if prefix == "STR" else -1
+    nb_stdb = sum(1 for r in sub if r.get("id_etat_contrat") == id_stdb)
     nb_hors_anomalie = nb_ctt - nb_anomalie
 
     return {
@@ -2625,6 +2730,7 @@ def _compute_dashboard_simple(rows: list[dict], prefix: str) -> dict:
         "nb_valide": nb_valide,
         "nb_resil": nb_resil,
         "nb_attente": nb_attente,
+        "nb_stdb": nb_stdb,
         "tx_anomalie": _pct(nb_anomalie, nb_ctt),
         "tx_valide": _pct(nb_valide, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
         "tx_resil": _pct(nb_resil, nb_hors_anomalie) if nb_hors_anomalie > 0 else 0.0,
