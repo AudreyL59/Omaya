@@ -1443,50 +1443,36 @@ def import_offres_ezy(
                 if prod:
                     id_produit = int(prod["id_produit"])
 
-            # Upsert : match par (lib_offre, type) pour eviter collision Part/Pro
+            # UPSERT fidele WinDev :
+            # - Match uniquement par lib_offre (permet migration MOBILE
+            #   -> MOB PRO en changeant type sur l'enregistrement existant)
+            # - Inclut les soft-deletes (reactivation avec les nouvelles
+            #   valeurs + modif_elem='Modif' -> soft-delete leve)
+            # - id_produit ecrase inconditionnellement (WinDev fait
+            #   SFR_OffresProvad.IDproduit = idProd meme si idProd=0)
             existing = db.query_one(
                 """SELECT id_offres_sfr FROM adv.pgt_sfr_offres_provad
-                    WHERE lib_offre = ? AND type = ?
-                      AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                    LIMIT 1""",
-                (lib, type_val),
+                    WHERE lib_offre = ? LIMIT 1""",
+                (lib,),
             )
             if existing:
-                # UPDATE : on ne touche pas id_produit sauf match auto (mobile/secu/mobpro)
-                params = [
-                    o["debit_down"], o["debit_up"],
-                    float(o["prix_offre"]),
-                    o["recurrence"],
-                    o["prix_pro_ttc"],
-                    o["engagement"],
-                    bool(o["en_promo"]),
-                    o["info_promo"],
-                    o["services_inclus"],
-                    int(op_id),
-                ]
-                if match_famille and id_produit:
-                    db.query(
-                        """UPDATE adv.pgt_sfr_offres_provad SET
-                                  debit_down=?, debit_up=?, prix_offre=?,
-                                  recurrence=?, prix_pro_ttc=?, engagement=?,
-                                  en_promo=?, info_promo=?, service_inclus=?,
-                                  id_produit=?, online=TRUE,
-                                  modif_date=NOW(), modif_op=?, modif_elem='Modif'
-                            WHERE id_offres_sfr=?""",
-                        (*params[:9], id_produit, int(op_id),
-                         int(existing["id_offres_sfr"])),
-                    )
-                else:
-                    db.query(
-                        """UPDATE adv.pgt_sfr_offres_provad SET
-                                  debit_down=?, debit_up=?, prix_offre=?,
-                                  recurrence=?, prix_pro_ttc=?, engagement=?,
-                                  en_promo=?, info_promo=?, service_inclus=?,
-                                  online=TRUE,
-                                  modif_date=NOW(), modif_op=?, modif_elem='Modif'
-                            WHERE id_offres_sfr=?""",
-                        (*params, int(existing["id_offres_sfr"])),
-                    )
+                db.query(
+                    """UPDATE adv.pgt_sfr_offres_provad SET
+                              type=?, debit_down=?, debit_up=?, prix_offre=?,
+                              recurrence=?, prix_pro_ttc=?, engagement=?,
+                              en_promo=?, info_promo=?, service_inclus=?,
+                              id_produit=?, online=TRUE,
+                              modif_date=NOW(), modif_op=?, modif_elem='Modif'
+                        WHERE id_offres_sfr=?""",
+                    (type_val,
+                     o["debit_down"], o["debit_up"],
+                     float(o["prix_offre"]),
+                     o["recurrence"], o["prix_pro_ttc"], o["engagement"],
+                     bool(o["en_promo"]), o["info_promo"],
+                     o["services_inclus"],
+                     id_produit, int(op_id),
+                     int(existing["id_offres_sfr"])),
+                )
                 res.nb_updates += 1
             else:
                 id_new = _new_id()
