@@ -538,14 +538,60 @@ def list_types_doc_unique() -> list[dict]:
 # TICKETS DE RECLAMATION (Btn Ticket de reclam - HAUT/BAS)
 # --------------------------------------------------------------------
 
+def _envoyer_sms_reclam(
+    gsm: str, lib_doc: str, id_tk_liste: int, op_id: int,
+) -> str:
+    """Envoi SMS de reclamation + INSERT histo (best-effort).
+
+    Cf. WinDev Btn Ticket de reclam :
+      envoiSMS_Rest(GSM, 'OMAYA-Info', texteSMS, 1, '')
+      envoiSMS_HistoSave(monHref, 'TK_DemandeDocDistrib', 'IDTK_Liste', idNew)
+
+    Retour : statut d'envoi (chaine, ex. 'SMS envoye avec succes').
+    """
+    from app.shared.notifications.sms import envoi_sms
+
+    if not gsm:
+        return "GSM inconnu"
+
+    texte = (
+        f"Bonjour, vous devez imperativement fournir votre {lib_doc}.\n"
+        "Merci de vous rendre sur l'intranet ou sur l'appli mobile "
+        "Omayapp pour envoyer ce document.\n"
+        "Cdt"
+    )
+
+    statut = envoi_sms(texte, gsm, emetteur="OMAYA-Info") or ""
+
+    # INSERT histo (divers.pgt_histo_sms). Best-effort.
+    try:
+        db_div = get_pg_connection("divers")
+        db_div.query(
+            """INSERT INTO divers.pgt_histo_sms
+                  (id_histo_sms, destinataire, fichier, rubrique,
+                   id_elem, contenu_envoye, statut, ope_envoi,
+                   datecrea, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?,
+                       ?, ?, ?, ?,
+                       NOW(), NOW(), ?, 'new')""",
+            (
+                _new_id(), gsm, "TK_DemandeDocDistrib", "IDTK_Liste",
+                int(id_tk_liste), texte, statut, int(op_id), int(op_id),
+            ),
+        )
+    except Exception:
+        logger.exception("INSERT pgt_histo_sms (reclam)")
+
+    return statut
+
+
 def create_ticket_reclam(
     id_doc_distrib: int, id_gerant: int, op_id: int,
 ) -> dict:
     """Cf. WinDev Btn Ticket de reclam : cree un ticket type 31 (TK_Liste
-    + TK_DemandeDocDistrib). SMS gerant est declenche a part par le
-    frontend (via l'endpoint SMS existant) - le service reste synchrone.
+    + TK_DemandeDocDistrib) + SMS de rappel au gerant + INSERT histo.
 
-    Retour : {ok, id_tk_liste, lib_doc, id_gerant, gsm_gerant}
+    Retour : {ok, id_tk_liste, lib_doc, id_gerant, gsm_gerant, sms_statut}
     """
     rh = get_pg_connection("rh")
     tk_bo = get_pg_connection("ticket_bo")
@@ -604,7 +650,7 @@ def create_ticket_reclam(
         logger.error("INSERT pgt_tk_liste KO : %s", e)
         return {"ok": False, "error": f"INSERT ticket : {e}"}
 
-    # GSM du gerant pour le SMS cote frontend
+    # GSM du gerant pour envoi SMS + historisation
     gsm = ""
     try:
         c = rh.query_one(
@@ -618,12 +664,16 @@ def create_ticket_reclam(
     except Exception:
         pass
 
+    # Envoi SMS + histo (cf. WinDev envoiSMS_Rest + envoiSMS_HistoSave)
+    sms_statut = _envoyer_sms_reclam(gsm, lib_doc, id_tk, op_id)
+
     return {
         "ok": True,
         "id_tk_liste": str(id_tk),
         "lib_doc": lib_doc,
         "id_gerant": str(id_gerant),
         "gsm_gerant": gsm,
+        "sms_statut": sms_statut,
     }
 
 

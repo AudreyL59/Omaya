@@ -241,7 +241,11 @@ export default function FI_DetailDistributeurModal({
           'info',
         )
       } else {
-        showToast(`Ticket créé (GSM gérant : ${d.gsm_gerant || 'inconnu'})`, 'success')
+        // cf. WinDev : SMS envoye au gerant + histo cote backend
+        const smsMsg = d.sms_statut
+          ? ` — SMS : ${d.sms_statut}`
+          : ''
+        showToast(`Ticket créé${smsMsg}`, 'success')
       }
       void loadAll()
     } finally {
