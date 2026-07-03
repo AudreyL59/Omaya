@@ -334,8 +334,12 @@ def _parse_fibre_pro(contenu: str) -> list[OffreParsed]:
 
         info_promo = ""
         if "discountODR" in block2:
-            btmp = _extrait(block2, 2, "discountODR")
-            info_promo = _extrait(btmp, 1, "<")
+            # cf. WinDev l.22 : BlockOffre = ExtraitChaine(BlockOffre, 2,
+            # 'discountODR') tronque le bloc pour que le parsing prix
+            # demarre APRES le bloc promo (evite d'attraper un prix
+            # 'price-tpe' inclus dans le bloc promo).
+            block2 = _extrait(block2, 2, "discountODR")
+            info_promo = _extrait(block2, 1, "<")
             info_promo = _extrait(info_promo, 1, ">", depuis_fin=True)
             info_promo = _decode(info_promo)
 
@@ -375,8 +379,10 @@ def _parse_mobile_pro(contenu: str) -> list[OffreParsed]:
 
         info_promo = ""
         if "discountODR" in block:
-            btmp = _extrait(block, 2, "discountODR")
-            info_promo = _extrait(btmp, 1, "<")
+            # cf. WinDev l.17 (Mobile Pro) : idem Fibre Pro, tronque
+            # BlockOffre pour que le parsing prix demarre APRES la promo.
+            block = _extrait(block, 2, "discountODR")
+            info_promo = _extrait(block, 1, "<")
             info_promo = _extrait(info_promo, 1, ">", depuis_fin=True)
             info_promo = _decode(info_promo)
 
