@@ -83,20 +83,46 @@ def _info_salarie(id_salarie: int) -> dict:
         return {}
 
 
-def _affectation(id_salarie: int) -> tuple[str, str]:
-    """(agence, equipe) via JOIN organigramme + niveau 3/4."""
+def _affectation(id_salarie: int, date_ref: str = "") -> tuple[str, str]:
+    """(agence, equipe) a la date `date_ref` (YYYY-MM-DD ou vide).
+
+    cf. WinDev affectationVendeurByDate(idVend, DateSig) : retourne
+    l'affectation en vigueur a la date de signature (pas l'actuelle).
+    Un vendeur mute apres signature avait son ancienne agence/equipe
+    sur les contrats historiques - critique pour l'export.
+
+    Si date_ref est vide, prend l'affectation actuelle (fallback WinDev).
+    """
     if not id_salarie:
         return ("", "")
     try:
         db = get_pg_connection("rh")
-        rows = db.query(
-            """SELECT o.lib_orga, o.id_type_niveau_orga
-                 FROM rh.pgt_salarie_organigramme so
-                 JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
-                WHERE so.id_salarie = ?
-                  AND (so.modif_elem IS NULL OR so.modif_elem NOT LIKE '%suppr%')""",
-            (int(id_salarie),),
-        ) or []
+        # Filtre les affectations valides a la date_ref si fournie
+        # (date_debut <= date_ref <= date_fin OU date_fin NULL)
+        if date_ref:
+            rows = db.query(
+                """SELECT o.lib_orga, o.id_type_niveau_orga
+                     FROM rh.pgt_salarie_organigramme so
+                     JOIN rh.pgt_organigramme o
+                          ON o.idorganigramme = so.idorganigramme
+                    WHERE so.id_salarie = ?
+                      AND (so.modif_elem IS NULL
+                           OR so.modif_elem NOT LIKE '%suppr%')
+                      AND (so.date_debut IS NULL OR so.date_debut <= ?)
+                      AND (so.date_fin IS NULL OR so.date_fin >= ?)""",
+                (int(id_salarie), date_ref, date_ref),
+            ) or []
+        else:
+            rows = db.query(
+                """SELECT o.lib_orga, o.id_type_niveau_orga
+                     FROM rh.pgt_salarie_organigramme so
+                     JOIN rh.pgt_organigramme o
+                          ON o.idorganigramme = so.idorganigramme
+                    WHERE so.id_salarie = ?
+                      AND (so.modif_elem IS NULL
+                           OR so.modif_elem NOT LIKE '%suppr%')""",
+                (int(id_salarie),),
+            ) or []
         agence = ""; equipe = ""
         for r in rows:
             lvl = r.get("id_type_niveau_orga")
@@ -171,7 +197,12 @@ def add_vendeur_agence_equipe(
             continue
         id_sal = int(ctt.get("id_salarie") or 0)
         sal = _info_salarie(id_sal)
-        agence, equipe = _affectation(id_sal)
+        # cf. WinDev affectationVendeurByDate(idVend, DateSig) : passe
+        # la date de signature pour retrouver l'agence/equipe historique
+        # (evite d'ecrire l'affectation actuelle si le vendeur a mute).
+        date_sig = ctt.get("date_signature")
+        date_ref = str(date_sig)[:10] if date_sig else ""
+        agence, equipe = _affectation(id_sal, date_ref)
         if sal:
             out_ws.cell(row=i, column=nb_cols + 1, value=sal.get("nom") or "")
             out_ws.cell(row=i, column=nb_cols + 2, value=sal.get("prenom") or "")
@@ -213,8 +244,19 @@ def add_date_signature(
             continue
         ctt = _lookup_contrat_basic(partenaire, num_ctt)
         if ctt and ctt.get("date_signature"):
-            out_ws.cell(row=i, column=nb_cols + 1,
-                        value=str(ctt["date_signature"]))
+            # cf. WinDev DateVersChaine(..., 'JJ/MM/AAAA') : format DD/MM/YYYY
+            # (Python renvoyait YYYY-MM-DD ISO -> livre visuellement different).
+            date_v = ctt["date_signature"]
+            try:
+                iso = str(date_v)[:10]
+                if len(iso) == 10 and iso[4] == "-" and iso[7] == "-":
+                    fr = f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}"
+                else:
+                    fr = str(date_v)
+            except Exception:
+                fr = str(date_v)
+            cell = out_ws.cell(row=i, column=nb_cols + 1, value=fr)
+            cell.number_format = "DD/MM/YYYY"
             nb_e += 1
     in_wb.close()
     b64, name = _save_workbook_b64(out_wb, "DateSign")
@@ -383,12 +425,19 @@ def add_car_eni(
     out_ws.cell(row=1, column=nb_cols + 1, value="CAR OMAYA Relevée")
     out_ws.cell(row=1, column=nb_cols + 2, value="CAR OMAYA Déclarée")
     db = get_pg_connection("adv")
+    col_part = _col_letter_to_index(p.col_partenaire) if p.col_partenaire else 0
     nb_t = 0; nb_e = 0
     for i in range(2, (in_ws.max_row or 0) + 1):
         num_ctt = _cell(in_ws, i, col_num).strip()
         if not num_ctt:
             continue
         nb_t += 1
+        # cf. WinDev L44 : si CelPart <> 'ENI' alors on skip.
+        partenaire = (_cell(in_ws, i, col_part).strip().lower()
+                      if p.mode_partenaire == "colonne" and col_part
+                      else p.partenaire.lower())
+        if partenaire != "eni":
+            continue
         try:
             r = db.query_one(
                 """SELECT gaz_car_relevee, gaz_car_declaree
@@ -400,10 +449,12 @@ def add_car_eni(
         except Exception:
             r = None
         if r:
+            # cf. audit : ecrire la valeur brute (peut contenir decimales)
+            # au lieu de _int() qui tronque.
             out_ws.cell(row=i, column=nb_cols + 1,
-                        value=_int(r.get("gaz_car_relevee")))
+                        value=r.get("gaz_car_relevee"))
             out_ws.cell(row=i, column=nb_cols + 2,
-                        value=_int(r.get("gaz_car_declaree")))
+                        value=r.get("gaz_car_declaree"))
             nb_e += 1
     in_wb.close()
     b64, name = _save_workbook_b64(out_wb, "CAR_ENI")
@@ -424,6 +475,7 @@ def add_infos_run_rem_sfr(
     except Exception as e:
         return AjoutColonneResult(ok=False, message=f"Lecture XLSX : {e}")
     col_num = _col_letter_to_index(p.col_num_contrat)
+    col_part = _col_letter_to_index(p.col_partenaire) if p.col_partenaire else 0
     out_ws.cell(row=1, column=nb_cols + 1, value="Va RUN")
     out_ws.cell(row=1, column=nb_cols + 2, value="Mois P Va RUN")
     out_ws.cell(row=1, column=nb_cols + 3, value="Ra RUN")
@@ -435,6 +487,12 @@ def add_infos_run_rem_sfr(
         if not num_ctt:
             continue
         nb_t += 1
+        # cf. WinDev : Run + REM SFR uniquement pour partenaire SFR.
+        partenaire = (_cell(in_ws, i, col_part).strip().lower()
+                      if p.mode_partenaire == "colonne" and col_part
+                      else p.partenaire.lower())
+        if partenaire != "sfr":
+            continue
         try:
             rows = db.query(
                 """SELECT validation, va_mois_p, raccordement, ra_mois_p
