@@ -123,15 +123,16 @@ export default function SuiviDistribPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-[#8B7355] border-b border-[#E5E0D5]">
-                    <SortableTh sk="raison_sociale" tsf={tsf}>
-                      Raison Sociale
-                    </SortableTh>
-                    <SortableTh sk="siret" tsf={tsf}>SIRET</SortableTh>
-                    <SortableTh sk="date_creation" tsf={tsf}>
-                      Date Création
-                    </SortableTh>
-                    <SortableTh sk="num_orias" tsf={tsf}>Num Orias</SortableTh>
-                    <SortableTh sk="nom_gerant" tsf={tsf}>Nom Gérant</SortableTh>
+                    <SortableTh label="Raison Sociale" sortKey="raison_sociale"
+                      sort={tsf.sort} onSort={tsf.toggleSort} />
+                    <SortableTh label="SIRET" sortKey="siret"
+                      sort={tsf.sort} onSort={tsf.toggleSort} />
+                    <SortableTh label="Date Création" sortKey="date_creation"
+                      sort={tsf.sort} onSort={tsf.toggleSort} />
+                    <SortableTh label="Num Orias" sortKey="num_orias"
+                      sort={tsf.sort} onSort={tsf.toggleSort} />
+                    <SortableTh label="Nom Gérant" sortKey="nom_gerant"
+                      sort={tsf.sort} onSort={tsf.toggleSort} />
                   </tr>
                 </thead>
                 <tbody>

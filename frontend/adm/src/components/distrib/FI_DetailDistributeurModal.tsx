@@ -16,8 +16,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  X, Loader2, FileText, AlertCircle, Ticket, Eye, Plus, Trash2,
-  Download, RefreshCw, Upload,
+  X, Loader2, Ticket, Eye, Plus, RefreshCw,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -75,8 +74,6 @@ const shortDate = (iso: string): string =>
   !iso || iso.length < 10
     ? ''
     : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
-
-const todayIso = (): string => new Date().toISOString().slice(0, 10)
 
 export default function FI_DetailDistributeurModal({
   idSte,
@@ -213,9 +210,10 @@ export default function FI_DetailDistributeurModal({
       showToast('Pas de gérant associé', 'error')
       return
     }
-    const ok = await showConfirm(
-      'Vous êtes sur le point de créer un ticket. Voulez-vous continuer ?',
-    )
+    const ok = await showConfirm({
+      title: 'Créer un ticket',
+      message: 'Vous êtes sur le point de créer un ticket. Voulez-vous continuer ?',
+    })
     if (!ok) return
     setAction(`reclam-${doc.id_doc_distrib}`)
     try {
