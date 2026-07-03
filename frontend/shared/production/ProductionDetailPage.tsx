@@ -2202,15 +2202,11 @@ function DashboardENI({ d }: { d: any }) {
       </DashboardSection>
 
       <DashboardSection title="Options (objectif 90 %)">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Kpi label="Démat" value={n('tx_demat')} suffix="%" tint="dual"
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <Kpi label="Mail" value={n('tx_demat')} suffix="%" tint="dual"
             sub={`${n('nb_demat')}`} small />
-          <Kpi label="Maintenance" value={n('tx_maintenance')} suffix="%" tint="dual"
+          <Kpi label="Home Serve" value={n('tx_maintenance')} suffix="%" tint="dual"
             sub={`${n('nb_maintenance')}`} small />
-          <Kpi label="Énergie Verte Gaz" value={n('tx_energie_verte')} suffix="%" tint="dual"
-            sub={`${n('nb_energie_verte')}`} small />
-          <Kpi label="Reforestation" value={n('tx_reforestation')} suffix="%" tint="dual"
-            sub={`${n('nb_reforestation')}`} small />
           <Kpi label="Protection" value={n('tx_protection')} suffix="%" tint="dual"
             sub={`${n('nb_protection')}`} small />
         </div>
