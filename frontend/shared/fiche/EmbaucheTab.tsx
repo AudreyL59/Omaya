@@ -212,6 +212,32 @@ export default function EmbaucheTab({
   const [sortieLoading, setSortieLoading] = useState<number | null>(null)
   const [emailOpen, setEmailOpen] = useState(false)
   const [loadingFPE, setLoadingFPE] = useState(false)
+  // cf. WinDev groupes GrBTN_Sortie / GrCV : droit Sa_FicheModif + user
+  // courant (visibilite GrCV = admin id_salarie === 6).
+  const [currentUser, setCurrentUser] = useState<
+    { id_salarie: number; droits: string[] } | null
+  >(null)
+
+  // cf. WinDev : chargement des infos user courant (id_salarie + droits)
+  // pour appliquer GrBTN_Sortie (droit Sa_FicheModif) et GrCV (admin id=6).
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/auth/me`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u) => {
+        if (cancelled || !u) return
+        setCurrentUser({
+          id_salarie: Number(u.id_salarie || 0),
+          droits: Array.isArray(u.droits) ? u.droits : [],
+        })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -621,6 +647,7 @@ export default function EmbaucheTab({
           getToken={getToken}
           edit={edit}
           set={set}
+          isAdminCv={currentUser?.id_salarie === 6}
           onClose={() => setOverlay(null)}
         />
       )}
@@ -640,53 +667,59 @@ export default function EmbaucheTab({
         />
       )}
 
-      {/* Boutons sortie (toujours visibles, cf. GrBTN_Sortie WinDev qui depend
-          seulement de VerifDroit("Sa_FicheModif")). Placeholders en attendant
-          la phase B (popup confirm + mails + tickets + droits OMAYA). */}
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-6">
-        <SortieButton
-          label="Annul DUE"
-          bgColor="#D97706"
-          onClick={() => handleSortie(1, 'Annulation DUE')}
-          disabled={sortieLoading !== null}
-        />
-        <SortieButton
-          label="FPE entreprise"
-          bgColor="#C2410C"
-          onClick={() => handleSortie(3, 'FPE entreprise')}
-          disabled={sortieLoading !== null}
-        />
-        <SortieButton
-          label="Dém / FPE Salarié"
-          bgColor="#DC2626"
-          onClick={() => {
-            // Cf. WinDev : si Fin_Periode_Essai >= aujourd'hui -> FPE salarie (2),
-            // sinon -> Demission (4).
-            const today = new Date().toISOString().slice(0, 10)
-            const type = edit.date_fin_per_essai && edit.date_fin_per_essai >= today ? 2 : 4
-            handleSortie(type, type === 2 ? 'FPE salarié' : 'Démission')
-          }}
-          disabled={sortieLoading !== null}
-        />
-        <SortieButton
-          label="Dém présumée"
-          bgColor="#475569"
-          onClick={() => handleSortie(10, 'Démission présumée')}
-          disabled={sortieLoading !== null}
-        />
-        <SortieButton
-          label="Licenciement"
-          bgColor="#475569"
-          onClick={() => handleSortie(5, 'Licenciement')}
-          disabled={sortieLoading !== null}
-        />
-        <SortieButton
-          label="Rupture conv"
-          bgColor="#C026D3"
-          onClick={() => handleSortie(6, 'Rupture conventionnelle')}
-          disabled={sortieLoading !== null}
-        />
-      </div>
+      {/* Boutons sortie - cf. WinDev GrBTN_Sortie.Visible = VerifDroit("Sa_FicheModif").
+          Cache l'ensemble du bloc si le user n'a pas le droit. */}
+      {currentUser?.droits.includes("Sa_FicheModif") && (() => {
+        // cf. WinDev testFPE : FPE entreprise (type 3) desactive si la
+        // periode d'essai est terminee (date_fin_per_essai < aujourd'hui).
+        const today = new Date().toISOString().slice(0, 10)
+        const fpeEntrepriseDisabled = sortieLoading !== null || !(
+          edit.date_fin_per_essai && edit.date_fin_per_essai >= today
+        )
+        return (
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-6">
+            <SortieButton
+              label="Annul DUE"
+              bgColor="#D97706"
+              onClick={() => handleSortie(1, 'Annulation DUE')}
+              disabled={sortieLoading !== null}
+            />
+            <SortieButton
+              label="FPE entreprise"
+              bgColor="#C2410C"
+              onClick={() => handleSortie(3, 'FPE entreprise')}
+              disabled={fpeEntrepriseDisabled}
+            />
+            <SortieButton
+              label="Dém / FPE Salarié"
+              bgColor="#DC2626"
+              onClick={() => {
+                const type = edit.date_fin_per_essai && edit.date_fin_per_essai >= today ? 2 : 4
+                handleSortie(type, type === 2 ? 'FPE salarié' : 'Démission')
+              }}
+              disabled={sortieLoading !== null}
+            />
+            <SortieButton
+              label="Dém présumée"
+              bgColor="#475569"
+              onClick={() => handleSortie(10, 'Démission présumée')}
+              disabled={sortieLoading !== null}
+            />
+            <SortieButton
+              label="Licenciement"
+              bgColor="#475569"
+              onClick={() => handleSortie(5, 'Licenciement')}
+              disabled={sortieLoading !== null}
+            />
+            <SortieButton
+              label="Rupture conv"
+              bgColor="#C026D3"
+              onClick={() => handleSortie(6, 'Rupture conventionnelle')}
+              disabled={sortieLoading !== null}
+            />
+          </div>
+        )
+      })()}
 
       {/* Blocs detail sortie : transposition WinDev AffInfoSortie() +
           GrSortie..Visible = pas EnActivite.
@@ -1474,6 +1507,7 @@ function OverlayOrigineDPAE({
   getToken,
   edit,
   set,
+  isAdminCv,
   onClose,
 }: {
   idSalarie: string
@@ -1481,6 +1515,7 @@ function OverlayOrigineDPAE({
   getToken: () => string | null
   edit: FicheEmbauche
   set: (patch: Partial<FicheEmbauche>) => void
+  isAdminCv: boolean
   onClose: () => void
 }) {
   const [pickerFor, setPickerFor] = useState<null | 'coopteur' | 'jo_coopteur'>(null)
@@ -1595,7 +1630,9 @@ function OverlayOrigineDPAE({
           </button>
         </div>
 
-        {/* Fiche CV */}
+        {/* Fiche CV - cf. WinDev GrCV.Visible = usersCial == 6 (admin uniquement).
+            Le bouton 'Fiche CV' reste visible pour tous (lecture seule),
+            mais le champ IdCV editable + bouton save sont admin-only. */}
         <div className="flex items-center gap-3">
           <button
             disabled={!edit.id_cvtheque}
@@ -1609,9 +1646,12 @@ function OverlayOrigineDPAE({
             <FileTextIcon className="w-4 h-4 shrink-0" style={{ color: COLOR_PRIMARY }} />
             Fiche CV
           </button>
+          {isAdminCv && (
           <span className="text-sm font-normal" style={{ color: COLOR_BRUN }}>
             IdCV
           </span>
+          )}
+          {isAdminCv && (
           <input
             value={edit.id_cvtheque || ''}
             onChange={(e) => set({ id_cvtheque: e.target.value })}
@@ -1619,7 +1659,10 @@ function OverlayOrigineDPAE({
             className="flex-1 px-2 py-1 rounded text-sm font-normal bg-white focus:outline-none focus:ring-1"
             style={{ border: `1px solid ${COLOR_BG_SOFT}`, color: COLOR_BRUN }}
           />
-          {/* Bouton disquette : save direct (UPDATE id_cvtheque uniquement) */}
+          )}
+          {/* Bouton disquette : save direct (UPDATE id_cvtheque uniquement).
+              cf. WinDev GrCV.Visible = admin uniquement (id_salarie === 6). */}
+          {isAdminCv && (
           <button
             onClick={handleSaveCv}
             disabled={savingCv}
@@ -1638,6 +1681,7 @@ function OverlayOrigineDPAE({
               <Save className="w-4 h-4" />
             )}
           </button>
+          )}
         </div>
       </div>
 
