@@ -337,7 +337,7 @@ def _load_salaries_info(db_rh, ids_salaries: set[int]) -> dict[int, dict]:
         rows = db_rh.query(
             f"""SELECT s.id_salarie, s.nom, s.prenom,
                 se.en_activite, se.date_anciennete, se.id_type_poste,
-                tp.lib_poste
+                se.id_salarie_trans_prod, tp.lib_poste, tp.categorie
             FROM pgt_salarie s
             INNER JOIN pgt_salarie_embauche se ON se.id_salarie = s.id_salarie
             LEFT JOIN pgt_type_poste tp ON tp.id_type_poste = se.id_type_poste
@@ -351,6 +351,15 @@ def _load_salaries_info(db_rh, ids_salaries: set[int]) -> dict[int, dict]:
                 "en_activite": bool(r.get("en_activite")),
                 "date_embauche": _iso(r.get("date_anciennete")),
                 "poste": r.get("lib_poste") or "",
+                # cf. WinDev IdSalarieTransProd : si != 0, les contrats du
+                # vendeur sont reattribues au vendeur cible pour le calcul
+                # des stats par vendeur (transfert de production).
+                "id_salarie_trans_prod": _clean_id(
+                    _to_int(r.get("id_salarie_trans_prod"))
+                ),
+                # cf. WinDev TypePoste.Categorie = 'STAFF' -> exclus du
+                # tableau vendeur (VendeurOrganigramme L132).
+                "categorie_poste": (r.get("categorie") or "").upper(),
             }
 
     # Date sortie pour les inactifs
@@ -550,7 +559,9 @@ def _load_contrat_options(
         try:
             rows = db_adv.query(
                 f"""SELECT id_contrat, opt_entretien, opt_energie_verte_gaz,
-                    opt_reforestation, opt_protection, opt_e_facture, opt_pdc
+                    opt_reforestation, opt_protection,
+                    opt_mail, opt_e_facture, opt_e_communication,
+                    opt_optin_commercial, opt_mandat, opt_pdc
                 FROM pgt_{prefix.lower()}_contrat_option
                 WHERE id_contrat IN ({ids_sql})
                   AND modif_elem <> 'suppr'"""
@@ -565,7 +576,11 @@ def _load_contrat_options(
                 "opt_energie_verte_gaz": bool(r.get("opt_energie_verte_gaz")),
                 "opt_reforestation": bool(r.get("opt_reforestation")),
                 "opt_protection": bool(r.get("opt_protection")),
+                "opt_mail": bool(r.get("opt_mail")),
                 "opt_efacture": bool(r.get("opt_e_facture")),
+                "opt_e_communication": bool(r.get("opt_e_communication")),
+                "opt_optin_commercial": bool(r.get("opt_optin_commercial")),
+                "opt_mandat": bool(r.get("opt_mandat")),
                 "opt_pdc": bool(r.get("opt_pdc")),
             }
     return out
@@ -979,6 +994,17 @@ def extract_job_to_parquet(
     ids_clients.discard(0)
 
     salaries_info = _load_salaries_info(db_rh, ids_salaries)
+    # cf. WinDev IdSalarieTransProd : les vendeurs cibles peuvent ne pas
+    # etre presents dans ids_salaries (jamais vendeur direct d'un contrat)
+    # -> deuxieme passe pour charger leurs infos aussi.
+    trans_targets = {
+        v.get("id_salarie_trans_prod") or 0
+        for v in salaries_info.values()
+    }
+    trans_targets = {t for t in trans_targets if t and t not in salaries_info}
+    if trans_targets:
+        salaries_info.update(_load_salaries_info(db_rh, trans_targets))
+
     clients_info = _load_clients_info(db_adv, ids_clients)
 
     # Lookups spécifiques par partenaire
@@ -1083,7 +1109,13 @@ def extract_job_to_parquet(
     for r in all_rows:
         prefix = r["_prefix"]
         stat_brut[prefix] = stat_brut.get(prefix, 0) + 1
-        id_salarie = _clean_id(_to_int(r.get("id_salarie")))
+        id_salarie_orig = _clean_id(_to_int(r.get("id_salarie")))
+        # cf. WinDev IdSalarieTransProd : si != 0, le contrat est attribue
+        # au vendeur cible pour tous les calculs (dashboard vendeur, agence,
+        # equipe, poste). L id d'origine reste disponible via id_salarie_orig.
+        _sinfo_check = salaries_info.get(id_salarie_orig, {})
+        trans = _sinfo_check.get("id_salarie_trans_prod", 0) or 0
+        id_salarie = trans if trans else id_salarie_orig
         date_sign_ymd = _to_ymd(r.get("date_signature"))
         # Pour mode "par mois de paiement", on considère la fin du mois de paiement
         date_c_ymd = date_sign_ymd
@@ -1237,12 +1269,18 @@ def extract_job_to_parquet(
             "id_type_etat_ope": etat_ope_type_id,
             "lib_type_etat_ope": etat_ope_type_lib,
             "lib_etat_ope": etat_ope_lib,
-            # Vendeur
+            # Vendeur (id_salarie = apres trans_prod ; id_salarie_orig
+            # garde le vendeur d'origine du contrat)
             "id_salarie": str(id_salarie),
+            "id_salarie_orig": str(id_salarie_orig),
             "vendeur_nom": sinfo.get("nom", ""),
             "vendeur_prenom": sinfo.get("prenom", ""),
             "agence": affect.get("agence", ""),
             "equipe": affect.get("equipe", ""),
+            # cf. WinDev VendeurOrganigramme L132 : TypePoste.Categorie
+            # = 'STAFF' -> exclu du tableau vendeur (mais garde dans le
+            # scope global). Utilise dans _vrow pour filtrer.
+            "categorie_poste": sinfo.get("categorie_poste", ""),
             "poste": sinfo.get("poste", ""),
             "en_activite": sinfo.get("en_activite", True),
             "date_embauche": sinfo.get("date_embauche", ""),
@@ -1305,11 +1343,27 @@ def extract_job_to_parquet(
             "gaz_actif": bool(r.get("gaz_actif")) if prefix == "ENI" else False,
             "elec_actif": bool(r.get("elec_actif")) if prefix == "ENI" else False,
             # ENI/OEN options (cf table _contrat_Option)
-            "opt_demat": bool(opts.get("opt_efacture", False)),  # OPT Démat ≈ OPT_eFacture (à confirmer)
+            # cf. WinDev AfficherOptionEnergie : Demat depend de la date sign
+            #   - Si DateSignature >= 20260501 : opt_mail seul
+            #   - Sinon (avant) : opt_mail AND opt_e_facture AND
+            #     opt_e_communication AND opt_optin_commercial
+            "opt_demat": (
+                bool(opts.get("opt_mail", False))
+                if _iso(r.get("date_signature")) >= "2026-05-01"
+                else (
+                    bool(opts.get("opt_mail", False))
+                    and bool(opts.get("opt_efacture", False))
+                    and bool(opts.get("opt_e_communication", False))
+                    and bool(opts.get("opt_optin_commercial", False))
+                )
+            ),
             "opt_maintenance": bool(opts.get("opt_entretien", False)),
             "opt_energie_verte_gaz": bool(opts.get("opt_energie_verte_gaz", False)),
             "opt_reforestation": bool(opts.get("opt_reforestation", False)),
             "opt_protection": bool(opts.get("opt_protection", False)),
+            # OPT Mandat SEPA (WinDev nbEni_Mandat). Utilise pour le KPI
+            # 'Mandat SEPA' du dashboard vendeur ENI (icone Carte).
+            "opt_mandat": bool(opts.get("opt_mandat", False)),
             # STR/VAL
             "opt_num": r.get("opt_num") or "" if prefix in ("STR", "VAL") else "",
             # Compteurs
@@ -1610,6 +1664,9 @@ def _compute_dashboard_sfr(
         """Retourne la ligne vendeur ou None si inactif (indF = 0 WinDev)."""
         id_s = r.get("id_salarie") or "0"
         if id_s == "0":
+            return None
+        # cf. WinDev VendeurOrganigramme L132 : exclut les postes STAFF
+        if r.get("categorie_poste", "") == "STAFF":
             return None
         v = v_rows.get(id_s)
         if v is None:
@@ -1982,6 +2039,17 @@ def _compute_dashboard_sfr(
         b["ventes"] += 1
     horaires_sign = sorted(horaires.values(), key=lambda x: x["h"])
 
+    # cf. WinDev AfficheResultatSFR L129 :
+    # TxProductivite = Arrondi(((nbSFR_FibreHorsA + nbSFR_DepotGar)
+    #                          / NBSFR_JourPres), 2)
+    # NBSFR_JourPres = somme des jours de presence de tous les vendeurs
+    # dans le scope filtre. Correspond a la ligne 'Productivite' globale
+    # sous les KPIs SFR (impacte le pilotage terrain).
+    total_jour_pres = sum(int(x) for x in jp.values())
+    tx_productivite_global = round(
+        (nb_sfr_fibre_hors_a + nb_sfr_depot_gar) / total_jour_pres, 2
+    ) if total_jour_pres > 0 else 0.0
+
     return {
         # SFR global
         "note_moy": note_moy,
@@ -1989,6 +2057,9 @@ def _compute_dashboard_sfr(
         "nb_consent": nb_consent,
         "nb_clients": nb_clients,
         "tx_consent": _pct(nb_consent, nb_clients),
+        # Productivite globale (cf. WinDev AfficheResultatSFR L129)
+        "tx_productivite": tx_productivite_global,
+        "nb_jour_pres_total": total_jour_pres,
 
         # Fibre
         "nb_fibre": nb_sfr_fibre,
@@ -2173,6 +2244,9 @@ def _compute_dashboard_oen(rows: list[dict]) -> dict:
         id_s = r.get("id_salarie") or "0"
         if id_s == "0":
             return None
+        # cf. WinDev VendeurOrganigramme L132 : exclut les postes STAFF
+        if r.get("categorie_poste", "") == "STAFF":
+            return None
         v = v_rows.get(id_s)
         if v is None:
             v = {
@@ -2337,7 +2411,11 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
     nb_elec = len(eni_elec_part)
 
     # Compteurs d'états (1 par ligne, pas de coeff)
-    nb_anomalie = sum(1 for r in eni if r.get("id_type_etat") == 3)
+    # cf. WinDev StatsENI L45 : Anomalie = IdTypeEtatContrat IN (3, 1, 9)
+    # Python : elargi de te==3 seul a te IN (3,1,9). Impact : les etats
+    # 'En attente' (1) et 'Rejet' (9) etaient sur-comptes en hors_anomalie
+    # -> denominateurs tx_valide/tx_resil errones.
+    nb_anomalie = sum(1 for r in eni if r.get("id_type_etat") in (3, 1, 9))
     nb_valide = sum(1 for r in eni if r.get("id_type_etat") in (5, 8))
     nb_resil = sum(1 for r in eni if r.get("id_type_etat") == 4)
     nb_attente = sum(1 for r in eni if r.get("id_type_etat") == 2)
@@ -2401,6 +2479,9 @@ def _compute_dashboard_eni(rows: list[dict]) -> dict:
     def _vrow(r: dict) -> dict | None:
         id_s = r.get("id_salarie") or "0"
         if id_s == "0":
+            return None
+        # cf. WinDev VendeurOrganigramme L132 : exclut les postes STAFF
+        if r.get("categorie_poste", "") == "STAFF":
             return None
         v = v_rows.get(id_s)
         if v is None:
@@ -2530,7 +2611,8 @@ def _compute_dashboard_simple(rows: list[dict], prefix: str) -> dict:
         return {}
 
     nb_ctt = len(sub)
-    nb_anomalie = sum(1 for r in sub if r.get("id_type_etat") == 3)
+    # cf. WinDev StatsSTR/StatsVAL : Anomalie = IdTypeEtatContrat IN (3,1,9)
+    nb_anomalie = sum(1 for r in sub if r.get("id_type_etat") in (3, 1, 9))
     nb_valide = sum(1 for r in sub if r.get("id_type_etat") in (5, 8))
     nb_resil = sum(1 for r in sub if r.get("id_type_etat") == 4)
     nb_attente = sum(1 for r in sub if r.get("id_type_etat") == 2)
