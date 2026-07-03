@@ -23,11 +23,24 @@ Tables PG :
   - rh.pgt_societe_doc_courtage (JOIN sur AfaireSigner=1)
 """
 
-from datetime import date, datetime
+import logging
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from app.core.database.pg import get_pg_connection
 from app.core.utils.sentinel_dates import is_sentinel, to_iso
+
+logger = logging.getLogger(__name__)
+
+
+def _new_id() -> int:
+    """ID 8 octets base sur DateHeureSys (equiv WinDev idEntierDateHeureSys)."""
+    return int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:17])
+
+
+def _now_iso() -> str:
+    """DateHeureSys() -> 'YYYY-MM-DD HH:MM:SS' pour timestamp PG."""
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 # --------------------------------------------------------------------
@@ -366,3 +379,446 @@ def list_facturations(id_ste: int) -> list[dict]:
         }
         for r in rows
     ]
+
+
+# --------------------------------------------------------------------
+# VERIF - auto-creation des Doc_Distrib manquants (cf. WinDev)
+# --------------------------------------------------------------------
+
+def _insert_doc_distrib(
+    rh, id_ste: int, id_type: int, date_prevue: str, op_id: int,
+) -> Optional[int]:
+    """INSERT dans pgt_doc_distrib. Retourne id_doc_distrib ou None."""
+    id_doc = _new_id()
+    now = _now_iso()
+    try:
+        rh.query(
+            """INSERT INTO pgt_doc_distrib
+                 (id_doc_distrib, id_ste, id_gerant,
+                  id_type_doc_distributeur, date_prevue, date_depot,
+                  nom_fichier, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, 0, ?, ?, NULL, '', ?, ?, 'new')""",
+            (id_doc, int(id_ste), int(id_type),
+             date_prevue, now, int(op_id)),
+        )
+        return id_doc
+    except Exception as e:
+        logger.error("INSERT pgt_doc_distrib KO : %s", e)
+        return None
+
+
+def verif_docs_unique(id_ste: int, op_id: int) -> dict:
+    """Cf. WinDev VerifDocUnique() : auto-creation d'un pgt_doc_distrib
+    pour chaque type_doc_distributeur (rappel_annuel=0) absent de la
+    societe. Date prevue = date_creation de la societe.
+    """
+    rh = get_pg_connection("rh")
+    boot = get_detail_bootstrap(id_ste)
+    if not boot:
+        return {"ok": False, "error": "Societe introuvable"}
+    date_crea = boot.get("date_creation") or date.today().isoformat()
+
+    # Types de docs uniques existants
+    types = rh.query(
+        """SELECT id_type_doc_distributeur
+             FROM pgt_type_doc_distributeur
+            WHERE rappel_annuel = 0""",
+    ) or []
+
+    # Types deja presents pour cette societe
+    already = rh.query(
+        """SELECT id_type_doc_distributeur
+             FROM pgt_doc_distrib
+            WHERE id_ste = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE 'suppr%')""",
+        (int(id_ste),),
+    ) or []
+    known = {int(r["id_type_doc_distributeur"]) for r in already}
+
+    created = 0
+    for t in types:
+        tid = int(t["id_type_doc_distributeur"])
+        if tid in known:
+            continue
+        if _insert_doc_distrib(rh, id_ste, tid, date_crea, op_id):
+            created += 1
+    return {"ok": True, "nb_created": created}
+
+
+def verif_docs_annuel(id_ste: int, annee: int, op_id: int) -> dict:
+    """Cf. WinDev VerifDocAnnuel() : pour chaque type_doc_distributeur
+    (rappel_annuel > 0) absent pour l'annee donnee, cree N entrees
+    (N = rappel_annuel) espacees de 12/N mois a partir du 2 janvier.
+    """
+    rh = get_pg_connection("rh")
+    types = rh.query(
+        """SELECT id_type_doc_distributeur, rappel_annuel
+             FROM pgt_type_doc_distributeur
+            WHERE rappel_annuel > 0""",
+    ) or []
+
+    # Existants pour cette societe/annee
+    annee_str = f"{int(annee):04d}"
+    already = rh.query(
+        """SELECT id_type_doc_distributeur
+             FROM pgt_doc_distrib
+            WHERE id_ste = ?
+              AND LEFT(CAST(date_prevue AS TEXT), 4) = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE 'suppr%')""",
+        (int(id_ste), annee_str),
+    ) or []
+    known = {int(r["id_type_doc_distributeur"]) for r in already}
+
+    created = 0
+    for t in types:
+        tid = int(t["id_type_doc_distributeur"])
+        if tid in known:
+            continue
+        rappel = int(t.get("rappel_annuel") or 1)
+        # Date de base : 2 janvier de l'annee (cf. WinDev jour=2)
+        base = date(int(annee), 1, 2)
+        if _insert_doc_distrib(rh, id_ste, tid, base.isoformat(), op_id):
+            created += 1
+        # Occurrences supplementaires (rappel_annuel > 1) : jour=1 des mois
+        # espaces de 12/rappel
+        if rappel > 1:
+            diff = 12 // rappel
+            cur = base
+            for i in range(2, rappel + 1):
+                # Ajoute diff mois
+                m = cur.month + diff
+                y = cur.year + (m - 1) // 12
+                m = ((m - 1) % 12) + 1
+                cur = date(y, m, 1)
+                _insert_doc_distrib(rh, id_ste, tid, cur.isoformat(), op_id)
+                created += 1
+    return {"ok": True, "nb_created": created}
+
+
+def add_doc_unique(id_ste: int, id_type: int, op_id: int) -> dict:
+    """Cf. WinDev Btn '+' a cote de la combo : ajout manuel d'un doc
+    unique avec DatePrevue = date_creation de la societe.
+    """
+    boot = get_detail_bootstrap(id_ste)
+    if not boot:
+        return {"ok": False, "error": "Societe introuvable"}
+    date_crea = boot.get("date_creation") or date.today().isoformat()
+    id_doc = _insert_doc_distrib(
+        get_pg_connection("rh"), id_ste, id_type, date_crea, op_id,
+    )
+    if not id_doc:
+        return {"ok": False, "error": "INSERT KO"}
+    return {"ok": True, "id_doc_distrib": str(id_doc)}
+
+
+def list_types_doc_unique() -> list[dict]:
+    """Combo reqDocUnique : SELECT * FROM TypeDocDistributeur
+    WHERE rappel_annuel = 0.
+    """
+    rh = get_pg_connection("rh")
+    rows = rh.query(
+        """SELECT id_type_doc_distributeur, lib_doc, obligatoire_dem,
+                  afaire_signer
+             FROM pgt_type_doc_distributeur
+            WHERE rappel_annuel = 0
+            ORDER BY lib_doc ASC NULLS LAST""",
+    ) or []
+    return [
+        {
+            "id_type_doc_distributeur": _clean_id(r.get("id_type_doc_distributeur")),
+            "lib_doc": (r.get("lib_doc") or "").strip(),
+            "obligatoire_dem": bool(r.get("obligatoire_dem")),
+            "afaire_signer": bool(r.get("afaire_signer")),
+        }
+        for r in rows
+    ]
+
+
+# --------------------------------------------------------------------
+# TICKETS DE RECLAMATION (Btn Ticket de reclam - HAUT/BAS)
+# --------------------------------------------------------------------
+
+def create_ticket_reclam(
+    id_doc_distrib: int, id_gerant: int, op_id: int,
+) -> dict:
+    """Cf. WinDev Btn Ticket de reclam : cree un ticket type 31 (TK_Liste
+    + TK_DemandeDocDistrib). SMS gerant est declenche a part par le
+    frontend (via l'endpoint SMS existant) - le service reste synchrone.
+
+    Retour : {ok, id_tk_liste, lib_doc, id_gerant, gsm_gerant}
+    """
+    rh = get_pg_connection("rh")
+    tk_bo = get_pg_connection("ticket_bo")
+    tk = get_pg_connection("ticket")
+
+    # Infos doc pour le SMS + le retour
+    d = rh.query_one(
+        """SELECT d.id_ste, d.id_type_doc_distributeur, t.lib_doc,
+                  t.afaire_signer, t.id_doc_courtage
+             FROM pgt_doc_distrib d
+             JOIN pgt_type_doc_distributeur t
+                  ON t.id_type_doc_distributeur = d.id_type_doc_distributeur
+            WHERE d.id_doc_distrib = ?""",
+        (int(id_doc_distrib),),
+    )
+    if not d:
+        return {"ok": False, "error": "Doc introuvable"}
+    lib_doc = (d.get("lib_doc") or "").strip()
+    if bool(d.get("afaire_signer")):
+        # cf. WinDev : si AfaireSign=1 -> ouverture Fen_SocieteDocCourtage
+        # (workflow special deja implemente par le module doc_courtage).
+        # On ne cree pas de ticket ici, on retourne l'indication au front.
+        return {
+            "ok": True,
+            "afaire_signer": True,
+            "lib_doc": lib_doc,
+            "message": "Redirection Fen_SocieteDocCourtage requise",
+        }
+
+    id_tk = _new_id()
+    now = _now_iso()
+    try:
+        tk_bo.query(
+            """INSERT INTO pgt_tk_demande_doc_distrib
+                 (id_tk_demande_doc_distrib, id_tk_liste, id_doc_distrib,
+                  lien_fichier, motif_refus, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, '', '', ?, ?, 'new')""",
+            (_new_id(), id_tk, int(id_doc_distrib), now, int(op_id)),
+        )
+    except Exception as e:
+        logger.error("INSERT pgt_tk_demande_doc_distrib KO : %s", e)
+        return {"ok": False, "error": f"INSERT demande : {e}"}
+
+    try:
+        tk.query(
+            """INSERT INTO pgt_tk_liste
+                 (id_tk_liste, date_crea, op_crea, op_dest,
+                  op_traitement_staff, ordre_traitement_staff,
+                  service, id_tk_type_demande, id_tk_statut,
+                  cloturee, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, 0, '', 'JU', 31, 1,
+                       FALSE, ?, ?, 'new')""",
+            (id_tk, now, int(op_id), int(id_gerant), now, int(op_id)),
+        )
+    except Exception as e:
+        logger.error("INSERT pgt_tk_liste KO : %s", e)
+        return {"ok": False, "error": f"INSERT ticket : {e}"}
+
+    # GSM du gerant pour le SMS cote frontend
+    gsm = ""
+    try:
+        c = rh.query_one(
+            """SELECT tel_mob FROM pgt_salarie_coordonnees
+                WHERE id_salarie = ?""",
+            (int(id_gerant),),
+        )
+        gsm = ((c.get("tel_mob") if c else "") or "").strip()
+        for ch in (".", " ", "/", "-"):
+            gsm = gsm.replace(ch, "")
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "id_tk_liste": str(id_tk),
+        "lib_doc": lib_doc,
+        "id_gerant": str(id_gerant),
+        "gsm_gerant": gsm,
+    }
+
+
+# --------------------------------------------------------------------
+# TICKET FACTURATION (Btn Ticket Facturation)
+# --------------------------------------------------------------------
+
+def _sanitize_filename(s: str) -> str:
+    """cf. WinDev ChaineFormate + ccSansEspaceInterieur + ccSansAccent +
+    ccSansEspace + ccSansPonctuationNiEspace.
+    """
+    import unicodedata
+    if not s:
+        return "STE"
+    nfkd = unicodedata.normalize("NFKD", s)
+    ascii_s = "".join(c for c in nfkd if not unicodedata.combining(c))
+    # Retire tout ce qui n'est pas alphanum
+    return "".join(c for c in ascii_s if c.isalnum()) or "STE"
+
+
+def create_ticket_facturation(
+    id_ste: int, id_gerant: int, filename: str, content: bytes,
+    montant: float, op_id: int,
+) -> dict:
+    """Cf. WinDev Btn Ticket Facturation :
+    1. Upload PDF sur FTP gestionRH/<id_gerant>/Factures/
+    2. Cree TK_Liste (type 28) + TK_DemandeFacturationDistrib
+    3. Mail juristes (envoie a envoi_mail_rh)
+
+    Retour : {ok, id_tk_liste, fic}
+    """
+    from app.core.config import FTP_GESTION_RH_PATH
+    from app.shared.tickets.forms.cttw_pdf import ftp_upload
+    from app.shared.notifications.mail import envoi_mail_rh
+
+    # Recupere lib_ste pour le nommage + le mail
+    rh = get_pg_connection("rh")
+    ste = rh.query_one(
+        "SELECT raison_sociale FROM pgt_societe WHERE id_ste = ?",
+        (int(id_ste),),
+    )
+    lib_ste = (ste.get("raison_sociale") if ste else "") or "STE"
+
+    # Nom du fichier (cf WinDev DateHeureSys+"_"+ChaineFormate(RS,...)+"_Facture"+ext)
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
+    fic = f"{ts}_{_sanitize_filename(lib_ste)}_Facture.{ext}"
+
+    # Upload FTP
+    try:
+        ftp_upload(
+            f"{FTP_GESTION_RH_PATH.rstrip('/')}/{id_gerant}/Factures",
+            fic, content,
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"Upload FTP : {e}"}
+
+    id_tk = _new_id()
+    now = _now_iso()
+    tk_bo = get_pg_connection("ticket_bo")
+    tk = get_pg_connection("ticket")
+
+    try:
+        tk_bo.query(
+            """INSERT INTO pgt_tk_demande_facturation_distrib
+                 (id_tk_demande_facturation_distrib, id_tk_liste,
+                  fic_facture, fic_preuve_virement, id_gerant, id_ste,
+                  montant, date_virement, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, '', ?, ?, ?, NULL, ?, ?, 'new')""",
+            (_new_id(), id_tk, fic, int(id_gerant), int(id_ste),
+             float(montant), now, int(op_id)),
+        )
+    except Exception as e:
+        logger.error("INSERT pgt_tk_demande_facturation_distrib KO : %s", e)
+        return {"ok": False, "error": f"INSERT demande : {e}"}
+
+    try:
+        tk.query(
+            """INSERT INTO pgt_tk_liste
+                 (id_tk_liste, date_crea, op_crea, op_dest,
+                  op_traitement_staff, ordre_traitement_staff,
+                  service, id_tk_type_demande, id_tk_statut,
+                  cloturee, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, 0, '', 'JU', 28, 1,
+                       FALSE, ?, ?, 'new')""",
+            (id_tk, now, int(op_id), int(op_id), now, int(op_id)),
+        )
+    except Exception as e:
+        logger.error("INSERT pgt_tk_liste (fact) KO : %s", e)
+        return {"ok": False, "error": f"INSERT ticket : {e}"}
+
+    # Notification mail juristes (cf. WinDev)
+    try:
+        from app.core.config import MAIL_JURISTE_1, MAIL_RESP_JURISTE
+        prenom = ""
+        i = rh.query_one(
+            "SELECT prenom FROM pgt_salarie WHERE id_salarie = ?",
+            (int(op_id),),
+        )
+        if i:
+            prenom = _cap_prenom((i.get("prenom") or "").strip())
+        dest = [m for m in (MAIL_RESP_JURISTE, MAIL_JURISTE_1) if m]
+        html = (
+            "<font face='arial' style='font-size:10pt;'><p> Bonjour,</p>"
+            f"<p>Un ticket de facturation vient d'être créé par {prenom} "
+            f"pour la société {lib_ste} pour un montant de {montant:.2f}€.</p>"
+            "<br/>---Cdt.<br/><p><i>PS : Ceci est un mail automatique, "
+            "ne pas répondre. Merci.</i></p></font>"
+        )
+        if dest:
+            envoi_mail_rh(f"Ticket Facture DISTRIB - {lib_ste}", html, dest)
+    except Exception:
+        logger.exception("Notification mail juristes")
+
+    return {"ok": True, "id_tk_liste": str(id_tk), "fic_facture": fic}
+
+
+def recharger_facture(
+    id_tk_liste: int, filename: str, content: bytes, op_id: int,
+) -> dict:
+    """Cf. WinDev Btn Recharger la facture sur le Ticket :
+    remplace le PDF sur FTP + UPDATE fic_facture + mail juristes.
+    """
+    from app.core.config import FTP_GESTION_RH_PATH
+    from app.shared.tickets.forms.cttw_pdf import ftp_upload
+    from app.shared.notifications.mail import envoi_mail_rh
+
+    tk_bo = get_pg_connection("ticket_bo")
+    d = tk_bo.query_one(
+        """SELECT id_gerant, id_ste, montant
+             FROM pgt_tk_demande_facturation_distrib
+            WHERE id_tk_liste = ?""",
+        (int(id_tk_liste),),
+    )
+    if not d:
+        return {"ok": False, "error": "Ticket introuvable"}
+    id_gerant = int(d.get("id_gerant") or 0)
+    id_ste = int(d.get("id_ste") or 0)
+    montant = float(d.get("montant") or 0)
+
+    rh = get_pg_connection("rh")
+    ste = rh.query_one(
+        "SELECT raison_sociale FROM pgt_societe WHERE id_ste = ?",
+        (id_ste,),
+    )
+    lib_ste = (ste.get("raison_sociale") if ste else "") or "STE"
+
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
+    fic = f"{ts}_{_sanitize_filename(lib_ste)}_Facture.{ext}"
+
+    try:
+        ftp_upload(
+            f"{FTP_GESTION_RH_PATH.rstrip('/')}/{id_gerant}/Factures",
+            fic, content,
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"Upload FTP : {e}"}
+
+    now = _now_iso()
+    try:
+        tk_bo.query(
+            """UPDATE pgt_tk_demande_facturation_distrib
+                  SET fic_facture = ?, modif_date = ?, modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (fic, now, int(op_id), int(id_tk_liste)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"UPDATE demande : {e}"}
+
+    # Notification mail juristes
+    try:
+        from app.core.config import MAIL_JURISTE_1, MAIL_RESP_JURISTE
+        prenom = ""
+        i = rh.query_one(
+            "SELECT prenom FROM pgt_salarie WHERE id_salarie = ?",
+            (int(op_id),),
+        )
+        if i:
+            prenom = _cap_prenom((i.get("prenom") or "").strip())
+        dest = [m for m in (MAIL_RESP_JURISTE, MAIL_JURISTE_1) if m]
+        html = (
+            "<font face='arial' style='font-size:10pt;'><p> Bonjour,</p>"
+            f"<p>Une facture pour la société {lib_ste} a été modifiée par "
+            f"{prenom} sur le ticket de demande facturation pour un montant "
+            f"de {montant:.2f}€.</p><br/>---Cdt.<br/>"
+            "<p><i>PS : Ceci est un mail automatique, ne pas répondre. "
+            "Merci.</i></p></font>"
+        )
+        if dest:
+            envoi_mail_rh(
+                f"Demande de facturation Distrib - {lib_ste}", html, dest,
+            )
+    except Exception:
+        logger.exception("Notification mail juristes (recharge)")
+
+    return {"ok": True, "fic_facture": fic}

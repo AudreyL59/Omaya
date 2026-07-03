@@ -13,7 +13,10 @@ Droits : SuiviADMDistri (base) + SuiviADMDistDoc (docs).
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import (
+    APIRouter, Depends, File, Form, HTTPException, Query, UploadFile,
+)
+from pydantic import BaseModel
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -86,3 +89,115 @@ def get_facturations(
     """Liste des tickets de facturation pour la societe."""
     _require_droit(user, "SuiviADMDistri")
     return {"items": svc.list_facturations(id_ste)}
+
+
+@router.get("/refs/types-doc-unique")
+def get_types_doc_unique(
+    user: UserToken = Depends(get_current_user),
+):
+    """Combo reqDocUnique : types de docs avec rappel_annuel = 0."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return {"items": svc.list_types_doc_unique()}
+
+
+# --------------------------------------------------------------------
+# WRITE
+# --------------------------------------------------------------------
+
+class AddDocPayload(BaseModel):
+    id_type_doc_distributeur: int
+
+
+class TicketReclamPayload(BaseModel):
+    id_doc_distrib: int
+    id_gerant: int
+
+
+@router.post("/{id_ste}/docs-unique/verif")
+def post_verif_docs_unique(
+    id_ste: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """VerifDocUnique() : auto-cree les docs uniques manquants."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.verif_docs_unique(id_ste, user.id_salarie)
+
+
+@router.post("/{id_ste}/docs-annuel/verif")
+def post_verif_docs_annuel(
+    id_ste: int,
+    annee: int = Query(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """VerifDocAnnuel() : auto-cree les docs annuels manquants pour
+    l'annee donnee (avec ventilation N occurrences)."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.verif_docs_annuel(id_ste, annee, user.id_salarie)
+
+
+@router.post("/{id_ste}/docs-unique")
+def post_add_doc_unique(
+    id_ste: int,
+    payload: AddDocPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn '+' a cote de la combo : ajout manuel d'un doc unique."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.add_doc_unique(
+        id_ste, payload.id_type_doc_distributeur, user.id_salarie,
+    )
+
+
+@router.post("/{id_ste}/tickets/reclam")
+def post_ticket_reclam(
+    id_ste: int,
+    payload: TicketReclamPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cree un ticket type 31 (reclamation doc). Retourne l'info gsm
+    du gerant pour que le frontend puisse declencher le SMS.
+    """
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.create_ticket_reclam(
+        payload.id_doc_distrib, payload.id_gerant, user.id_salarie,
+    )
+
+
+@router.post("/{id_ste}/tickets/facturation")
+async def post_ticket_facturation(
+    id_ste: int,
+    id_gerant: int = Form(...),
+    montant: float = Form(...),
+    facture: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Ticket Facturation : upload PDF + creation ticket type 28
+    + mail juristes.
+    """
+    _require_droit(user, "SuiviADMDistri")
+    content = await facture.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide")
+    return svc.create_ticket_facturation(
+        id_ste, id_gerant, facture.filename or "facture.pdf",
+        content, montant, user.id_salarie,
+    )
+
+
+@router.post("/facturation/{id_tk_liste}/recharger")
+async def post_recharger_facture(
+    id_tk_liste: int,
+    facture: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Recharger la facture : remplace le PDF + UPDATE fic_facture
+    + mail juristes.
+    """
+    _require_droit(user, "SuiviADMDistri")
+    content = await facture.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide")
+    return svc.recharger_facture(
+        id_tk_liste, facture.filename or "facture.pdf",
+        content, user.id_salarie,
+    )
