@@ -80,16 +80,11 @@ DEPARTEMENTS: dict[str, str] = {
 # Liste hardcodée des orgas "internes" utilisées comme filtres de groupement.
 # À rendre dynamique via une interface d'admin plus tard.
 GROUPEMENTS_ORGAS: list[int] = [
-    18,                         # Région Cécile
-    19,                         # Région Julien
-    64,                         # Agence CD
-    20260402170805658,          # Agence Duval Caen
-    20191203164626234,          # Agence JR
-    20210906121249525,          # Agence Le Mans
-    20260402142812484,          # Agence Brosset Tours
-    20260402165637765,          # Agence Mohammed Boutayed Poitiers
-    20180131091629815,          # OrgaPower
-    20230105145730716,          # OrgaFox
+    3,                          # FDV Interne
+    18,                         # ILLYADE
+    19,                         # ODYSSEE
+    20180131091629815,          # Distrib POWER DISTRIBUTION
+    20230105145730716,          # Distrib FOX MARKETING/SFR
 ]
 
 
