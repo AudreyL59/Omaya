@@ -33,6 +33,7 @@ from app.intranets.adm.routers.recherche_ville import router as recherche_ville_
 from app.intranets.adm.routers.societes import router as societes_router
 from app.intranets.adm.routers.distrib_courtage import router as distrib_courtage_router
 from app.intranets.adm.routers.doc_courtage import router as doc_courtage_router
+from app.intranets.adm.routers.suivi_distrib import router as suivi_distrib_router
 from app.shared.production.router import router as production_router
 from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
@@ -75,6 +76,7 @@ router.include_router(recherche_ville_router)
 router.include_router(societes_router)
 router.include_router(distrib_courtage_router)
 router.include_router(doc_courtage_router)
+router.include_router(suivi_distrib_router)
 router.include_router(production_router)
 # Module recrutement/recherche-cv shared (ADM voit tout)
 router.include_router(get_recherche_cv_router("adm"))
