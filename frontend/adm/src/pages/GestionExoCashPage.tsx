@@ -7,9 +7,10 @@
  *
  * Cf. WinDev Fen_GestionExoCash + Fen_LotFiche.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, Banknote, Loader2, Plus, Pencil, Copy, Trash2, Check, X,
+  Save, Upload, Image as ImageIcon,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -46,6 +47,20 @@ interface Lot {
   has_photo3: boolean
 }
 
+interface Famille {
+  id_exo_cash_famille_lot: string
+  lib_famille_lot: string
+  has_icone: boolean
+}
+
+interface Livret {
+  id_salarie: string
+  nom_prenom: string
+  somme_debit: number
+  somme_credit: number
+  solde_livret: number
+}
+
 type Tab = 'lots' | 'famille' | 'suivi'
 
 const money = (n: number): string =>
@@ -58,6 +73,19 @@ export default function GestionExoCashPage() {
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<string>('')
   const [ficheOpen, setFicheOpen] = useState<{ id: string | null } | null>(null)
+
+  // Famille (onglet 2)
+  const [familles, setFamilles] = useState<Famille[]>([])
+  const [selectedFam, setSelectedFam] = useState<string>('')
+  const [famEdit, setFamEdit] = useState<{
+    id: string
+    lib: string
+    dirty: boolean
+  } | null>(null)
+  const famIconeInput = useRef<HTMLInputElement>(null)
+
+  // Suivi Livrets (onglet 3)
+  const [livrets, setLivrets] = useState<Livret[]>([])
 
   const loadLots = useCallback(async () => {
     setLoading(true)
@@ -76,9 +104,147 @@ export default function GestionExoCashPage() {
     }
   }, [])
 
+  const loadFamilles = useCallback(async () => {
+    setLoading(true)
+    setSelectedFam('')
+    setFamEdit(null)
+    try {
+      const r = await fetch(`${API_BASE}/gestion-exo-cash/familles`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      setFamilles(d.items || [])
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadLivrets = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/gestion-exo-cash/suivi-livrets`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      setLivrets(d.items || [])
+    } catch (e) {
+      showToast(`Erreur : ${(e as Error).message}`, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (tab === 'lots') void loadLots()
-  }, [tab, loadLots])
+    else if (tab === 'famille') void loadFamilles()
+    else if (tab === 'suivi') void loadLivrets()
+  }, [tab, loadLots, loadFamilles, loadLivrets])
+
+  // ============ FAMILLE handlers ============
+  const selFam = familles.find((f) => f.id_exo_cash_famille_lot === selectedFam) || null
+
+  const famNew = () => {
+    setSelectedFam('')
+    setFamEdit({ id: '0', lib: '', dirty: false })
+  }
+  const famEdit_open = () => {
+    if (!selFam) return
+    setFamEdit({
+      id: selFam.id_exo_cash_famille_lot,
+      lib: selFam.lib_famille_lot,
+      dirty: false,
+    })
+  }
+  const famSave = async () => {
+    if (!famEdit || !famEdit.lib.trim()) return
+    const r = await fetch(`${API_BASE}/gestion-exo-cash/familles`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        id_exo_cash_famille_lot: Number(famEdit.id),
+        lib_famille_lot: famEdit.lib,
+      }),
+    })
+    const d = await r.json()
+    if (d.ok) {
+      showToast('Famille enregistrée', 'success')
+      setFamEdit({ id: d.id_exo_cash_famille_lot, lib: famEdit.lib, dirty: false })
+      setSelectedFam(d.id_exo_cash_famille_lot)
+      void loadFamilles()
+    } else {
+      showToast(d.error || 'Erreur', 'error')
+    }
+  }
+  const famDelete = async () => {
+    if (!selFam) return
+    const ok = await showConfirm({
+      title: 'Supprimer cette famille',
+      message: 'Vous êtes sur le point de supprimer ce type d\'opération. Voulez-vous continuer ?',
+      variant: 'danger',
+    })
+    if (!ok) return
+    const r = await fetch(
+      `${API_BASE}/gestion-exo-cash/familles/${selFam.id_exo_cash_famille_lot}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` } },
+    )
+    const d = await r.json()
+    if (d.ok) {
+      showToast('Famille supprimée', 'success')
+      void loadFamilles()
+    } else {
+      showToast(d.error || 'Erreur', 'error')
+    }
+  }
+  const famUploadIcone = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !famEdit || famEdit.id === '0') {
+      showToast('Enregistre d\'abord la famille avant de charger une icône.', 'info')
+      return
+    }
+    const fd = new FormData()
+    fd.append('fichier', file)
+    const r = await fetch(
+      `${API_BASE}/gestion-exo-cash/familles/${famEdit.id}/icone`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: fd,
+      },
+    )
+    const d = await r.json()
+    if (d.ok) {
+      showToast('Icône chargée', 'success')
+      void loadFamilles()
+    } else {
+      showToast(d.error || 'Erreur', 'error')
+    }
+  }
+
+  const tsfFam = useTableSortFilter(
+    familles as unknown as Array<Record<string, unknown>>,
+    { key: 'lib_famille_lot', dir: 'asc' },
+    (r) => String(r.lib_famille_lot || ''),
+  )
+  const visibleFam = tsfFam.rows as unknown as Famille[]
+
+  // ============ LIVRET tsf ============
+  const tsfLiv = useTableSortFilter(
+    livrets as unknown as Array<Record<string, unknown>>,
+    { key: 'solde_livret', dir: 'desc' },
+    (r) => String(r.nom_prenom || ''),
+  )
+  const visibleLiv = tsfLiv.rows as unknown as Livret[]
+  const totalDebit = visibleLiv.reduce((s, l) => s + l.somme_debit, 0)
+  const totalCredit = visibleLiv.reduce((s, l) => s + l.somme_credit, 0)
+  const totalSolde = totalCredit - totalDebit
 
   const tsf = useTableSortFilter(
     lots as unknown as Array<Record<string, unknown>>,
@@ -307,18 +473,252 @@ export default function GestionExoCashPage() {
         )}
 
         {tab === 'famille' && (
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-400 italic">
-              Onglet Famille Prod à implémenter (en attente des TXT WinDev).
-            </p>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+            <div className="bg-white rounded-lg shadow p-4">
+              {/* Actions top */}
+              <div className="flex items-center gap-2 mb-4">
+                <button
+                  onClick={famNew}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#8B7355] text-white hover:bg-[#725e46]"
+                >
+                  <Plus className="w-4 h-4" />
+                  Nouvelle famille
+                </button>
+                <button
+                  onClick={famEdit_open}
+                  disabled={!selFam}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#8B7355] text-[#8B7355] disabled:opacity-40 hover:bg-[#ECF1F2]"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Éditer
+                </button>
+                <button
+                  onClick={famDelete}
+                  disabled={!selFam}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-red-500 text-red-500 disabled:opacity-40 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Supprimer
+                </button>
+                <div className="ml-auto">
+                  <FilterInput
+                    value={tsfFam.filter}
+                    onChange={tsfFam.setFilter}
+                    placeholder="Rechercher..."
+                  />
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#8B7355]" />
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[#8B7355] border-b border-[#E5E0D5]">
+                      <th className="py-1.5 px-2 w-14 text-center">Icône</th>
+                      <SortableTh label="Libellé" sortKey="lib_famille_lot"
+                        sort={tsfFam.sort} onSort={tsfFam.toggleSort} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleFam.map((f) => {
+                      const isSel = f.id_exo_cash_famille_lot === selectedFam
+                      return (
+                        <tr
+                          key={f.id_exo_cash_famille_lot}
+                          onClick={() => setSelectedFam(f.id_exo_cash_famille_lot)}
+                          className={`cursor-pointer border-b border-[#F0EDE5] hover:bg-[#ECF1F2] ${
+                            isSel ? 'bg-[#ECF1F2] ring-1 ring-[#8B7355]' : ''
+                          }`}
+                        >
+                          <td className="py-1.5 px-2 text-center">
+                            {f.has_icone ? (
+                              <img
+                                src={`${API_BASE}/gestion-exo-cash/familles/${f.id_exo_cash_famille_lot}/icone`}
+                                alt=""
+                                className="w-8 h-8 object-cover rounded inline-block"
+                              />
+                            ) : (
+                              <ImageIcon className="w-6 h-6 text-gray-300 inline-block" />
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2">{f.lib_famille_lot}</td>
+                        </tr>
+                      )
+                    })}
+                    {visibleFam.length === 0 && (
+                      <tr>
+                        <td colSpan={2} className="py-6 text-center text-gray-400">
+                          Aucune famille.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Panneau édition à droite */}
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-sm font-semibold text-[#8B7355] mb-3">
+                {famEdit
+                  ? famEdit.id === '0'
+                    ? 'Nouvelle famille'
+                    : 'Édition famille'
+                  : 'Sélectionnez ou créez une famille'}
+              </h3>
+              {famEdit ? (
+                <div className="space-y-3">
+                  <label className="flex flex-col text-sm gap-1">
+                    <span className="text-[#8B7355] font-medium">
+                      Libellé (max 50)
+                    </span>
+                    <input
+                      value={famEdit.lib}
+                      onChange={(e) =>
+                        setFamEdit({ ...famEdit, lib: e.target.value, dirty: true })
+                      }
+                      maxLength={50}
+                      className="px-2 py-1.5 border border-[#E5E0D5] rounded"
+                      autoFocus
+                    />
+                  </label>
+                  <div className="flex justify-end">
+                    <button
+                      onClick={famSave}
+                      disabled={!famEdit.lib.trim()}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#059669] text-white disabled:opacity-40 hover:bg-[#047857]"
+                    >
+                      <Save className="w-4 h-4" />
+                      Enregistrer
+                    </button>
+                  </div>
+
+                  {/* Icône */}
+                  <div className="border-t border-[#E5E0D5] pt-3 mt-3">
+                    <p className="text-xs text-[#8B7355] font-medium mb-2">
+                      Icône
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {famEdit.id !== '0' &&
+                      familles.find((f) => f.id_exo_cash_famille_lot === famEdit.id)?.has_icone ? (
+                        <img
+                          src={`${API_BASE}/gestion-exo-cash/familles/${famEdit.id}/icone?_=${Date.now()}`}
+                          alt=""
+                          className="w-16 h-16 object-cover rounded border border-[#E5E0D5]"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 rounded border border-[#E5E0D5] bg-[#F5F5F0] flex items-center justify-center">
+                          <ImageIcon className="w-8 h-8 text-gray-300" />
+                        </div>
+                      )}
+                      <button
+                        onClick={() => famIconeInput.current?.click()}
+                        disabled={famEdit.id === '0'}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#8B7355] text-white disabled:opacity-40 hover:bg-[#725e46]"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Télécharger
+                      </button>
+                      <input
+                        ref={famIconeInput}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={famUploadIcone}
+                      />
+                    </div>
+                    {famEdit.id === '0' && (
+                      <p className="text-xs text-gray-500 italic mt-2">
+                        Enregistre d'abord pour charger une icône.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic">
+                  Utilisez les boutons ci-contre pour créer ou éditer une famille.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
         {tab === 'suivi' && (
           <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-400 italic">
-              Onglet Suivi des livrets à implémenter (SELECT AGG salarie_Livret).
-            </p>
+            <div className="flex items-center gap-2 mb-4">
+              <FilterInput
+                value={tsfLiv.filter}
+                onChange={tsfLiv.setFilter}
+                placeholder="Rechercher un salarié..."
+              />
+              <div className="ml-auto text-xs text-gray-600 tabular-nums">
+                Solde total :{' '}
+                <span
+                  className={`font-semibold ${
+                    totalSolde >= 0 ? 'text-green-700' : 'text-red-700'
+                  }`}
+                >
+                  {money(totalSolde)}
+                </span>
+              </div>
+            </div>
+            {loading ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-6 h-6 animate-spin text-[#8B7355]" />
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[#8B7355] border-b border-[#E5E0D5]">
+                    <SortableTh label="Salarié" sortKey="nom_prenom"
+                      sort={tsfLiv.sort} onSort={tsfLiv.toggleSort} />
+                    <SortableTh label="Débit" sortKey="somme_debit" align="right"
+                      sort={tsfLiv.sort} onSort={tsfLiv.toggleSort} />
+                    <SortableTh label="Crédit" sortKey="somme_credit" align="right"
+                      sort={tsfLiv.sort} onSort={tsfLiv.toggleSort} />
+                    <SortableTh label="Solde" sortKey="solde_livret" align="right"
+                      sort={tsfLiv.sort} onSort={tsfLiv.toggleSort} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleLiv.map((l) => (
+                    <tr
+                      key={l.id_salarie}
+                      className="border-b border-[#F0EDE5] hover:bg-[#ECF1F2]"
+                    >
+                      <td className="py-2 px-2">{l.nom_prenom}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        {l.somme_debit > 0 ? money(l.somme_debit) : ''}
+                      </td>
+                      <td className="py-2 px-2 text-right tabular-nums">
+                        {l.somme_credit > 0 ? money(l.somme_credit) : ''}
+                      </td>
+                      <td
+                        className={`py-2 px-2 text-right tabular-nums font-semibold ${
+                          l.solde_livret >= 0 ? 'text-green-700' : 'text-red-700'
+                        }`}
+                      >
+                        {money(l.solde_livret)}
+                      </td>
+                    </tr>
+                  ))}
+                  {visibleLiv.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-gray-400">
+                        Aucun livret.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+            <div className="mt-3 text-xs text-gray-500">
+              {visibleLiv.length} salarié{visibleLiv.length > 1 ? 's' : ''} —
+              trié par solde décroissant
+            </div>
           </div>
         )}
       </div>
