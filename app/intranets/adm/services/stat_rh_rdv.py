@@ -123,9 +123,13 @@ def calculer_stats_rdv(
 
     rows = db_rec.query(sql, tuple(params))
 
-    # Sanity : filtrer les rows avec des ids corrompus (2^64-1 = NULL HFSQL)
+    # Sanity : filtrer uniquement les rows avec des ids VRAIMENT corrompus
+    # (2^64-1 ~= 1.8e19 = NULL HFSQL exporte en bigint). Les negatifs sont
+    # de vraies sentinelles HFSQL (id_elem_source = -1 => 'pas de source')
+    # et doivent etre conserves - filtrer -1 excluait a tort des RDV
+    # legitimes (candidats sans coopteur ni annonceur).
     def _valid(n: int) -> bool:
-        return 0 <= n < 9_000_000_000_000_000_000
+        return abs(n) < 9_000_000_000_000_000_000
 
     rows = [
         r for r in rows
