@@ -77,6 +77,34 @@ const shortDate = (iso: string): string =>
     ? ''
     : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 
+// Initiales : "LOUDIEUX Audrey" -> "LA", "DOINEAU MEHDI" -> "DM"
+const getInitials = (name: string): string => {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return parts[0][0].toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+// Couleur deterministe par nom (palette OMAYA-friendly, saturee mais douce)
+const _AVATAR_COLORS = [
+  '#8B7355', // marron OMAYA
+  '#17494E', // teal
+  '#B25E43', // terracotta
+  '#4E7C59', // vert olive
+  '#7A5D82', // prune
+  '#C77D3E', // ambre
+  '#3D6B8C', // bleu ardoise
+  '#8E4162', // grenat
+]
+const colorFromName = (name: string): string => {
+  if (!name) return '#8B7355'
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  }
+  return _AVATAR_COLORS[hash % _AVATAR_COLORS.length]
+}
+
 export default function FI_DetailDistributeurModal({
   idSte,
   onClose,
@@ -981,28 +1009,41 @@ export default function FI_DetailDistributeurModal({
                   Aucun mémo pour ce gérant.
                 </p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-[#8B7355] border-b border-[#E5E0D5]">
-                      <th className="py-1 px-2 w-32">Déposé le</th>
-                      <th className="py-1 px-2 w-40">Par</th>
-                      <th className="py-1 px-2">Message</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {suiviMemos.map((m) => (
-                      <tr key={m.id} className="border-b border-[#F0EDE5]">
-                        <td className="py-2 px-2 text-xs whitespace-nowrap align-top">
-                          {shortDate(m.depose_le)}
-                        </td>
-                        <td className="py-2 px-2 text-xs align-top">{m.par}</td>
-                        <td className="py-2 px-2 text-xs whitespace-pre-wrap">
-                          {m.message}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <ul className="space-y-3">
+                  {suiviMemos.map((m) => {
+                    const initials = getInitials(m.par)
+                    const bg = colorFromName(m.par)
+                    return (
+                      <li
+                        key={m.id}
+                        className="bg-white border border-[#E5E0D5] rounded-lg p-3 shadow-sm hover:shadow transition-shadow"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold"
+                            style={{ backgroundColor: bg }}
+                            title={m.par}
+                          >
+                            {initials}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline justify-between gap-2 mb-1">
+                              <span className="text-sm font-medium text-[#4E1D17] truncate">
+                                {m.par || 'Inconnu'}
+                              </span>
+                              <span className="text-[11px] text-gray-500 shrink-0">
+                                {shortDate(m.depose_le)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-[#3F3F3F] whitespace-pre-wrap break-words leading-relaxed">
+                              {m.message}
+                            </p>
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
               )}
             </div>
 
