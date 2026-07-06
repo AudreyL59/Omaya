@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   X, Loader2, Ticket, Eye, Plus, RefreshCw,
+  Link2, Link2Off, Trash2, Download, Bell, BellOff,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -319,6 +320,153 @@ export default function FI_DetailDistributeurModal({
 
   // --- Render helpers ------------------------------------------------
 
+  // --- Handlers boutons doc (associer/desassocier/supprimer/DL/rappel) ---
+  const docAssocierInputRef = useRef<HTMLInputElement>(null)
+  const [docActionId, setDocActionId] = useState<string>('')
+
+  const associerDoc = (d: DocRow) => {
+    setDocActionId(d.id_doc_distrib)
+    docAssocierInputRef.current?.click()
+  }
+
+  const onAssocierFileSelected = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !docActionId) {
+      setDocActionId('')
+      return
+    }
+    setAction(`assoc-${docActionId}`)
+    try {
+      const fd = new FormData()
+      fd.append('fichier', file)
+      const r = await _fetch(
+        `${API_BASE}/distributeurs/docs/${docActionId}/associer-pc`,
+        { method: 'POST', body: fd },
+      )
+      const d = await r.json()
+      if (d.ok) {
+        showToast('Document associé', 'success')
+        void loadAll()
+      } else {
+        showToast(d.error || 'Erreur', 'error')
+      }
+    } finally {
+      setAction('')
+      setDocActionId('')
+    }
+  }
+
+  const desassocierDoc = async (d: DocRow) => {
+    const ok = await showConfirm({
+      title: 'Dissocier le document',
+      message: 'Vous êtes sur le point de dissocier ce document. Voulez-vous continuer ?',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setAction(`desassoc-${d.id_doc_distrib}`)
+    try {
+      const r = await _fetch(
+        `${API_BASE}/distributeurs/docs/${d.id_doc_distrib}/desassocier`,
+        { method: 'POST' },
+      )
+      const j = await r.json()
+      if (j.ok) {
+        showToast('Document dissocié', 'success')
+        void loadAll()
+      } else {
+        showToast(j.error || 'Erreur', 'error')
+      }
+    } finally {
+      setAction('')
+    }
+  }
+
+  const supprimerDoc = async (d: DocRow) => {
+    const ok = await showConfirm({
+      title: 'Supprimer cet enregistrement',
+      message:
+        'Le document ne sera pas supprimé de l\'espace salarié. Voulez-vous continuer ?',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setAction(`del-${d.id_doc_distrib}`)
+    try {
+      const r = await _fetch(
+        `${API_BASE}/distributeurs/docs/${d.id_doc_distrib}`,
+        { method: 'DELETE' },
+      )
+      const j = await r.json()
+      if (j.ok) {
+        showToast('Document supprimé', 'success')
+        void loadAll()
+      } else {
+        showToast(j.error || 'Erreur', 'error')
+      }
+    } finally {
+      setAction('')
+    }
+  }
+
+  const telechargerDoc = (d: DocRow) => {
+    if (!d.nom_fichier || d.nom_fichier === 'PAS RAPPEL') return
+    const url = `${API_BASE}/distributeurs/docs/${d.id_doc_distrib}/telecharger`
+    // Ouvre dans un nouvel onglet avec le token en param URL (le
+    // navigateur ne peut pas ajouter le header Authorization sur un
+    // window.open). Fallback : fetch + blob URL.
+    void (async () => {
+      setAction(`dl-${d.id_doc_distrib}`)
+      try {
+        const r = await _fetch(url)
+        if (!r.ok) {
+          showToast(`Téléchargement KO : ${r.status}`, 'error')
+          return
+        }
+        const blob = await r.blob()
+        const objUrl = URL.createObjectURL(blob)
+        window.open(objUrl, '_blank')
+        setTimeout(() => URL.revokeObjectURL(objUrl), 30_000)
+      } finally {
+        setAction('')
+      }
+    })()
+  }
+
+  const toggleRappelDoc = async (d: DocRow) => {
+    if (d.nom_fichier && d.nom_fichier !== 'PAS RAPPEL') {
+      showToast('Document déjà fourni : pas de bascule.', 'info')
+      return
+    }
+    const label = d.nom_fichier === 'PAS RAPPEL'
+      ? 'Réactiver le rappel'
+      : 'Désactiver le rappel'
+    const ok = await showConfirm({
+      title: label,
+      message: 'Voulez-vous continuer ?',
+    })
+    if (!ok) return
+    setAction(`rappel-${d.id_doc_distrib}`)
+    try {
+      const r = await _fetch(
+        `${API_BASE}/distributeurs/docs/${d.id_doc_distrib}/toggle-rappel`,
+        { method: 'POST' },
+      )
+      const j = await r.json()
+      if (j.ok) {
+        showToast('Rappel mis à jour', 'success')
+        void loadAll()
+      } else {
+        showToast(j.error || 'Erreur', 'error')
+      }
+    } finally {
+      setAction('')
+    }
+  }
+
+  // --- renderDocRow --------------------------------------------------
+
   const renderDocRow = (
     d: DocRow, selected: DocRow | null,
     setSelected: (d: DocRow | null) => void,
@@ -330,6 +478,8 @@ export default function FI_DetailDistributeurModal({
       : isNoRappel
         ? 'bg-[#E3E3E3] line-through'
         : ''
+    const hasFile = !!d.nom_fichier && d.nom_fichier !== 'PAS RAPPEL'
+    const busy = action.endsWith(`-${d.id_doc_distrib}`)
     return (
       <tr
         key={d.id_doc_distrib}
@@ -346,6 +496,59 @@ export default function FI_DetailDistributeurModal({
         <td className="py-2 px-2 text-xs">{shortDate(d.date_depot)}</td>
         <td className="py-2 px-2 text-center">
           {d.obligatoire_dem && <span className="text-[#059669]">✓</span>}
+        </td>
+        <td
+          className="py-1 px-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex gap-0.5 justify-end">
+            <button
+              onClick={() => associerDoc(d)}
+              disabled={busy || hasFile}
+              className="p-1 rounded hover:bg-[#DEF7EC] disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Associer un fichier"
+            >
+              <Link2 className="w-3.5 h-3.5 text-[#059669]" />
+            </button>
+            <button
+              onClick={() => desassocierDoc(d)}
+              disabled={busy || !hasFile}
+              className="p-1 rounded hover:bg-[#FDE2E2] disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Dissocier le fichier"
+            >
+              <Link2Off className="w-3.5 h-3.5 text-[#DC2626]" />
+            </button>
+            <button
+              onClick={() => supprimerDoc(d)}
+              disabled={busy}
+              className="p-1 rounded hover:bg-[#FDE2E2] disabled:opacity-30"
+              title="Supprimer l'enregistrement"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-[#8B7355]" />
+            </button>
+            <button
+              onClick={() => telechargerDoc(d)}
+              disabled={busy || !hasFile}
+              className="p-1 rounded hover:bg-[#ECF1F2] disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Télécharger le fichier"
+            >
+              <Download className="w-3.5 h-3.5 text-[#8B7355]" />
+            </button>
+            <button
+              onClick={() => toggleRappelDoc(d)}
+              disabled={busy || hasFile}
+              className="p-1 rounded hover:bg-[#ECF1F2] disabled:opacity-30 disabled:cursor-not-allowed"
+              title={
+                isNoRappel
+                  ? 'Réactiver le rappel'
+                  : 'Désactiver le rappel'
+              }
+            >
+              {isNoRappel
+                ? <BellOff className="w-3.5 h-3.5 text-[#8B7355]" />
+                : <Bell className="w-3.5 h-3.5 text-[#8B7355]" />}
+            </button>
+          </div>
         </td>
       </tr>
     )
@@ -429,6 +632,7 @@ export default function FI_DetailDistributeurModal({
                       <th className="py-1 px-2">Prévue</th>
                       <th className="py-1 px-2">Dépôt</th>
                       <th className="py-1 px-2 text-center">Obl. Dém.</th>
+                      <th className="py-1 px-2 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -437,7 +641,7 @@ export default function FI_DetailDistributeurModal({
                     )}
                     {docsUnique.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-4 text-center text-gray-400">
+                        <td colSpan={6} className="py-4 text-center text-gray-400">
                           Aucun doc unique.
                         </td>
                       </tr>
@@ -528,6 +732,7 @@ export default function FI_DetailDistributeurModal({
                       <th className="py-1 px-2">Prévue</th>
                       <th className="py-1 px-2">Dépôt</th>
                       <th className="py-1 px-2 text-center">Obl. Dém.</th>
+                      <th className="py-1 px-2 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -536,7 +741,7 @@ export default function FI_DetailDistributeurModal({
                     )}
                     {docsAnnuel.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-4 text-center text-gray-400">
+                        <td colSpan={6} className="py-4 text-center text-gray-400">
                           Aucun doc annuel pour {annee}.
                         </td>
                       </tr>
@@ -577,6 +782,12 @@ export default function FI_DetailDistributeurModal({
                   accept="application/pdf"
                   className="hidden"
                   onChange={onRechargeSelected}
+                />
+                <input
+                  ref={docAssocierInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={onAssocierFileSelected}
                 />
               </div>
               <div className="max-h-56 overflow-y-auto">
