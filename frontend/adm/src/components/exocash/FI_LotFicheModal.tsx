@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
+import { AuthImage } from '@shared/ui/AuthImage'
 
 const API_BASE = '/api/adm'
 
@@ -491,11 +492,14 @@ export default function FI_LotFicheModal({
                   >
                     <div className="aspect-square bg-[#F5F5F0] rounded flex items-center justify-center overflow-hidden mb-2">
                       {src ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <AuthImage
                           src={src}
                           alt={`Photo ${num}`}
                           className="w-full h-full object-cover"
+                          getToken={getToken}
+                          fallback={
+                            <ImageIcon className="w-10 h-10 text-gray-300" />
+                          }
                         />
                       ) : (
                         <ImageIcon className="w-10 h-10 text-gray-300" />

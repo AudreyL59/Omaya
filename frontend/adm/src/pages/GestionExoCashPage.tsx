@@ -15,6 +15,7 @@ import {
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
+import { AuthImage } from '@shared/ui/AuthImage'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import {
   useTableSortFilter, SortableTh, FilterInput,
@@ -535,10 +536,14 @@ export default function GestionExoCashPage() {
                         >
                           <td className="py-1.5 px-2 text-center">
                             {f.has_icone ? (
-                              <img
+                              <AuthImage
                                 src={`${API_BASE}/gestion-exo-cash/familles/${f.id_exo_cash_famille_lot}/icone`}
                                 alt=""
                                 className="w-8 h-8 object-cover rounded inline-block"
+                                getToken={getToken}
+                                fallback={
+                                  <ImageIcon className="w-6 h-6 text-gray-300 inline-block" />
+                                }
                               />
                             ) : (
                               <ImageIcon className="w-6 h-6 text-gray-300 inline-block" />
@@ -604,10 +609,16 @@ export default function GestionExoCashPage() {
                     <div className="flex items-center gap-3">
                       {famEdit.id !== '0' &&
                       familles.find((f) => f.id_exo_cash_famille_lot === famEdit.id)?.has_icone ? (
-                        <img
+                        <AuthImage
                           src={`${API_BASE}/gestion-exo-cash/familles/${famEdit.id}/icone?_=${Date.now()}`}
                           alt=""
                           className="w-16 h-16 object-cover rounded border border-[#E5E0D5]"
+                          getToken={getToken}
+                          fallback={
+                            <div className="w-16 h-16 rounded border border-[#E5E0D5] bg-[#F5F5F0] flex items-center justify-center">
+                              <ImageIcon className="w-8 h-8 text-gray-300" />
+                            </div>
+                          }
                         />
                       ) : (
                         <div className="w-16 h-16 rounded border border-[#E5E0D5] bg-[#F5F5F0] flex items-center justify-center">
