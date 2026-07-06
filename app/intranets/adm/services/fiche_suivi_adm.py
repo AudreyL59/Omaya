@@ -13,6 +13,7 @@ from typing import Any
 
 from app.core.database.pg import get_pg_connection
 from app.core.utils.sentinel_dates import is_sentinel
+from app.shared.tickets.service import rtf_to_text
 
 
 def _str(v: Any) -> str:
@@ -74,7 +75,9 @@ def load_suivi_adm(id_salarie: int) -> list[dict]:
             "op_crea_nom": (
                 f"{_str(r.get('op_nom'))} {_capitalize_first(_str(r.get('op_prenom')))}"
             ).strip(),
-            "description": _str(r.get("description")),
+            # cf. WinDev : description stockee en RTF (edit_rich WinDev).
+            # rtf_to_text convertit vers texte brut lisible.
+            "description": rtf_to_text(_str(r.get("description"))),
             "date_crea": _iso_dt(r.get("date_crea")),
         }
         for r in rows
