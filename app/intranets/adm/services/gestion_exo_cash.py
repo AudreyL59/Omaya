@@ -407,3 +407,149 @@ def list_familles() -> list[dict]:
         }
         for r in rows
     ]
+
+
+def save_famille(id_famille: int, lib_famille: str, op_id: int) -> dict:
+    """Cf. WinDev Btn Enregistrer Famille : INSERT si id=0, UPDATE sinon."""
+    lib_famille = (lib_famille or "").strip()[:50]
+    if not lib_famille:
+        return {"ok": False, "error": "Libelle vide"}
+    db = get_pg_connection("divers")
+    now = _now_iso()
+    if id_famille == 0:
+        id_famille = _new_id()
+        try:
+            db.query(
+                """INSERT INTO divers.pgt_exo_cash_famille_lot
+                     (id_exo_cash_famille_lot, lib_famille_lot,
+                      modif_op, modif_date, modif_elem)
+                   VALUES (?, ?, ?, ?, 'new')""",
+                (id_famille, lib_famille, int(op_id), now),
+            )
+        except Exception as e:
+            return {"ok": False, "error": f"INSERT : {e}"}
+    else:
+        try:
+            db.query(
+                """UPDATE divers.pgt_exo_cash_famille_lot
+                      SET lib_famille_lot = ?,
+                          modif_op = ?, modif_date = ?, modif_elem = 'modif'
+                    WHERE id_exo_cash_famille_lot = ?""",
+                (lib_famille, int(op_id), now, id_famille),
+            )
+        except Exception as e:
+            return {"ok": False, "error": f"UPDATE : {e}"}
+    return {"ok": True, "id_exo_cash_famille_lot": str(id_famille)}
+
+
+def delete_famille(id_famille: int, op_id: int) -> dict:
+    """Cf. WinDev Btn Suppr Famille : soft-delete."""
+    db = get_pg_connection("divers")
+    now = _now_iso()
+    try:
+        db.query(
+            """UPDATE divers.pgt_exo_cash_famille_lot
+                  SET modif_op = ?, modif_date = ?, modif_elem = 'suppr'
+                WHERE id_exo_cash_famille_lot = ?""",
+            (int(op_id), now, int(id_famille)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"DELETE : {e}"}
+    return {"ok": True}
+
+
+def upload_icone(id_famille: int, content: bytes, op_id: int) -> dict:
+    """Cf. WinDev Btn Telecharger + Enregistrer : HAttacheMemo(icone, ...)."""
+    db = get_pg_connection("divers")
+    now = _now_iso()
+    try:
+        db.query(
+            """UPDATE divers.pgt_exo_cash_famille_lot
+                  SET icone = ?,
+                      modif_op = ?, modif_date = ?, modif_elem = 'modif'
+                WHERE id_exo_cash_famille_lot = ?""",
+            (content, int(op_id), now, int(id_famille)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"UPDATE icone : {e}"}
+    return {"ok": True}
+
+
+def get_icone(id_famille: int) -> Optional[bytes]:
+    """Retourne le bytea de l'icone ou None."""
+    db = get_pg_connection("divers")
+    r = db.query_one(
+        "SELECT icone FROM divers.pgt_exo_cash_famille_lot "
+        "WHERE id_exo_cash_famille_lot = ?",
+        (int(id_famille),),
+    )
+    if not r:
+        return None
+    v = r.get("icone")
+    if v is None:
+        return None
+    if isinstance(v, memoryview):
+        return v.tobytes()
+    if isinstance(v, bytes):
+        return v
+    if isinstance(v, str):
+        try:
+            return base64.b64decode(v)
+        except Exception:
+            return None
+    return None
+
+
+# --------------------------------------------------------------------
+# Onglet 3 : Suivi des livrets (AGG salarie_Livret)
+# --------------------------------------------------------------------
+
+def list_suivi_livrets() -> list[dict]:
+    """Cf. WinDev reqSuiviLivret : SUM debit/credit par salarie actif.
+
+    Filtres :
+      - modif_elem != 'suppr'
+      - en_activite = TRUE
+      - id_ste <> 4 (a preciser : quelle societe est exclue ?)
+      - id_salarie <> 6 (utilisateur systeme exclu)
+      - id_salarie <> 0
+
+    Tri par -Solde_Livret (credit - debit) DESC.
+    """
+    db_rh = get_pg_connection("rh")
+    rows = db_rh.query(
+        """SELECT l.id_salarie,
+                  s.nom, s.prenom,
+                  COALESCE(SUM(l.montant_debit), 0) AS somme_debit,
+                  COALESCE(SUM(l.montant_credit), 0) AS somme_credit
+             FROM pgt_salarie s
+             JOIN pgt_salarie_livret l
+                  ON s.id_salarie = l.id_salarie
+             JOIN pgt_salarie_embauche e
+                  ON e.id_salarie = s.id_salarie
+            WHERE (l.modif_elem IS NULL
+                   OR l.modif_elem NOT LIKE '%suppr%')
+              AND e.en_activite = TRUE
+              AND e.id_ste <> 4
+              AND e.id_salarie <> 6
+              AND e.id_salarie <> 0
+            GROUP BY l.id_salarie, s.nom, s.prenom
+            ORDER BY (COALESCE(SUM(l.montant_credit), 0)
+                    - COALESCE(SUM(l.montant_debit), 0)) DESC""",
+    ) or []
+    return [
+        {
+            "id_salarie": _clean_id(r.get("id_salarie")),
+            "nom_prenom": (
+                f"{(r.get('nom') or '').strip()} "
+                f"{_cap_prenom((r.get('prenom') or '').strip())}"
+            ).strip(),
+            "somme_debit": float(r.get("somme_debit") or 0),
+            "somme_credit": float(r.get("somme_credit") or 0),
+            "solde_livret": (
+                float(r.get("somme_credit") or 0)
+                - float(r.get("somme_debit") or 0)
+            ),
+        }
+        for r in rows
+    ]

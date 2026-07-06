@@ -64,6 +64,79 @@ def get_familles(user: UserToken = Depends(get_current_user)):
     return {"items": svc.list_familles()}
 
 
+class FamillePayload(BaseModel):
+    id_exo_cash_famille_lot: int = 0
+    lib_famille_lot: str = ""
+
+
+@router.post("/familles")
+def post_save_famille(
+    payload: FamillePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer Famille - INSERT si id=0, UPDATE sinon."""
+    _require_droit(user, "GestExoCash")
+    return svc.save_famille(
+        payload.id_exo_cash_famille_lot,
+        payload.lib_famille_lot,
+        user.id_salarie,
+    )
+
+
+@router.delete("/familles/{id_famille}")
+def delete_famille(
+    id_famille: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Suppr Famille - soft-delete."""
+    _require_droit(user, "GestExoCash")
+    return svc.delete_famille(id_famille, user.id_salarie)
+
+
+@router.post("/familles/{id_famille}/icone")
+async def post_upload_icone(
+    id_famille: int,
+    fichier: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Telecharger + Enregistrer icone Famille."""
+    _require_droit(user, "GestExoCash")
+    content = await fichier.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide")
+    return svc.upload_icone(id_famille, content, user.id_salarie)
+
+
+@router.get("/familles/{id_famille}/icone")
+def get_icone(
+    id_famille: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Retourne le bytea de l icone."""
+    _require_droit(user, "GestExoCash")
+    content = svc.get_icone(id_famille)
+    if not content:
+        raise HTTPException(status_code=404, detail="Icone introuvable")
+    mime = "image/jpeg"
+    if content[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+    elif content[:6] in (b"GIF87a", b"GIF89a"):
+        mime = "image/gif"
+    return Response(content=content, media_type=mime,
+                    headers={"Cache-Control": "private, max-age=60"})
+
+
+# --------------------------------------------------------------------
+# Suivi des livrets (onglet 3)
+# --------------------------------------------------------------------
+
+@router.get("/suivi-livrets")
+def get_suivi_livrets(user: UserToken = Depends(get_current_user)):
+    """Table reqSuiviLivret - SUM debit/credit par salarie actif."""
+    _require_droit(user, "GestExoCash")
+    return {"items": svc.list_suivi_livrets()}
+
+
 # --------------------------------------------------------------------
 # Lots
 # --------------------------------------------------------------------
