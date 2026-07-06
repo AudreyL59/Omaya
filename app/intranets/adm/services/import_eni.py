@@ -1016,11 +1016,52 @@ def _apply_maj_run_valides(md: dict, op_id: int, simulation: bool) -> bool:
         )
         nb_pts = 0.0
         if prod:
+            # cf. WinDev importRUNValides (MAJ 2026-07-06) :
+            # la chaine nbOption depend de la date de signature.
+            # - Post-2026-05-01 : "NOTE:<notation>//" + "RIB//" (opt_mandat)
+            #   + "MAIL//" (opt_mail) + "MAINT//" (opt_entretien)
+            # - Pre-2026-05-01  : compte des 4 options historiques
+            #   (opt_mail + opt_reforestation + opt_energie_verte_elec/gaz)
+            opts = db.query_one(
+                """SELECT opt_mail, opt_entretien,
+                          opt_reforestation, opt_energie_verte_elec,
+                          opt_energie_verte_gaz
+                     FROM adv.pgt_eni_contrat_option
+                    WHERE id_contrat = ?
+                      AND (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')
+                    LIMIT 1""",
+                (id_contrat,),
+            ) or {}
+            date_sign = md.get("date_signature")
+            date_sign_iso = str(date_sign)[:10] if date_sign else ""
+            is_post_20260501 = date_sign_iso >= "2026-05-01"
+            if is_post_20260501:
+                # NB : opt_mandat n'est pas encore en base PG (colonne
+                # absente sur pgt_eni_contrat). Traite comme False tant
+                # que la migration n'est pas faite.
+                opt_mandat = bool(md.get("opt_mandat") or False)
+                parts = [f"NOTE:{md.get('notation') or 0}//"]
+                if opt_mandat:
+                    parts.append("RIB//")
+                if opts.get("opt_mail"):
+                    parts.append("MAIL//")
+                if opts.get("opt_entretien"):
+                    parts.append("MAINT//")
+                info_cplt = "".join(parts)
+            else:
+                nb_opts = (
+                    int(bool(opts.get("opt_mail")))
+                    + int(bool(opts.get("opt_reforestation")))
+                    + int(bool(opts.get("opt_energie_verte_elec")))
+                    + int(bool(opts.get("opt_energie_verte_gaz")))
+                )
+                info_cplt = str(nb_opts)
             nb_pts = _calcul_points_eni(
                 prod.get("famille") or "", prod.get("sous_fam") or "",
                 int(md.get("car_excel") or 0),
-                md.get("date_signature"),
-                "",
+                date_sign,
+                info_cplt,
                 int(md.get("puiss_excel") or 0),
             )
         db.query(
