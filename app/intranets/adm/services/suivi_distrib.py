@@ -876,3 +876,227 @@ def recharger_facture(
         logger.exception("Notification mail juristes (recharge)")
 
     return {"ok": True, "fic_facture": fic}
+
+
+# --------------------------------------------------------------------
+# 5 boutons Doc (uniques + annuels : logique identique cote WinDev)
+# --------------------------------------------------------------------
+
+def _get_doc_row(id_doc: int) -> Optional[dict]:
+    """Charge une ligne pgt_doc_distrib + lib_doc + id_ste + id_gerant.
+    Retour : None si introuvable ou soft-deleted.
+    """
+    rh = get_pg_connection("rh")
+    try:
+        r = rh.query_one(
+            """SELECT d.id_doc_distrib, d.id_ste, d.id_gerant,
+                      d.id_type_doc_distributeur, d.date_prevue, d.date_depot,
+                      d.nom_fichier, t.lib_doc, s.raison_sociale
+                 FROM pgt_doc_distrib d
+                 JOIN pgt_type_doc_distributeur t
+                      ON t.id_type_doc_distributeur = d.id_type_doc_distributeur
+                 LEFT JOIN pgt_societe s ON s.id_ste = d.id_ste
+                WHERE d.id_doc_distrib = ?
+                  AND (d.modif_elem IS NULL
+                       OR d.modif_elem NOT LIKE 'suppr%')""",
+            (int(id_doc),),
+        )
+    except Exception:
+        r = None
+    return r
+
+
+def associer_doc_from_pc(
+    id_doc: int, filename: str, content: bytes, op_id: int,
+) -> dict:
+    """Bouton 'Associer' (vert) - cas 1 : upload depuis le PC.
+
+    Cf. WinDev : upload FTP /gestionRH/{IdGerant}/Fiches_Salaires/ puis
+    UPDATE pgt_doc_distrib.nom_fichier + date_depot + id_gerant.
+    Nom du fichier : {date}_{IdSte}_{LibDoc}<ext>.
+    """
+    from app.core.config import FTP_GESTION_RH_PATH
+    from app.shared.tickets.forms.cttw_pdf import ftp_upload
+
+    d = _get_doc_row(id_doc)
+    if not d:
+        return {"ok": False, "error": "Doc introuvable"}
+
+    id_ste = int(d.get("id_ste") or 0)
+    lib_doc = (d.get("lib_doc") or "").strip()
+
+    # Recupere id_gerant depuis la societe (cf. WinDev : Id_Gerant est
+    # le id_gerant de la societe, pas celui du doc).
+    rh = get_pg_connection("rh")
+    ste = rh.query_one(
+        "SELECT id_gerant FROM pgt_societe WHERE id_ste = ?",
+        (id_ste,),
+    )
+    id_gerant = int((ste or {}).get("id_gerant") or 0)
+    if not id_gerant:
+        return {"ok": False, "error": "Pas de gerant associe a la societe"}
+
+    # Nom du fichier : cf. WinDev DateSys() + IdSte + LibDoc + extension
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "pdf"
+    ymd = date.today().isoformat()
+    fic = f"{ymd}_{id_ste}_{_sanitize_filename(lib_doc)}.{ext}"
+
+    try:
+        ftp_upload(
+            f"{FTP_GESTION_RH_PATH.rstrip('/')}/{id_gerant}/Fiches_Salaires",
+            fic, content,
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"Upload FTP : {e}"}
+
+    now = _now_iso()
+    try:
+        rh.query(
+            """UPDATE pgt_doc_distrib
+                  SET id_gerant = ?, date_depot = ?, nom_fichier = ?,
+                      modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                WHERE id_doc_distrib = ?""",
+            (id_gerant, ymd, fic, now, int(op_id), int(id_doc)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"UPDATE : {e}"}
+
+    return {"ok": True, "nom_fichier": fic}
+
+
+def associer_doc_from_gerant(
+    id_doc: int, nom_fichier: str, op_id: int,
+) -> dict:
+    """Bouton 'Associer' (vert) - cas 2 : selection depuis l'espace
+    Doc du Gerant (Fen_DocGerant). On recoit juste le nom du fichier
+    deja present sur le FTP.
+    """
+    d = _get_doc_row(id_doc)
+    if not d:
+        return {"ok": False, "error": "Doc introuvable"}
+    if not nom_fichier:
+        return {"ok": False, "error": "Nom de fichier manquant"}
+
+    id_ste = int(d.get("id_ste") or 0)
+    rh = get_pg_connection("rh")
+    ste = rh.query_one(
+        "SELECT id_gerant FROM pgt_societe WHERE id_ste = ?",
+        (id_ste,),
+    )
+    id_gerant = int((ste or {}).get("id_gerant") or 0)
+
+    now = _now_iso()
+    try:
+        rh.query(
+            """UPDATE pgt_doc_distrib
+                  SET id_gerant = ?, date_depot = ?, nom_fichier = ?,
+                      modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                WHERE id_doc_distrib = ?""",
+            (id_gerant, date.today().isoformat(), nom_fichier,
+             now, int(op_id), int(id_doc)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"UPDATE : {e}"}
+    return {"ok": True, "nom_fichier": nom_fichier}
+
+
+def desassocier_doc(id_doc: int, op_id: int) -> dict:
+    """Bouton 'Desassocier' (rouge) : vide nom_fichier + date_depot.
+    Cf. WinDev : NomFichier = '', DateDepot = ''.
+    """
+    if not _get_doc_row(id_doc):
+        return {"ok": False, "error": "Doc introuvable"}
+    now = _now_iso()
+    try:
+        get_pg_connection("rh").query(
+            """UPDATE pgt_doc_distrib
+                  SET nom_fichier = '', date_depot = NULL,
+                      modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                WHERE id_doc_distrib = ?""",
+            (now, int(op_id), int(id_doc)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"UPDATE : {e}"}
+    return {"ok": True}
+
+
+def supprimer_doc(id_doc: int, op_id: int) -> dict:
+    """Bouton 'Poubelle' : soft-delete modif_elem = 'suppr'."""
+    if not _get_doc_row(id_doc):
+        return {"ok": False, "error": "Doc introuvable"}
+    now = _now_iso()
+    try:
+        get_pg_connection("rh").query(
+            """UPDATE pgt_doc_distrib
+                  SET modif_date = ?, modif_op = ?, modif_elem = 'suppr'
+                WHERE id_doc_distrib = ?""",
+            (now, int(op_id), int(id_doc)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"UPDATE : {e}"}
+    return {"ok": True}
+
+
+def toggle_rappel_doc(id_doc: int, op_id: int) -> dict:
+    """Bouton 'Active/Deactive rappel' (cloche) : bascule le doc entre
+    - nom_fichier = 'PAS RAPPEL' (rappel desactive)
+    - nom_fichier = '' (rappel active, doc a fournir)
+
+    Cf. WinDev selon NomFichier :
+      '' -> 'PAS RAPPEL' (desactive)
+      'PAS RAPPEL' -> '' (reactive)
+      Autre (fichier deja associe) -> ne fait rien (cf. autres cas WinDev).
+    """
+    d = _get_doc_row(id_doc)
+    if not d:
+        return {"ok": False, "error": "Doc introuvable"}
+    current = (d.get("nom_fichier") or "").strip()
+    if current == "":
+        new_val = "PAS RAPPEL"
+    elif current == "PAS RAPPEL":
+        new_val = ""
+    else:
+        # Fichier deja associe -> pas de bascule (cf. WinDev 'autres cas')
+        return {"ok": True, "no_change": True}
+    now = _now_iso()
+    try:
+        get_pg_connection("rh").query(
+            """UPDATE pgt_doc_distrib
+                  SET nom_fichier = ?,
+                      modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                WHERE id_doc_distrib = ?""",
+            (new_val, now, int(op_id), int(id_doc)),
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"UPDATE : {e}"}
+    return {"ok": True, "nom_fichier": new_val}
+
+
+def download_doc(id_doc: int) -> Optional[dict]:
+    """Bouton 'Telecharger' : recupere le fichier via FTP.
+
+    Cf. WinDev URL : /gestionRH/{IdGerant}/Fiches_Salaires/{NomFichier}.
+    Retour : {'filename': ..., 'content': bytes, 'lib_doc': ...} ou None.
+    """
+    from app.core.config import FTP_GESTION_RH_PATH
+    from app.shared.tickets.forms.factdistrib import _ftp_download
+
+    d = _get_doc_row(id_doc)
+    if not d:
+        return None
+    fic = (d.get("nom_fichier") or "").strip()
+    if not fic or fic == "PAS RAPPEL":
+        return None
+    id_gerant = int(d.get("id_gerant") or 0)
+    if not id_gerant:
+        return None
+
+    path = f"{FTP_GESTION_RH_PATH.rstrip('/')}/{id_gerant}/Fiches_Salaires/{fic}"
+    content = _ftp_download(path)
+    if not content:
+        return None
+    return {
+        "filename": fic,
+        "content": content,
+        "lib_doc": (d.get("lib_doc") or "").strip(),
+    }

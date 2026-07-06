@@ -201,3 +201,97 @@ async def post_recharger_facture(
         id_tk_liste, facture.filename or "facture.pdf",
         content, user.id_salarie,
     )
+
+
+# --------------------------------------------------------------------
+# 5 boutons Doc (uniques + annuels)
+# --------------------------------------------------------------------
+
+class AssocierGerantPayload(BaseModel):
+    nom_fichier: str
+
+
+@router.post("/docs/{id_doc}/associer-pc")
+async def post_associer_doc_pc(
+    id_doc: int,
+    fichier: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Associer (vert) - cas 1 : upload depuis le PC."""
+    _require_droit(user, "SuiviADMDistDoc")
+    content = await fichier.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Fichier vide")
+    return svc.associer_doc_from_pc(
+        id_doc, fichier.filename or "doc.pdf", content, user.id_salarie,
+    )
+
+
+@router.post("/docs/{id_doc}/associer-gerant")
+def post_associer_doc_gerant(
+    id_doc: int,
+    payload: AssocierGerantPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Associer (vert) - cas 2 : choix depuis l'espace Doc du Gerant."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.associer_doc_from_gerant(
+        id_doc, payload.nom_fichier, user.id_salarie,
+    )
+
+
+@router.post("/docs/{id_doc}/desassocier")
+def post_desassocier_doc(
+    id_doc: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Desassocier (rouge) : vide nom_fichier + date_depot."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.desassocier_doc(id_doc, user.id_salarie)
+
+
+@router.delete("/docs/{id_doc}")
+def delete_doc(
+    id_doc: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Poubelle : soft-delete (modif_elem = 'suppr')."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.supprimer_doc(id_doc, user.id_salarie)
+
+
+@router.post("/docs/{id_doc}/toggle-rappel")
+def post_toggle_rappel_doc(
+    id_doc: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Active/Deactive rappel : bascule 'PAS RAPPEL' <-> ''."""
+    _require_droit(user, "SuiviADMDistDoc")
+    return svc.toggle_rappel_doc(id_doc, user.id_salarie)
+
+
+@router.get("/docs/{id_doc}/telecharger")
+def get_telecharger_doc(
+    id_doc: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Telecharger : recupere le contenu du fichier depuis FTP.
+    Retour : StreamingResponse (application/octet-stream + Content-Disposition).
+    """
+    from fastapi.responses import Response
+    _require_droit(user, "SuiviADMDistDoc")
+    d = svc.download_doc(id_doc)
+    if not d:
+        raise HTTPException(status_code=404, detail="Fichier introuvable")
+    # Determine MIME rapide
+    fname = d["filename"]
+    ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+    mime = {
+        "pdf": "application/pdf",
+        "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    }.get(ext, "application/octet-stream")
+    return Response(
+        content=d["content"],
+        media_type=mime,
+        headers={"Content-Disposition": f'inline; filename="{fname}"'},
+    )
