@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ArrowLeft, Bell, Loader2, Plus, Eye, RefreshCw, Ticket,
+  ArrowLeft, Bell, Loader2, Plus, RefreshCw, Ticket,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getToken } from '@/api'
