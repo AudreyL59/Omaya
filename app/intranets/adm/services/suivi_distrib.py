@@ -879,6 +879,138 @@ def recharger_facture(
 
 
 # --------------------------------------------------------------------
+# Fen_SuiviDistribRappel - vue transversale des docs manquants
+# --------------------------------------------------------------------
+
+def _lookup_ticket_open_for_doc(
+    id_doc_distrib: int, id_doc_courtage: int,
+    id_gerant: int, afaire_signer: bool,
+) -> tuple[int, str]:
+    """Cherche un ticket OUVERT (cloturee=False) pour ce doc.
+
+    Cf. WinDev Table_reqDocDistrib 'Affichage d'une ligne' :
+    - AfaireSigner=1 : JOIN societe_doc_courtage + tk_demande_ctt_courtage
+      filtre sur id_doc_courtage + op_dest = id_gerant
+    - Sinon : JOIN tk_demande_doc_distrib filtre sur id_doc_distrib
+
+    Retour : (id_tk_liste, date_crea_iso) ou (0, '').
+    """
+    tk_bo = get_pg_connection("ticket_bo")
+    if afaire_signer and id_doc_courtage:
+        try:
+            r = tk_bo.query_one(
+                """SELECT tl.id_tk_liste, tl.date_crea
+                     FROM ticket_bo.pgt_tk_demande_ctt_courtage tcc
+                     JOIN ticket.pgt_tk_liste tl
+                          ON tl.id_tk_liste = tcc.id_tk_liste
+                     JOIN rh.pgt_societe_doc_courtage sdc
+                          ON sdc.id_societe_doc_courtage
+                             = tcc.id_societe_doc_courtage
+                    WHERE sdc.id_doc_courtage = ?
+                      AND tl.op_dest = ?
+                      AND (tl.modif_elem IS NULL
+                           OR tl.modif_elem NOT LIKE '%suppr%')
+                      AND tl.cloturee = FALSE
+                    ORDER BY tl.date_crea DESC NULLS LAST
+                    LIMIT 1""",
+                (int(id_doc_courtage), int(id_gerant)),
+            )
+        except Exception:
+            r = None
+    else:
+        try:
+            r = tk_bo.query_one(
+                """SELECT tl.id_tk_liste, tl.date_crea
+                     FROM ticket_bo.pgt_tk_demande_doc_distrib tdd
+                     JOIN ticket.pgt_tk_liste tl
+                          ON tl.id_tk_liste = tdd.id_tk_liste
+                    WHERE tdd.id_doc_distrib = ?
+                      AND (tl.modif_elem IS NULL
+                           OR tl.modif_elem NOT LIKE '%suppr%')
+                      AND tl.cloturee = FALSE
+                    ORDER BY tl.date_crea DESC NULLS LAST
+                    LIMIT 1""",
+                (int(id_doc_distrib),),
+            )
+        except Exception:
+            r = None
+    if not r:
+        return (0, "")
+    return (
+        int(r.get("id_tk_liste") or 0),
+        _to_iso(r.get("date_crea")),
+    )
+
+
+def list_rappels_docs(jours: int = 15) -> list[dict]:
+    """Vue transversale : tous les docs distributeur non fournis
+    (nom_fichier='') dont date_prevue <= aujourd'hui + jours (defaut 15).
+
+    Cf. WinDev Fen_SuiviDistribRappel Code Init : JOIN
+    salarie + type_doc_distributeur + societe + doc_distrib,
+    WHERE nom_fichier='' AND modif_elem!='suppr' AND is_actif=TRUE
+    AND date_prevue <= DateRef (today+15).
+
+    Enrichissement par ligne : verifie si un ticket OUVERT existe deja
+    (cf. Table_reqDocDistrib 'Affichage d'une ligne').
+    """
+    date_ref = (date.today() + timedelta(days=int(jours))).isoformat()
+    rh = get_pg_connection("rh")
+    rows = rh.query(
+        """SELECT t.id_type_doc_distributeur, t.lib_doc, t.afaire_signer,
+                  t.id_doc_courtage,
+                  d.id_doc_distrib, d.date_prevue,
+                  s.id_ste, s.raison_sociale, s.id_gerant,
+                  sal.nom AS gerant_nom, sal.prenom AS gerant_prenom
+             FROM pgt_doc_distrib d
+             JOIN pgt_type_doc_distributeur t
+                  ON t.id_type_doc_distributeur = d.id_type_doc_distributeur
+             JOIN pgt_societe s ON s.id_ste = d.id_ste
+             LEFT JOIN pgt_salarie sal ON sal.id_salarie = s.id_gerant
+            WHERE d.nom_fichier = ''
+              AND (d.modif_elem IS NULL OR d.modif_elem NOT LIKE 'suppr%')
+              AND d.date_prevue <= ?::date
+              AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')
+              AND s.is_actif = TRUE
+            ORDER BY d.date_prevue ASC NULLS LAST""",
+        (date_ref,),
+    ) or []
+
+    out = []
+    for r in rows:
+        id_doc = int(r.get("id_doc_distrib") or 0)
+        id_doc_courtage = int(r.get("id_doc_courtage") or 0)
+        id_gerant = int(r.get("id_gerant") or 0)
+        afaire = bool(r.get("afaire_signer"))
+        id_tk, date_tk = _lookup_ticket_open_for_doc(
+            id_doc, id_doc_courtage, id_gerant, afaire,
+        )
+        p = (r.get("gerant_prenom") or "").strip()
+        gerant_disp = (
+            f"{(r.get('gerant_nom') or '').strip()} "
+            f"{_cap_prenom(p)}"
+        ).strip()
+        out.append({
+            "id_doc_distrib": _clean_id(id_doc),
+            "id_type_doc_distributeur": _clean_id(
+                r.get("id_type_doc_distributeur"),
+            ),
+            "lib_doc": (r.get("lib_doc") or "").strip(),
+            "date_prevue": _to_iso(r.get("date_prevue")),
+            "id_ste": _clean_id(r.get("id_ste")),
+            "raison_sociale": (r.get("raison_sociale") or "").strip(),
+            "id_gerant": _clean_id(id_gerant),
+            "gerant_nom": gerant_disp,
+            "afaire_signer": afaire,
+            "id_doc_courtage": _clean_id(id_doc_courtage),
+            "id_tk": _clean_id(id_tk),
+            "date_ticket": date_tk,
+            "ticket_rappel_fait": bool(id_tk),
+        })
+    return out
+
+
+# --------------------------------------------------------------------
 # 5 boutons Doc (uniques + annuels : logique identique cote WinDev)
 # --------------------------------------------------------------------
 

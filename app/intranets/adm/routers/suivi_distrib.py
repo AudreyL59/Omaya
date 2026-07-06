@@ -91,6 +91,18 @@ def get_facturations(
     return {"items": svc.list_facturations(id_ste)}
 
 
+@router.get("/rappels")
+def get_rappels_docs(
+    jours: int = Query(15, ge=0, le=365),
+    user: UserToken = Depends(get_current_user),
+):
+    """Vue transversale Fen_SuiviDistribRappel : docs non fournis a
+    fournir sous <jours> jours (defaut 15).
+    """
+    _require_droit(user, "SuiviADMDistDoc")
+    return {"items": svc.list_rappels_docs(jours=jours)}
+
+
 @router.get("/refs/types-doc-unique")
 def get_types_doc_unique(
     user: UserToken = Depends(get_current_user),
