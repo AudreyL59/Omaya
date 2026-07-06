@@ -32,6 +32,7 @@ import ListeSocietePage from '@/pages/ListeSocietePage'
 import ListeDocCourtagePage from '@/pages/ListeDocCourtagePage'
 import SuiviDistribPage from '@/pages/SuiviDistribPage'
 import SuiviDistribRappelPage from '@/pages/SuiviDistribRappelPage'
+import GestionExoCashPage from '@/pages/GestionExoCashPage'
 import GestionRecruteursPageAdm from '@/pages/GestionRecruteursPage'
 import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
@@ -132,6 +133,7 @@ function App() {
           <Route path="contrats-courtage" element={<ListeDocCourtagePage />} />
           <Route path="distributeurs" element={<SuiviDistribPage />} />
           <Route path="distributeurs/documents" element={<SuiviDistribRappelPage />} />
+          <Route path="comm/exo-cash" element={<GestionExoCashPage />} />
           <Route path="recrutement/recruteurs" element={<GestionRecruteursPageAdm />} />
           <Route path="recrutement/parametres" element={<ParametresCVPage />} />
           <Route path="imports/contrats" element={<ImportsHubPage />} />
