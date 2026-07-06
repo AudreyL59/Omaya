@@ -77,6 +77,16 @@ const shortDate = (iso: string): string =>
     ? ''
     : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 
+// 'YYYY-MM-DD HH:MM:SS' -> 'DD/MM/YYYY HH:MM' (ou juste date si pas d'heure)
+const shortDateTime = (iso: string): string => {
+  const d = shortDate(iso)
+  if (!d) return ''
+  if (iso.length >= 16 && iso[10] === ' ' && iso[13] === ':') {
+    return `${d} ${iso.slice(11, 16)}`
+  }
+  return d
+}
+
 // Initiales : "LOUDIEUX Audrey" -> "LA", "DOINEAU MEHDI" -> "DM"
 const getInitials = (name: string): string => {
   if (!name) return '?'
@@ -1031,8 +1041,8 @@ export default function FI_DetailDistributeurModal({
                               <span className="text-sm font-medium text-[#4E1D17] truncate">
                                 {m.par || 'Inconnu'}
                               </span>
-                              <span className="text-[11px] text-gray-500 shrink-0">
-                                {shortDate(m.depose_le)}
+                              <span className="text-[11px] text-gray-500 shrink-0 tabular-nums">
+                                {shortDateTime(m.depose_le)}
                               </span>
                             </div>
                             <p className="text-sm text-[#3F3F3F] whitespace-pre-wrap break-words leading-relaxed">
