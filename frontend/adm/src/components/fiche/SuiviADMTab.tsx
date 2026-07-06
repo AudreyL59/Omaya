@@ -33,6 +33,28 @@ function fmtDateTime(iso: string): string {
   return `${d} ${iso.slice(11, 16)}`
 }
 
+// Initiales : "LOUDIEUX Audrey" -> "LA"
+const getInitials = (name: string): string => {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return parts[0][0].toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+// Couleur deterministe par nom (palette OMAYA)
+const _AVATAR_COLORS = [
+  '#8B7355', '#17494E', '#B25E43', '#4E7C59',
+  '#7A5D82', '#C77D3E', '#3D6B8C', '#8E4162',
+]
+const colorFromName = (name: string): string => {
+  if (!name) return '#8B7355'
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  }
+  return _AVATAR_COLORS[hash % _AVATAR_COLORS.length]
+}
+
 export default function SuiviADMTab({ idSalarie }: Props) {
   const [items, setItems] = useState<SuiviItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -91,51 +113,62 @@ export default function SuiviADMTab({ idSalarie }: Props) {
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      {/* Tableau */}
-      <div className="border rounded overflow-hidden" style={{ borderColor: COLOR_BG_SOFT }}>
-        <div
-          className="grid items-center gap-2 px-3 py-2 text-xs font-semibold border-b"
-          style={{
-            gridTemplateColumns: '130px 170px 1fr',
-            color: COLOR_BRUN,
-            backgroundColor: COLOR_BG_SOFT,
-            borderColor: COLOR_BG_SOFT,
-          }}
-        >
-          <div>Déposé le</div>
-          <div>Déposé par</div>
-          <div>Message</div>
-        </div>
-        <div className="max-h-[400px] overflow-y-auto">
-          {loading && (
-            <div className="p-3 flex items-center gap-2 text-xs" style={{ color: COLOR_BRUN }}>
-              <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
-            </div>
-          )}
-          {!loading && items.length === 0 && (
-            <div className="p-3 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
-              Aucun mémo déposé.
-            </div>
-          )}
-          {!loading &&
-            items.map((it) => (
-              <div
-                key={it.id_salarie_suivi_adm}
-                className="grid items-start gap-2 px-3 py-2 text-xs border-b"
-                style={{
-                  gridTemplateColumns: '130px 170px 1fr',
-                  borderColor: COLOR_BG_SOFT,
-                  color: COLOR_BRUN,
-                }}
-              >
-                <div>{fmtDateTime(it.date_crea)}</div>
-                <div className="truncate" title={it.op_crea_nom}>
-                  {it.op_crea_nom}
-                </div>
-                <div className="whitespace-pre-wrap">{it.description}</div>
-              </div>
-            ))}
-        </div>
+      {/* Liste memos - style cards + avatar (cf. FI_DetailDistributeur) */}
+      <div className="max-h-[400px] overflow-y-auto">
+        {loading && (
+          <div className="p-3 flex items-center gap-2 text-xs" style={{ color: COLOR_BRUN }}>
+            <Loader2 className="w-4 h-4 animate-spin" /> Chargement…
+          </div>
+        )}
+        {!loading && items.length === 0 && (
+          <div className="p-3 text-xs italic" style={{ color: COLOR_BRUN, opacity: 0.6 }}>
+            Aucun mémo déposé.
+          </div>
+        )}
+        {!loading && items.length > 0 && (
+          <ul className="space-y-3">
+            {items.map((it) => {
+              const initials = getInitials(it.op_crea_nom)
+              const bg = colorFromName(it.op_crea_nom)
+              return (
+                <li
+                  key={it.id_salarie_suivi_adm}
+                  className="bg-white border rounded-lg p-3 shadow-sm hover:shadow transition-shadow"
+                  style={{ borderColor: COLOR_BG_SOFT }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold"
+                      style={{ backgroundColor: bg }}
+                      title={it.op_crea_nom}
+                    >
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2 mb-1">
+                        <span
+                          className="text-sm font-medium truncate"
+                          style={{ color: COLOR_BRUN }}
+                        >
+                          {it.op_crea_nom || 'Inconnu'}
+                        </span>
+                        <span className="text-[11px] text-gray-500 shrink-0 tabular-nums">
+                          {fmtDateTime(it.date_crea)}
+                        </span>
+                      </div>
+                      <p
+                        className="text-sm whitespace-pre-wrap break-words leading-relaxed"
+                        style={{ color: '#3F3F3F' }}
+                      >
+                        {it.description}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
 
       {/* Saisie nouveau mémo */}
