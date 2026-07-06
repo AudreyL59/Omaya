@@ -134,7 +134,7 @@ export default function SuiviDistribRappelPage() {
 
   const voirTicket = () => {
     if (!sel || !sel.id_tk) return
-    nav(`/tickets/${sel.id_tk}`)
+    nav(`/tickets?ticket=${sel.id_tk}`)
   }
 
   return (

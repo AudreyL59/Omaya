@@ -51,6 +51,7 @@ export default function AdmTicketsPage() {
         getToken={getToken}
         onOpenFicheSalarie={(id, nom, prenom) => setFiche({ id, nom, prenom })}
         initialTypeId={searchParams.get('type') || undefined}
+        initialTicketId={searchParams.get('ticket') || undefined}
       />
       <AnimatePresence>
         {fiche && (

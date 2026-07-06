@@ -720,7 +720,7 @@ export default function FI_DetailDistributeurModal({
                     Ticket de réclam
                   </button>
                   <Link
-                    to={selDocUnique?.id_tk ? `/tickets/${selDocUnique.id_tk}` : '#'}
+                    to={selDocUnique?.id_tk ? `/tickets?ticket=${selDocUnique.id_tk}` : '#'}
                     onClick={(e) => {
                       if (!canVoirTk(selDocUnique)) e.preventDefault()
                     }}
@@ -821,7 +821,7 @@ export default function FI_DetailDistributeurModal({
                     Ticket de réclam
                   </button>
                   <Link
-                    to={selDocAnnuel?.id_tk ? `/tickets/${selDocAnnuel.id_tk}` : '#'}
+                    to={selDocAnnuel?.id_tk ? `/tickets?ticket=${selDocAnnuel.id_tk}` : '#'}
                     onClick={(e) => {
                       if (!canVoirTk(selDocAnnuel)) e.preventDefault()
                     }}
@@ -944,7 +944,7 @@ export default function FI_DetailDistributeurModal({
                         <td className="py-2 px-2 text-center">
                           <div className="flex gap-1 justify-center">
                             <Link
-                              to={`/tickets/${f.id_tk_liste}`}
+                              to={`/tickets?ticket=${f.id_tk_liste}`}
                               className="p-1 hover:bg-[#ECF1F2] rounded"
                               title="Ouvrir le ticket"
                             >

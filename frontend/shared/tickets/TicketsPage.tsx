@@ -100,6 +100,9 @@ interface TicketsPageProps {
   /** Optionnel : id_type_demande a pre-selectionner au chargement (ex
    *  navigation 'Terminer ma DPAE' qui force le type 'DPAE'=3). */
   initialTypeId?: string
+  /** Optionnel : id_tk_liste a ouvrir automatiquement au chargement
+   *  (ex. deep link depuis SuiviDistribRappel 'Voir le ticket'). */
+  initialTicketId?: string
 }
 
 function shortDateTime(raw: string | undefined | null): string {
@@ -121,7 +124,7 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
 }
 
-export default function TicketsPage({ apiBase, getToken, onOpenFicheSalarie, initialTypeId }: TicketsPageProps) {
+export default function TicketsPage({ apiBase, getToken, onOpenFicheSalarie, initialTypeId, initialTicketId }: TicketsPageProps) {
   const [sidebar, setSidebar] = useState<TicketSidebarItem[]>([])
   const [loadingSidebar, setLoadingSidebar] = useState(true)
   const [selectedType, setSelectedType] = useState<TicketTypeDemande | null>(null)
@@ -455,6 +458,17 @@ export default function TicketsPage({ apiBase, getToken, onOpenFicheSalarie, ini
       showToast('Erreur réseau lors de la suppression.', 'error')
     }
   }
+
+  // Auto-ouverture d'un ticket depuis un deep link (?ticket=<id>).
+  // cf. Fen_SuiviDistribRappel > 'Voir le ticket'.
+  const autoOpenedTicketRef = useRef(false)
+  useEffect(() => {
+    if (autoOpenedTicketRef.current) return
+    if (!initialTicketId) return
+    autoOpenedTicketRef.current = true
+    void openTicket(initialTicketId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTicketId])
 
   // Clic sur une ligne → ouvre Fen_TicketContenu (applique aussi la
   // règle WinDev statut<2 → 2 côté backend).
