@@ -856,9 +856,10 @@ def _import_run_valides(
         elec_valide_nouv = b_elec_actif
         maj_etat_flag = False
 
-        # IDTypeEtat 1 ou 2, ou IDetat 54, ou resil partielle detectee
-        # -> contrat eligible MAJ (cf WinDev)
-        eligible = ((id_type_etat in (1, 2))
+        # IDTypeEtat 1, 2 ou 8, ou IDetat 54, ou resil partielle detectee
+        # -> contrat eligible MAJ (cf WinDev importRUNValides.txt l.423,
+        # maj 2026-07-06 : ajout du type 8).
+        eligible = ((id_type_etat in (1, 2, 8))
                     or etat_actuel == 54
                     or test_dual_resil_partielle)
         if eligible and flag_offre:
