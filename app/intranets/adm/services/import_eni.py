@@ -1431,13 +1431,17 @@ def _id_produit_from_type_offre(type_offre: str) -> int:
 
 
 def _etat_contrat_journ_eni(lib_statut: str, id_prod: int, offre: str,
-                             non_call: bool) -> tuple[int, bool, bool]:
+                             non_call: bool,
+                             etat_actuel: int = 0) -> tuple[int, bool, bool]:
     """Determine (id_etat, gaz_actif, elec_actif) selon WinDev :
       - CANCELLED :
         - Dual : 43 (Resil partielle GAZ) ou 42 (partielle ELEC) selon offre
         - Sinon : 57 (Retractation Client) + gaz/elec off
       - Sinon :
-        - Pas NonCALL : 37 (En cours traitement) ou 70 (En cours valid.)
+        - Pas NonCALL :
+          * Si etat_actuel = 72 -> on ne touche pas (cf. WinDev
+            ImportJournalierENI.txt l.290, maj 2026-07-06).
+          * Sinon : 37 (En cours traitement) ou 70 (En cours valid.)
         - NonCALL : 51 (Temporaire SF)
     """
     statut = (lib_statut or "").upper()
@@ -1450,6 +1454,9 @@ def _etat_contrat_journ_eni(lib_statut: str, id_prod: int, offre: str,
         return (57, False, False)  # Retractation Client
     # Pas CANCELLED
     if not non_call:
+        # cf. WinDev l.290 (maj 2026-07-06) : etat 72 preserve
+        if etat_actuel == 72:
+            return (72, id_prod != 65, id_prod != 66)
         if "COMPLETED" in statut:
             return (70, id_prod != 65, id_prod != 66)  # BS CALL En cours valid.
         return (37, id_prod != 65, id_prod != 66)  # En cours traitement
@@ -1942,6 +1949,7 @@ def _import_journalier_eni(
         if eligible_etat:
             nouvel_etat, _, _ = _etat_contrat_journ_eni(
                 lib_statut, id_produit, offre, non_call=non_call_bdd,
+                etat_actuel=etat_actuel,
             )
             if nouvel_etat != etat_actuel:
                 diffs.append(f"etat {etat_actuel} -> {nouvel_etat}")
