@@ -626,7 +626,7 @@ export default function FI_DetailDistributeurModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-[#F5F5F0] rounded-lg shadow-xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
+      <div className="bg-[#F5F5F0] rounded-lg shadow-xl w-[95vw] max-w-[1600px] max-h-[95vh] overflow-y-auto">
         <div className="sticky top-0 bg-[#F5F5F0] border-b border-[#E5E0D5] px-6 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-[#8B7355]">
