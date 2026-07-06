@@ -529,7 +529,14 @@ export default function GestionExoCashPage() {
                       return (
                         <tr
                           key={f.id_exo_cash_famille_lot}
-                          onClick={() => setSelectedFam(f.id_exo_cash_famille_lot)}
+                          onClick={() => {
+                            setSelectedFam(f.id_exo_cash_famille_lot)
+                            setFamEdit({
+                              id: f.id_exo_cash_famille_lot,
+                              lib: f.lib_famille_lot,
+                              dirty: false,
+                            })
+                          }}
                           className={`cursor-pointer border-b border-[#F0EDE5] hover:bg-[#ECF1F2] ${
                             isSel ? 'bg-[#ECF1F2] ring-1 ring-[#8B7355]' : ''
                           }`}
