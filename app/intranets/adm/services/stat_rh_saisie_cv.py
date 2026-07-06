@@ -93,24 +93,27 @@ def calculer_stats_saisie_cv(
     param_deb = f"{date_debut[:4]}-{date_debut[4:6]}-{date_debut[6:8]} 00:00:00"
     param_fin = f"{date_fin[:4]}-{date_fin[4:6]}-{date_fin[6:8]} 23:59:59"
 
-    # Filtres selon mode
+    # Filtres selon mode.
+    # cf. schema PG : pgt_cvtheque.origine est smallint (pas text).
+    # On construit un fragment SQL en dur (pas de LIKE sur int).
     if type_recherche == "service":
         # Service complet : Origine = 1 (CVtheque interne), operateur = % (tous)
-        origine_param = "1"
-        op_filter_sql = "LIKE '%'"
+        origine_sql = "c.origine = 1"
+        origine_params: tuple = ()
+        op_filter_sql = "IS NOT NULL"
         op_filter_params: tuple = ()
     else:
-        # Une personne : Origine = % (toutes), operateur specifique
-        origine_param = "%"
+        # Une personne : toutes origines, operateur specifique
+        origine_sql = "TRUE"
+        origine_params = ()
         if id_ope_filter is not None and id_ope_filter > 0:
             op_filter_sql = "= ?"
             op_filter_params = (id_ope_filter,)
         else:
-            op_filter_sql = "LIKE '%'"
+            op_filter_sql = "IS NOT NULL"
             op_filter_params = ()
 
     # --- Req CV Saisis (saisie OU reactivation dans la periode) -----------
-    # Note : c.origine est stocke comme chaine cote HFSQL ; on compare toujours avec LIKE + string param.
     sql_cv_saisis = f"""
         SELECT
             c.id_cvtheque, c.nom, c.prenom, c.gsm,
@@ -122,14 +125,14 @@ def calculer_stats_saisie_cv(
         FROM pgt_cvtheque c
         LEFT JOIN pgt_cv_source s ON s.id_cvsource = c.id_cvsource
         WHERE c.modif_elem <> 'suppr'
-          AND c.origine LIKE ?
+          AND {origine_sql}
           AND (
                 (c.date_saisie BETWEEN ? AND ? AND c.ope_saisie {op_filter_sql})
              OR (c.date_reac   BETWEEN ? AND ? AND c.ope_reac   {op_filter_sql})
           )
     """
     params_saisis: list = [
-        origine_param,
+        *origine_params,
         param_deb, param_fin, *op_filter_params,
         param_deb, param_fin, *op_filter_params,
     ]
