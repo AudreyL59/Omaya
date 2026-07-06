@@ -270,6 +270,36 @@ def post_toggle_rappel_doc(
     return svc.toggle_rappel_doc(id_doc, user.id_salarie)
 
 
+class AddMemoPayload(BaseModel):
+    message: str
+
+
+@router.get("/{id_ste}/suivi-adm")
+def get_suivi_adm(
+    id_ste: int,
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste des memos suivi ADM du gerant de la societe.
+
+    Cf. WinDev Table_ReqSuiviADM (ordonne par datecrea DESC).
+    """
+    _require_droit(user, "SuiviADMDistri")
+    return {"items": svc.list_suivi_adm(id_ste)}
+
+
+@router.post("/{id_ste}/suivi-adm")
+def post_add_memo_suivi_adm(
+    id_ste: int,
+    payload: AddMemoPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn 'Envoyer' : INSERT salarie_suiviADM + mail juristes/BO."""
+    _require_droit(user, "SuiviADMDistri")
+    return svc.add_memo_suivi_adm(
+        id_ste, payload.message, user.id_salarie,
+    )
+
+
 @router.get("/docs/{id_doc}/telecharger")
 def get_telecharger_doc(
     id_doc: int,

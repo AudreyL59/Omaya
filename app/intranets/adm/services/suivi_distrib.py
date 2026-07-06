@@ -1072,6 +1072,108 @@ def toggle_rappel_doc(id_doc: int, op_id: int) -> dict:
     return {"ok": True, "nom_fichier": new_val}
 
 
+# --------------------------------------------------------------------
+# Suivi ADM (memos gerant)
+# --------------------------------------------------------------------
+
+def _gerant_and_libste(id_ste: int) -> tuple[int, str]:
+    """Retourne (id_gerant, raison_sociale) pour une societe."""
+    rh = get_pg_connection("rh")
+    ste = rh.query_one(
+        "SELECT id_gerant, raison_sociale FROM pgt_societe WHERE id_ste = ?",
+        (int(id_ste),),
+    )
+    if not ste:
+        return (0, "")
+    return (
+        int(ste.get("id_gerant") or 0),
+        (ste.get("raison_sociale") or "").strip(),
+    )
+
+
+def list_suivi_adm(id_ste: int) -> list[dict]:
+    """Journal salarie_suiviADM du gerant de la societe.
+
+    Cf. WinDev Table_ReqSuiviADM :
+      SELECT OPCrea, Description, Datecrea
+      FROM salarie_suiviADM
+      WHERE IDSalarie = Id_Gerant
+        AND ModifElem NOT LIKE '%suppr%'
+      ORDER BY Datecrea DESC
+    """
+    id_gerant, _ = _gerant_and_libste(id_ste)
+    if not id_gerant:
+        return []
+    # Reutilise le helper deja teste dans factdistrib.py
+    from app.shared.tickets.forms.factdistrib import _suivi_adm
+    return _suivi_adm(id_gerant)
+
+
+def add_memo_suivi_adm(
+    id_ste: int, message: str, op_id: int,
+) -> dict:
+    """Cf. WinDev 'Suivi ADM - Btn Envoyer' : INSERT salarie_suiviADM
+    (id_salarie = id_gerant) + mail juristes/BO (Ajout Memo Distrib).
+    """
+    message = (message or "").strip()
+    if not message:
+        return {"ok": False, "error": "Mémo vide"}
+
+    id_gerant, lib_ste = _gerant_and_libste(id_ste)
+    if not id_gerant:
+        return {"ok": False, "error": "Pas de gérant associé à la société"}
+
+    id_memo = _new_id()
+    now = _now_iso()
+    rh = get_pg_connection("rh")
+    try:
+        rh.query(
+            """INSERT INTO pgt_salarie_suivi_adm
+                 (id_salarie_suivi_adm, id_salarie, op_crea, description,
+                  date_crea, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'new')""",
+            (id_memo, id_gerant, int(op_id), message,
+             now, now, int(op_id)),
+        )
+    except Exception as e:
+        logger.error("INSERT pgt_salarie_suivi_adm KO : %s", e)
+        return {"ok": False, "error": f"INSERT : {e}"}
+
+    # Mail juristes + BO (cf. WinDev)
+    mail_statut = ""
+    try:
+        from app.core.config import (
+            MAIL_BO, MAIL_JURISTE_1, MAIL_RESP_JURISTE,
+        )
+        from app.shared.notifications.mail import envoi_mail_rh
+
+        prenom = ""
+        i = rh.query_one(
+            "SELECT prenom FROM pgt_salarie WHERE id_salarie = ?",
+            (int(op_id),),
+        )
+        if i:
+            prenom = _cap_prenom((i.get("prenom") or "").strip())
+        dest = [m for m in (MAIL_RESP_JURISTE, MAIL_JURISTE_1, MAIL_BO) if m]
+        html = (
+            "<font face='arial' style='font-size:10pt;'><p> Bonjour,</p>"
+            f"<p>Un mémo vient d'être déposé par {prenom} concernant "
+            f"la société {lib_ste}.</p>"
+            "<br/>---Cdt.<br/>"
+            "<p><i>PS : Ceci est un mail automatique, ne pas répondre. "
+            "Merci.</i></p></font>"
+        )
+        if dest:
+            ok = envoi_mail_rh(
+                f"Ajout Mémo Distrib - {lib_ste}", html, dest,
+            )
+            mail_statut = "envoye" if ok else "echec"
+    except Exception:
+        logger.exception("Notification mail juristes (memo distrib)")
+
+    return {"ok": True, "id": str(id_memo), "mail_statut": mail_statut}
+
+
 def download_doc(id_doc: int) -> Optional[dict]:
     """Bouton 'Telecharger' : recupere le fichier via FTP.
 

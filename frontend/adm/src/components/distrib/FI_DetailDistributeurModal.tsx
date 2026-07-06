@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   X, Loader2, Ticket, Eye, Plus, RefreshCw,
   Link2, Link2Off, Trash2, Download, Bell, BellOff,
+  MessageSquare, Send,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -97,6 +98,13 @@ export default function FI_DetailDistributeurModal({
   const rechargeInputRef = useRef<HTMLInputElement>(null)
   const [rechargeTkId, setRechargeTkId] = useState<string>('')
   const factureInputRef = useRef<HTMLInputElement>(null)
+  // Overlay Suivi ADM
+  const [suiviOpen, setSuiviOpen] = useState(false)
+  const [suiviMemos, setSuiviMemos] = useState<
+    Array<{ id: string; depose_le: string; par: string; message: string }>
+  >([])
+  const [suiviLoading, setSuiviLoading] = useState(false)
+  const [newMemo, setNewMemo] = useState('')
 
   const _fetch = (u: string, opts: RequestInit = {}) =>
     fetch(u, {
@@ -319,6 +327,61 @@ export default function FI_DetailDistributeurModal({
   }
 
   // --- Render helpers ------------------------------------------------
+
+  // --- Handlers Suivi ADM (overlay memos) ----------------------------
+
+  const openSuiviAdm = async () => {
+    setSuiviOpen(true)
+    setSuiviLoading(true)
+    setNewMemo('')
+    try {
+      const r = await _fetch(
+        `${API_BASE}/distributeurs/${idSte}/suivi-adm`,
+      )
+      const d = await r.json()
+      setSuiviMemos(d.items || [])
+    } catch {
+      setSuiviMemos([])
+    } finally {
+      setSuiviLoading(false)
+    }
+  }
+
+  const envoyerMemo = async () => {
+    const msg = newMemo.trim()
+    if (!msg) return
+    setAction('memo')
+    try {
+      const r = await _fetch(
+        `${API_BASE}/distributeurs/${idSte}/suivi-adm`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg }),
+        },
+      )
+      const d = await r.json()
+      if (d.ok) {
+        showToast(
+          d.mail_statut === 'envoye'
+            ? 'Mémo enregistré + mail envoyé'
+            : 'Mémo enregistré',
+          'success',
+        )
+        setNewMemo('')
+        // Recharge la liste
+        const r2 = await _fetch(
+          `${API_BASE}/distributeurs/${idSte}/suivi-adm`,
+        )
+        const d2 = await r2.json()
+        setSuiviMemos(d2.items || [])
+      } else {
+        showToast(d.error || 'Erreur', 'error')
+      }
+    } finally {
+      setAction('')
+    }
+  }
 
   // --- Handlers boutons doc (associer/desassocier/supprimer/DL/rappel) ---
   const docAssocierInputRef = useRef<HTMLInputElement>(null)
@@ -579,13 +642,23 @@ export default function FI_DetailDistributeurModal({
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded hover:bg-white/50"
-            title="Fermer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openSuiviAdm}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm bg-white border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2]"
+              title="Suivi ADM (mémos)"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Suivi ADM
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded hover:bg-white/50"
+              title="Fermer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {loading || !boot ? (
@@ -874,6 +947,96 @@ export default function FI_DetailDistributeurModal({
           </div>
         )}
       </div>
+
+      {/* Overlay Suivi ADM (memos gerant) */}
+      {suiviOpen && boot && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="border-b border-[#E5E0D5] px-5 py-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-[#8B7355]">
+                  Suivi ADM — {boot.raison_sociale}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Gérant : {boot.nom_gerant || 'non associé'}
+                </p>
+              </div>
+              <button
+                onClick={() => setSuiviOpen(false)}
+                className="p-2 rounded hover:bg-[#ECF1F2]"
+                title="Fermer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Liste memos */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {suiviLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#8B7355]" />
+                </div>
+              ) : suiviMemos.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-8">
+                  Aucun mémo pour ce gérant.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-[#8B7355] border-b border-[#E5E0D5]">
+                      <th className="py-1 px-2 w-32">Déposé le</th>
+                      <th className="py-1 px-2 w-40">Par</th>
+                      <th className="py-1 px-2">Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {suiviMemos.map((m) => (
+                      <tr key={m.id} className="border-b border-[#F0EDE5]">
+                        <td className="py-2 px-2 text-xs whitespace-nowrap align-top">
+                          {shortDate(m.depose_le)}
+                        </td>
+                        <td className="py-2 px-2 text-xs align-top">{m.par}</td>
+                        <td className="py-2 px-2 text-xs whitespace-pre-wrap">
+                          {m.message}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Zone de saisie */}
+            <div className="border-t border-[#E5E0D5] p-4">
+              <label className="text-xs text-[#8B7355] font-medium">
+                Saisir un nouveau mémo
+              </label>
+              <div className="flex items-end gap-2 mt-1">
+                <textarea
+                  value={newMemo}
+                  onChange={(e) => setNewMemo(e.target.value)}
+                  rows={3}
+                  placeholder="Votre mémo..."
+                  className="flex-1 text-sm border border-[#E5E0D5] rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#8B7355]/40 resize-none"
+                />
+                <button
+                  onClick={envoyerMemo}
+                  disabled={!newMemo.trim() || action === 'memo'}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded bg-[#059669] text-white disabled:opacity-40 hover:bg-[#047857]"
+                  title="Envoyer le mémo"
+                >
+                  {action === 'memo' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  Envoyer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
