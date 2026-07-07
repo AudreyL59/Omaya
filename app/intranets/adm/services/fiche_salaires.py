@@ -673,12 +673,14 @@ def parse_xlsx(xlsx_bytes: bytes) -> ParseXlsxResult:
     nrows = min(nrows, 200)
     ncols = min(ncols, 30)
 
+    merged_map = _build_merged_map(ws)
     cells: list[list[CellData]] = []
     for r in range(1, nrows + 1):
         row_data: list[CellData] = []
         for c in range(1, ncols + 1):
             cell = ws.cell(row=r, column=c)
-            row_data.append(_cell_to_data(cell))
+            cs, rs, mg = merged_map.get((r, c), (1, 1, False))
+            row_data.append(_cell_to_data(cell, cs=cs, rs=rs, mg=mg))
         cells.append(row_data)
 
     return ParseXlsxResult(
@@ -710,8 +712,28 @@ def _color_hex(color) -> str:
         return ""
 
 
-def _cell_to_data(cell) -> "CellData":
-    """Convertit une cellule openpyxl en CellData (valeur + styles)."""
+# Mapping style bordure openpyxl -> epaisseur px
+_BORDER_WIDTH_PX = {
+    "hair": 1, "dotted": 1, "dashed": 1, "thin": 1, "dashDot": 1,
+    "dashDotDot": 1, "slantDashDot": 1,
+    "medium": 2, "mediumDashed": 2, "mediumDashDot": 2,
+    "mediumDashDotDot": 2,
+    "thick": 3, "double": 3,
+}
+
+
+def _border_px(side) -> int:
+    """Epaisseur en px d'un cote de bordure openpyxl. 0 si absent."""
+    if not side or not getattr(side, "style", None):
+        return 0
+    return _BORDER_WIDTH_PX.get(side.style, 1)
+
+
+def _cell_to_data(cell, cs: int = 1, rs: int = 1, mg: bool = False) -> "CellData":
+    """Convertit une cellule openpyxl en CellData (valeur + styles).
+
+    cs, rs, mg : viennent du merged_map (parse_xlsx / generer_pdf_prepaie).
+    """
     # Valeur formatee (comme avant)
     v = cell.value
     if v is None:
@@ -724,7 +746,7 @@ def _cell_to_data(cell) -> "CellData":
     else:
         v_str = str(v)
 
-    data = CellData(v=v_str)
+    data = CellData(v=v_str, cs=cs, rs=rs, mg=mg)
 
     # Couleur de fond
     try:
@@ -754,18 +776,45 @@ def _cell_to_data(cell) -> "CellData":
     except Exception:
         pass
 
-    # Bordures (true si le style est defini et != 'none')
+    # Bordures avec epaisseur px
     try:
         border = cell.border
         if border:
-            data.bt = bool(border.top and border.top.style)
-            data.br = bool(border.right and border.right.style)
-            data.bb = bool(border.bottom and border.bottom.style)
-            data.bl = bool(border.left and border.left.style)
+            data.bt = _border_px(border.top)
+            data.br = _border_px(border.right)
+            data.bb = _border_px(border.bottom)
+            data.bl = _border_px(border.left)
     except Exception:
         pass
 
     return data
+
+
+def _build_merged_map(ws) -> dict[tuple[int, int], tuple[int, int, bool]]:
+    """Construit une map (row, col) -> (colspan, rowspan, is_slave).
+
+    - cellule maitre (top-left du range) : (cs, rs, False)
+    - autres cellules du range : (0, 0, True) - a masquer
+    """
+    result: dict[tuple[int, int], tuple[int, int, bool]] = {}
+    try:
+        ranges = list(ws.merged_cells.ranges)
+    except Exception:
+        return result
+    for rng in ranges:
+        try:
+            r1, c1 = int(rng.min_row), int(rng.min_col)
+            r2, c2 = int(rng.max_row), int(rng.max_col)
+        except Exception:
+            continue
+        cs = c2 - c1 + 1
+        rs = r2 - r1 + 1
+        result[(r1, c1)] = (cs, rs, False)
+        for rr in range(r1, r2 + 1):
+            for cc in range(c1, c2 + 1):
+                if (rr, cc) != (r1, c1):
+                    result[(rr, cc)] = (0, 0, True)
+    return result
 
 
 def _parse_plage(plage: str) -> Optional[tuple[int, int, int, int]]:
@@ -829,6 +878,9 @@ def _render_prepaie_html(
     for row in cells:
         tds: list[str] = []
         for cell in row:
+            # Skip cellules fusionnees non-maitres
+            if cell.mg:
+                continue
             v_stripped = (cell.v or "").strip()
             classes: list[str] = []
             styles: list[str] = []
@@ -846,15 +898,29 @@ def _render_prepaie_html(
                 styles.append("font-weight:bold")
             if cell.italic:
                 styles.append("font-style:italic")
-            if cell.align and not classes.count("num"):
+            if cell.align and "num" not in classes:
                 styles.append(f"text-align:{cell.align}")
-            # Bordures explicites du XLSX (surcharge les bordures default)
-            if any([cell.bt, cell.br, cell.bb, cell.bl]):
-                styles.append("border:1px solid #444")
+            # Bordures individuelles avec epaisseur px
+            if cell.bt:
+                styles.append(f"border-top:{cell.bt}px solid #444")
+            if cell.br:
+                styles.append(f"border-right:{cell.br}px solid #444")
+            if cell.bb:
+                styles.append(f"border-bottom:{cell.bb}px solid #444")
+            if cell.bl:
+                styles.append(f"border-left:{cell.bl}px solid #444")
+
+            # Colspan / rowspan
+            span_attrs: list[str] = []
+            if cell.cs > 1:
+                span_attrs.append(f'colspan="{cell.cs}"')
+            if cell.rs > 1:
+                span_attrs.append(f'rowspan="{cell.rs}"')
+            span = (" " + " ".join(span_attrs)) if span_attrs else ""
 
             cls = f' class="{" ".join(classes)}"' if classes else ""
             sty = f' style="{";".join(styles)}"' if styles else ""
-            tds.append(f"<td{cls}{sty}>{h(v_stripped)}</td>")
+            tds.append(f"<td{cls}{sty}{span}>{h(v_stripped)}</td>")
         rows_html.append("<tr>" + "".join(tds) + "</tr>")
 
     return f"""<!DOCTYPE html>
@@ -969,17 +1035,31 @@ def generer_pdf_prepaie(p: GenererPdfPrepaieParams) -> GenererPdfPrepaieResult:
         )
 
     r_min, c_min, r_max, c_max = bounds
+    merged_map = _build_merged_map(ws)
+    # Ajuste les cellules maitres pour ne pas deborder de la selection
     cells: list[list[CellData]] = []
     for r in range(r_min, r_max + 1):
         row_data: list[CellData] = []
         for c in range(c_min, c_max + 1):
-            row_data.append(_cell_to_data(ws.cell(row=r, column=c)))
+            cs, rs, mg = merged_map.get((r, c), (1, 1, False))
+            # Clamp le colspan/rowspan aux bornes de la selection
+            if not mg and (cs > 1 or rs > 1):
+                cs = min(cs, c_max - c + 1)
+                rs = min(rs, r_max - r + 1)
+            row_data.append(
+                _cell_to_data(ws.cell(row=r, column=c), cs=cs, rs=rs, mg=mg),
+            )
         cells.append(row_data)
 
     # Trim des lignes entierement vides en debut et fin
-    # (une ligne est vide si aucune cellule n'a de valeur textuelle)
+    # (une ligne est vide si aucune cellule n'a de valeur ; les cellules
+    # 'mg' - part d'une fusion venant d'au dessus - comptent aussi comme
+    # occupees pour ne pas casser le rowspan)
     def _row_is_empty(row: list[CellData]) -> bool:
-        return all(not (c.v or "").strip() for c in row)
+        return all(
+            (not (c.v or "").strip()) and (not c.mg)
+            for c in row
+        )
     while cells and _row_is_empty(cells[0]):
         cells.pop(0)
     while cells and _row_is_empty(cells[-1]):

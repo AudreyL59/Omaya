@@ -31,10 +31,15 @@ interface CellData {
   bold?: boolean
   italic?: boolean
   align?: 'left' | 'center' | 'right' | ''
-  bt?: boolean       // border top
-  br?: boolean
-  bb?: boolean
-  bl?: boolean
+  // Epaisseur px (0 = pas de bordure)
+  bt?: number
+  br?: number
+  bb?: number
+  bl?: number
+  // Fusion cellules
+  cs?: number        // colspan (>1)
+  rs?: number        // rowspan (>1)
+  mg?: boolean       // cellule masquee (fusion)
 }
 
 interface VendeurRow {
@@ -970,6 +975,8 @@ export default function FichesSalairePage() {
                             {r + 1}
                           </th>
                           {row.map((cell, c) => {
+                            // Skip les cellules masquees par fusion
+                            if (cell.mg) return null
                             const selected = isCellSelected(r, c)
                             const style: React.CSSProperties = {}
                             if (!selected) {
@@ -979,15 +986,33 @@ export default function FichesSalairePage() {
                             if (cell.bold) style.fontWeight = 'bold'
                             if (cell.italic) style.fontStyle = 'italic'
                             if (cell.align) style.textAlign = cell.align
-                            // Bordures explicites (surcharge le border par defaut)
+                            // Bordures individuelles avec epaisseur
                             const hasBorder =
-                              cell.bt || cell.br || cell.bb || cell.bl
+                              (cell.bt || 0) + (cell.br || 0)
+                              + (cell.bb || 0) + (cell.bl || 0) > 0
+                            if (hasBorder) {
+                              // Chaque cote peut avoir sa propre epaisseur
+                              style.borderTop = cell.bt
+                                ? `${cell.bt}px solid #444`
+                                : '1px solid #E5E0D5'
+                              style.borderRight = cell.br
+                                ? `${cell.br}px solid #444`
+                                : '1px solid #E5E0D5'
+                              style.borderBottom = cell.bb
+                                ? `${cell.bb}px solid #444`
+                                : '1px solid #E5E0D5'
+                              style.borderLeft = cell.bl
+                                ? `${cell.bl}px solid #444`
+                                : '1px solid #E5E0D5'
+                            }
                             const borderCls = hasBorder
-                              ? 'border border-gray-500'
+                              ? ''
                               : 'border border-[#E5E0D5]'
                             return (
                               <td
                                 key={c}
+                                colSpan={cell.cs && cell.cs > 1 ? cell.cs : undefined}
+                                rowSpan={cell.rs && cell.rs > 1 ? cell.rs : undefined}
                                 onMouseDown={(e) => onCellMouseDown(r, c, e)}
                                 onMouseEnter={() => onCellMouseEnter(r, c)}
                                 style={style}

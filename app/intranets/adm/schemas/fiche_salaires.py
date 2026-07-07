@@ -102,19 +102,24 @@ class ReimportXlsxResult(BaseModel):
 # --------------------------------------------------------------------
 
 class CellData(BaseModel):
-    """Cellule XLSX avec styles (couleurs, bordures, gras) pour reproduire
-    la mise en page cote frontend et dans le PDF genere.
-    Champs optionnels par defaut '' / False -> compression JSON."""
+    """Cellule XLSX avec styles (couleurs, bordures, gras, fusion) pour
+    reproduire la mise en page cote frontend et dans le PDF genere.
+    Champs optionnels par defaut '' / False / 0 / 1 -> compression JSON."""
     v: str = ""
     bg: str = ""       # couleur fond hex 'RRGGBB' (sans #)
     fg: str = ""       # couleur texte hex 'RRGGBB' (sans #)
     bold: bool = False
     italic: bool = False
     align: str = ""    # 'left' | 'center' | 'right' (vide = auto)
-    bt: bool = False   # bordure top (si XLSX en definit une)
-    br: bool = False   # bordure right
-    bb: bool = False   # bordure bottom
-    bl: bool = False   # bordure left
+    # Bordures : 0 = pas de bordure, 1/2/3 = epaisseur px
+    bt: int = 0
+    br: int = 0
+    bb: int = 0
+    bl: int = 0
+    # Fusion cellules
+    cs: int = 1        # colspan (>1 = fusion horizontale)
+    rs: int = 1        # rowspan (>1 = fusion verticale)
+    mg: bool = False   # cellule masquee (contenue dans une fusion, pas la cellule maitre)
 
 
 class ParseXlsxResult(BaseModel):
