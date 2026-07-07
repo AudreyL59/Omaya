@@ -1421,7 +1421,9 @@ function ColonneDroite({
                   options={[
                     { v: 0, l: 'Non défini' },
                     { v: 1, l: 'Conquête' },
-                    { v: 2, l: 'Mig Mobile / Mig ADSL' },
+                    { v: 2, l: 'Conquête VLA' },
+                    { v: 3, l: 'Mig Mobile / Mig ADSL -> THD' },
+                    { v: 4, l: 'Mig FTTB -> FTTH' },
                   ]}
                   onChange={(v) => onOffreChange({ type_vente: v })}
                 />
