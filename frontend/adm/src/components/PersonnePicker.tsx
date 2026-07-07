@@ -7,10 +7,21 @@ export interface SalarieItem {
   id_salarie: string
   nom: string
   prenom: string
+  // Contexte enrichi (cf. Fen_RechercheNomSalarie WinDev)
+  poste?: string
+  raison_sociale?: string
+  date_embauche?: string  // YYYY-MM-DD
+  date_sortie?: string    // YYYY-MM-DD (vide si actif)
+  en_activite?: boolean
 }
 
 function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s
+}
+
+function shortDate(iso: string | undefined): string {
+  if (!iso || iso.length < 10) return ''
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 }
 
 export default function PersonnePicker({
@@ -102,12 +113,38 @@ export default function PersonnePicker({
                   key={r.id_salarie}
                   type="button"
                   onClick={() => setSelected(r)}
-                  className={`w-full text-left px-4 py-2.5 text-sm border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7] ${
+                  className={`w-full text-left px-4 py-2 text-sm border-b border-[#E5DDDC] last:border-0 hover:bg-[#EFE9E7] ${
                     selected?.id_salarie === r.id_salarie ? 'bg-[#EFE9E7]' : ''
                   }`}
                 >
-                  <span className="font-medium text-[#4E1D17]">{r.nom}</span>{' '}
-                  <span className="text-[#4E1D17]/80">{capitalize(r.prenom)}</span>
+                  <div>
+                    <span className="font-medium text-[#4E1D17]">{r.nom}</span>{' '}
+                    <span className="text-[#4E1D17]/80">
+                      {capitalize(r.prenom)}
+                    </span>
+                  </div>
+                  {(r.poste || r.raison_sociale) && (
+                    <div className="text-[11px] text-[#4E1D17]/70 mt-0.5">
+                      {r.poste || 'Poste non défini'}
+                      {r.raison_sociale ? `, ${r.raison_sociale}` : ''}
+                    </div>
+                  )}
+                  {r.date_embauche && (
+                    <div
+                      className={`text-[11px] mt-0.5 ${
+                        r.en_activite
+                          ? 'text-green-700'
+                          : 'text-orange-700'
+                      }`}
+                    >
+                      Emb. le {shortDate(r.date_embauche)},{' '}
+                      {r.en_activite
+                        ? 'Toujours en activité'
+                        : r.date_sortie
+                        ? `sorti le ${shortDate(r.date_sortie)}`
+                        : 'plus dans les effectifs'}
+                    </div>
+                  )}
                 </button>
               ))
             )}
