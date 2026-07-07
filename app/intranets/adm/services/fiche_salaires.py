@@ -122,13 +122,26 @@ def _find_salarie_by_name(
       - les accents (TRANSLATE)
       - les espaces bordants (TRIM)
       - le statut (inclut les salaries sortis)
-      - l'ambiguite : si N matches, on prend le salarie actif ou le
-        segment d'embauche le plus recent.
+      - les noms composes epoux/naissance
+      - l'ambiguite : si N matches -> None (attribution manuelle)
+
+    Nom compose : le PDF peut sortir 'DOINEAU-DESORMEAUX' quand la
+    salariee a un nom_marital + un nom (naissance). On matche donc :
+      1. nom seul (naissance)
+      2. nom_marital seul
+      3. nom_marital-nom
+      4. nom-nom_marital
 
     Cf. WinDev ReqChercheSalarieByPrenomNOM (avec ChaineFormate
     ccSansAccent + ccMajuscule).
     """
     rh = get_pg_connection("rh")
+    # Expression PG partagee : TRANSLATE(UPPER(TRIM(x)), accents, sans)
+    def norm(col: str) -> str:
+        return (
+            f"TRANSLATE(UPPER(TRIM({col})), "
+            f"'{_ACCENTS_FROM}', '{_ACCENTS_TO}')"
+        )
     try:
         rows = rh.query(
             f"""SELECT DISTINCT ON (s.id_salarie)
@@ -143,14 +156,19 @@ def _find_salarie_by_name(
                          ON e.id_salarie = s.id_salarie
                         AND (e.modif_elem IS NULL
                              OR e.modif_elem NOT LIKE '%suppr%')
-                 WHERE TRANSLATE(UPPER(TRIM(s.nom)),
-                                 '{_ACCENTS_FROM}',
-                                 '{_ACCENTS_TO}') = ?
-                   AND TRANSLATE(UPPER(TRIM(s.prenom)),
-                                 '{_ACCENTS_FROM}',
-                                 '{_ACCENTS_TO}') = ?
+                 WHERE (
+                     {norm('s.nom')} = ?
+                     OR {norm("COALESCE(s.nom_marital, '')")} = ?
+                     OR {norm(
+                          "COALESCE(s.nom_marital, '') || '-' || s.nom"
+                        )} = ?
+                     OR {norm(
+                          "s.nom || '-' || COALESCE(s.nom_marital, '')"
+                        )} = ?
+                 )
+                   AND {norm('s.prenom')} = ?
                  ORDER BY s.id_salarie, e.date_debut DESC NULLS LAST""",
-            (nom_norm, prenom_norm),
+            (nom_norm, nom_norm, nom_norm, nom_norm, prenom_norm),
         ) or []
     except Exception:
         logger.exception("Recherche salarie KO")
