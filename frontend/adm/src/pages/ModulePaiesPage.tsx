@@ -223,7 +223,6 @@ export default function ModulePaiesPage() {
   const [showPicker, setShowPicker] = useState(false)
   const [moisPaie, setMoisPaie] = useState<string>(currentMoisPaie())
   const [simu, setSimu] = useState(true)
-  const [listerContrats, setListerContrats] = useState(true)
   const [afficherInactifs, setAfficherInactifs] = useState(false)
 
   const [parts, setParts] = useState<PartenaireState[]>(
@@ -511,17 +510,6 @@ export default function ModulePaiesPage() {
               />
               <span className="text-[#8B7355] font-medium">
                 Faire une simulation
-              </span>
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={listerContrats}
-                onChange={(e) => setListerContrats(e.target.checked)}
-                className="accent-[#8B7355]"
-              />
-              <span className="text-[#8B7355] font-medium">
-                Lister les contrats
               </span>
             </label>
             <label className="ml-auto flex items-center gap-2 text-sm">
