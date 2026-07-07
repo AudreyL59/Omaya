@@ -5,7 +5,7 @@
  *   Plan 1 : Découpage PDF + attribution vendeurs
  *   Plan 2 : Prépaie Excel + envoi FDP par email
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Send, Loader2, Upload, Check, X as XIcon, Save,
   FileText, ArrowLeftCircle,
@@ -229,7 +229,29 @@ export default function FichesSalairePage() {
     }
   }
 
+  // ------ Blob URL du PDF (pour preview iframe) ------
+  const pdfBlobUrl = useMemo<string>(() => {
+    if (!pdfB64) return ''
+    try {
+      const bytes = atob(pdfB64)
+      const buf = new Uint8Array(bytes.length)
+      for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i)
+      const blob = new Blob([buf], { type: 'application/pdf' })
+      return URL.createObjectURL(blob)
+    } catch {
+      return ''
+    }
+  }, [pdfB64])
+
+  useEffect(() => {
+    // Revoke le blob URL quand il change ou au demontage
+    return () => {
+      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl)
+    }
+  }, [pdfBlobUrl])
+
   // ------ Attribution manuelle (ligne rouge) ------
+  // + affiche le PDF a la page du vendeur clique
   const onLigneRougeClick = (idx: number) => {
     setSelectedIdx(idx)
     if (vendeurs[idx].id_salarie === '0') {
@@ -711,10 +733,35 @@ export default function FichesSalairePage() {
 
           {/* Preview */}
           <div className="bg-white rounded-lg shadow p-4">
-            {plan === 1 && pdfB64 && (
-              <div className="text-xs text-gray-500 italic">
-                PDF chargé ({vendeurs.length} vendeurs identifiés).
-                Cliquez sur une ligne rouge pour attribuer manuellement.
+            {plan === 1 && pdfBlobUrl && (
+              <div>
+                <div className="text-[11px] text-gray-500 mb-2">
+                  {vendeurs.length} vendeur(s) identifié(s) - Cliquez sur
+                  une ligne pour afficher la page. Ligne rouge : ouvre
+                  aussi la recherche salarié.
+                  {selectedIdx >= 0 && vendeurs[selectedIdx] && (
+                    <span className="ml-2 text-[#8B7355] font-medium">
+                      Page {vendeurs[selectedIdx].num_page}
+                      {vendeurs[selectedIdx].nb_page > 1
+                        ? `-${vendeurs[selectedIdx].num_page + vendeurs[selectedIdx].nb_page - 1}`
+                        : ''}
+                    </span>
+                  )}
+                </div>
+                <iframe
+                  key={selectedIdx >= 0 ? vendeurs[selectedIdx]?.num_page : 0}
+                  title="Aperçu PDF"
+                  src={`${pdfBlobUrl}#page=${
+                    selectedIdx >= 0 ? vendeurs[selectedIdx]?.num_page || 1 : 1
+                  }&toolbar=1&navpanes=0`}
+                  className="w-full border border-[#E5E0D5] rounded"
+                  style={{ height: '650px' }}
+                />
+              </div>
+            )}
+            {plan === 1 && !pdfBlobUrl && (
+              <div className="py-8 text-center text-sm text-gray-400">
+                Chargez un PDF pour voir l'aperçu
               </div>
             )}
             {plan === 2 && prepaieCells.length > 0 && (
