@@ -24,7 +24,8 @@ from typing import Optional
 
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.schemas.fiche_salaires import (
-    ChargerPdfResult, ReimportXlsxResult, SauvegardeXlsxResult, SocieteFDV,
+    ChargerPdfResult, GenererPdfPrepaieParams, GenererPdfPrepaieResult,
+    ParseXlsxResult, ReimportXlsxResult, SauvegardeXlsxResult, SocieteFDV,
     ValiderParams, ValiderResult, VendeurRow,
 )
 
@@ -560,4 +561,223 @@ def reimporter_xlsx(xlsx_bytes: bytes) -> ReimportXlsxResult:
         ok=True,
         vendeurs=vendeurs,
         message=f"{len(vendeurs)} vendeur(s) reimporte(s)",
+    )
+
+
+# --------------------------------------------------------------------
+# Prepaie Excel (Plan 2)
+# --------------------------------------------------------------------
+
+def parse_xlsx(xlsx_bytes: bytes) -> ParseXlsxResult:
+    """Ouvre le XLSX + retourne la matrice de cellules pour affichage
+    dans le composant grille React.
+
+    Cf. WinDev Btn Ouvrir un tableau prepaies : Tableur1.Charge(monfic, 1).
+    """
+    try:
+        from openpyxl import load_workbook  # noqa: PLC0415
+    except ImportError:
+        return ParseXlsxResult(
+            ok=False, message="openpyxl non installe",
+        )
+
+    import io as _io
+    try:
+        wb = load_workbook(_io.BytesIO(xlsx_bytes), data_only=True)
+    except Exception as e:
+        return ParseXlsxResult(ok=False, message=f"XLSX illisible : {e}")
+
+    ws = wb.active
+    if not ws:
+        return ParseXlsxResult(ok=True)
+
+    nrows = ws.max_row or 0
+    ncols = ws.max_column or 0
+    # Sanity : bornes raisonnables (evite XLSX corrompu geant)
+    nrows = min(nrows, 200)
+    ncols = min(ncols, 30)
+
+    cells: list[list[str]] = []
+    for r in range(1, nrows + 1):
+        row_vals: list[str] = []
+        for c in range(1, ncols + 1):
+            v = ws.cell(row=r, column=c).value
+            if v is None:
+                row_vals.append("")
+            elif isinstance(v, (int, float)):
+                # Format nombre : entier -> pas de decimal, sinon 2 dec
+                if isinstance(v, int) or float(v).is_integer():
+                    row_vals.append(str(int(v)))
+                else:
+                    row_vals.append(f"{v:.2f}")
+            else:
+                row_vals.append(str(v))
+        cells.append(row_vals)
+
+    return ParseXlsxResult(
+        ok=True, nrows=nrows, ncols=ncols, cells=cells,
+    )
+
+
+def _parse_plage(plage: str) -> Optional[tuple[int, int, int, int]]:
+    """Parse 'A1:G17' -> (row_min, col_min, row_max, col_max) 1-indexed."""
+    plage = (plage or "").strip().upper()
+    m = re.match(r"^([A-Z]+)(\d+):([A-Z]+)(\d+)$", plage)
+    if not m:
+        return None
+
+    def col_letter_to_num(letter: str) -> int:
+        n = 0
+        for c in letter:
+            n = n * 26 + (ord(c) - 64)
+        return n
+
+    c1 = col_letter_to_num(m.group(1))
+    r1 = int(m.group(2))
+    c2 = col_letter_to_num(m.group(3))
+    r2 = int(m.group(4))
+    return (min(r1, r2), min(c1, c2), max(r1, r2), max(c1, c2))
+
+
+def _render_prepaie_html(cells: list[list[str]], titre: str) -> str:
+    """Genere HTML pour PDF prepaie (page A4 portrait)."""
+    from html import escape as h
+    rows = []
+    for row in cells:
+        rows.append("<tr>" + "".join(f"<td>{h(v)}</td>" for v in row) + "</tr>")
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"><title>{h(titre)}</title>
+<style>
+@page {{ size: A4; margin: 15mm 10mm; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #222; }}
+h1 {{ font-size: 12pt; color: #17494E; border-bottom: 2px solid #17494E; padding-bottom: 4px; }}
+table {{ border-collapse: collapse; width: 100%; margin-top: 8px; }}
+td {{ border: 1px solid #999; padding: 3px 5px; font-size: 8pt; }}
+</style>
+</head>
+<body>
+<h1>{h(titre)}</h1>
+<table>{''.join(rows)}</table>
+</body>
+</html>
+"""
+
+
+def generer_pdf_prepaie(p: GenererPdfPrepaieParams) -> GenererPdfPrepaieResult:
+    """Cf. WinDev Btn Enregistrer la selection en PDF.
+
+    1. Ouvre XLSX + extrait la plage selectionnee (A1:G17 par ex).
+    2. Genere PDF via WeasyPrint (tableau HTML).
+    3. Upload FTP gestionRH/{id_sal}/Fiches_Salaires/.
+    4. Retour couleur : vert (OK) / orange (upload KO) / rouge (PDF KO).
+    """
+    # Validation
+    if not p.id_salarie or p.id_salarie == "0":
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge", message="Vendeur non attribue",
+        )
+    if len(p.mois_paiement) != 7:
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge", message="mois_paiement invalide",
+        )
+    bounds = _parse_plage(p.plage)
+    if not bounds:
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge",
+            message="Plage invalide (attendu 'A1:G17')",
+        )
+
+    # Decode XLSX
+    try:
+        xlsx_bytes = base64.b64decode(p.xlsx_b64)
+    except Exception as e:
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge",
+            message=f"XLSX b64 invalide : {e}",
+        )
+
+    try:
+        from openpyxl import load_workbook  # noqa: PLC0415
+    except ImportError:
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge",
+            message="openpyxl non installe",
+        )
+
+    import io as _io
+    try:
+        wb = load_workbook(_io.BytesIO(xlsx_bytes), data_only=True)
+    except Exception as e:
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge",
+            message=f"XLSX illisible : {e}",
+        )
+
+    ws = wb.active
+    if not ws:
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge",
+            message="XLSX sans feuille",
+        )
+
+    r_min, c_min, r_max, c_max = bounds
+    cells: list[list[str]] = []
+    for r in range(r_min, r_max + 1):
+        row_vals: list[str] = []
+        for c in range(c_min, c_max + 1):
+            v = ws.cell(row=r, column=c).value
+            if v is None:
+                row_vals.append("")
+            elif isinstance(v, (int, float)):
+                if isinstance(v, int) or float(v).is_integer():
+                    row_vals.append(str(int(v)))
+                else:
+                    row_vals.append(f"{v:.2f}")
+            else:
+                row_vals.append(str(v))
+        cells.append(row_vals)
+
+    # Genere PDF
+    titre = f"Tableau prepaie - {p.nom_prenom} - {p.mois_paiement}"
+    html = _render_prepaie_html(cells, titre)
+    try:
+        from weasyprint import HTML as _HTML  # noqa: PLC0415
+        pdf_bytes = _HTML(string=html).write_pdf()
+    except Exception as e:
+        logger.exception("WeasyPrint prepaie")
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge",
+            message=f"Erreur PDF : {e}",
+        )
+
+    # Nom fichier : {NomPrenom}_{YYYY_MM}_FicPREPAIE.pdf
+    # cf. WinDev : DateVersChaine(MoisP, "AAAA_MM") avec underscore
+    mois_slash = p.mois_paiement.replace("-", "_")
+    fic_name = (
+        f"{_safe_filename(p.nom_prenom)}"
+        f"_{mois_slash}_FicPREPAIE.pdf"
+    )
+
+    # Upload FTP
+    try:
+        from app.core.config import FTP_GESTION_RH_PATH
+        from app.shared.tickets.forms.cttw_pdf import ftp_upload
+        ftp_upload(
+            f"{FTP_GESTION_RH_PATH.rstrip('/')}"
+            f"/{p.id_salarie}/Fiches_Salaires",
+            fic_name, pdf_bytes,
+        )
+    except Exception as e:
+        logger.exception("Upload FTP prepaie")
+        # PDF genere mais upload KO -> orange
+        return GenererPdfPrepaieResult(
+            ok=True, couleur="orange", fic_name=fic_name,
+            message=f"PDF genere mais upload FTP KO : {e}",
+        )
+
+    return GenererPdfPrepaieResult(
+        ok=True, couleur="vert", fic_name=fic_name,
+        message=f"PDF prepaie envoye : {fic_name}",
     )

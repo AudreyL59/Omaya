@@ -17,7 +17,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.intranets.adm.schemas.fiche_salaires import (
-    ChargerPdfResult, ReimportXlsxResult, SauvegardeXlsxResult,
+    ChargerPdfResult, GenererPdfPrepaieParams, GenererPdfPrepaieResult,
+    ParseXlsxResult, ReimportXlsxResult, SauvegardeXlsxResult,
     ValiderParams, ValiderResult, VendeurRow,
 )
 from app.intranets.adm.services import fiche_salaires as svc
@@ -111,3 +112,36 @@ async def post_reimporter_xlsx(
     if not content:
         raise HTTPException(status_code=400, detail="XLSX vide")
     return svc.reimporter_xlsx(content)
+
+
+# --------------------------------------------------------------------
+# Plan 2 : Prepaie Excel
+# --------------------------------------------------------------------
+
+@router.post("/prepaie/parse-xlsx", response_model=ParseXlsxResult)
+async def post_parse_xlsx_prepaie(
+    fichier: UploadFile = File(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Ouvrir un tableau prepaies : parse le XLSX en matrice."""
+    _require_droit(user, "FichePaies")
+    content = await fichier.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="XLSX vide")
+    return svc.parse_xlsx(content)
+
+
+@router.post(
+    "/prepaie/generer-pdf",
+    response_model=GenererPdfPrepaieResult,
+)
+def post_generer_pdf_prepaie(
+    params: GenererPdfPrepaieParams,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Enregistrer la selection en PDF.
+
+    Genere un PDF de la plage selectionnee + upload FTP.
+    """
+    _require_droit(user, "FichePaies")
+    return svc.generer_pdf_prepaie(params)

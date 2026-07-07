@@ -94,3 +94,32 @@ class ReimportXlsxResult(BaseModel):
     ok: bool
     vendeurs: list[VendeurRow] = Field(default_factory=list)
     message: str = ""
+
+
+# --------------------------------------------------------------------
+# Prepaie Excel (Plan 2)
+# --------------------------------------------------------------------
+
+class ParseXlsxResult(BaseModel):
+    """Parse XLSX prepaie -> matrice cellules pour affichage frontend."""
+    ok: bool
+    nrows: int = 0
+    ncols: int = 0
+    cells: list[list[str]] = Field(default_factory=list)  # matrice [row][col]
+    message: str = ""
+
+
+class GenererPdfPrepaieParams(BaseModel):
+    """Input Btn Enregistrer la selection en PDF."""
+    id_salarie: str
+    nom_prenom: str    # pour le nom fichier
+    mois_paiement: str # YYYY-MM
+    xlsx_b64: str      # XLSX complet
+    plage: str         # 'A1:G17'
+
+
+class GenererPdfPrepaieResult(BaseModel):
+    ok: bool
+    fic_name: str = ""
+    couleur: str = ""    # vert / orange / rouge
+    message: str = ""
