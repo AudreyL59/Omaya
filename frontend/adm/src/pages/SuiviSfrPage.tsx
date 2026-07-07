@@ -21,6 +21,7 @@ import {
   ShoppingBag, CalendarClock, Users, Antenna,
 } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 interface MenuItem {
   key: string
@@ -56,13 +57,11 @@ export default function SuiviSfrPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold text-c-ink mb-1 flex items-center gap-2">
-        <Antenna className="w-5 h-5 text-c-brand" />
-        Suivi SFR
-      </h1>
-      <p className="text-sm text-c-ink-faint mb-6">
-        Choisis une fonctionnalité ci-dessous.
-      </p>
+      <PageHeader
+        icon={Antenna}
+        title="Suivi SFR"
+        subtitle="Choisis une fonctionnalité ci-dessous."
+      />
 
       <div className="grid grid-cols-3 gap-4">
         {ITEMS.map((it) => {
