@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Bell, Loader2, Plus, RefreshCw, Ticket,
 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import PageHeader from '@/components/PageHeader'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
