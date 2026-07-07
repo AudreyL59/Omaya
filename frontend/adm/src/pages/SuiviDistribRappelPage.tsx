@@ -13,9 +13,10 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ArrowLeft, Bell, Loader2, Plus, RefreshCw, Ticket,
+  Bell, Loader2, Plus, RefreshCw, Ticket,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import PageHeader from '@/components/PageHeader'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -140,19 +141,7 @@ export default function SuiviDistribRappelPage() {
   return (
     <div className="min-h-screen bg-[#F5F5F0] p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link
-            to="/"
-            className="p-2 rounded hover:bg-white/50"
-            title="Retour"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <Bell className="w-6 h-6 text-[#8B7355]" />
-          <h1 className="text-2xl font-semibold text-[#8B7355]">
-            Rappel récup Doc Distrib
-          </h1>
-        </div>
+        <PageHeader icon={Bell} title="Rappel récup Doc Distrib" />
 
         <div className="bg-white rounded-lg shadow p-4">
           {/* Actions top */}

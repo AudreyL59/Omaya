@@ -12,7 +12,6 @@ import {
   Banknote, Loader2, Plus, Pencil, Copy, Trash2, Check, X,
   Save, Upload, Image as ImageIcon,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
 import { AuthImage } from '@shared/ui/AuthImage'

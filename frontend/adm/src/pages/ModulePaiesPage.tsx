@@ -14,7 +14,6 @@ import {
   Download,
 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
-import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'

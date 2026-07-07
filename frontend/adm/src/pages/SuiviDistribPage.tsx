@@ -10,8 +10,8 @@
  * Cf. WinDev Table_ListeSTE + FI_DétailDistributeur.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Building2, Loader2 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Building2, Loader2 } from 'lucide-react'
+import PageHeader from '@/components/PageHeader'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -82,19 +82,7 @@ export default function SuiviDistribPage() {
   return (
     <div className="min-h-screen bg-[#F5F5F0] p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link
-            to="/"
-            className="p-2 rounded hover:bg-white/50"
-            title="Retour"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <Building2 className="w-6 h-6 text-[#8B7355]" />
-          <h1 className="text-2xl font-semibold text-[#8B7355]">
-            Suivi Distributeurs
-          </h1>
-        </div>
+        <PageHeader icon={Building2} title="Suivi Distributeurs" />
 
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between mb-4">
