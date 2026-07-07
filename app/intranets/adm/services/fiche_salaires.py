@@ -788,36 +788,115 @@ def generer_pdf_prepaie(p: GenererPdfPrepaieParams) -> GenererPdfPrepaieResult:
 # Envoi FDP - ZIP protege + SMTP salaire@omaya.fr
 # --------------------------------------------------------------------
 
+def _decrypter_mdp_windev(mdp_crypte: bytes) -> Optional[str]:
+    """Decrypte pgt_salarie.mdp_crypte (bytea) vers le mot de passe en clair.
+
+    Cf. WinDev :
+      bufCle est un Buffer = HashChaine(HA_MD5_128, HASH_SECRET_KEY)
+      sResultat est un Buffer = DecrypteStandard(salarie.MDPCrypte,
+                                                bufCle, crypteAES128)
+
+    Details WinDev DecrypteStandard avec crypteAES128 :
+      - Algorithme : AES-128 en CBC
+      - Cle : buffer 16 bytes (MD5 de HASH_SECRET_KEY)
+      - IV : les 16 premiers bytes du buffer chiffre
+      - Contenu chiffre : le reste apres les 16 bytes d'IV
+      - Padding : PKCS7
+
+    Config env attendue :
+      HASH_SECRET_KEY : la constante WinDev (chaine)
+    """
+    if not mdp_crypte or len(mdp_crypte) < 32:
+        # Un buffer chiffre doit contenir au moins IV (16b) + 1 bloc (16b)
+        return None
+
+    import os
+    import hashlib
+
+    secret = os.environ.get("HASH_SECRET_KEY", "").strip()
+    if not secret:
+        return None  # config manquante -> fallback aval
+
+    # Cle AES-128 = MD5(secret) = 16 bytes
+    key = hashlib.md5(secret.encode("utf-8")).digest()
+
+    try:
+        from cryptography.hazmat.primitives.ciphers import (
+            Cipher, algorithms, modes,
+        )
+        from cryptography.hazmat.primitives.padding import PKCS7
+    except ImportError:
+        logger.warning("cryptography non installe - decryptage impossible")
+        return None
+
+    # IV = 16 premiers bytes, contenu = reste
+    iv = bytes(mdp_crypte[:16])
+    ciphertext = bytes(mdp_crypte[16:])
+
+    try:
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        decryptor = cipher.decryptor()
+        padded = decryptor.update(ciphertext) + decryptor.finalize()
+        unpadder = PKCS7(128).unpadder()
+        clear = unpadder.update(padded) + unpadder.finalize()
+    except Exception:
+        logger.exception("Decryptage AES-128 KO")
+        return None
+
+    try:
+        return clear.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            return clear.decode("latin-1")
+        except Exception:
+            return None
+
+
 def _mdp_zip_for_salarie(id_salarie: int, fallback: str = "OMAYA") -> str:
     """Retourne le mot de passe ZIP pour un salarie.
 
-    TODO migration : le WinDev utilise
-    DecrypteStandard(salarie.MDPCrypte, bufCle, crypteAES128) pour
-    obtenir le mdp de connexion du salarie. Le buffer 'bufCle' n'est
-    pas encore accessible cote Python.
+    Cf. WinDev : DecrypteStandard(salarie.MDPCrypte, bufCle, crypteAES128).
+    bufCle = HashChaine(HA_MD5_128, HASH_SECRET_KEY).
 
-    Strategie de secours (deployable) :
-      1. Login OMAYA du salarie (colonne login) - facile a retrouver
-      2. Sinon fallback constant
-
-    A migrer quand la cle AES-128 sera fournie.
+    Strategie :
+    1. Si HASH_SECRET_KEY configure ET mdp_crypte present : decrypte AES-128
+    2. Fallback : partie locale du login OMAYA (avant @)
+    3. Fallback ultime : constante 'OMAYA'
     """
     if not id_salarie:
         return fallback
     rh = get_pg_connection("rh")
     try:
         r = rh.query_one(
-            "SELECT login FROM pgt_salarie WHERE id_salarie = ?",
+            "SELECT login, mdp_crypte FROM pgt_salarie WHERE id_salarie = ?",
             (int(id_salarie),),
         )
     except Exception:
         r = None
-    login = ((r.get("login") if r else "") or "").strip()
-    if not login:
+    if not r:
         return fallback
-    # Le login est generalement l'email ; on prend la partie locale
-    # (avant @) qui est plus facile a saisir pour le salarie.
-    return login.split("@")[0].strip() or fallback
+
+    # 1. Tente decryptage WinDev
+    mdp_crypte = r.get("mdp_crypte")
+    if mdp_crypte:
+        if isinstance(mdp_crypte, memoryview):
+            mdp_crypte = mdp_crypte.tobytes()
+        elif isinstance(mdp_crypte, str):
+            try:
+                import base64 as _b64
+                mdp_crypte = _b64.b64decode(mdp_crypte)
+            except Exception:
+                mdp_crypte = None
+        if isinstance(mdp_crypte, bytes):
+            clear = _decrypter_mdp_windev(mdp_crypte)
+            if clear and clear.strip():
+                return clear.strip()
+
+    # 2. Fallback login (partie locale)
+    login = ((r.get("login") or "") or "").strip()
+    if login:
+        return login.split("@")[0].strip() or fallback
+    return fallback
 
 
 def _download_pdf_from_ftp(id_salarie: str, fic_name: str) -> Optional[bytes]:
