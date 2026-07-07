@@ -713,27 +713,98 @@ def _parse_plage(plage: str) -> Optional[tuple[int, int, int, int]]:
     return (min(r1, r2), min(c1, c2), max(r1, r2), max(c1, c2))
 
 
+def _is_numeric(s: str) -> bool:
+    """Test si une chaine represente un nombre (int/float, virgule ou point)."""
+    if not s:
+        return False
+    t = s.strip().replace(",", ".").replace(" ", "")
+    if t.startswith("-"):
+        t = t[1:]
+    if not t:
+        return False
+    return t.replace(".", "", 1).isdigit()
+
+
 def _render_prepaie_html(cells: list[list[str]], titre: str) -> str:
-    """Genere HTML pour PDF prepaie (page A4 portrait)."""
+    """Genere HTML pour PDF prepaie en A4 paysage.
+
+    - Colonnes s'adaptent au contenu (table-layout: auto)
+    - Cellules numeriques alignees a droite
+    - Font size adaptative selon le nombre de colonnes
+    - Cellules vides discretes (bg gris tres leger)
+    """
     from html import escape as h
-    rows = []
+    ncols = max((len(r) for r in cells), default=0)
+
+    # Font size adaptatif selon le nombre de colonnes
+    if ncols <= 8:
+        cell_font = 9
+    elif ncols <= 12:
+        cell_font = 8
+    elif ncols <= 16:
+        cell_font = 7
+    else:
+        cell_font = 6
+
+    rows_html: list[str] = []
     for row in cells:
-        rows.append("<tr>" + "".join(f"<td>{h(v)}</td>" for v in row) + "</tr>")
+        tds: list[str] = []
+        for v in row:
+            v_stripped = (v or "").strip()
+            classes: list[str] = []
+            if not v_stripped:
+                classes.append("empty")
+            elif _is_numeric(v_stripped):
+                classes.append("num")
+            cls = f' class="{" ".join(classes)}"' if classes else ""
+            tds.append(f"<td{cls}>{h(v_stripped)}</td>")
+        rows_html.append("<tr>" + "".join(tds) + "</tr>")
+
     return f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8"><title>{h(titre)}</title>
 <style>
-@page {{ size: A4; margin: 15mm 10mm; }}
-body {{ font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #222; }}
-h1 {{ font-size: 12pt; color: #17494E; border-bottom: 2px solid #17494E; padding-bottom: 4px; }}
-table {{ border-collapse: collapse; width: 100%; margin-top: 8px; }}
-td {{ border: 1px solid #999; padding: 3px 5px; font-size: 8pt; }}
+@page {{ size: A4 landscape; margin: 10mm 8mm 12mm 8mm; }}
+body {{
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: {cell_font}pt;
+    color: #222;
+    margin: 0;
+}}
+h1 {{
+    font-size: 12pt;
+    color: #17494E;
+    border-bottom: 2px solid #17494E;
+    padding-bottom: 4px;
+    margin: 0 0 8px 0;
+}}
+table {{
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 4px;
+    table-layout: auto;
+}}
+td {{
+    border: 1px solid #B0A78E;
+    padding: 2px 4px;
+    font-size: {cell_font}pt;
+    vertical-align: middle;
+    white-space: nowrap;
+}}
+td.num {{
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}}
+td.empty {{
+    background: #FAFAF7;
+}}
+tr:nth-child(even) td:not(.empty) {{ background: #FBFAF6; }}
 </style>
 </head>
 <body>
 <h1>{h(titre)}</h1>
-<table>{''.join(rows)}</table>
+<table>{"".join(rows_html)}</table>
 </body>
 </html>
 """
