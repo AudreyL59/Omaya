@@ -59,3 +59,38 @@ class ChargerPdfResult(BaseModel):
 class RechercheSalariePayload(BaseModel):
     """Recherche manuelle salarie (ligne rouge)."""
     q: str  # recherche libre nom/prenom
+
+
+# --------------------------------------------------------------------
+# Valider (decoupe PDF + upload FTP + recup base)
+# --------------------------------------------------------------------
+
+class ValiderParams(BaseModel):
+    """Input Btn Valider."""
+    mois_paiement: str  # YYYY-MM
+    pdf_b64: str        # PDF complet original en base64
+    vendeurs: list[VendeurRow] = Field(default_factory=list)
+
+
+class ValiderResult(BaseModel):
+    ok: bool
+    vendeurs: list[VendeurRow] = Field(default_factory=list)  # avec fichier_pdf / base_pdf / couleur
+    nb_valides: int = 0
+    nb_erreurs: int = 0
+    message: str = ""
+
+
+# --------------------------------------------------------------------
+# Sauvegarde XLSX / Reimport XLSX (reprise etat)
+# --------------------------------------------------------------------
+
+class SauvegardeXlsxResult(BaseModel):
+    ok: bool
+    xlsx_b64: str = ""
+    fic_name: str = ""
+
+
+class ReimportXlsxResult(BaseModel):
+    ok: bool
+    vendeurs: list[VendeurRow] = Field(default_factory=list)
+    message: str = ""
