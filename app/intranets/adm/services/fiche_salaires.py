@@ -24,8 +24,8 @@ from typing import Optional
 
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.schemas.fiche_salaires import (
-    ChargerPdfResult, EnvoiVendeurResult, EnvoyerFdpParams, EnvoyerFdpResult,
-    GenererPdfPrepaieParams, GenererPdfPrepaieResult,
+    CellData, ChargerPdfResult, EnvoiVendeurResult, EnvoyerFdpParams,
+    EnvoyerFdpResult, GenererPdfPrepaieParams, GenererPdfPrepaieResult,
     ParseXlsxResult, ReimportXlsxResult, SauvegardeXlsxResult, SocieteFDV,
     ValiderParams, ValiderResult, VendeurRow,
 )
@@ -661,6 +661,8 @@ def parse_xlsx(xlsx_bytes: bytes) -> ParseXlsxResult:
     except Exception as e:
         return ParseXlsxResult(ok=False, message=f"XLSX illisible : {e}")
 
+    # Ouvre aussi avec data_only=False pour les couleurs (data_only
+    # peut ignorer les styles dans certains cas)
     ws = wb.active
     if not ws:
         return ParseXlsxResult(ok=True)
@@ -671,26 +673,99 @@ def parse_xlsx(xlsx_bytes: bytes) -> ParseXlsxResult:
     nrows = min(nrows, 200)
     ncols = min(ncols, 30)
 
-    cells: list[list[str]] = []
+    cells: list[list[CellData]] = []
     for r in range(1, nrows + 1):
-        row_vals: list[str] = []
+        row_data: list[CellData] = []
         for c in range(1, ncols + 1):
-            v = ws.cell(row=r, column=c).value
-            if v is None:
-                row_vals.append("")
-            elif isinstance(v, (int, float)):
-                # Format nombre : entier -> pas de decimal, sinon 2 dec
-                if isinstance(v, int) or float(v).is_integer():
-                    row_vals.append(str(int(v)))
-                else:
-                    row_vals.append(f"{v:.2f}")
-            else:
-                row_vals.append(str(v))
-        cells.append(row_vals)
+            cell = ws.cell(row=r, column=c)
+            row_data.append(_cell_to_data(cell))
+        cells.append(row_data)
 
     return ParseXlsxResult(
         ok=True, nrows=nrows, ncols=ncols, cells=cells,
     )
+
+
+def _color_hex(color) -> str:
+    """Extrait une couleur hex 6 chars 'RRGGBB' depuis openpyxl.
+    Retourne '' si couleur non definie/blanche/transparente."""
+    if color is None:
+        return ""
+    try:
+        # openpyxl : color.rgb peut etre 'AARRGGBB' (avec alpha) ou None
+        rgb = getattr(color, "rgb", None)
+        if not rgb or not isinstance(rgb, str):
+            return ""
+        s = rgb.upper()
+        # Format ARGB -> retire alpha
+        if len(s) == 8:
+            s = s[2:]
+        if len(s) != 6:
+            return ""
+        # Blanc / noir 000000 = probablement pas de fond
+        if s == "FFFFFF" or s == "000000":
+            return ""
+        return s
+    except Exception:
+        return ""
+
+
+def _cell_to_data(cell) -> "CellData":
+    """Convertit une cellule openpyxl en CellData (valeur + styles)."""
+    # Valeur formatee (comme avant)
+    v = cell.value
+    if v is None:
+        v_str = ""
+    elif isinstance(v, (int, float)):
+        if isinstance(v, int) or float(v).is_integer():
+            v_str = str(int(v))
+        else:
+            v_str = f"{v:.2f}"
+    else:
+        v_str = str(v)
+
+    data = CellData(v=v_str)
+
+    # Couleur de fond
+    try:
+        fill = cell.fill
+        if fill and fill.fgColor is not None:
+            data.bg = _color_hex(fill.fgColor)
+    except Exception:
+        pass
+
+    # Style texte
+    try:
+        font = cell.font
+        if font:
+            if font.bold:
+                data.bold = True
+            if font.italic:
+                data.italic = True
+            data.fg = _color_hex(font.color)
+    except Exception:
+        pass
+
+    # Alignement
+    try:
+        align = cell.alignment
+        if align and align.horizontal in ("left", "center", "right"):
+            data.align = align.horizontal
+    except Exception:
+        pass
+
+    # Bordures (true si le style est defini et != 'none')
+    try:
+        border = cell.border
+        if border:
+            data.bt = bool(border.top and border.top.style)
+            data.br = bool(border.right and border.right.style)
+            data.bb = bool(border.bottom and border.bottom.style)
+            data.bl = bool(border.left and border.left.style)
+    except Exception:
+        pass
+
+    return data
 
 
 def _parse_plage(plage: str) -> Optional[tuple[int, int, int, int]]:
@@ -725,20 +800,20 @@ def _is_numeric(s: str) -> bool:
     return t.replace(".", "", 1).isdigit()
 
 
-def _render_prepaie_html(cells: list[list[str]], titre: str) -> str:
+def _render_prepaie_html(
+    cells: list[list[CellData]], titre: str,
+) -> str:
     """Genere HTML pour PDF prepaie en A4 paysage.
 
     - Colonnes s'adaptent au contenu (table-layout: auto)
     - Cellules numeriques alignees a droite
     - Font size adaptative selon le nombre de colonnes
-    - Cellules vides discretes (bg gris tres leger)
+    - Reproduit les couleurs de fond + bordures + gras du XLSX source
     """
     from html import escape as h
     ncols = max((len(r) for r in cells), default=0)
 
     # Font size adaptatif selon le nombre de colonnes
-    # A4 paysage utile ~281mm largeur. Chaque colonne prend en moyenne
-    # 8-14mm selon le font size + padding.
     if ncols <= 6:
         cell_font = 9
     elif ncols <= 10:
@@ -753,15 +828,33 @@ def _render_prepaie_html(cells: list[list[str]], titre: str) -> str:
     rows_html: list[str] = []
     for row in cells:
         tds: list[str] = []
-        for v in row:
-            v_stripped = (v or "").strip()
+        for cell in row:
+            v_stripped = (cell.v or "").strip()
             classes: list[str] = []
+            styles: list[str] = []
             if not v_stripped:
                 classes.append("empty")
             elif _is_numeric(v_stripped):
                 classes.append("num")
+
+            # Styles heritees du XLSX
+            if cell.bg:
+                styles.append(f"background:#{cell.bg}")
+            if cell.fg:
+                styles.append(f"color:#{cell.fg}")
+            if cell.bold:
+                styles.append("font-weight:bold")
+            if cell.italic:
+                styles.append("font-style:italic")
+            if cell.align and not classes.count("num"):
+                styles.append(f"text-align:{cell.align}")
+            # Bordures explicites du XLSX (surcharge les bordures default)
+            if any([cell.bt, cell.br, cell.bb, cell.bl]):
+                styles.append("border:1px solid #444")
+
             cls = f' class="{" ".join(classes)}"' if classes else ""
-            tds.append(f"<td{cls}>{h(v_stripped)}</td>")
+            sty = f' style="{";".join(styles)}"' if styles else ""
+            tds.append(f"<td{cls}{sty}>{h(v_stripped)}</td>")
         rows_html.append("<tr>" + "".join(tds) + "</tr>")
 
     return f"""<!DOCTYPE html>
@@ -808,7 +901,6 @@ td.num {{
 td.empty {{
     background: #FAFAF7;
 }}
-tr:nth-child(even) td:not(.empty) {{ background: #FBFAF6; }}
 </style>
 </head>
 <body>
@@ -877,21 +969,12 @@ def generer_pdf_prepaie(p: GenererPdfPrepaieParams) -> GenererPdfPrepaieResult:
         )
 
     r_min, c_min, r_max, c_max = bounds
-    cells: list[list[str]] = []
+    cells: list[list[CellData]] = []
     for r in range(r_min, r_max + 1):
-        row_vals: list[str] = []
+        row_data: list[CellData] = []
         for c in range(c_min, c_max + 1):
-            v = ws.cell(row=r, column=c).value
-            if v is None:
-                row_vals.append("")
-            elif isinstance(v, (int, float)):
-                if isinstance(v, int) or float(v).is_integer():
-                    row_vals.append(str(int(v)))
-                else:
-                    row_vals.append(f"{v:.2f}")
-            else:
-                row_vals.append(str(v))
-        cells.append(row_vals)
+            row_data.append(_cell_to_data(ws.cell(row=r, column=c)))
+        cells.append(row_data)
 
     # Genere PDF
     titre = f"Tableau prepaie - {p.nom_prenom} - {p.mois_paiement}"

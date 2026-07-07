@@ -101,12 +101,28 @@ class ReimportXlsxResult(BaseModel):
 # Prepaie Excel (Plan 2)
 # --------------------------------------------------------------------
 
+class CellData(BaseModel):
+    """Cellule XLSX avec styles (couleurs, bordures, gras) pour reproduire
+    la mise en page cote frontend et dans le PDF genere.
+    Champs optionnels par defaut '' / False -> compression JSON."""
+    v: str = ""
+    bg: str = ""       # couleur fond hex 'RRGGBB' (sans #)
+    fg: str = ""       # couleur texte hex 'RRGGBB' (sans #)
+    bold: bool = False
+    italic: bool = False
+    align: str = ""    # 'left' | 'center' | 'right' (vide = auto)
+    bt: bool = False   # bordure top (si XLSX en definit une)
+    br: bool = False   # bordure right
+    bb: bool = False   # bordure bottom
+    bl: bool = False   # bordure left
+
+
 class ParseXlsxResult(BaseModel):
     """Parse XLSX prepaie -> matrice cellules pour affichage frontend."""
     ok: bool
     nrows: int = 0
     ncols: int = 0
-    cells: list[list[str]] = Field(default_factory=list)  # matrice [row][col]
+    cells: list[list[CellData]] = Field(default_factory=list)
     message: str = ""
 
 

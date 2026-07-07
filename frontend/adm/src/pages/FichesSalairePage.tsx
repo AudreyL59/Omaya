@@ -24,6 +24,19 @@ interface SocieteFDV {
   rs_interne: string
 }
 
+interface CellData {
+  v: string
+  bg?: string        // 'RRGGBB' sans #
+  fg?: string
+  bold?: boolean
+  italic?: boolean
+  align?: 'left' | 'center' | 'right' | ''
+  bt?: boolean       // border top
+  br?: boolean
+  bb?: boolean
+  bl?: boolean
+}
+
 interface VendeurRow {
   id_salarie: string
   vendeur: string
@@ -69,7 +82,7 @@ export default function FichesSalairePage() {
   const xlsxInputRef = useRef<HTMLInputElement>(null)
 
   // Plan 2 - Prépaie
-  const [prepaieCells, setPrepaieCells] = useState<string[][]>([])
+  const [prepaieCells, setPrepaieCells] = useState<CellData[][]>([])
   const [plage, setPlage] = useState<string>('')
   const [xlsxB64, setXlsxB64] = useState('')
   const prepaieInputRef = useRef<HTMLInputElement>(null)
@@ -956,20 +969,38 @@ export default function FichesSalairePage() {
                           <th className="bg-[#E5E0D5] px-2 py-0.5 sticky left-0 text-[#8B7355] font-mono">
                             {r + 1}
                           </th>
-                          {row.map((cell, c) => (
-                            <td
-                              key={c}
-                              onMouseDown={(e) => onCellMouseDown(r, c, e)}
-                              onMouseEnter={() => onCellMouseEnter(r, c)}
-                              className={`border border-[#E5E0D5] px-1 py-0.5 whitespace-nowrap cursor-pointer ${
-                                isCellSelected(r, c)
-                                  ? 'bg-[#8B7355] text-white'
-                                  : 'hover:bg-[#ECF1F2]'
-                              }`}
-                            >
-                              {cell}
-                            </td>
-                          ))}
+                          {row.map((cell, c) => {
+                            const selected = isCellSelected(r, c)
+                            const style: React.CSSProperties = {}
+                            if (!selected) {
+                              if (cell.bg) style.background = `#${cell.bg}`
+                              if (cell.fg) style.color = `#${cell.fg}`
+                            }
+                            if (cell.bold) style.fontWeight = 'bold'
+                            if (cell.italic) style.fontStyle = 'italic'
+                            if (cell.align) style.textAlign = cell.align
+                            // Bordures explicites (surcharge le border par defaut)
+                            const hasBorder =
+                              cell.bt || cell.br || cell.bb || cell.bl
+                            const borderCls = hasBorder
+                              ? 'border border-gray-500'
+                              : 'border border-[#E5E0D5]'
+                            return (
+                              <td
+                                key={c}
+                                onMouseDown={(e) => onCellMouseDown(r, c, e)}
+                                onMouseEnter={() => onCellMouseEnter(r, c)}
+                                style={style}
+                                className={`${borderCls} px-1 py-0.5 whitespace-nowrap cursor-pointer ${
+                                  selected
+                                    ? 'bg-[#8B7355] text-white'
+                                    : 'hover:brightness-95'
+                                }`}
+                              >
+                                {cell.v}
+                              </td>
+                            )
+                          })}
                         </tr>
                       ))}
                     </tbody>
