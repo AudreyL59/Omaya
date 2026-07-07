@@ -92,6 +92,16 @@ SMTP_FPE_USER = os.getenv("SMTP_FPE_USER", "fpe@exosphere.fr")
 SMTP_FPE_PASSWORD = os.getenv("SMTP_FPE_PASSWORD", "")
 SMTP_FPE_FROM = os.getenv("SMTP_FPE_FROM", "fpe@exosphere.fr")
 
+# SMTP OVH salaire@omaya.fr (Fen_FicheSalaires - envoi FDP)
+SMTP_SALAIRE_HOST = os.getenv("SMTP_SALAIRE_HOST", "ssl0.ovh.net")
+SMTP_SALAIRE_PORT = int(os.getenv("SMTP_SALAIRE_PORT", "465"))
+SMTP_SALAIRE_USER = os.getenv("SMTP_SALAIRE_USER", "salaire@omaya.fr")
+SMTP_SALAIRE_PASSWORD = os.getenv("SMTP_SALAIRE_PASSWORD", "")
+
+# Cle pour derivation MDP salarie (cf. WinDev :
+# bufCle = HashChaine(HA_MD5_128, HASH_SECRET_KEY) + DecrypteStandard AES-128)
+HASH_SECRET_KEY = os.getenv("HASH_SECRET_KEY", "")
+
 # Google Maps
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 GOOGLE_MAPS_SECRET = os.getenv("GOOGLE_MAPS_SECRET", "")

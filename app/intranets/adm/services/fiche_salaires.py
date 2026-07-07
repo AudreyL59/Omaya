@@ -810,10 +810,10 @@ def _decrypter_mdp_windev(mdp_crypte: bytes) -> Optional[str]:
         # Un buffer chiffre doit contenir au moins IV (16b) + 1 bloc (16b)
         return None
 
-    import os
     import hashlib
+    from app.core.config import HASH_SECRET_KEY
 
-    secret = os.environ.get("HASH_SECRET_KEY", "").strip()
+    secret = (HASH_SECRET_KEY or "").strip()
     if not secret:
         return None  # config manquante -> fallback aval
 
@@ -974,27 +974,24 @@ def _send_mail_salaire(
     from email.mime.text import MIMEText
     from email.utils import formataddr
 
-    # Config
-    try:
-        import os
-        host = os.environ.get("SMTP_SALAIRE_HOST", "ssl0.ovh.net")
-        port = int(os.environ.get("SMTP_SALAIRE_PORT", "465"))
-        user = os.environ.get("SMTP_SALAIRE_USER", "salaire@omaya.fr")
-        pwd = os.environ.get("SMTP_SALAIRE_PASSWORD", "")
-        if not pwd:
-            # Fallback SMTP RH (Gmail) - le mail arrivera depuis noreply
-            from app.core.config import (
-                SMTP_RH_HOST, SMTP_RH_PORT, SMTP_RH_USER, SMTP_RH_PASSWORD,
-            )
-            host = SMTP_RH_HOST
-            port = SMTP_RH_PORT
-            user = SMTP_RH_USER
-            pwd = SMTP_RH_PASSWORD
-    except Exception:
-        logger.exception("Config SMTP salaire")
-        return False
+    # Config centralisee (app/core/config.py)
+    from app.core.config import (
+        SMTP_SALAIRE_HOST, SMTP_SALAIRE_PORT, SMTP_SALAIRE_USER,
+        SMTP_SALAIRE_PASSWORD,
+        SMTP_RH_HOST, SMTP_RH_PORT, SMTP_RH_USER, SMTP_RH_PASSWORD,
+    )
+    host = SMTP_SALAIRE_HOST
+    port = SMTP_SALAIRE_PORT
+    user = SMTP_SALAIRE_USER
+    pwd = SMTP_SALAIRE_PASSWORD
     if not pwd:
-        logger.error("SMTP salaire pas configure (SMTP_SALAIRE_PASSWORD vide)")
+        # Fallback SMTP RH (Gmail) si salaire non configure
+        host = SMTP_RH_HOST
+        port = SMTP_RH_PORT
+        user = SMTP_RH_USER
+        pwd = SMTP_RH_PASSWORD
+    if not pwd:
+        logger.error("SMTP pas configure (SMTP_SALAIRE_PASSWORD + SMTP_RH_PASSWORD vides)")
         return False
 
     all_recipients = dest + cci
