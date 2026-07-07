@@ -317,18 +317,45 @@ export default function FichesSalairePage() {
     }
   }
 
-  // ------ Sélection cellules Excel ------
-  const onCellClick = (r: number, c: number, evt: React.MouseEvent) => {
+  // ------ Sélection cellules Excel (drag pour multi) ------
+  const [dragging, setDragging] = useState(false)
+
+  const onCellMouseDown = (r: number, c: number, evt: React.MouseEvent) => {
+    evt.preventDefault()
     if (evt.shiftKey && selCell1) {
       setSelCell2({ r, c })
-      const p = cellsToPlage(selCell1, { r, c })
-      setPlage(p)
+      setPlage(cellsToPlage(selCell1, { r, c }))
     } else {
       setSelCell1({ r, c })
       setSelCell2({ r, c })
       setPlage(cellsToPlage({ r, c }, { r, c }))
     }
+    setDragging(true)
   }
+
+  const onCellMouseEnter = (r: number, c: number) => {
+    if (!dragging || !selCell1) return
+    setSelCell2({ r, c })
+    setPlage(cellsToPlage(selCell1, { r, c }))
+  }
+
+  useEffect(() => {
+    const stop = () => setDragging(false)
+    if (dragging) {
+      window.addEventListener('mouseup', stop)
+      return () => window.removeEventListener('mouseup', stop)
+    }
+    return undefined
+  }, [dragging])
+
+  // Auto-selection du premier vendeur choix=true au passage en Plan 2
+  // (necessaire pour activer le btn Enregistrer la selection en PDF)
+  useEffect(() => {
+    if (plan !== 2) return
+    if (selectedIdx >= 0 && vendeurs[selectedIdx]?.choix) return
+    const first = vendeurs.findIndex((v) => v.choix)
+    if (first >= 0) setSelectedIdx(first)
+  }, [plan, vendeurs, selectedIdx])
 
   const cellsToPlage = (a: { r: number; c: number }, b: { r: number; c: number }): string => {
     const rMin = Math.min(a.r, b.r) + 1
@@ -588,7 +615,14 @@ export default function FichesSalairePage() {
               <button
                 onClick={doEnregistrerSelection}
                 disabled={loading || !plage || selectedIdx < 0}
-                className="flex items-center gap-1.5 px-3 py-2 rounded bg-[#059669] text-white disabled:opacity-40 hover:bg-[#047857]"
+                title={
+                  selectedIdx < 0
+                    ? 'Sélectionne d\'abord un vendeur dans la liste'
+                    : !plage
+                    ? 'Sélectionne d\'abord une plage dans le tableau'
+                    : ''
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded bg-[#17494E] text-white disabled:opacity-40 hover:bg-[#0F3438]"
               >
                 <FileText className="w-4 h-4" />
                 Enregistrer la sélection en PDF
@@ -767,7 +801,7 @@ export default function FichesSalairePage() {
             {plan === 2 && prepaieCells.length > 0 && (
               <div>
                 <div className="text-xs text-[#8B7355] font-medium mb-2">
-                  Cliquez une cellule + Maj+clic pour sélectionner une plage
+                  Cliquez-glissez pour sélectionner une plage (ou clic + Maj+clic)
                 </div>
                 <div className="overflow-auto max-h-[600px] border border-[#E5E0D5] rounded">
                   <table className="text-[10px] border-collapse">
@@ -793,7 +827,8 @@ export default function FichesSalairePage() {
                           {row.map((cell, c) => (
                             <td
                               key={c}
-                              onClick={(e) => onCellClick(r, c, e)}
+                              onMouseDown={(e) => onCellMouseDown(r, c, e)}
+                              onMouseEnter={() => onCellMouseEnter(r, c)}
                               className={`border border-[#E5E0D5] px-1 py-0.5 whitespace-nowrap cursor-pointer ${
                                 isCellSelected(r, c)
                                   ? 'bg-[#8B7355] text-white'
