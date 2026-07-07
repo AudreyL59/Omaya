@@ -109,36 +109,56 @@ _BULLETIN_RE = re.compile(
 )
 
 
+# Table de translation accents -> sans (pour normalisation SQL et Python).
+_ACCENTS_FROM = "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüý"
+_ACCENTS_TO   = "AAAAAACEEEEIIIINOOOOOUUUUYaaaaaaceeeeiiiinooooouuuuy"
+
+
 def _find_salarie_by_name(
     nom_norm: str, prenom_norm: str,
 ) -> Optional[dict]:
-    """Recherche un salarie actif par nom+prenom (insensible casse/accent).
+    """Recherche un salarie par nom+prenom, tolerant a :
+      - la casse (UPPER)
+      - les accents (TRANSLATE)
+      - les espaces bordants (TRIM)
+      - le statut (inclut les salaries sortis)
+      - l'ambiguite : si N matches, on prend le salarie actif ou le
+        segment d'embauche le plus recent.
 
-    Retour : {id_salarie, nom, prenom, mail, gsm} ou None.
+    Cf. WinDev ReqChercheSalarieByPrenomNOM (avec ChaineFormate
+    ccSansAccent + ccMajuscule).
     """
     rh = get_pg_connection("rh")
-    # Utilise UPPER + unaccent equivalent : on normalise cote SQL avec
-    # TRANSLATE (pattern classique PG sans extension unaccent).
     try:
         rows = rh.query(
-            """SELECT s.id_salarie, s.nom, s.prenom, s.login AS mail,
-                      c.tel_mob AS gsm
-                 FROM pgt_salarie s
-                 LEFT JOIN pgt_salarie_coordonnees c
-                        ON c.id_salarie = s.id_salarie
-                 JOIN pgt_salarie_embauche e
-                      ON e.id_salarie = s.id_salarie
-                     AND (e.modif_elem IS NULL
-                          OR e.modif_elem NOT LIKE '%suppr%')
-                     AND e.en_activite = TRUE
-                WHERE UPPER(s.nom) = ?
-                  AND UPPER(s.prenom) = ?
-                LIMIT 2""",
+            f"""SELECT DISTINCT ON (s.id_salarie)
+                    s.id_salarie, s.nom, s.prenom, s.login AS mail,
+                    c.tel_mob AS gsm,
+                    e.en_activite,
+                    e.date_debut
+                  FROM pgt_salarie s
+                  LEFT JOIN pgt_salarie_coordonnees c
+                         ON c.id_salarie = s.id_salarie
+                  LEFT JOIN pgt_salarie_embauche e
+                         ON e.id_salarie = s.id_salarie
+                        AND (e.modif_elem IS NULL
+                             OR e.modif_elem NOT LIKE '%suppr%')
+                 WHERE TRANSLATE(UPPER(TRIM(s.nom)),
+                                 '{_ACCENTS_FROM}',
+                                 '{_ACCENTS_TO}') = ?
+                   AND TRANSLATE(UPPER(TRIM(s.prenom)),
+                                 '{_ACCENTS_FROM}',
+                                 '{_ACCENTS_TO}') = ?
+                 ORDER BY s.id_salarie, e.date_debut DESC NULLS LAST""",
             (nom_norm, prenom_norm),
         ) or []
     except Exception:
+        logger.exception("Recherche salarie KO")
         return None
-    # Ambiguite -> pas d'attribution auto (cf. WinDev HNbEnr=1)
+    # Cf. Fen_FicheSalaires - HNbEnr = 1 sinon ligne rouge :
+    # en cas d'ambiguite (homonyme), on ne prend pas de decision,
+    # on laisse en rouge pour attribution manuelle.
+    # (DISTINCT ON s.id_salarie -> chaque row = 1 personne differente)
     if len(rows) != 1:
         return None
     r = rows[0]
