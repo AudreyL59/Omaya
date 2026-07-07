@@ -151,6 +151,62 @@ def post_generer_pdf_prepaie(
     return svc.generer_pdf_prepaie(params)
 
 
+@router.get("/download-ftp")
+def get_download_ftp(
+    id_salarie: str = Query(...),
+    fic: str = Query(..., min_length=1),
+    user: UserToken = Depends(get_current_user),
+):
+    """Btns Verifier Fiche/Base/Tableau : telecharge un fichier depuis
+    gestionRH/{id_salarie}/Fiches_Salaires/{fic} et le sert au frontend.
+
+    Cf. WinDev : Ouvre(Fen_ApercuFichier, TableListeVendeur.FichierPDF, monfic)
+    Cote web : GET le fichier + Content-Disposition inline pour ouverture
+    directe dans un nouvel onglet.
+    """
+    _require_droit(user, "FichePaies")
+    # Sanitize : empeche path traversal
+    if "/" in fic or "\\" in fic or ".." in fic:
+        raise HTTPException(status_code=400, detail="Nom fichier invalide")
+    if not id_salarie or id_salarie == "0":
+        raise HTTPException(status_code=400, detail="id_salarie manquant")
+    try:
+        int(id_salarie)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="id_salarie invalide")
+
+    from app.core.config import FTP_GESTION_RH_PATH
+    from app.shared.tickets.forms.factdistrib import _ftp_download
+    path = (
+        f"{FTP_GESTION_RH_PATH.rstrip('/')}"
+        f"/{id_salarie}/Fiches_Salaires/{fic}"
+    )
+    try:
+        content = _ftp_download(path)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"FTP KO : {e}")
+    if not content:
+        raise HTTPException(status_code=404, detail="Fichier introuvable")
+
+    # Type MIME selon extension
+    ext = fic.rsplit(".", 1)[-1].lower() if "." in fic else ""
+    mime = {
+        "pdf": "application/pdf",
+        "xlsx": (
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+        "xls": "application/vnd.ms-excel",
+    }.get(ext, "application/octet-stream")
+    return Response(
+        content=content,
+        media_type=mime,
+        headers={
+            "Content-Disposition": f'inline; filename="{fic}"',
+        },
+    )
+
+
 @router.post("/envoyer-fdp", response_model=EnvoyerFdpResult)
 def post_envoyer_fdp(
     params: EnvoyerFdpParams,

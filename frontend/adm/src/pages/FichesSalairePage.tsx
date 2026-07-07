@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Send, Loader2, Upload, Check, X as XIcon, Save,
-  FileText, ArrowLeftCircle,
+  FileText, ArrowLeftCircle, Eye,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -426,6 +426,41 @@ export default function FichesSalairePage() {
     )
   }
 
+  // ------ Btns Vérifier Fiche/Base/Tableau ------
+  const doVerifier = async (type: 'fs' | 'base' | 'prep') => {
+    if (selectedIdx < 0) {
+      showToast('Sélectionne un vendeur', 'info')
+      return
+    }
+    const v = vendeurs[selectedIdx]
+    const fic =
+      type === 'fs' ? v.fichier_pdf
+      : type === 'base' ? v.base_pdf
+      : v.tab_prepaies
+    if (!fic) {
+      showToast('Aucun fichier disponible pour ce vendeur', 'info')
+      return
+    }
+    try {
+      const r = await fetch(
+        `${API_BASE}/paies/fiches/download-ftp`
+          + `?id_salarie=${encodeURIComponent(v.id_salarie)}`
+          + `&fic=${encodeURIComponent(fic)}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) {
+        showToast(`Fichier introuvable : ${fic}`, 'error')
+        return
+      }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      showToast('Erreur téléchargement', 'error')
+    }
+  }
+
   // ------ Btn Enregistrer la sélection en PDF ------
   const doEnregistrerSelection = async () => {
     if (selectedIdx < 0) {
@@ -655,6 +690,35 @@ export default function FichesSalairePage() {
                 <ArrowLeftCircle className="w-4 h-4" />
                 Retour étape précédente
               </button>
+              <div className="flex items-center gap-1 border-l border-r border-[#E5E0D5] px-2">
+                <button
+                  onClick={() => doVerifier('fs')}
+                  disabled={selectedIdx < 0 || !vendeurs[selectedIdx]?.fichier_pdf}
+                  title="Vérifier la fiche de salaire (PDF découpé)"
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  Vérifier Fiche
+                </button>
+                <button
+                  onClick={() => doVerifier('base')}
+                  disabled={selectedIdx < 0 || !vendeurs[selectedIdx]?.base_pdf}
+                  title="Vérifier la base contrat"
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  Vérifier Base
+                </button>
+                <button
+                  onClick={() => doVerifier('prep')}
+                  disabled={selectedIdx < 0 || !vendeurs[selectedIdx]?.tab_prepaies}
+                  title="Vérifier le tableau prépaie"
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  Vérifier Tableau
+                </button>
+              </div>
               <button
                 onClick={() => prepaieInputRef.current?.click()}
                 className="flex items-center gap-1.5 px-3 py-2 rounded bg-[#8B7355] text-white hover:bg-[#725e46]"
@@ -707,6 +771,21 @@ export default function FichesSalairePage() {
                 )}
               </div>
             )}
+            {/* Légende couleur Prépaie */}
+            <div className="mt-3 pt-2 border-t border-[#F0EDE5] flex items-center gap-4 flex-wrap text-[11px] text-gray-600">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full bg-[#FED2D2]" />
+                Fichier Prépaie non créé
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full bg-[#FFC6A8]" />
+                Fichier Prépaie créé mais pas envoyé dans le dossier salarié
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full bg-[#D1F2C9]" />
+                Fichier Prépaie créé et disponible dans le dossier
+              </span>
+            </div>
           </div>
         )}
 
