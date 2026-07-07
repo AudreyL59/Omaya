@@ -134,13 +134,15 @@ function PartenaireCell({
   onChange: (v: PartenaireState) => void
 }) {
   const isSFR = p.prefixe === 'SFR'
+  const inputCls =
+    'w-full min-w-0 px-2 py-1 border border-[#E5E0D5] rounded text-xs bg-white disabled:bg-[#F5F5F0] disabled:cursor-not-allowed'
   return (
     <div
       className={`border rounded-lg p-3 ${
         p.coche ? 'border-[#8B7355] bg-white' : 'border-[#E5E0D5] bg-[#FCFAF5] opacity-60'
       }`}
     >
-      <label className="flex items-center gap-2 mb-2 cursor-pointer">
+      <label className="flex items-center gap-2 mb-3 cursor-pointer">
         <input
           type="checkbox"
           checked={p.coche}
@@ -149,50 +151,66 @@ function PartenaireCell({
         />
         <span className="font-semibold text-[#8B7355]">{p.prefixe}</span>
       </label>
-      <div className="text-xs space-y-1">
-        <div className="flex items-center gap-1">
-          <span className="text-[#8B7355] font-medium w-16">
-            {isSFR ? 'Signé' : 'Signé'}
-          </span>
-          <span className="text-gray-500">Du</span>
-          <input
-            type="date"
-            value={p.signe_du}
-            onChange={(e) => onChange({ ...p, signe_du: e.target.value })}
-            className="px-1 py-0.5 border border-[#E5E0D5] rounded text-xs"
-            disabled={!p.coche}
-          />
-          <span className="text-gray-500">Au</span>
-          <input
-            type="date"
-            value={p.signe_au}
-            onChange={(e) => onChange({ ...p, signe_au: e.target.value })}
-            className="px-1 py-0.5 border border-[#E5E0D5] rounded text-xs"
-            disabled={!p.coche}
-          />
+
+      {/* Signé */}
+      <div className="mb-2">
+        <div className="text-[10px] uppercase tracking-wider text-[#8B7355] font-semibold mb-1">
+          Signé
         </div>
-        {!isSFR && (
-          <div className="flex items-center gap-1">
-            <span className="text-[#8B7355] font-medium w-16">Hors Délai</span>
-            <span className="text-gray-500">Du</span>
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-gray-500 mb-0.5">Du</span>
             <input
               type="date"
-              value={p.hors_delai_du}
-              onChange={(e) => onChange({ ...p, hors_delai_du: e.target.value })}
-              className="px-1 py-0.5 border border-[#E5E0D5] rounded text-xs"
-              disabled={!p.coche}
-            />
-            <span className="text-gray-500">Au</span>
-            <input
-              type="date"
-              value={p.hors_delai_au}
-              onChange={(e) => onChange({ ...p, hors_delai_au: e.target.value })}
-              className="px-1 py-0.5 border border-[#E5E0D5] rounded text-xs"
+              value={p.signe_du}
+              onChange={(e) => onChange({ ...p, signe_du: e.target.value })}
+              className={inputCls}
               disabled={!p.coche}
             />
           </div>
-        )}
+          <div className="flex flex-col">
+            <span className="text-[10px] text-gray-500 mb-0.5">Au</span>
+            <input
+              type="date"
+              value={p.signe_au}
+              onChange={(e) => onChange({ ...p, signe_au: e.target.value })}
+              className={inputCls}
+              disabled={!p.coche}
+            />
+          </div>
+        </div>
       </div>
+
+      {/* Hors Délai (pas pour SFR) */}
+      {!isSFR && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-[#8B7355] font-semibold mb-1">
+            Hors Délai
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-500 mb-0.5">Du</span>
+              <input
+                type="date"
+                value={p.hors_delai_du}
+                onChange={(e) => onChange({ ...p, hors_delai_du: e.target.value })}
+                className={inputCls}
+                disabled={!p.coche}
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-500 mb-0.5">Au</span>
+              <input
+                type="date"
+                value={p.hors_delai_au}
+                onChange={(e) => onChange({ ...p, hors_delai_au: e.target.value })}
+                className={inputCls}
+                disabled={!p.coche}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -525,7 +543,7 @@ export default function ModulePaiesPage() {
           <h2 className="text-sm font-semibold text-[#8B7355] uppercase tracking-wider mb-3">
             Choisir les partenaires
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {partsVisibles.map((p) => (
               <PartenaireCell
                 key={p.prefixe}
