@@ -34,6 +34,7 @@ import SuiviDistribPage from '@/pages/SuiviDistribPage'
 import SuiviDistribRappelPage from '@/pages/SuiviDistribRappelPage'
 import GestionExoCashPage from '@/pages/GestionExoCashPage'
 import ModulePaiesPage from '@/pages/ModulePaiesPage'
+import FichesSalairePage from '@/pages/FichesSalairePage'
 import GestionRecruteursPageAdm from '@/pages/GestionRecruteursPage'
 import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
@@ -136,6 +137,7 @@ function App() {
           <Route path="distributeurs/documents" element={<SuiviDistribRappelPage />} />
           <Route path="comm/exo-cash" element={<GestionExoCashPage />} />
           <Route path="paies" element={<ModulePaiesPage />} />
+          <Route path="paies/fiches" element={<FichesSalairePage />} />
           <Route path="recrutement/recruteurs" element={<GestionRecruteursPageAdm />} />
           <Route path="recrutement/parametres" element={<ParametresCVPage />} />
           <Route path="imports/contrats" element={<ImportsHubPage />} />
