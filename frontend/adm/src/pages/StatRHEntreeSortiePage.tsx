@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
 import {
-  ChevronLeft,
   Calendar as CalendarIcon,
   Network,
   Building2,
@@ -10,7 +8,9 @@ import {
   Loader2,
   AlertCircle,
   X,
+  ArrowLeftRight,
 } from 'lucide-react'
+import PageHeader from '@/components/PageHeader'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -102,7 +102,6 @@ function capitalize(s: string): string {
 
 export default function StatRHEntreeSortiePage() {
   useDocumentTitle('Stat RH — DPAE / Sortie')
-  const navigate = useNavigate()
   const { user } = useAuth()
   const hasDroitGr = (user?.droits || []).includes('StatsRHGr')
 
@@ -167,19 +166,12 @@ export default function StatRHEntreeSortiePage() {
 
   return (
     <div className="p-8">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <button
-          onClick={() => navigate('/stat-rh')}
-          className="flex items-center gap-1.5 text-sm text-[#A68D8A] hover:text-[#4E1D17] mb-3"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Retour Stats RH
-        </button>
-        <h1 className="text-2xl font-bold text-[#4E1D17]">Stats DPAE / Sortie</h1>
-        <p className="text-[#A68D8A] mt-1">
-          Entrees et sorties par agence/equipe sur la periode.
-        </p>
-      </motion.div>
+      <PageHeader
+        icon={ArrowLeftRight}
+        title="Stats DPAE / Sortie"
+        subtitle="Entrées et sorties par agence/équipe sur la période."
+        backTo="/stat-rh"
+      />
 
       {/* Filtres */}
       <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-4 mt-6 flex flex-wrap items-center gap-3">

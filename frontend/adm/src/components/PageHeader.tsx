@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 interface PageHeaderProps {
   icon: LucideIcon
   title: string
+  subtitle?: string
   right?: React.ReactNode
   backTo?: string
 }
@@ -26,6 +27,7 @@ interface PageHeaderProps {
 export default function PageHeader({
   icon: Icon,
   title,
+  subtitle,
   right,
   backTo = '/',
 }: PageHeaderProps) {
@@ -38,8 +40,15 @@ export default function PageHeader({
       >
         <ArrowLeft className="w-5 h-5" />
       </Link>
-      <Icon className="w-6 h-6 text-[#17494E]" />
-      <h1 className="text-2xl font-semibold text-[#17494E]">{title}</h1>
+      <Icon className="w-6 h-6 text-[#17494E] shrink-0" />
+      <div className="min-w-0">
+        <h1 className="text-2xl font-semibold text-[#17494E] leading-tight">
+          {title}
+        </h1>
+        {subtitle && (
+          <p className="text-sm text-[#5A7A7D] mt-0.5">{subtitle}</p>
+        )}
+      </div>
       {right && <div className="ml-auto">{right}</div>}
     </div>
   )

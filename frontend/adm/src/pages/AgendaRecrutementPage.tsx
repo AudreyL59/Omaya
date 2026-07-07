@@ -21,6 +21,8 @@ import { showConfirm, showToast } from '@shared/ui/dialog'
 import AgendaDetailModal from '@/components/agenda/AgendaDetailModal'
 import RecruteurPicker from '@/components/agenda/RecruteurPicker'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
+import { CalendarDays } from 'lucide-react'
 
 interface AgendaRDV {
   id_evenement: string
@@ -334,10 +336,11 @@ export default function AgendaRecrutementPage() {
 
   return (
     <div className="p-8">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold text-[#4E1D17]">Agenda de recrutement</h1>
-        <p className="text-[#A68D8A] mt-1">RDV d'entretiens</p>
-      </motion.div>
+      <PageHeader
+        icon={CalendarDays}
+        title="Agenda de recrutement"
+        subtitle="RDV d'entretiens"
+      />
 
       <div className="mt-6">
         {/* Toolbar */}

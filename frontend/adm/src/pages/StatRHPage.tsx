@@ -6,8 +6,10 @@ import {
   ArrowLeftRight,
   Megaphone,
   ChevronRight,
+  BarChart3,
 } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 interface HubItem {
   key: string
@@ -59,15 +61,11 @@ export default function StatRHPage() {
 
   return (
     <div className="p-8 max-w-5xl">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <h1 className="text-2xl font-bold text-[#4E1D17]">Stats RH</h1>
-        <p className="text-[#A68D8A] mt-1">
-          Selectionne un rapport pour consulter les indicateurs.
-        </p>
-      </motion.div>
+      <PageHeader
+        icon={BarChart3}
+        title="Stats RH"
+        subtitle="Sélectionne un rapport pour consulter les indicateurs."
+      />
 
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
         {ITEMS.map((item, i) => (

@@ -1,18 +1,18 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
 import {
-  ChevronLeft,
   Calendar as CalendarIcon,
   Users,
   User,
   Play,
   Loader2,
   AlertCircle,
+  CalendarClock,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
 import ExportButton from '@/components/ExportButton'
 import StatRdvDetailModal from '@/components/StatRdvDetailModal'
@@ -80,7 +80,6 @@ function formatShortDate(raw: string): string {
 
 export default function StatRHRdvPage() {
   useDocumentTitle('Stat RH — RDV')
-  const navigate = useNavigate()
   const { user } = useAuth()
   const hasDroitGr = (user?.droits || []).includes('StatsRHGr')
 
@@ -149,19 +148,12 @@ export default function StatRHRdvPage() {
 
   return (
     <div className="p-8">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <button
-          onClick={() => navigate('/stat-rh')}
-          className="flex items-center gap-1.5 text-sm text-[#A68D8A] hover:text-[#4E1D17] mb-3"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Retour Stats RH
-        </button>
-        <h1 className="text-2xl font-bold text-[#4E1D17]">Stats Prise de RDV</h1>
-        <p className="text-[#A68D8A] mt-1">
-          Volumetrie des RDV planifies sur la periode.
-        </p>
-      </motion.div>
+      <PageHeader
+        icon={CalendarClock}
+        title="Stats Prise de RDV"
+        subtitle="Volumétrie des RDV planifiés sur la période."
+        backTo="/stat-rh"
+      />
 
       {/* Filtres */}
       <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-4 mt-6 flex flex-wrap items-center gap-3">

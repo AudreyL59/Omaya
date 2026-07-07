@@ -29,10 +29,12 @@ import {
   FileText,
   ClipboardList,
   FileSignature,
+  Network,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
 
 // --- Types ---------------------------------------------------------------
@@ -334,16 +336,11 @@ export default function OrganigrammePage() {
 
   return (
     <div className="p-8 h-[calc(100vh-4rem)] flex flex-col">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-[#4E1D17]">Organigramme</h1>
-            <p className="text-[#A68D8A] mt-1">
-              {stats.total} salariés · {stats.orgas} organisations
-            </p>
-          </div>
-        </div>
-      </motion.div>
+      <PageHeader
+        icon={Network}
+        title="Organigramme"
+        subtitle={`${stats.total} salariés · ${stats.orgas} organisations`}
+      />
 
       {/* Toolbar */}
       <div className="bg-white rounded-[10px] border border-[#E5DDDC] p-3 mt-6 flex items-center gap-3 flex-wrap">
