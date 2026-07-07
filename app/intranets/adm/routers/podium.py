@@ -34,6 +34,10 @@ from app.intranets.adm.schemas.podium import (
     ValiderAnneeParams, ValiderAnneeResult,
 )
 from app.intranets.adm.services import podium as svc
+from app.intranets.adm.services import podium_calcul as svc_calc
+from app.intranets.adm.schemas.podium import (
+    CalculPodiumParams, CalculPodiumResult,
+)
 
 router = APIRouter(prefix="/comm/podium", tags=["adm-comm-podium"])
 
@@ -195,6 +199,19 @@ def post_score_visible(
     op_id = int(user.id_salarie or 0)
     ok = svc.sauver_score_visible(params, op_id)
     return {"ok": ok}
+
+
+@router.post("/calcul", response_model=CalculPodiumResult)
+def post_calcul_podium(
+    params: CalculPodiumParams,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Calcul Podium : recalcule les podiums entre du et au+7j
+    (boucle par pas de 1 mois). Cf. WinDev Podium_Calcul.
+    """
+    _require_droit(user, "GestionPodium")
+    op_id = int(user.id_salarie or 0)
+    return svc_calc.calcul_podium(params, op_id)
 
 
 @router.post("/telecharger-xlsx")
