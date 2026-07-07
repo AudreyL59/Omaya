@@ -7,9 +7,10 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, Send, Loader2, Upload, Check, X as XIcon, Save,
+  Send, Loader2, Upload, Check, X as XIcon, Save,
   FileText, ArrowLeftCircle, Eye,
 } from 'lucide-react'
+import PageHeader from '@/components/PageHeader'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
@@ -580,22 +581,11 @@ export default function FichesSalairePage() {
   return (
     <div className="min-h-screen bg-[#F5F5F0] p-6">
       <div className="max-w-full mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link
-            to="/"
-            className="p-2 rounded hover:bg-white/50"
-            title="Retour"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <Send className="w-6 h-6 text-[#8B7355]" />
-          <h1 className="text-2xl font-semibold text-[#8B7355]">
-            Envoi des fiches de salaires
-          </h1>
-          <div className="ml-auto text-xs text-gray-500">
-            Plan {plan}/2
-          </div>
-        </div>
+        <PageHeader
+          icon={Send}
+          title="Envoi des fiches de salaires"
+          right={<span className="text-xs text-gray-500">Plan {plan}/2</span>}
+        />
 
         {/* Header commun */}
         <div className="bg-white rounded-lg shadow p-4 mb-4">

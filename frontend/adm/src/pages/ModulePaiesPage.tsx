@@ -10,9 +10,10 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ArrowLeft, Wallet, Loader2, Check, Search, Play,
+  Wallet, Loader2, Check, Search, Play,
   Download,
 } from 'lucide-react'
+import PageHeader from '@/components/PageHeader'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
@@ -586,13 +587,7 @@ export default function ModulePaiesPage() {
   return (
     <div className="min-h-screen bg-[#F5F5F0] p-6">
       <div className="max-w-[1600px] mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link to="/" className="p-2 rounded hover:bg-white/50" title="Retour">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <Wallet className="w-6 h-6 text-[#8B7355]" />
-          <h1 className="text-2xl font-semibold text-[#8B7355]">Module Paies</h1>
-        </div>
+        <PageHeader icon={Wallet} title="Module Paies" />
 
         {/* Bloc header : salarié + mois + toggles */}
         <div className="bg-white rounded-lg shadow p-4 mb-4">

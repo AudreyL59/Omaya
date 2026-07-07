@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft, Banknote, Loader2, Plus, Pencil, Copy, Trash2, Check, X,
+  Banknote, Loader2, Plus, Pencil, Copy, Trash2, Check, X,
   Save, Upload, Image as ImageIcon,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -17,6 +17,7 @@ import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
 import { AuthImage } from '@shared/ui/AuthImage'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import {
   useTableSortFilter, SortableTh, FilterInput,
 } from '@shared/production/_tableHelpers'
@@ -295,19 +296,7 @@ export default function GestionExoCashPage() {
   return (
     <div className="min-h-screen bg-[#F5F5F0] p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-4 mb-6">
-          <Link
-            to="/"
-            className="p-2 rounded hover:bg-white/50"
-            title="Retour"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <Banknote className="w-6 h-6 text-[#8B7355]" />
-          <h1 className="text-2xl font-semibold text-[#8B7355]">
-            Gestion Exo Cash
-          </h1>
-        </div>
+        <PageHeader icon={Banknote} title="Gestion Exo Cash" />
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-[#E5E0D5] mb-4">

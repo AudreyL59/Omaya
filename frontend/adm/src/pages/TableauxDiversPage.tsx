@@ -8,13 +8,13 @@
  */
 import { useState } from 'react'
 import {
-  ArrowLeft, Loader2, Search, FileSpreadsheet, Send, Table2,
+  Loader2, Search, FileSpreadsheet, Send, Table2,
   CheckSquare, Square,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 const API_BASE = '/api/adm'
 
@@ -136,16 +136,7 @@ export default function TableauxDiversPage() {
   return (
     <div className="min-h-screen bg-[#F5F5F0] p-6">
       <div className="max-w-full mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Link to="/" className="p-2 rounded hover:bg-white/50" title="Retour">
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <Table2 className="w-6 h-6 text-[#8B7355]" />
-          <h1 className="text-2xl font-semibold text-[#8B7355]">
-            Génération de tableaux divers
-          </h1>
-        </div>
+        <PageHeader icon={Table2} title="Génération de tableaux divers" />
 
         {/* Bloc actions */}
         <div className="bg-white rounded-lg shadow p-4 mb-4 space-y-3">
