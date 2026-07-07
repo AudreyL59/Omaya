@@ -10,6 +10,7 @@ import { FileUp, Loader2, Play } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -158,14 +159,19 @@ export default function ImportMassePage() {
   return (
     <div className="p-4 flex flex-col h-[calc(100vh-120px)]"
          style={{ color: COL_BRUN }}>
-      <h1 className="text-xl font-bold mb-3">
-        Import en masse{simulation && (
-          <span className="ml-2 text-xs px-2 py-0.5 rounded"
-                style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
-            SIMULATION
-          </span>
-        )}
-      </h1>
+      <PageHeader
+        icon={FileUp}
+        title="Import en masse"
+        backTo="/imports/contrats"
+        right={
+          simulation ? (
+            <span className="text-xs px-2 py-0.5 rounded"
+                  style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+              SIMULATION
+            </span>
+          ) : undefined
+        }
+      />
 
       {/* Bandeau commun */}
       <div className="border rounded p-3 mb-3 flex items-end gap-3 flex-wrap"

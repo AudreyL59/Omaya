@@ -10,6 +10,7 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -126,16 +127,23 @@ export default function ImportOenPage() {
   return (
     <div className="p-4 flex flex-col h-[calc(100vh-120px)]"
          style={{ color: COL_BRUN }}>
-      <h1 className="text-xl font-bold mb-3 flex items-center gap-2">
-        {logoSrc && <img src={logoSrc} alt="OHM Énergie" className="h-7" />}
-        Import OHM Énergie
-        {simulation && (
-          <span className="ml-2 text-xs px-2 py-0.5 rounded"
-                style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
-            SIMULATION
-          </span>
-        )}
-      </h1>
+      <PageHeader
+        iconNode={
+          logoSrc ? (
+            <img src={logoSrc} alt="OHM Énergie" className="h-7" />
+          ) : undefined
+        }
+        title="Import OHM Énergie"
+        backTo="/imports/contrats"
+        right={
+          simulation ? (
+            <span className="text-xs px-2 py-0.5 rounded"
+                  style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+              SIMULATION
+            </span>
+          ) : undefined
+        }
+      />
 
       <div className="border rounded mb-3 divide-y"
            style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>

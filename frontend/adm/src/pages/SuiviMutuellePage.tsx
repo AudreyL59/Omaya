@@ -13,6 +13,7 @@ import { HeartPulse, Loader2 } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showToast } from '@shared/ui/dialog'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
 
@@ -103,32 +104,32 @@ export default function SuiviMutuellePage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal space-y-4">
-      <div className="flex items-center gap-3">
-        <HeartPulse className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold flex-1" style={{ color: COL_BRUN }}>
-          Adhésion mutuelle entreprise
-        </h1>
-        <div className="flex items-center rounded overflow-hidden"
-             style={{ border: `1px solid ${COL_BORDER}` }}>
-          {([
-            { v: 'actifs' as Tab, l: 'Actifs' },
-            { v: 'sortants' as Tab, l: 'Sortants' },
-          ]).map((o) => {
-            const active = tab === o.v
-            return (
-              <button key={o.v} type="button" onClick={() => setTab(o.v)}
-                      className="px-4 py-1.5 text-sm"
-                      style={{
-                        backgroundColor: active ? COL_PRIMARY : 'white',
-                        color: active ? 'white' : COL_BRUN,
-                        fontWeight: active ? 600 : 400,
-                      }}>
-                {o.l}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <PageHeader
+        icon={HeartPulse}
+        title="Adhésion mutuelle entreprise"
+        right={
+          <div className="flex items-center rounded overflow-hidden"
+               style={{ border: `1px solid ${COL_BORDER}` }}>
+            {([
+              { v: 'actifs' as Tab, l: 'Actifs' },
+              { v: 'sortants' as Tab, l: 'Sortants' },
+            ]).map((o) => {
+              const active = tab === o.v
+              return (
+                <button key={o.v} type="button" onClick={() => setTab(o.v)}
+                        className="px-4 py-1.5 text-sm"
+                        style={{
+                          backgroundColor: active ? COL_PRIMARY : 'white',
+                          color: active ? 'white' : COL_BRUN,
+                          fontWeight: active ? 600 : 400,
+                        }}>
+                  {o.l}
+                </button>
+              )
+            })}
+          </div>
+        }
+      />
 
       <div className="bg-white rounded-lg shadow-sm border overflow-hidden"
            style={{ borderColor: COL_BORDER }}>

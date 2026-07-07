@@ -17,7 +17,10 @@ import { ArrowLeft } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 interface PageHeaderProps {
-  icon: LucideIcon
+  /** Icone Lucide standard. Non necessaire si iconNode est fourni. */
+  icon?: LucideIcon
+  /** Rendu custom (logo image, etc.) - prioritaire sur icon. */
+  iconNode?: React.ReactNode
   title: string
   subtitle?: string
   right?: React.ReactNode
@@ -26,6 +29,7 @@ interface PageHeaderProps {
 
 export default function PageHeader({
   icon: Icon,
+  iconNode,
   title,
   subtitle,
   right,
@@ -40,7 +44,11 @@ export default function PageHeader({
       >
         <ArrowLeft className="w-5 h-5" />
       </Link>
-      <Icon className="w-6 h-6 text-[#17494E] shrink-0" />
+      {iconNode ? (
+        <div className="shrink-0">{iconNode}</div>
+      ) : Icon ? (
+        <Icon className="w-6 h-6 text-[#17494E] shrink-0" />
+      ) : null}
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold text-[#17494E] leading-tight">
           {title}

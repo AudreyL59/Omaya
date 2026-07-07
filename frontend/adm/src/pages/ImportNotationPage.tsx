@@ -10,6 +10,7 @@ import { Download, FileUp, Loader2, Play, Star } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -118,16 +119,18 @@ export default function ImportNotationPage() {
   return (
     <div className="p-4 flex flex-col h-[calc(100vh-120px)]"
          style={{ color: COL_BRUN }}>
-      <h1 className="text-xl font-bold mb-3 flex items-center gap-2">
-        <Star className="w-5 h-5" style={{ color: '#f59e0b' }} />
-        Import notations
-        {simulation && (
-          <span className="ml-2 text-xs px-2 py-0.5 rounded"
-                style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
-            SIMULATION
-          </span>
-        )}
-      </h1>
+      <PageHeader
+        icon={Star}
+        title="Import notations"
+        right={
+          simulation ? (
+            <span className="text-xs px-2 py-0.5 rounded"
+                  style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+              SIMULATION
+            </span>
+          ) : undefined
+        }
+      />
 
       <div className="border rounded p-3 mb-3 flex items-end gap-3 flex-wrap"
            style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>

@@ -15,6 +15,7 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -110,10 +111,7 @@ export default function ImportsHubPage() {
 
   return (
     <div className="p-6 max-w-4xl" style={{ color: COL_BRUN }}>
-      <h1 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <FileDown className="w-5 h-5" style={{ color: COL_PRIMARY }} />
-        Choix du partenaire pour l'import
-      </h1>
+      <PageHeader icon={FileDown} title="Choix du partenaire pour l'import" />
 
       {/* Imports manuels */}
       <div className="border rounded p-4 mb-4"

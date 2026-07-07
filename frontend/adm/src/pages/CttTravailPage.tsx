@@ -23,6 +23,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import DocRHEditModal from '@/components/DocRHEditModal'
 
@@ -169,13 +170,11 @@ export default function CttTravailPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal">
-      <div className="flex items-center gap-3 mb-5">
-        <FileSignature className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold flex-1" style={{ color: COL_BRUN }}>
-          Liste des documents RH
-        </h1>
-        <ActifToggle value={actif} onChange={setActif} />
-      </div>
+      <PageHeader
+        icon={FileSignature}
+        title="Liste des documents RH"
+        right={<ActifToggle value={actif} onChange={setActif} />}
+      />
 
       {/* Toolbar actions */}
       <div

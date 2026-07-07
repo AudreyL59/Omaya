@@ -24,6 +24,7 @@ import { Eraser, Loader2, Play, Search, UserPlus } from 'lucide-react'
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showToast } from '@shared/ui/dialog'
 
 interface DpaeRow {
@@ -134,13 +135,7 @@ export default function DpaeRecherchePage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <Search className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold" style={{ color: COL_BRUN }}>
-          DPAE - Recherche
-        </h1>
-      </div>
+      <PageHeader icon={Search} title="DPAE - Recherche" />
 
       {/* Toolbar : 3 inputs + Loupe + DPAE vierge + Demarrer la DPAE */}
       <div

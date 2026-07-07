@@ -28,6 +28,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showToast } from '@shared/ui/dialog'
 import FicheVehiculeModal from '@/components/FicheVehiculeModal'
 import GestionCarteCarbModal from '@/components/GestionCarteCarbModal'
@@ -98,12 +99,7 @@ export default function ParcAutoPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal">
-      <div className="flex items-center gap-3 mb-5">
-        <CarFront className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold flex-1" style={{ color: COL_BRUN }}>
-          TDB Ulease — Suivi du Parc Auto
-        </h1>
-      </div>
+      <PageHeader icon={CarFront} title="TDB Ulease — Suivi du Parc Auto" />
 
       {/* Toolbar */}
       <div

@@ -23,6 +23,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import DocUleaseEditModal from '@/components/DocUleaseEditModal'
 
@@ -151,13 +152,11 @@ export default function DocUleasePage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal">
-      <div className="flex items-center gap-3 mb-5">
-        <FileText className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold flex-1" style={{ color: COL_BRUN }}>
-          Liste des documents Ulease
-        </h1>
-        <ActifToggle value={actif} onChange={setActif} />
-      </div>
+      <PageHeader
+        icon={FileText}
+        title="Liste des documents Ulease"
+        right={<ActifToggle value={actif} onChange={setActif} />}
+      />
 
       <div className="flex items-center gap-2 p-3 mb-4 bg-white rounded-lg border"
         style={{ borderColor: COL_BORDER }}>

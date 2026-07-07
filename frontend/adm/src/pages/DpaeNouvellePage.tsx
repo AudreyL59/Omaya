@@ -26,6 +26,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import SearchPicker, {
   type PickerItem,
@@ -312,29 +313,23 @@ export default function DpaeNouvellePage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto font-normal">
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-sm mb-3 hover:underline"
-        style={{ color: COL_PRIMARY }}
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Retour à la recherche
-      </button>
-
-      <div className="flex items-center gap-3 mb-5">
-        <UserCog className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold" style={{ color: COL_BRUN }}>
-          {phase === 'form'
+      <PageHeader
+        icon={UserCog}
+        title={
+          phase === 'form'
             ? 'Nouvelle DPAE'
-            : `Ajout des codes partenaires - ${data.nom} ${data.prenom}`}
-        </h1>
-        {savedMatricule && (
-          <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: COL_BG_SOFT, color: COL_BRUN }}>
-            Matricule : {savedMatricule}
-          </span>
-        )}
-      </div>
+            : `Ajout des codes partenaires - ${data.nom} ${data.prenom}`
+        }
+        backTo="/salaries/dpae"
+        right={
+          savedMatricule ? (
+            <span className="text-xs px-2 py-1 rounded"
+                  style={{ backgroundColor: COL_BG_SOFT, color: COL_BRUN }}>
+              Matricule : {savedMatricule}
+            </span>
+          ) : undefined
+        }
+      />
 
       {phase === 'form' ? (
         <FormPlan1

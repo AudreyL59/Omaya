@@ -19,6 +19,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showToast } from '@shared/ui/dialog'
 
 const COL_BRUN = '#4E1D17'
@@ -158,12 +159,7 @@ export default function FormationsIAGPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal space-y-4">
-      <div className="flex items-center gap-3">
-        <GraduationCap className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold" style={{ color: COL_BRUN }}>
-          Suivi des formations IAG
-        </h1>
-      </div>
+      <PageHeader icon={GraduationCap} title="Suivi des formations IAG" />
 
       <div className="grid grid-cols-2 gap-4">
         {/* Gauche : Import */}

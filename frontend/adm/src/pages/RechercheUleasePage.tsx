@@ -20,6 +20,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showToast } from '@shared/ui/dialog'
 import FicheVehiculeModal from '@/components/FicheVehiculeModal'
 import FicheSalarieModal from '@/components/FicheSalarieModal'
@@ -85,12 +86,7 @@ export default function RechercheUleasePage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal space-y-6">
-      <div className="flex items-center gap-3">
-        <Search className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold" style={{ color: COL_BRUN }}>
-          Recherche Véhicule / Conducteur
-        </h1>
-      </div>
+      <PageHeader icon={Search} title="Recherche Véhicule / Conducteur" />
 
       <RechercheVehiculeSection
         lookups={lookups}

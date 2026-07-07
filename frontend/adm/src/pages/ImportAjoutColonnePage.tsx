@@ -11,6 +11,7 @@ import {
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -102,10 +103,7 @@ export default function ImportAjoutColonnePage() {
 
   return (
     <div className="p-4 max-w-3xl" style={{ color: COL_BRUN }}>
-      <h1 className="text-xl font-bold mb-3">
-        <Plus className="inline w-5 h-5 mr-2" style={{ color: COL_PRIMARY }} />
-        Ajouter des colonnes
-      </h1>
+      <PageHeader icon={Plus} title="Ajouter des colonnes" />
 
       <div className="border rounded p-3 mb-3 space-y-3"
            style={{ borderColor: COL_BORDER, backgroundColor: COL_BG_SOFT }}>

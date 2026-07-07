@@ -14,6 +14,7 @@ import {
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 
 const COL_BRUN = '#4E1D17'
 const COL_PRIMARY = '#17494E'
@@ -62,10 +63,7 @@ export default function ParametresCVPage() {
   return (
     <div className="p-4 flex flex-col h-[calc(100vh-120px)]"
          style={{ color: COL_BRUN }}>
-      <h1 className="text-xl font-bold mb-3 flex items-center gap-2">
-        <Settings className="w-5 h-5" style={{ color: COL_PRIMARY }} />
-        Paramètres CVthèque
-      </h1>
+      <PageHeader icon={Settings} title="Paramètres CVthèque" />
 
       <div className="flex border-b mb-3" style={{ borderColor: COL_BORDER }}>
         {TABS.map(t => (

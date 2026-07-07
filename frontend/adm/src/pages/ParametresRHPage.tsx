@@ -26,6 +26,7 @@ import {
 
 import { getToken } from '@/api'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import PageHeader from '@/components/PageHeader'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 
 const COL_BRUN = '#4E1D17'
@@ -94,12 +95,7 @@ export default function ParametresRHPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-normal space-y-4">
-      <div className="flex items-center gap-3">
-        <Settings className="w-6 h-6" style={{ color: COL_BRUN }} />
-        <h1 className="text-xl font-bold" style={{ color: COL_BRUN }}>
-          Paramétrage RH
-        </h1>
-      </div>
+      <PageHeader icon={Settings} title="Paramétrage RH" />
 
       {/* Onglets */}
       <div className="flex flex-wrap gap-1 border-b" style={{ borderColor: COL_BORDER }}>
