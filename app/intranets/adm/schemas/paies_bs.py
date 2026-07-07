@@ -93,3 +93,59 @@ class ListerContratsResult(BaseModel):
     has_eni: bool = False      # colonnes ENI visibles ?
     has_sfr: bool = False      # colonnes SFR visibles ?
     message: str = ""
+
+
+# --------------------------------------------------------------------
+# Btn 'Valider les paies'
+# --------------------------------------------------------------------
+
+class ContratMaj(BaseModel):
+    """Contrat en input du bouton Valider (sous-ensemble de ContratRow)."""
+    id_contrat: str
+    partenaire: str            # ENI/SFR/IAG/OEN/PRO/STR/VAL
+    id_type_etat: int
+    id_etat: int
+    type_etat: str = ""        # LibType (contient 'RESI', 'VALID', 'En ATTENTE Operateur')
+    etat_contrat: str = ""
+    type_prod: str = ""        # Sous-fam ENI ou Famille (FIBRE pour SFR-Fibre)
+    date_signature: str        # YYYY-MM-DD
+    mois_paiement: str = ""    # MoisP courant
+    nb_points: float = 0.0
+    date_racc_valid: str = ""  # SFR uniquement (DateRaccActiv)
+
+
+class ValiderPaiesParams(BaseModel):
+    """Input Btn Valider les paies."""
+    id_salarie: int
+    mois_paiement: str         # YYYY-MM
+    date_racc_limite: str      # YYYY-MM-DD (SFR raccorde eligible si <= cette date)
+    simulation: bool = True
+    contrats: list[ContratMaj] = Field(default_factory=list)
+
+
+class ContratMajResult(BaseModel):
+    """Contrat apres validation (nouvel etat)."""
+    id_contrat: str
+    partenaire: str
+    id_etat: int                # etatFinal
+    id_type_etat: int
+    etat_contrat: str           # LibetatFinal
+    type_etat: str              # LibTypeEtatFinal
+    mois_paiement: str          # DateP (peut etre vide si Rejet/Resil)
+    updated: bool               # True si UPDATE SQL applique (non-simu + optMoisPaiement non vide)
+
+
+class NbCttParJourRow(BaseModel):
+    date_ctt: str     # YYYY-MM-DD
+    nb_ctt: int
+    type_ctt: int     # 1 = ENI/IAG/STR (3 ctts/jour = 1 TR), 2 = SFR-Fibre (1 ctt/jour = 1 TR)
+
+
+class ValiderPaiesResult(BaseModel):
+    """Output Btn Valider les paies."""
+    ok: bool
+    contrats_maj: list[ContratMajResult] = Field(default_factory=list)
+    nb_ctt_par_jour: list[NbCttParJourRow] = Field(default_factory=list)
+    nb_tr: int = 0
+    nb_updated: int = 0        # combien d'UPDATE SQL appliques
+    message: str = ""

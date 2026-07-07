@@ -27,8 +27,9 @@ from typing import Optional
 from app.core.database.pg import get_pg_connection
 from app.core.utils.sentinel_dates import is_sentinel
 from app.intranets.adm.schemas.paies_bs import (
-    ContratRow, JourNonProd, ListerContratsParams, ListerContratsResult,
-    PartenairePeriode,
+    ContratMaj, ContratMajResult, ContratRow, JourNonProd,
+    ListerContratsParams, ListerContratsResult, NbCttParJourRow,
+    PartenairePeriode, ValiderPaiesParams, ValiderPaiesResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -606,3 +607,240 @@ def _compute_jours_non_prod(
         cur += timedelta(days=1)
 
     return result
+
+
+# --------------------------------------------------------------------
+# Btn 'Valider les paies' + calcul TR + histo contrat
+# --------------------------------------------------------------------
+
+# Dispatch histo par partenaire (reutilise les helpers deja implementes
+# dans chaque service import_{part}). cf. pattern import_masse._ajoute_histo.
+def _dispatch_histo_etat(
+    partenaire: str, id_contrat: int, old_etat: int,
+    new_etat: int, date_paiement: str, op_id: int,
+) -> None:
+    """Delegue au helper _ajoute_histo_{part}_etat du service import
+    correspondant. Categorie 'Vend' (mode vendeur, cf. WinDev).
+    """
+    p = partenaire.lower()
+    try:
+        if p == "sfr":
+            from app.intranets.adm.services.import_sfr import (
+                _ajoute_histo_sfr_etat,
+            )
+            _ajoute_histo_sfr_etat(
+                id_contrat, old_etat, new_etat, date_paiement, op_id,
+                categorie="Vend",
+            )
+        elif p == "eni":
+            from app.intranets.adm.services.import_eni import (
+                _ajoute_histo_eni_etat,
+            )
+            _ajoute_histo_eni_etat(
+                id_contrat, old_etat, new_etat, date_paiement, op_id,
+            )
+        elif p == "iag":
+            from app.intranets.adm.services.import_iag import (
+                _ajoute_histo_iag_etat,
+            )
+            _ajoute_histo_iag_etat(
+                id_contrat, old_etat, new_etat, date_paiement, op_id,
+            )
+        elif p == "pro":
+            from app.intranets.adm.services.import_pro import (
+                _ajoute_histo_pro_etat,
+            )
+            _ajoute_histo_pro_etat(
+                id_contrat, old_etat, new_etat, date_paiement, op_id,
+            )
+        elif p == "oen":
+            from app.intranets.adm.services.import_oen import (
+                _ajoute_histo_oen_etat,
+            )
+            _ajoute_histo_oen_etat(
+                id_contrat, old_etat, new_etat, date_paiement, op_id,
+                categorie="Vend",
+            )
+        elif p == "str":
+            from app.intranets.adm.services.import_str import (
+                _ajoute_histo_str_etat,
+            )
+            _ajoute_histo_str_etat(
+                id_contrat, old_etat, new_etat, date_paiement, op_id,
+            )
+        elif p == "val":
+            from app.intranets.adm.services.import_val import (
+                _ajoute_histo_val_etat,
+            )
+            _ajoute_histo_val_etat(
+                id_contrat, old_etat, new_etat, date_paiement, op_id,
+            )
+    except Exception:
+        logger.exception("histo etat %s (id=%s)", partenaire, id_contrat)
+
+
+def valider_paies(
+    p: ValiderPaiesParams, op_id: int,
+) -> ValiderPaiesResult:
+    """Cf. WinDev Btn Valider les paies.
+
+    Pour chaque contrat en input :
+      1. Cas SFR + type_etat=8 + date_racc_valid <= date_racc_limite ->
+         nouvel etat = 6 (Paye par employeur - Raccordement) + UPDATE
+         SFR (mois_p_ra + nb_pts_payes_ra) + histo etat.
+      2. Autres partenaires + type_etat=3/4 (Rejet/Resil) -> mois_paiement
+         = "" (reset, pas d'UPDATE en BDD).
+      3. Sinon : rien (contrat inchange).
+
+    Puis calcul TR (Titres Restaurant) :
+      - Partenaires eligibles : ENI, IAG, STR, SFR-FIBRE
+      - Etats eligibles : type_etat contenant RESI, VALID,
+        ou "En ATTENTE Operateur"
+      - Type 1 (ENI/IAG/STR) : 3 ctts/jour = 1 TR
+      - Type 2 (SFR-Fibre)   : 1 ctt/jour  = 1 TR
+    """
+    if not p.contrats:
+        return ValiderPaiesResult(
+            ok=True, message="Aucun contrat a valider",
+        )
+    mois_deb = _premier_jour(p.mois_paiement)
+    date_racc_limite = p.date_racc_limite or "1900-01-01"
+
+    contrats_maj: list[ContratMajResult] = []
+    nb_updated = 0
+    db = get_pg_connection("adv")
+    now_iso = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    for c in p.contrats:
+        etat_final = c.id_etat
+        type_etat_final = c.type_etat
+        etat_lib_final = c.etat_contrat
+        date_p = c.mois_paiement
+        opt_maj = False  # True si UPDATE metier a faire
+
+        # Cas SFR + Raccorde
+        if (c.partenaire == "SFR" and c.id_type_etat == 8
+                and c.date_racc_valid
+                and c.date_racc_valid <= date_racc_limite):
+            etat_final = 6  # Paye par employeur - Raccordement
+            type_etat_final = "Validé-Payé"
+            etat_lib_final = "Payé par employeur - Raccordement"
+            date_p = mois_deb
+            opt_maj = True
+
+        # Cas Rejet/Resil (autres partenaires)
+        elif c.partenaire != "SFR" and c.id_type_etat in (3, 4):
+            date_p = ""  # reset mois paiement (pas d'UPDATE, juste affichage)
+
+        updated_this = False
+
+        # UPDATE + histo si non-simu + optMoisPaiement non vide
+        if not p.simulation and opt_maj:
+            try:
+                prefix = c.partenaire.lower()
+                if c.partenaire == "SFR":
+                    # UPDATE SFR : id_etat + mois_p_ra + nb_pts_payes_ra
+                    db.query(
+                        f"""UPDATE adv.pgt_{prefix}_contrat
+                              SET id_etat_contrat = ?,
+                                  mois_p_ra = ?,
+                                  nb_pts_payes_ra = ?,
+                                  modif_date = ?, modif_op = ?,
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (int(etat_final), date_p or None,
+                         float(c.nb_points), now_iso, int(op_id),
+                         int(c.id_contrat)),
+                    )
+                else:
+                    # Autres partenaires (pas de cas UPDATE identifie dans
+                    # le TXT WinDev - opt_maj reste False sur non-SFR).
+                    db.query(
+                        f"""UPDATE adv.pgt_{prefix}_contrat
+                              SET id_etat_contrat = ?,
+                                  modif_date = ?, modif_op = ?,
+                                  modif_elem = 'modif'
+                            WHERE id_contrat = ?""",
+                        (int(etat_final), now_iso, int(op_id),
+                         int(c.id_contrat)),
+                    )
+                # Histo etat
+                _dispatch_histo_etat(
+                    c.partenaire, int(c.id_contrat),
+                    c.id_etat, etat_final, date_p, op_id,
+                )
+                updated_this = True
+                nb_updated += 1
+            except Exception:
+                logger.exception("UPDATE contrat KO (id=%s)", c.id_contrat)
+
+        contrats_maj.append(ContratMajResult(
+            id_contrat=c.id_contrat,
+            partenaire=c.partenaire,
+            id_etat=etat_final,
+            id_type_etat=c.id_type_etat if not opt_maj else 5,
+            etat_contrat=etat_lib_final,
+            type_etat=type_etat_final,
+            mois_paiement=date_p,
+            updated=updated_this,
+        ))
+
+    # -------- Calcul TR --------
+    # Compte par jour (partenaire eligible + etat eligible)
+    from collections import defaultdict
+    nb_par_jour: dict[str, dict] = defaultdict(
+        lambda: {"nb": 0, "type": 1}
+    )
+    for cm in contrats_maj:
+        # Prend le contrat d'origine pour re-verifier le partenaire/type
+        orig = next(
+            (x for x in p.contrats
+             if x.id_contrat == cm.id_contrat
+             and x.partenaire == cm.partenaire),
+            None,
+        )
+        if not orig:
+            continue
+        # Partenaire eligible
+        is_eni_like = orig.partenaire in ("ENI", "IAG", "STR")
+        is_sfr_fibre = (orig.partenaire == "SFR"
+                       and (orig.type_prod or "").upper() == "FIBRE")
+        if not (is_eni_like or is_sfr_fibre):
+            continue
+        # Etat eligible (post-validation - on utilise cm.type_etat qui
+        # a ete recalcule)
+        te = (cm.type_etat or "").upper()
+        # cf. WinDev : Contient(Type_Etat,"RESI") ou Contient(..., "VALID")
+        # ou Type_Etat = "En ATTENTE Operateur"
+        if not ("RESI" in te or "VALID" in te
+                or te == "EN ATTENTE OPERATEUR"
+                or te == "EN ATTENTE OPÉRATEUR"):
+            continue
+        jour = orig.date_signature[:10] if orig.date_signature else ""
+        if not jour:
+            continue
+        nb_par_jour[jour]["nb"] += 1
+        nb_par_jour[jour]["type"] = 2 if is_sfr_fibre else 1
+
+    nb_tr = 0
+    rows_par_jour: list[NbCttParJourRow] = []
+    for jour, info in sorted(nb_par_jour.items()):
+        rows_par_jour.append(NbCttParJourRow(
+            date_ctt=jour, nb_ctt=info["nb"], type_ctt=info["type"],
+        ))
+        if info["type"] == 1 and info["nb"] >= 3:
+            nb_tr += 1  # ENI/IAG/STR : 3 ctts/j = 1 TR
+        elif info["type"] == 2 and info["nb"] >= 1:
+            nb_tr += 1  # SFR-Fibre : 1 ctt/j = 1 TR
+
+    return ValiderPaiesResult(
+        ok=True,
+        contrats_maj=contrats_maj,
+        nb_ctt_par_jour=rows_par_jour,
+        nb_tr=nb_tr,
+        nb_updated=nb_updated,
+        message=(
+            f"{nb_updated} contrat(s) mis a jour, {nb_tr} TR calcule(s). "
+            + ("(SIMULATION)" if p.simulation else "")
+        ),
+    )
