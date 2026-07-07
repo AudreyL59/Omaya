@@ -610,11 +610,17 @@ export default function FichesSalairePage() {
             />
           </div>
 
-          {plan === 1 && vendeurs.length > 0 && (
+          {plan === 1 && (
             <div className="mt-3 flex items-center gap-2">
               <button
                 onClick={doSauveXlsx}
-                className="flex items-center gap-1.5 text-sm px-2 py-1 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2]"
+                disabled={vendeurs.length === 0}
+                title={
+                  vendeurs.length === 0
+                    ? 'Charge d\'abord un PDF pour pouvoir sauvegarder'
+                    : ''
+                }
+                className="flex items-center gap-1.5 text-sm px-2 py-1 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
               >
                 <Save className="w-3.5 h-3.5" />
                 Sauve EXCEL
@@ -626,9 +632,12 @@ export default function FichesSalairePage() {
                 <Upload className="w-3.5 h-3.5" />
                 Réimporter Sauve XLS
               </button>
-              <span className="text-xs text-gray-500 ml-auto">
-                {vendeurs.length} vendeur(s) - {vendeurs.filter((v) => v.id_salarie === '0').length} en rouge
-              </span>
+              {vendeurs.length > 0 && (
+                <span className="text-xs text-gray-500 ml-auto">
+                  {vendeurs.length} vendeur(s) -{' '}
+                  {vendeurs.filter((v) => v.id_salarie === '0').length} en rouge
+                </span>
+              )}
             </div>
           )}
         </div>
