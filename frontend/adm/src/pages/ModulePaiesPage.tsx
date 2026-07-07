@@ -10,7 +10,7 @@
  */
 import { useCallback, useState } from 'react'
 import {
-  ArrowLeft, Wallet, Loader2, Check, X as XIcon, Search, Play,
+  ArrowLeft, Wallet, Loader2, Check, Search, Play,
   Download,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
