@@ -40,6 +40,7 @@ interface Resume {
   nb_erreurs_energie_verte: number; nb_erreurs_car: number
   nb_erreurs_puiss: number; nb_erreurs_reforest: number
   nb_erreurs_protection: number
+  nb_erreurs_mandat: number
 }
 
 interface ImportResult {
@@ -424,6 +425,7 @@ function ResumePanel({ resume }: { resume: Resume }) {
     ['NB Erreurs de PUISS', resume.nb_erreurs_puiss],
     ['NB Erreurs Reforestation', resume.nb_erreurs_reforest],
     ['NB Erreurs Protection', resume.nb_erreurs_protection],
+    ['NB Erreurs Mandat', resume.nb_erreurs_mandat],
   ]
   return (
     <div className="grid grid-cols-3 gap-2 max-w-3xl">

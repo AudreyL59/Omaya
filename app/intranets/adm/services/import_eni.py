@@ -22,6 +22,7 @@ pour l'instant : retourne un resume vide + erreur 'pas encore code').
 from __future__ import annotations
 
 import io
+import logging
 import re
 from datetime import date, datetime
 from typing import Optional
@@ -29,6 +30,8 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.core.database.pg import get_pg_connection
+
+logger = logging.getLogger(__name__)
 
 
 class ImportEniParams(BaseModel):
@@ -92,7 +95,13 @@ COLS_RUN_V = {
     "puissance": "Q",
     "type_comptage": "R",
     "mail_fourni": "AB",
-    "protection": "AC",
+    # Cf. WinDev importRUNValides (TXT 2026-07 : ligne 53-54) : ce qui
+    # etait 'Protection' est devenu 'HomeServe' (map vers opt_entretien
+    # en DB), + nouvelle colonne 'Mandat' (map vers pgt_eni_contrat.opt_mandat).
+    # NB : la colonne opt_mandat doit exister sur pgt_eni_contrat (migration
+    # SQL fournie separement), sinon comparaison desactivee via fallback.
+    "home_serve": "AC",
+    "mandat": "AD",
 }
 
 
@@ -155,6 +164,7 @@ class ImportEniResume(BaseModel):
     nb_erreurs_puiss: int = 0
     nb_erreurs_reforest: int = 0
     nb_erreurs_protection: int = 0
+    nb_erreurs_mandat: int = 0
 
 
 class ImportEniResult(BaseModel):
@@ -728,9 +738,13 @@ def _import_run_valides(
         type_comptage = _cell(ws, i, cols["type_comptage"])
         opt_hphc = "HPHC" in type_comptage.upper()
         montant_mails = _parse_int(_cell(ws, i, cols["mail_fourni"]))
-        montant_protect = _parse_int(_cell(ws, i, cols["protection"]))
+        montant_hs = _parse_int(_cell(ws, i, cols["home_serve"]))
+        montant_mandat = _parse_int(_cell(ws, i, cols["mandat"]))
         opt_mails = montant_mails > 0
-        opt_protect = montant_protect > 0
+        opt_home_serve = montant_hs > 0
+        opt_mandat_xls = montant_mandat > 0
+        # cf. WinDev importRUNValides : Opt_Protection est mis a 0
+        opt_protect = False
 
         # Lookup contrat(s)
         rows_ctt = db.query(
@@ -907,6 +921,19 @@ def _import_run_valides(
                  FROM adv.pgt_eni_contrat_option WHERE id_contrat = ? LIMIT 1""",
             (id_contrat,),
         )
+        # opt_mandat sur pgt_eni_contrat (colonne peut ne pas exister
+        # si migration SQL pas encore faite - fallback False)
+        db_opt_mandat = False
+        try:
+            r_mandat = db.query_one(
+                "SELECT opt_mandat FROM adv.pgt_eni_contrat WHERE id_contrat = ?",
+                (id_contrat,),
+            )
+            db_opt_mandat = bool(r_mandat and r_mandat.get("opt_mandat"))
+        except Exception:
+            # colonne opt_mandat pas encore en base
+            db_opt_mandat = False
+
         if opt:
             if (not opt_mails and opt.get("opt_e_facture")
                     and opt.get("opt_e_communication")
@@ -914,8 +941,12 @@ def _import_run_valides(
                 resume.nb_erreurs_mails += 1
             if not opt_hphc and opt.get("opt_hp_hc"):
                 resume.nb_erreurs_type_comptage += 1
-            if not opt_protect and opt.get("opt_protection"):
-                resume.nb_erreurs_protection += 1
+            # cf. WinDev TXT 2026-07 ligne 537 : HomeServe XLSX vs opt_entretien DB
+            if not opt_home_serve and opt.get("opt_entretien"):
+                resume.nb_erreurs_entretien += 1
+        # cf. WinDev TXT 2026-07 ligne 513 : Mandat XLSX vs pgt_eni_contrat.opt_mandat
+        if not opt_mandat_xls and db_opt_mandat:
+            resume.nb_erreurs_mandat += 1
 
         contrats_run.append({
             "NumCtt": r.get("num_bs"),
@@ -939,7 +970,8 @@ def _import_run_valides(
             "MAJ car": maj_car_flag,
             "OptMail Excel": opt_mails,
             "OptHPHC Excel": opt_hphc,
-            "OptProtec Excel": opt_protect,
+            "OptHomeServe Excel": opt_home_serve,
+            "OptMandat Excel": opt_mandat_xls,
             # Payload pour MAJ prod
             "_maj_data": {
                 "id_contrat": id_contrat,
@@ -956,7 +988,10 @@ def _import_run_valides(
                 "car_excel": car,
                 "puiss_excel": puiss_elec,
                 "opt_mail": opt_mails,
-                "opt_protect": opt_protect,
+                "opt_home_serve": opt_home_serve,
+                "opt_mandat": opt_mandat_xls,
+                # cf. WinDev : Opt_Protection est mis a 0 dans importRUNValides
+                "opt_protect": False,
                 "notation": r.get("notation"),
             },
         })
@@ -1097,28 +1132,50 @@ def _apply_maj_run_valides(md: dict, op_id: int, simulation: bool) -> bool:
         )
         has_change = True
 
-    # MAJ options (Mail + Protection)
+    # MAJ options (Mail + HomeServe/Entretien + Protection)
+    # cf. WinDev TXT 2026-07 :
+    #   XLSX 'HomeServe' -> pgt_eni_contrat_option.opt_entretien
+    #   XLSX 'Mandat' -> pgt_eni_contrat.opt_mandat
+    opt_home_serve = bool(md.get("opt_home_serve"))
     if md.get("opt_mail"):
-        # Si opt_mail=true on coche aussi les 3 cases liees (cf WinDev)
         db.query(
             """UPDATE adv.pgt_eni_contrat_option
                   SET opt_mail = TRUE, opt_e_facture = TRUE,
                       opt_e_communication = TRUE, opt_optin_commercial = TRUE,
+                      opt_entretien = ?,
                       opt_protection = ?,
                       modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
                 WHERE id_contrat = ?""",
-            (bool(md.get("opt_protect")), int(op_id), id_contrat),
+            (opt_home_serve, bool(md.get("opt_protect")),
+             int(op_id), id_contrat),
         )
         has_change = True
-    elif md.get("opt_protect") is not None:
+    else:
         db.query(
             """UPDATE adv.pgt_eni_contrat_option
-                  SET opt_mail = FALSE, opt_protection = ?,
+                  SET opt_mail = FALSE, opt_entretien = ?, opt_protection = ?,
                       modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
                 WHERE id_contrat = ?""",
-            (bool(md["opt_protect"]), int(op_id), id_contrat),
+            (opt_home_serve, bool(md.get("opt_protect")),
+             int(op_id), id_contrat),
         )
         has_change = True
+
+    # MAJ opt_mandat sur pgt_eni_contrat (colonne peut ne pas exister
+    # si migration SQL pas encore faite - skip silencieux)
+    try:
+        db.query(
+            """UPDATE adv.pgt_eni_contrat
+                  SET opt_mandat = ?,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_contrat = ?""",
+            (bool(md.get("opt_mandat")), int(op_id), id_contrat),
+        )
+        has_change = True
+    except Exception:
+        logger.warning(
+            "opt_mandat MAJ KO (migration pgt_eni_contrat.opt_mandat requise)",
+        )
 
     return has_change
 
@@ -2139,6 +2196,7 @@ def _resume_to_lines(resume: ImportEniResume) -> list[tuple[str, int]]:
         ("NB Erreurs PUISS", resume.nb_erreurs_puiss),
         ("NB Erreurs Reforestation", resume.nb_erreurs_reforest),
         ("NB Erreurs Protection", resume.nb_erreurs_protection),
+        ("NB Erreurs Mandat", resume.nb_erreurs_mandat),
     ]
 
 
