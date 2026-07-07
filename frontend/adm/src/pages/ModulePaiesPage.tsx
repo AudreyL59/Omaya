@@ -280,7 +280,7 @@ export default function ModulePaiesPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id_salarie: Number(salarie.id_salarie),
+          id_salarie: salarie.id_salarie,
           mois_paiement: moisPaie,
           partenaires: parts
             .filter((p) => p.coche)
@@ -343,7 +343,7 @@ export default function ModulePaiesPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id_salarie: Number(salarie.id_salarie),
+          id_salarie: salarie.id_salarie,
           mois_paiement: moisPaie,
           date_racc_limite: dateRaccLimite,
           simulation: simu,
@@ -421,7 +421,7 @@ export default function ModulePaiesPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id_salarie: Number(salarie.id_salarie),
+          id_salarie: salarie.id_salarie,
           mois_paiement: moisPaie,
           contrats: contratsSignes.map((c) => ({
             vendeur: c.vendeur_nom,

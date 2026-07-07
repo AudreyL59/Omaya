@@ -416,20 +416,20 @@ def lister_contrats(
         )
 
     # Recupere nom du vendeur pour affichage
+    # (cf. WinDev DonneInfoSalarie : ne bloque pas si absent)
     rh = get_pg_connection("rh")
     sal = rh.query_one(
         """SELECT nom, prenom
              FROM pgt_salarie WHERE id_salarie = ?""",
         (int(p.id_salarie),),
     )
-    if not sal:
-        return ListerContratsResult(
-            ok=False, message=f"Salarie {p.id_salarie} introuvable",
-        )
-    vendeur_nom = (
-        f"{(sal.get('nom') or '').strip()} "
-        f"{_cap_prenom((sal.get('prenom') or '').strip())}"
-    ).strip()
+    if sal:
+        vendeur_nom = (
+            f"{(sal.get('nom') or '').strip()} "
+            f"{_cap_prenom((sal.get('prenom') or '').strip())}"
+        ).strip()
+    else:
+        vendeur_nom = ""
 
     # Preload : affectation historique + type etats
     date_min = min((pp.signe_du or pp.hors_delai_du or "1900-01-01")
