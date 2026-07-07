@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft, Send, Loader2, Upload, Check, X as XIcon, Save,
-  FileText, Eye, Download, Search, ArrowLeftCircle, Trash2,
+  FileText, ArrowLeftCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -792,13 +792,3 @@ interface EnvoiVendeurResult {
   message: string
 }
 
-// Utile pour le rendu (importé plus haut)
-function colLetter(n: number): string {
-  let s = ''
-  let x = n
-  do {
-    s = String.fromCharCode(65 + (x % 26)) + s
-    x = Math.floor(x / 26) - 1
-  } while (x >= 0)
-  return s
-}

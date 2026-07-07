@@ -8,10 +8,10 @@
  *  4. Bloc résultats : Date Racc SFR limite + Valider les paies + NB TR
  *  5. 4 onglets : Contrats Signés / Décommission / Jours non Prod TR / Base PDF
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import {
   ArrowLeft, Wallet, Loader2, Check, X as XIcon, Search, Play,
-  Download, FileText,
+  Download,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getToken } from '@/api'
@@ -105,15 +105,11 @@ interface NbCttParJourRow {
 
 type Tab = 'signes' | 'decomm' | 'non_prod' | 'base_pdf'
 
-const money = (n: number): string =>
-  n.toFixed(2).replace('.', ',') + ' €'
-
 const shortDate = (iso: string): string =>
   !iso || iso.length < 10
     ? ''
     : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 
-const today = (): string => new Date().toISOString().slice(0, 10)
 const firstOfMonth = (): string => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
