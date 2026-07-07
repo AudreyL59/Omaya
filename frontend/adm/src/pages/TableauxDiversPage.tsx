@@ -149,7 +149,7 @@ export default function TableauxDiversPage() {
 
         {/* Bloc actions */}
         <div className="bg-white rounded-lg shadow p-4 mb-4 space-y-3">
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-end gap-4 flex-wrap">
             <label className="flex flex-col text-xs gap-1">
               <span className="text-[#8B7355] font-medium">Du</span>
               <input
