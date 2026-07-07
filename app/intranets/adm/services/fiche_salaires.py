@@ -976,6 +976,20 @@ def generer_pdf_prepaie(p: GenererPdfPrepaieParams) -> GenererPdfPrepaieResult:
             row_data.append(_cell_to_data(ws.cell(row=r, column=c)))
         cells.append(row_data)
 
+    # Trim des lignes entierement vides en debut et fin
+    # (une ligne est vide si aucune cellule n'a de valeur textuelle)
+    def _row_is_empty(row: list[CellData]) -> bool:
+        return all(not (c.v or "").strip() for c in row)
+    while cells and _row_is_empty(cells[0]):
+        cells.pop(0)
+    while cells and _row_is_empty(cells[-1]):
+        cells.pop()
+    if not cells:
+        return GenererPdfPrepaieResult(
+            ok=False, couleur="rouge",
+            message="La selection ne contient que des cellules vides",
+        )
+
     # Genere PDF
     titre = f"Tableau prepaie - {p.nom_prenom} - {p.mois_paiement}"
     html = _render_prepaie_html(cells, titre)
