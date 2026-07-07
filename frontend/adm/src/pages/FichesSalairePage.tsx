@@ -73,6 +73,7 @@ export default function FichesSalairePage() {
   const [plage, setPlage] = useState<string>('')
   const [xlsxB64, setXlsxB64] = useState('')
   const prepaieInputRef = useRef<HTMLInputElement>(null)
+  const gridScrollRef = useRef<HTMLDivElement>(null)
   const [selCell1, setSelCell1] = useState<{ r: number; c: number } | null>(null)
   const [selCell2, setSelCell2] = useState<{ r: number; c: number } | null>(null)
 
@@ -341,11 +342,49 @@ export default function FichesSalairePage() {
 
   useEffect(() => {
     const stop = () => setDragging(false)
-    if (dragging) {
-      window.addEventListener('mouseup', stop)
-      return () => window.removeEventListener('mouseup', stop)
+    if (!dragging) return undefined
+
+    // Auto-scroll du container quand le curseur approche des bords
+    const EDGE = 40           // px depuis le bord
+    const MAX_SPEED = 20      // px par frame
+    let rafId: number | null = null
+    let lastMouse = { x: 0, y: 0 }
+
+    const tick = () => {
+      const el = gridScrollRef.current
+      if (!el) { rafId = null; return }
+      const rect = el.getBoundingClientRect()
+      const dxLeft = lastMouse.x - rect.left
+      const dxRight = rect.right - lastMouse.x
+      const dyTop = lastMouse.y - rect.top
+      const dyBottom = rect.bottom - lastMouse.y
+      let sx = 0
+      let sy = 0
+      if (dxLeft < EDGE && dxLeft > -EDGE)
+        sx = -Math.round(((EDGE - dxLeft) / EDGE) * MAX_SPEED)
+      else if (dxRight < EDGE && dxRight > -EDGE)
+        sx = Math.round(((EDGE - dxRight) / EDGE) * MAX_SPEED)
+      if (dyTop < EDGE && dyTop > -EDGE)
+        sy = -Math.round(((EDGE - dyTop) / EDGE) * MAX_SPEED)
+      else if (dyBottom < EDGE && dyBottom > -EDGE)
+        sy = Math.round(((EDGE - dyBottom) / EDGE) * MAX_SPEED)
+      if (sx !== 0) el.scrollLeft += sx
+      if (sy !== 0) el.scrollTop += sy
+      rafId = requestAnimationFrame(tick)
     }
-    return undefined
+
+    const onMove = (e: MouseEvent) => {
+      lastMouse = { x: e.clientX, y: e.clientY }
+      if (rafId == null) rafId = requestAnimationFrame(tick)
+    }
+
+    window.addEventListener('mouseup', stop)
+    window.addEventListener('mousemove', onMove)
+    return () => {
+      window.removeEventListener('mouseup', stop)
+      window.removeEventListener('mousemove', onMove)
+      if (rafId != null) cancelAnimationFrame(rafId)
+    }
   }, [dragging])
 
   // Auto-selection du premier vendeur choix=true au passage en Plan 2
@@ -485,7 +524,7 @@ export default function FichesSalairePage() {
   // ------ Rendu ------
   return (
     <div className="min-h-screen bg-[#F5F5F0] p-6">
-      <div className="max-w-[1600px] mx-auto">
+      <div className="max-w-full mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <Link
             to="/"
@@ -661,7 +700,7 @@ export default function FichesSalairePage() {
         )}
 
         {/* 2 colonnes : Table vendeurs + Preview PDF/XLSX */}
-        <div className="grid grid-cols-1 lg:grid-cols-[500px_1fr] gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-4">
           {/* Table vendeurs */}
           <div className="bg-white rounded-lg shadow p-4">
             <div className="max-h-[700px] overflow-y-auto">
@@ -803,7 +842,10 @@ export default function FichesSalairePage() {
                 <div className="text-xs text-[#8B7355] font-medium mb-2">
                   Cliquez-glissez pour sélectionner une plage (ou clic + Maj+clic)
                 </div>
-                <div className="overflow-auto max-h-[600px] border border-[#E5E0D5] rounded">
+                <div
+                  ref={gridScrollRef}
+                  className="overflow-auto max-h-[600px] border border-[#E5E0D5] rounded"
+                >
                   <table className="text-[10px] border-collapse">
                     <thead>
                       <tr>
