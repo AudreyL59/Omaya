@@ -148,7 +148,7 @@ def _load_affectations_batch(
     try:
         segs = rh.query(
             """SELECT so.date_debut, so.date_fin, o.lib_orga,
-                      o.id_type_niveau_orga, o.idparent
+                      o.id_type_niveau_orga, o.id_parent
                  FROM pgt_salarie_organigramme so
                  JOIN pgt_organigramme o
                       ON o.idorganigramme = so.idorganigramme
@@ -194,8 +194,8 @@ def _affectation_at(
             agence = lib
         elif lvl == 4 and not equipe:
             equipe = lib
-            id_agence = int(s.get("idparent") or 0)
-    # Si equipe trouvee et agence pas encore, on lookup l'idparent
+            id_agence = int(s.get("id_parent") or 0)
+    # Si equipe trouvee et agence pas encore, on lookup l'id_parent
     if equipe and not agence and id_agence:
         rh = get_pg_connection("rh")
         try:
