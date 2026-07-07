@@ -180,7 +180,7 @@ export default function FichesSalairePage() {
             Authorization: `Bearer ${getToken()}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ vendeurs }),
+          body: JSON.stringify({ vendeurs, pdf_b64: pdfB64 }),
         },
       )
       const d = await r.json()
@@ -224,6 +224,8 @@ export default function FichesSalairePage() {
         return
       }
       setVendeurs(d.vendeurs || [])
+      if (d.pdf_b64) setPdfB64(d.pdf_b64)
+      setSelectedIdx(-1)
       showToast(d.message || 'XLSX rechargé', 'success')
     } finally {
       setLoading(false)

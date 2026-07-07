@@ -93,6 +93,7 @@ class SauvegardeXlsxResult(BaseModel):
 class ReimportXlsxResult(BaseModel):
     ok: bool
     vendeurs: list[VendeurRow] = Field(default_factory=list)
+    pdf_b64: str = ""   # PDF restaure (si le XLSX contient la feuille 'PDF')
     message: str = ""
 
 

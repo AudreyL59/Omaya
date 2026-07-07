@@ -87,6 +87,7 @@ def post_valider(
 
 class SauvegardePayload(BaseModel):
     vendeurs: list[VendeurRow]
+    pdf_b64: str = ""
 
 
 @router.post("/sauvegarder-xlsx")
@@ -95,10 +96,12 @@ def post_sauvegarder_xlsx(
     user: UserToken = Depends(get_current_user),
 ):
     """Btn Sauve EXCEL : exporte la table en XLSX (reprise ulterieure).
+    Le PDF source (pdf_b64) est embarque dans une 2e feuille 'PDF' pour
+    permettre la restauration complete au reimport.
     Retour : { xlsx_b64, fic_name } (base64 pour telechargement direct).
     """
     _require_droit(user, "FichePaies")
-    r = svc.sauvegarder_xlsx(payload.vendeurs)
+    r = svc.sauvegarder_xlsx(payload.vendeurs, payload.pdf_b64)
     return r
 
 

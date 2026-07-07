@@ -518,9 +518,23 @@ _XLSX_COLS = [
 ]
 
 
-def sauvegarder_xlsx(vendeurs: list[VendeurRow]) -> SauvegardeXlsxResult:
+# Limite Excel : 32767 chars par cellule. On decoupe en chunks plus
+# petits pour marge (openpyxl peut planter sur des chaines trop longues).
+_XLSX_PDF_CHUNK = 30000
+_XLSX_PDF_SHEET = "PDF"
+
+
+def sauvegarder_xlsx(
+    vendeurs: list[VendeurRow], pdf_b64: str = "",
+) -> SauvegardeXlsxResult:
     """Btn Sauve EXCEL : exporte TableListeVendeur en XLSX pour reprise
     ulterieure. Cf. WinDev TableListeVendeur.VersExcel(...).
+
+    Si pdf_b64 fourni : le PDF source est embarque dans une 2e feuille
+    'PDF' (chunks de 30k chars par cellule pour respecter la limite
+    Excel de 32767). Permet a la reimportation de restaurer aussi
+    l'apercu PDF sans que l'utilisateur ait a recharger le fichier
+    d'origine.
     """
     try:
         from openpyxl import Workbook  # noqa: PLC0415
@@ -535,6 +549,12 @@ def sauvegarder_xlsx(vendeurs: list[VendeurRow]) -> SauvegardeXlsxResult:
     for v in vendeurs:
         d = v.model_dump()
         ws.append([d.get(attr, "") for _, attr in _XLSX_COLS])
+
+    # Feuille PDF : b64 en chunks colonne A
+    if pdf_b64:
+        ws_pdf = wb.create_sheet(_XLSX_PDF_SHEET)
+        for i in range(0, len(pdf_b64), _XLSX_PDF_CHUNK):
+            ws_pdf.append([pdf_b64[i:i + _XLSX_PDF_CHUNK]])
 
     import io as _io
     buf = _io.BytesIO()
@@ -565,9 +585,20 @@ def reimporter_xlsx(xlsx_bytes: bytes) -> ReimportXlsxResult:
         return ReimportXlsxResult(
             ok=False, message=f"XLSX illisible : {e}",
         )
-    ws = wb.active
+    # Feuille 'Sauve' explicite si presente, sinon active
+    ws = wb["Sauve"] if "Sauve" in wb.sheetnames else wb.active
     if not ws or ws.max_row < 2:
         return ReimportXlsxResult(ok=True, vendeurs=[])
+
+    # Reconstitue le PDF b64 depuis la feuille PDF (chunks colonne A)
+    pdf_b64 = ""
+    if _XLSX_PDF_SHEET in wb.sheetnames:
+        ws_pdf = wb[_XLSX_PDF_SHEET]
+        chunks = []
+        for row in ws_pdf.iter_rows(values_only=True):
+            if row and row[0]:
+                chunks.append(str(row[0]))
+        pdf_b64 = "".join(chunks)
 
     # Attend le meme header que sauvegarder_xlsx (positions fixes)
     vendeurs: list[VendeurRow] = []
@@ -596,10 +627,14 @@ def reimporter_xlsx(xlsx_bytes: bytes) -> ReimportXlsxResult:
         except Exception:
             logger.exception("Row XLSX skip")
 
+    msg = f"{len(vendeurs)} vendeur(s) reimporte(s)"
+    if pdf_b64:
+        msg += " + PDF restaure"
     return ReimportXlsxResult(
         ok=True,
         vendeurs=vendeurs,
-        message=f"{len(vendeurs)} vendeur(s) reimporte(s)",
+        pdf_b64=pdf_b64,
+        message=msg,
     )
 
 
