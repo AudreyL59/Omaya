@@ -37,6 +37,7 @@ from app.intranets.adm.routers.suivi_distrib import router as suivi_distrib_rout
 from app.intranets.adm.routers.gestion_exo_cash import router as gestion_exo_cash_router
 from app.intranets.adm.routers.paies_bs import router as paies_bs_router
 from app.intranets.adm.routers.fiche_salaires import router as fiche_salaires_router
+from app.intranets.adm.routers.export_tr import router as export_tr_router
 from app.shared.production.router import router as production_router
 from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
@@ -83,6 +84,7 @@ router.include_router(suivi_distrib_router)
 router.include_router(gestion_exo_cash_router)
 router.include_router(paies_bs_router)
 router.include_router(fiche_salaires_router)
+router.include_router(export_tr_router)
 router.include_router(production_router)
 # Module recrutement/recherche-cv shared (ADM voit tout)
 router.include_router(get_recherche_cv_router("adm"))
