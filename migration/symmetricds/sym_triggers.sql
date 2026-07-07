@@ -376,6 +376,9 @@ INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_podium_type_part_option', 'divers', 'pgt_podium_type_part_option', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_podium_type_part_option', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
 
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_podium_type_part', 'divers', 'pgt_podium_type_part', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_podium_type_part', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_podium_type_prod', 'divers', 'pgt_podium_type_prod', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_podium_type_prod', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
 
