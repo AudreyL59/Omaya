@@ -8,7 +8,7 @@
  *  4. Bloc résultats : Date Racc SFR limite + Valider les paies + NB TR
  *  5. 4 onglets : Contrats Signés / Décommission / Jours non Prod TR / Base PDF
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowLeft, Wallet, Loader2, Check, Search, Play,
   Download,
@@ -110,19 +110,107 @@ const shortDate = (iso: string): string =>
     ? ''
     : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 
-const firstOfMonth = (): string => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-}
-const lastOfMonth = (): string => {
-  const d = new Date()
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-  return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
-}
-
 const currentMoisPaie = (): string => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/**
+ * Retourne les 4 dates (signe Du/Au + hors delai Du/Au) + eventuelle
+ * DateRaccLimite pour un partenaire donne, en fonction du mois paiement.
+ *
+ * Cf. WinDev MoisP - Changement (regles metier) :
+ *
+ *   Pour chaque partenaire :
+ *     dateDeb = 1er du mois M   |  dateFin = 1er du mois M (init)
+ *     si SFR :
+ *       dateDeb = 1er du mois M
+ *       dateFin = dernier du mois M
+ *     sinon :
+ *       dateDeb.Mois -= 1
+ *       dateDeb.Jour = 16          -> 16 du mois M-1
+ *       dateFin.Jour = 15          -> 15 du mois M
+ *     si TLC ou VAL :
+ *       dateDeb.Mois -= 1          -> 16 du mois M-2
+ *       dateFin.Mois -= 1          -> 15 du mois M-1
+ *
+ *     Signe Du = dateDeb
+ *     Signe Au = dateFin
+ *     dateRacc = copie de dateDeb (avant modifs suivantes)
+ *
+ *     si SFR :
+ *       dateDeb.Mois -= 2          -> 1er du mois M-2
+ *       (dateFin inchange)
+ *     sinon :
+ *       dateDeb.Mois -= 1
+ *       dateFin.Mois -= 1
+ *
+ *     Hors Delai Du = dateDeb
+ *     Hors Delai Au = dateFin
+ *
+ *     si SFR :
+ *       dateRacc.Mois += 1 ; dateRacc.Jour = 5
+ *       DateRaccLimite = dateRacc  -> 5 du mois M+1
+ */
+function computeDatesForPartenaire(
+  prefixe: string, moisPaieYYYYMM: string,
+): {
+  signe_du: string; signe_au: string
+  hors_delai_du: string; hors_delai_au: string
+  date_racc_limite: string | null
+} {
+  const [y, m] = moisPaieYYYYMM.split('-').map(Number)
+  if (!y || !m) {
+    return {
+      signe_du: '', signe_au: '',
+      hors_delai_du: '', hors_delai_au: '',
+      date_racc_limite: null,
+    }
+  }
+  const isSFR = prefixe === 'SFR'
+  const isTlcVal = prefixe === 'TLC' || prefixe === 'VAL'
+  const fmt = (dt: Date): string =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+
+  let signeDu: Date
+  let signeAu: Date
+  let horsDu: Date
+  let horsAu: Date
+  let dateRacc: Date | null = null
+
+  if (isSFR) {
+    // dateDeb = 1er du mois M ; dateFin = dernier du mois M
+    signeDu = new Date(y, m - 1, 1)
+    signeAu = new Date(y, m, 0)             // dernier jour du mois M
+    // Capture dateRacc avant modification (= Signe Du)
+    dateRacc = new Date(signeDu)
+    // Hors Delai : dateDeb.Mois -= 2, dateFin inchange
+    horsDu = new Date(y, m - 1 - 2, 1)
+    horsAu = new Date(signeAu)
+    // DateRaccLimite = dateRacc.Mois += 1 puis .Jour = 5
+    dateRacc.setMonth(dateRacc.getMonth() + 1)
+    dateRacc.setDate(5)
+  } else {
+    // dateDeb = 16 du mois M-1 ; dateFin = 15 du mois M
+    signeDu = new Date(y, m - 1 - 1, 16)
+    signeAu = new Date(y, m - 1, 15)
+    if (isTlcVal) {
+      signeDu.setMonth(signeDu.getMonth() - 1)   // 16 du mois M-2
+      signeAu.setMonth(signeAu.getMonth() - 1)   // 15 du mois M-1
+    }
+    // Hors Delai : dateDeb.Mois -= 1, dateFin.Mois -= 1
+    horsDu = new Date(signeDu)
+    horsAu = new Date(signeAu)
+    horsDu.setMonth(horsDu.getMonth() - 1)
+    horsAu.setMonth(horsAu.getMonth() - 1)
+  }
+  return {
+    signe_du: fmt(signeDu),
+    signe_au: fmt(signeAu),
+    hors_delai_du: fmt(horsDu),
+    hors_delai_au: fmt(horsAu),
+    date_racc_limite: dateRacc ? fmt(dateRacc) : null,
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -225,16 +313,20 @@ export default function ModulePaiesPage() {
   const [simu, setSimu] = useState(true)
   const [afficherInactifs, setAfficherInactifs] = useState(false)
 
+  const initialMois = currentMoisPaie()
   const [parts, setParts] = useState<PartenaireState[]>(
-    _PARTENAIRES.map((p) => ({
-      prefixe: p.prefixe,
-      is_actif: p.is_actif,
-      coche: p.prefixe === 'ENI' || p.prefixe === 'SFR',
-      signe_du: firstOfMonth(),
-      signe_au: lastOfMonth(),
-      hors_delai_du: firstOfMonth(),
-      hors_delai_au: lastOfMonth(),
-    })),
+    _PARTENAIRES.map((p) => {
+      const dates = computeDatesForPartenaire(p.prefixe, initialMois)
+      return {
+        prefixe: p.prefixe,
+        is_actif: p.is_actif,
+        coche: p.prefixe === 'ENI' || p.prefixe === 'SFR',
+        signe_du: dates.signe_du,
+        signe_au: dates.signe_au,
+        hors_delai_du: dates.hors_delai_du,
+        hors_delai_au: dates.hors_delai_au,
+      }
+    }),
   )
 
   const [loading, setLoading] = useState(false)
@@ -248,9 +340,33 @@ export default function ModulePaiesPage() {
   const [nbTr, setNbTr] = useState(0)
   const [hasEni, setHasEni] = useState(false)
   const [hasSfr, setHasSfr] = useState(false)
-  const [dateRaccLimite, setDateRaccLimite] = useState(lastOfMonth())
+  const [dateRaccLimite, setDateRaccLimite] = useState(
+    computeDatesForPartenaire('SFR', initialMois).date_racc_limite || '',
+  )
 
   const [tab, setTab] = useState<Tab>('signes')
+
+  // Recalcul des dates a chaque changement de mois paiement
+  // (cf. WinDev MoisP - Changement)
+  useEffect(() => {
+    if (!moisPaie.match(/^\d{4}-\d{2}$/)) return
+    setParts((prev) =>
+      prev.map((p) => {
+        const d = computeDatesForPartenaire(p.prefixe, moisPaie)
+        return {
+          ...p,
+          signe_du: d.signe_du,
+          signe_au: d.signe_au,
+          hors_delai_du: d.hors_delai_du,
+          hors_delai_au: d.hors_delai_au,
+        }
+      }),
+    )
+    const sfrDates = computeDatesForPartenaire('SFR', moisPaie)
+    if (sfrDates.date_racc_limite) {
+      setDateRaccLimite(sfrDates.date_racc_limite)
+    }
+  }, [moisPaie])
 
   const partsVisibles = afficherInactifs
     ? parts
@@ -548,7 +664,7 @@ export default function ModulePaiesPage() {
             <button
               onClick={doLister}
               disabled={loading || !salarie}
-              className="flex items-center gap-2 px-4 py-2 rounded bg-[#059669] text-white disabled:opacity-40 hover:bg-[#047857]"
+              className="flex items-center gap-2 px-4 py-2 rounded bg-[#17494E] text-white disabled:opacity-40 hover:bg-[#0F3438]"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -580,7 +696,7 @@ export default function ModulePaiesPage() {
             <button
               onClick={doValider}
               disabled={validating || contratsSignes.length === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded bg-[#8B7355] text-white disabled:opacity-40 hover:bg-[#725e46]"
+              className="flex items-center gap-2 px-4 py-2 rounded bg-[#17494E] text-white disabled:opacity-40 hover:bg-[#0F3438]"
             >
               {validating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
