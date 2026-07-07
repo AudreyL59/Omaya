@@ -28,7 +28,10 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.podium import (
     PodiumType, PodiumTypePart, PodiumTypePartPayload,
-    PodiumTypePayload, ValiderAnneeParams, ValiderAnneeResult,
+    PodiumTypePayload,
+    RechercherPodiumParams, RechercherPodiumResult,
+    SauveScoreVisibleParams, TelechargerParams,
+    ValiderAnneeParams, ValiderAnneeResult,
 )
 from app.intranets.adm.services import podium as svc
 
@@ -166,3 +169,51 @@ def post_valider_annee(
     _require_droit(user, "GestionPodium")
     op_id = int(user.id_salarie or 0)
     return svc.valider_annee(params, op_id)
+
+
+# --------------------------------------------------------------------
+# Onglet 1 - Podiums Vendeurs
+# --------------------------------------------------------------------
+
+@router.post("/rechercher", response_model=RechercherPodiumResult)
+def post_rechercher(
+    params: RechercherPodiumParams,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Rechercher : lance la requete + agrege par salarie / equipe."""
+    _require_droit(user, "GestionPodium")
+    return svc.rechercher_podium(params)
+
+
+@router.post("/score-visible")
+def post_score_visible(
+    params: SauveScoreVisibleParams,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Disquette : sauve score_visible sur PodiumMois."""
+    _require_droit(user, "GestionPodium")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.sauver_score_visible(params, op_id)
+    return {"ok": ok}
+
+
+@router.post("/telecharger-xlsx")
+def post_telecharger_xlsx(
+    params: TelechargerParams,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Telecharger : XLSX du podium tel qu'affiche."""
+    _require_droit(user, "GestionPodium")
+    fic, content = svc.generer_xlsx_podium(params)
+    if not content:
+        raise HTTPException(status_code=500, detail="openpyxl indisponible")
+    return Response(
+        content=content,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+        headers={
+            "Content-Disposition": f'attachment; filename="{fic}"',
+        },
+    )
