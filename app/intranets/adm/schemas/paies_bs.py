@@ -149,3 +149,43 @@ class ValiderPaiesResult(BaseModel):
     nb_tr: int = 0
     nb_updated: int = 0        # combien d'UPDATE SQL appliques
     message: str = ""
+
+
+# --------------------------------------------------------------------
+# GenerationBase (PDF EtatBaseSalaire)
+# --------------------------------------------------------------------
+
+class GenerationBaseRow(BaseModel):
+    """Ligne du PDF (subset de ContratRow, cf. WinDev BaseContrat)."""
+    vendeur: str = ""
+    num_bs: str = ""
+    signe_le: str = ""       # YYYY-MM-DD
+    nom_produit: str = ""
+    etat: str = ""           # etat_contrat
+    mois_paiement: str = ""
+    car: str = ""            # ENI
+    date_racc_activ: str = ""  # SFR
+    type_vente: str = ""     # SFR (libelle)
+    portabilite: bool = False
+    prise_saisie: bool = False
+    note: float = 0.0        # notation_client
+    nb_pts: float = 0.0
+
+
+class GenerationBaseParams(BaseModel):
+    """Input pour generer + uploader le PDF EtatBaseSalaire."""
+    id_salarie: int
+    mois_paiement: str          # YYYY-MM
+    contrats: list[GenerationBaseRow] = Field(default_factory=list)
+    has_eni: bool = False
+    has_sfr: bool = False
+
+
+class GenerationBaseResult(BaseModel):
+    """Output : PDF genere + eventuellement uploade FTP."""
+    ok: bool
+    fic_name: str = ""       # nom du fichier PDF
+    pdf_b64: str = ""        # PDF en base64 (pour telechargement direct)
+    ftp_uploaded: bool = False
+    url: str = ""            # URL publique (si upload OK)
+    message: str = ""
