@@ -37,6 +37,7 @@ import ModulePaiesPage from '@/pages/ModulePaiesPage'
 import FichesSalairePage from '@/pages/FichesSalairePage'
 import ExportTRPage from '@/pages/ExportTRPage'
 import TableauxDiversPage from '@/pages/TableauxDiversPage'
+import GestionPodiumPage from '@/pages/GestionPodiumPage'
 import GestionRecruteursPageAdm from '@/pages/GestionRecruteursPage'
 import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
@@ -142,6 +143,7 @@ function App() {
           <Route path="paies/fiches" element={<FichesSalairePage />} />
           <Route path="paies/export-tr" element={<ExportTRPage />} />
           <Route path="paies/tableaux-divers" element={<TableauxDiversPage />} />
+          <Route path="comm/podium" element={<GestionPodiumPage />} />
           <Route path="recrutement/recruteurs" element={<GestionRecruteursPageAdm />} />
           <Route path="recrutement/parametres" element={<ParametresCVPage />} />
           <Route path="imports/contrats" element={<ImportsHubPage />} />
