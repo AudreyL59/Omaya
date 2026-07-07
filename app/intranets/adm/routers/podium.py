@@ -53,13 +53,13 @@ def _require_droit(user: UserToken, code: str) -> None:
 
 @router.get("/combos/types")
 def get_combo_types(user: UserToken = Depends(get_current_user)):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     return {"items": svc.list_types_podium_actifs()}
 
 
 @router.get("/combos/distributeurs")
 def get_combo_distributeurs(user: UserToken = Depends(get_current_user)):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     return {"items": svc.list_distributeurs()}
 
 
@@ -69,7 +69,7 @@ def get_combo_distributeurs(user: UserToken = Depends(get_current_user)):
 
 @router.get("/types", response_model=list[PodiumType])
 def get_types(user: UserToken = Depends(get_current_user)):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     return svc.list_podium_types()
 
 
@@ -78,7 +78,7 @@ def post_type(
     payload: PodiumTypePayload,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     if not payload.lib_podium_type.strip():
         raise HTTPException(status_code=400, detail="Libelle requis")
     op_id = int(user.id_salarie or 0)
@@ -92,7 +92,7 @@ def put_type(
     payload: PodiumTypePayload,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     op_id = int(user.id_salarie or 0)
     ok = svc.update_podium_type(id_pt, payload, op_id)
     return {"ok": ok}
@@ -103,7 +103,7 @@ def delete_type(
     id_pt: str,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     op_id = int(user.id_salarie or 0)
     ok = svc.delete_podium_type(id_pt, op_id)
     return {"ok": ok}
@@ -121,7 +121,7 @@ def get_type_parts(
     id_pt: str,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     return svc.list_podium_type_parts(id_pt)
 
 
@@ -130,7 +130,7 @@ def post_part(
     payload: PodiumTypePartPayload,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     if not payload.id_podium_type or payload.id_podium_type == "0":
         raise HTTPException(status_code=400, detail="PodiumType requis")
     op_id = int(user.id_salarie or 0)
@@ -144,7 +144,7 @@ def put_part(
     payload: PodiumTypePartPayload,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     op_id = int(user.id_salarie or 0)
     ok = svc.update_podium_type_part(id_ptp, payload, op_id)
     return {"ok": ok}
@@ -155,7 +155,7 @@ def delete_part(
     id_ptp: str,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     op_id = int(user.id_salarie or 0)
     ok = svc.delete_podium_type_part(id_ptp, op_id)
     return {"ok": ok}
@@ -170,7 +170,7 @@ def post_valider_annee(
     params: ValiderAnneeParams,
     user: UserToken = Depends(get_current_user),
 ):
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     op_id = int(user.id_salarie or 0)
     return svc.valider_annee(params, op_id)
 
@@ -185,7 +185,7 @@ def post_rechercher(
     user: UserToken = Depends(get_current_user),
 ):
     """Btn Rechercher : lance la requete + agrege par salarie / equipe."""
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     return svc.rechercher_podium(params)
 
 
@@ -195,7 +195,7 @@ def post_score_visible(
     user: UserToken = Depends(get_current_user),
 ):
     """Btn Disquette : sauve score_visible sur PodiumMois."""
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     op_id = int(user.id_salarie or 0)
     ok = svc.sauver_score_visible(params, op_id)
     return {"ok": ok}
@@ -209,7 +209,7 @@ def post_calcul_podium(
     """Btn Calcul Podium : recalcule les podiums entre du et au+7j
     (boucle par pas de 1 mois). Cf. WinDev Podium_Calcul.
     """
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     op_id = int(user.id_salarie or 0)
     return svc_calc.calcul_podium(params, op_id)
 
@@ -220,7 +220,7 @@ def post_telecharger_xlsx(
     user: UserToken = Depends(get_current_user),
 ):
     """Btn Telecharger : XLSX du podium tel qu'affiche."""
-    _require_droit(user, "GestionPodium")
+    _require_droit(user, "GestPodium")
     fic, content = svc.generer_xlsx_podium(params)
     if not content:
         raise HTTPException(status_code=500, detail="openpyxl indisponible")

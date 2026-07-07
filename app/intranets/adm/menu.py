@@ -143,7 +143,7 @@ def get_menu(user: UserToken = Depends(get_current_user)):
             "items": [
                 {"key": "challenges",        "label": "Gestion des challenges",   "route": "/comm/challenges","icon":"trophy",        "droit": "GestChallenge"},
                 {"key": "exo_cash",          "label": "Gestion Exo Cash",         "route": "/comm/exo-cash",  "icon":"banknote",      "droit": "GestExoCash"},
-                {"key": "podiums",           "label": "Gestion des Podiums",      "route": "/comm/podium",    "icon":"medal",         "droit": "GestionPodium"},
+                {"key": "podiums",           "label": "Gestion des Podiums",      "route": "/comm/podium",    "icon":"medal",         "droit": "GestPodium"},
                 {"key": "sms_perf",          "label": "Gestion SMS Perf-Exo",     "route": "/comm/sms-perf",  "icon":"message-square","droit": "GestPerfExo"},
             ],
         },
