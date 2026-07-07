@@ -56,6 +56,15 @@ def _cap_prenom(p: str) -> str:
     return p[0].upper() + p[1:].lower() if len(p) > 1 else p.upper()
 
 
+def _new_id() -> int:
+    """ID timestamp WinDev-style (YYYYMMDDHHMMSSXXX). Utilise pour
+    generer un id 8 octets equivalent WinDev sur les tables sans
+    BIGSERIAL (necessaire depuis le fix sync).
+    """
+    n = datetime.now()
+    return int(n.strftime("%Y%m%d%H%M%S") + f"{n.microsecond // 1000:03d}")
+
+
 # --------------------------------------------------------------------
 # Combos (Types podium, Distributeurs)
 # --------------------------------------------------------------------
@@ -153,22 +162,25 @@ def list_podium_types() -> list[PodiumType]:
 
 
 def create_podium_type(p: PodiumTypePayload, op_id: int) -> str:
-    """Cree un PodiumType. Retourne l'id cree en string."""
+    """Cree un PodiumType. Retourne l'id cree en string.
+    Note : id_podium_type genere en Python (WinDev-style) - la table
+    ne dispose pas d'auto-increment (compatibilite sync HFSQL)."""
     db = get_pg_connection("rh")
-    r = db.query_one(
+    new_id = _new_id()
+    db.execute(
         """INSERT INTO divers.pgt_podium_type
-              (lib_podium_type, lib_court, prod_groupe, qualite, espoir,
-               is_actif, ordre_affichage,
+              (id_podium_type, lib_podium_type, lib_court, prod_groupe,
+               qualite, espoir, is_actif, ordre_affichage,
                modif_date, modif_op, modif_elem)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')
-           RETURNING id_podium_type""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
         (
+            new_id,
             p.lib_podium_type.strip(), p.lib_court.strip(),
             p.prod_groupe, p.qualite, p.espoir,
             p.is_actif, p.ordre_affichage, int(op_id),
         ),
     )
-    return _clean_id(r.get("id_podium_type")) if r else ""
+    return str(new_id)
 
 
 def update_podium_type(id_pt: str, p: PodiumTypePayload, op_id: int) -> bool:
@@ -245,15 +257,19 @@ def list_podium_type_parts(id_podium_type: str) -> list[PodiumTypePart]:
 
 
 def create_podium_type_part(p: PodiumTypePartPayload, op_id: int) -> str:
+    """Note : id_podium_type_part genere en Python (WinDev-style) car
+    la table ne dispose pas d'auto-increment (compatibilite sync HFSQL)."""
     db = get_pg_connection("rh")
-    r = db.query_one(
+    new_id = _new_id()
+    db.execute(
         """INSERT INTO divers.pgt_podium_type_part
-              (id_podium_type, famille, sous_fam, prefixe_bdd, type_prod,
-               option_vente, jour_cial_deb, jour_cial_fin,
+              (id_podium_type_part, id_podium_type, famille, sous_fam,
+               prefixe_bdd, type_prod, option_vente,
+               jour_cial_deb, jour_cial_fin,
                modif_date, modif_op, modif_elem)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')
-           RETURNING id_podium_type_part""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
         (
+            new_id,
             int(p.id_podium_type),
             p.famille.strip() or "Tous",
             p.sous_fam.strip() or "Tous",
@@ -265,7 +281,7 @@ def create_podium_type_part(p: PodiumTypePartPayload, op_id: int) -> str:
             int(op_id),
         ),
     )
-    return _clean_id(r.get("id_podium_type_part")) if r else ""
+    return str(new_id)
 
 
 def update_podium_type_part(
