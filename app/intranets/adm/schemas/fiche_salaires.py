@@ -123,3 +123,31 @@ class GenererPdfPrepaieResult(BaseModel):
     fic_name: str = ""
     couleur: str = ""    # vert / orange / rouge
     message: str = ""
+
+
+# --------------------------------------------------------------------
+# Envoi FDP (Btn Valider et envoyer les FDP)
+# --------------------------------------------------------------------
+
+class EnvoyerFdpParams(BaseModel):
+    """Input Btn Valider et envoyer les FDP."""
+    id_ste: str        # societe (pour signature mail)
+    raison_sociale: str = ""  # pour signature
+    mois_paiement: str  # YYYY-MM
+    vendeurs: list[VendeurRow] = Field(default_factory=list)
+
+
+class EnvoiVendeurResult(BaseModel):
+    id_salarie: str
+    nom_prenom: str
+    mail: str = ""
+    couleur: str    # vert (envoye) / orange (mail invalide) / rouge (echec)
+    message: str = ""
+
+
+class EnvoyerFdpResult(BaseModel):
+    ok: bool
+    envois: list[EnvoiVendeurResult] = Field(default_factory=list)
+    nb_envoyes: int = 0
+    nb_echecs: int = 0
+    message: str = ""

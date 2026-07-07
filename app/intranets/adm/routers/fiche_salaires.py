@@ -17,7 +17,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.intranets.adm.schemas.fiche_salaires import (
-    ChargerPdfResult, GenererPdfPrepaieParams, GenererPdfPrepaieResult,
+    ChargerPdfResult, EnvoyerFdpParams, EnvoyerFdpResult,
+    GenererPdfPrepaieParams, GenererPdfPrepaieResult,
     ParseXlsxResult, ReimportXlsxResult, SauvegardeXlsxResult,
     ValiderParams, ValiderResult, VendeurRow,
 )
@@ -145,3 +146,19 @@ def post_generer_pdf_prepaie(
     """
     _require_droit(user, "FichePaies")
     return svc.generer_pdf_prepaie(params)
+
+
+@router.post("/envoyer-fdp", response_model=EnvoyerFdpResult)
+def post_envoyer_fdp(
+    params: EnvoyerFdpParams,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Valider et envoyer les FDP.
+
+    Pour chaque vendeur avec Choix=True et mail valide :
+    - Recupere les PDF FTP (FS + base + prepaie)
+    - Cree un ZIP AES-256 protege par le mot de passe du salarie
+    - Envoie email via SMTP salaire@omaya.fr avec ZIP en PJ
+    """
+    _require_droit(user, "FichePaies")
+    return svc.envoyer_fdp(params)

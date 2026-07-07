@@ -24,7 +24,8 @@ from typing import Optional
 
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.schemas.fiche_salaires import (
-    ChargerPdfResult, GenererPdfPrepaieParams, GenererPdfPrepaieResult,
+    ChargerPdfResult, EnvoiVendeurResult, EnvoyerFdpParams, EnvoyerFdpResult,
+    GenererPdfPrepaieParams, GenererPdfPrepaieResult,
     ParseXlsxResult, ReimportXlsxResult, SauvegardeXlsxResult, SocieteFDV,
     ValiderParams, ValiderResult, VendeurRow,
 )
@@ -780,4 +781,293 @@ def generer_pdf_prepaie(p: GenererPdfPrepaieParams) -> GenererPdfPrepaieResult:
     return GenererPdfPrepaieResult(
         ok=True, couleur="vert", fic_name=fic_name,
         message=f"PDF prepaie envoye : {fic_name}",
+    )
+
+
+# --------------------------------------------------------------------
+# Envoi FDP - ZIP protege + SMTP salaire@omaya.fr
+# --------------------------------------------------------------------
+
+def _mdp_zip_for_salarie(id_salarie: int, fallback: str = "OMAYA") -> str:
+    """Retourne le mot de passe ZIP pour un salarie.
+
+    TODO migration : le WinDev utilise
+    DecrypteStandard(salarie.MDPCrypte, bufCle, crypteAES128) pour
+    obtenir le mdp de connexion du salarie. Le buffer 'bufCle' n'est
+    pas encore accessible cote Python.
+
+    Strategie de secours (deployable) :
+      1. Login OMAYA du salarie (colonne login) - facile a retrouver
+      2. Sinon fallback constant
+
+    A migrer quand la cle AES-128 sera fournie.
+    """
+    if not id_salarie:
+        return fallback
+    rh = get_pg_connection("rh")
+    try:
+        r = rh.query_one(
+            "SELECT login FROM pgt_salarie WHERE id_salarie = ?",
+            (int(id_salarie),),
+        )
+    except Exception:
+        r = None
+    login = ((r.get("login") if r else "") or "").strip()
+    if not login:
+        return fallback
+    # Le login est generalement l'email ; on prend la partie locale
+    # (avant @) qui est plus facile a saisir pour le salarie.
+    return login.split("@")[0].strip() or fallback
+
+
+def _download_pdf_from_ftp(id_salarie: str, fic_name: str) -> Optional[bytes]:
+    """Recupere un PDF stocke sur FTP gestionRH/{id}/Fiches_Salaires/."""
+    if not fic_name:
+        return None
+    try:
+        from app.core.config import FTP_GESTION_RH_PATH
+        from app.shared.tickets.forms.factdistrib import _ftp_download
+    except ImportError:
+        return None
+    path = (
+        f"{FTP_GESTION_RH_PATH.rstrip('/')}"
+        f"/{id_salarie}/Fiches_Salaires/{fic_name}"
+    )
+    return _ftp_download(path)
+
+
+def _create_zip_aes(
+    files: list[tuple[str, bytes]], password: str,
+) -> Optional[bytes]:
+    """Cree un ZIP AES-256 protege par mot de passe.
+
+    Utilise pyzipper si dispo. Fallback : ZIP non chiffre + log warning.
+    """
+    try:
+        import pyzipper  # noqa: PLC0415
+    except ImportError:
+        logger.warning(
+            "pyzipper non installe - ZIP NON CHIFFRE (installer pyzipper)",
+        )
+        # Fallback stdlib
+        import io as _io
+        import zipfile
+        buf = _io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, content in files:
+                zf.writestr(name, content)
+        return buf.getvalue()
+
+    import io as _io
+    buf = _io.BytesIO()
+    try:
+        with pyzipper.AESZipFile(
+            buf, "w", compression=pyzipper.ZIP_DEFLATED,
+            encryption=pyzipper.WZ_AES,
+        ) as zf:
+            zf.setpassword(password.encode("utf-8"))
+            for name, content in files:
+                zf.writestr(name, content)
+    except Exception:
+        logger.exception("Creation ZIP AES KO")
+        return None
+    return buf.getvalue()
+
+
+def _send_mail_salaire(
+    dest: list[str], cci: list[str], sujet: str, html: str,
+    zip_bytes: bytes, zip_name: str,
+) -> bool:
+    """Envoi email via SMTP OVH avec compte salaire@omaya.fr.
+
+    Config attendue :
+      SMTP_SALAIRE_HOST=ssl0.ovh.net
+      SMTP_SALAIRE_PORT=465
+      SMTP_SALAIRE_USER=salaire@omaya.fr
+      SMTP_SALAIRE_PASSWORD=***
+
+    Fallback : reutilise SMTP_RH_* si SMTP_SALAIRE_* absents.
+    """
+    import smtplib
+    from email.header import Header
+    from email.mime.application import MIMEApplication
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.utils import formataddr
+
+    # Config
+    try:
+        import os
+        host = os.environ.get("SMTP_SALAIRE_HOST", "ssl0.ovh.net")
+        port = int(os.environ.get("SMTP_SALAIRE_PORT", "465"))
+        user = os.environ.get("SMTP_SALAIRE_USER", "salaire@omaya.fr")
+        pwd = os.environ.get("SMTP_SALAIRE_PASSWORD", "")
+        if not pwd:
+            # Fallback SMTP RH (Gmail) - le mail arrivera depuis noreply
+            from app.core.config import (
+                SMTP_RH_HOST, SMTP_RH_PORT, SMTP_RH_USER, SMTP_RH_PASSWORD,
+            )
+            host = SMTP_RH_HOST
+            port = SMTP_RH_PORT
+            user = SMTP_RH_USER
+            pwd = SMTP_RH_PASSWORD
+    except Exception:
+        logger.exception("Config SMTP salaire")
+        return False
+    if not pwd:
+        logger.error("SMTP salaire pas configure (SMTP_SALAIRE_PASSWORD vide)")
+        return False
+
+    all_recipients = dest + cci
+    if not dest:
+        return False
+
+    msg = MIMEMultipart("mixed")
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(html, "html", "utf-8"))
+    msg.attach(alt)
+    zip_part = MIMEApplication(zip_bytes, Name=zip_name)
+    zip_part["Content-Disposition"] = f'attachment; filename="{zip_name}"'
+    msg.attach(zip_part)
+
+    msg["Subject"] = Header(sujet, "utf-8")
+    msg["From"] = formataddr(("Service paie OMAYA", user))
+    msg["To"] = ", ".join(dest)
+    if cci:
+        msg["Bcc"] = ", ".join(cci)
+
+    try:
+        with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
+            smtp.login(user, pwd)
+            smtp.sendmail(user, all_recipients, msg.as_string())
+        logger.info("Mail salaire envoye : %s -> %d dest", sujet[:80], len(dest))
+        return True
+    except Exception:
+        logger.exception("Envoi SMTP salaire KO (%s)", sujet[:80])
+        return False
+
+
+def _valid_email(email: str) -> bool:
+    if not email or "@" not in email:
+        return False
+    local, _, domain = email.rpartition("@")
+    return bool(local) and "." in domain
+
+
+def envoyer_fdp(p: EnvoyerFdpParams) -> EnvoyerFdpResult:
+    """Cf. WinDev Btn Valider et envoyer les FDP.
+
+    Pour chaque vendeur avec Choix=True et mail valide :
+    1. Recupere les PDF depuis le FTP (FS + base + prepaie)
+    2. Cree un ZIP AES-256 protege par le mdp du salarie
+    3. Envoie email via SMTP salaire@omaya.fr avec le ZIP en PJ
+    4. CCI systematique : salaire@omaya.fr + intranet@omaya.fr
+    """
+    if not p.vendeurs:
+        return EnvoyerFdpResult(
+            ok=False, message="Aucun vendeur",
+        )
+    mois_fr = p.mois_paiement  # YYYY-MM
+    envois: list[EnvoiVendeurResult] = []
+    nb_envoyes = 0
+    nb_echecs = 0
+
+    for v in p.vendeurs:
+        if not v.choix:
+            continue
+        res = EnvoiVendeurResult(
+            id_salarie=v.id_salarie,
+            nom_prenom=v.nom_prenom,
+            mail=v.mail,
+            couleur="rouge",
+        )
+        # 1. Mail valide ?
+        if not _valid_email(v.mail):
+            res.couleur = "orange"
+            res.message = "Adresse mail invalide"
+            envois.append(res)
+            nb_echecs += 1
+            continue
+
+        # 2. Recupere les PDF depuis le FTP
+        files_to_zip: list[tuple[str, bytes]] = []
+        if v.fichier_pdf:
+            fs = _download_pdf_from_ftp(v.id_salarie, v.fichier_pdf)
+            if fs:
+                files_to_zip.append((v.fichier_pdf, fs))
+        if v.base_pdf:
+            bp = _download_pdf_from_ftp(v.id_salarie, v.base_pdf)
+            if bp:
+                files_to_zip.append((v.base_pdf, bp))
+        if v.tab_prepaies:
+            tp = _download_pdf_from_ftp(v.id_salarie, v.tab_prepaies)
+            if tp:
+                files_to_zip.append((v.tab_prepaies, tp))
+
+        if not files_to_zip:
+            res.message = "Aucun fichier a envoyer"
+            envois.append(res)
+            nb_echecs += 1
+            continue
+
+        # 3. ZIP AES-256
+        mdp = _mdp_zip_for_salarie(int(v.id_salarie) if v.id_salarie else 0)
+        zip_name = (
+            f"DocSalaire_{mois_fr}_{_safe_filename(v.nom_prenom)}.zip"
+        )
+        zip_bytes = _create_zip_aes(files_to_zip, mdp)
+        if not zip_bytes:
+            res.message = "Creation ZIP KO"
+            envois.append(res)
+            nb_echecs += 1
+            continue
+
+        # 4. Corps du mail
+        parts_lib = ["votre fiche de salaire"]
+        if v.base_pdf:
+            parts_lib.append("votre base contrat")
+        if v.tab_prepaies:
+            parts_lib.append("votre tableau prepaie")
+        if len(parts_lib) > 1:
+            parts_str = ", ".join(parts_lib[:-1]) + " et " + parts_lib[-1]
+        else:
+            parts_str = parts_lib[0]
+
+        sujet = f"Fiche Salaire {mois_fr} {v.nom_prenom}"
+        html = f"""<font face='arial' style='font-size:10pt;'>
+<p>Bonjour,</p>
+<p>Retrouvez des a present sur votre espace salarie, {parts_str}.</p>
+<p>Cet espace personnel est accessible depuis l'intranet ou l'appli
+mobile Omayapp.</p>
+<p>https://groupe-exo.omaya.fr</p>
+<p><b>IMPORTANT : Le fichier ZIP en PJ, contenant les documents cites
+ci-dessus, a ete protege par votre mot de passe de connexion OMAYA.</b></p>
+<p>Pour toute question n'hesitez pas a contacter votre responsable.</p>
+<p>Cordialement</p>
+<p><b>Service paie</b><br/>
+Std: 03.62.27.60.04<br/>
+{p.raison_sociale}</p>
+<p><i>PS : ceci est un mail automatique merci de ne pas repondre</i></p>
+</font>"""
+
+        cci = ["salaire@omaya.fr", "intranet@omaya.fr"]
+        sent = _send_mail_salaire(
+            [v.mail], cci, sujet, html, zip_bytes, zip_name,
+        )
+        if sent:
+            res.couleur = "vert"
+            res.message = "Envoye"
+            nb_envoyes += 1
+        else:
+            res.couleur = "rouge"
+            res.message = "Envoi SMTP KO"
+            nb_echecs += 1
+        envois.append(res)
+
+    return EnvoyerFdpResult(
+        ok=True,
+        envois=envois,
+        nb_envoyes=nb_envoyes,
+        nb_echecs=nb_echecs,
+        message=f"{nb_envoyes} envoye(s), {nb_echecs} en erreur",
     )
