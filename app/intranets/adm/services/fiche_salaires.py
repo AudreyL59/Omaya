@@ -737,14 +737,18 @@ def _render_prepaie_html(cells: list[list[str]], titre: str) -> str:
     ncols = max((len(r) for r in cells), default=0)
 
     # Font size adaptatif selon le nombre de colonnes
-    if ncols <= 8:
+    # A4 paysage utile ~281mm largeur. Chaque colonne prend en moyenne
+    # 8-14mm selon le font size + padding.
+    if ncols <= 6:
         cell_font = 9
-    elif ncols <= 12:
+    elif ncols <= 10:
         cell_font = 8
-    elif ncols <= 16:
-        cell_font = 7
+    elif ncols <= 14:
+        cell_font = 6.5
+    elif ncols <= 18:
+        cell_font = 5.5
     else:
-        cell_font = 6
+        cell_font = 5
 
     rows_html: list[str] = []
     for row in cells:
@@ -782,19 +786,24 @@ h1 {{
 table {{
     border-collapse: collapse;
     width: 100%;
+    max-width: 100%;
     margin-top: 4px;
-    table-layout: auto;
+    table-layout: fixed;   /* colonnes de largeur egale, respecte 100% */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }}
 td {{
     border: 1px solid #B0A78E;
-    padding: 2px 4px;
+    padding: 1.5px 3px;
     font-size: {cell_font}pt;
     vertical-align: middle;
-    white-space: nowrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }}
 td.num {{
     text-align: right;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }}
 td.empty {{
     background: #FAFAF7;
