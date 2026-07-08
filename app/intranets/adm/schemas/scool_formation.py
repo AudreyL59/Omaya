@@ -58,6 +58,16 @@ class FormationPayload(BaseModel):
     formateur5_id: str = ""
     formation_active: bool = True
     formation_cloturee: bool = False
+    # Ajout Fen_ScoolFormation_Ajout : si != "0", clone le programme du modele
+    id_modele_form: str = ""
+
+
+class FormateurCombo(BaseModel):
+    """Combo formateur (Fen_ScoolFormation_Ajout)."""
+    id_formateur: str
+    lib: str          # 'NOM Prenom (N)'
+    niveau: str = ""
+    is_actif: bool = True
 
 
 class ListeFormationsParams(BaseModel):
@@ -74,3 +84,11 @@ class ModeleFormationRow(BaseModel):
     nb_heure_terrain: int = 0
     heure_jour_salle: int = 0
     heure_jour_terrain: int = 0
+
+
+class ModeleFormationCombo(BaseModel):
+    """Combo 'Utiliser ce modele' de Fen_ScoolFormation_Ajout.
+    Format 'Categorie - Intitule' (cf. WinDev reqListeModele).
+    """
+    id_modele: str
+    nom_formation: str    # 'Categorie - Intitule'

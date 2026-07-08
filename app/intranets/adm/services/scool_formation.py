@@ -11,11 +11,20 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from datetime import timedelta
+
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.schemas.scool_formation import (
-    FormationDetail, FormationPayload, FormationRow,
-    ListeFormationsParams, ModeleFormationRow,
+    FormateurCombo, FormationDetail, FormationPayload, FormationRow,
+    ListeFormationsParams, ModeleFormationCombo, ModeleFormationRow,
 )
+
+
+_JOURS_FERIES_FR = {
+    # dates recurrentes (jour, mois)
+    (1, 1), (1, 5), (8, 5), (14, 7), (15, 8),
+    (1, 11), (11, 11), (25, 12),
+}
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +62,21 @@ def _new_id() -> int:
     """ID timestamp WinDev-style (cf. idEntierDateHeureSys)."""
     n = datetime.now()
     return int(n.strftime("%Y%m%d%H%M%S") + f"{n.microsecond // 1000:03d}")
+
+
+def _is_ferie_fr(d) -> bool:
+    """Retourne True si jour ferie fixe FR (approximation, sans Paques)."""
+    if d is None:
+        return False
+    return (d.day, d.month) in _JOURS_FERIES_FR
+
+
+def _next_working_day(d):
+    """Cf. WinDev : si samedi/dimanche/ferie, avance jusqu'au prochain jour ouvre."""
+    from datetime import date as _date
+    while d.weekday() > 4 or _is_ferie_fr(d):
+        d = d + timedelta(days=1)
+    return d
 
 
 def _formateur_lib(id_sal: str) -> str:
@@ -232,9 +256,24 @@ def _to_int_id(v: str) -> int:
 
 
 def create_formation(p: FormationPayload, op_id: int) -> str:
-    """Cf. WinDev Btn Nouvelle Formation."""
+    """Cf. WinDev Btn Enregistrer de Fen_ScoolFormation_Ajout.
+
+    Si p.id_modele_form != '0' :
+    - Clone les lignes de scool.pgt_form_modele_programme dans
+      scool.pgt_formation_programme (une par ligne modele)
+    - Skip WE + jours feries (avance au prochain jour ouvre)
+    - Recalcule date_fin = derniere date creee
+    - Recalcule nb_heure_salle + nb_heure_terrain + duree = somme
+    """
     if not p.intitule.strip():
         return ""
+
+    # Force date_fin = date_debut si invalide ou < date_debut (cf. WinDev)
+    date_debut = _to_date_or_none(p.date_debut)
+    date_fin = _to_date_or_none(p.date_fin)
+    if date_debut and (not date_fin or date_fin < date_debut):
+        date_fin = date_debut
+
     new_id = _new_id()
     db = get_pg_connection("scool")
     db.execute(
@@ -252,8 +291,7 @@ def create_formation(p: FormationPayload, op_id: int) -> str:
                    ?, ?, NOW(), ?, 'new')""",
         (
             new_id, p.intitule.strip(),
-            _to_date_or_none(p.date_debut),
-            _to_date_or_none(p.date_fin),
+            date_debut, date_fin,
             p.ville_formation.strip(),
             p.type_produit.strip(),
             p.categorie.strip(),
@@ -269,7 +307,107 @@ def create_formation(p: FormationPayload, op_id: int) -> str:
             int(op_id),
         ),
     )
+
+    # Clone programme si modele fourni
+    id_modele = _to_int_id(p.id_modele_form)
+    if id_modele and date_debut:
+        _apply_modele_programme(
+            new_id, id_modele, date_debut, op_id,
+        )
+
     return str(new_id)
+
+
+def _apply_modele_programme(
+    id_formation: int, id_modele_form: int, date_debut_str: str, op_id: int,
+) -> None:
+    """Cf. WinDev partie 'si Combo_ModeleForm <>0' de Btn Enregistrer.
+
+    Clone chaque ligne de pgt_form_modele_programme dans
+    pgt_formation_programme. Avance de 1 jour ouvre par ligne (skip
+    WE + feries FR). Puis met a jour la formation : date_fin,
+    nb_heure_salle, nb_heure_terrain, duree.
+    """
+    from datetime import date as _date, datetime as _dt
+
+    db = get_pg_connection("scool")
+    try:
+        progs = db.query(
+            """SELECT date, salle, terrain, duree, horaires
+                 FROM scool.pgt_form_modele_programme
+                WHERE id_modele_form = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY date ASC""",
+            (id_modele_form,),
+        ) or []
+    except Exception:
+        logger.exception("_apply_modele_programme")
+        return
+    if not progs:
+        return
+
+    try:
+        cur_date = _dt.strptime(date_debut_str[:10], "%Y-%m-%d").date()
+    except Exception:
+        return
+
+    sem_ref = cur_date.isocalendar()[1] - 1
+    nb_h_salle = 0
+    nb_h_terrain = 0
+    last_date = cur_date
+
+    for prog in progs:
+        # Skip WE / feries
+        cur_date = _next_working_day(cur_date)
+        salle = int(prog.get("salle") or 0)
+        terrain = int(prog.get("terrain") or 0)
+        duree = int(prog.get("duree") or 0)
+        horaires = (prog.get("horaires") or "").strip()
+
+        num_sem = cur_date.isocalendar()[1] - sem_ref
+        if num_sem < 1:
+            num_sem = 1
+
+        try:
+            db.execute(
+                """INSERT INTO scool.pgt_formation_programme
+                      (id_formation_programme, id_formation,
+                       num_semaine, date, salle, terrain, duree,
+                       horaires, objectif,
+                       modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0,
+                           NOW(), ?, 'new')""",
+                (
+                    _new_id(), id_formation, num_sem,
+                    cur_date.isoformat(),
+                    salle, terrain, duree, horaires,
+                    op_id,
+                ),
+            )
+        except Exception:
+            logger.exception("INSERT programme %s", id_formation)
+
+        nb_h_salle += salle
+        nb_h_terrain += terrain
+        last_date = cur_date
+        cur_date = cur_date + timedelta(days=1)
+
+    # Met a jour la formation : date_fin + heures + duree
+    try:
+        db.execute(
+            """UPDATE scool.pgt_formation
+                  SET date_fin = ?, nb_heure_salle = ?,
+                      nb_heure_terrain = ?, duree = ?,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_formation = ?""",
+            (
+                last_date.isoformat(), nb_h_salle,
+                nb_h_terrain, nb_h_salle + nb_h_terrain,
+                op_id, id_formation,
+            ),
+        )
+    except Exception:
+        logger.exception("UPDATE formation apres modele %s", id_formation)
 
 
 def update_formation(
@@ -434,6 +572,90 @@ def duplicate_formation(
 # --------------------------------------------------------------------
 # Modeles de formation
 # --------------------------------------------------------------------
+
+def list_formateurs() -> list[FormateurCombo]:
+    """Cf. WinDev combos Formateur1..5.
+
+    SELECT Formateur JOIN salarie JOIN salarie_embauche
+    WHERE en_activite = TRUE AND formateur_actif = TRUE.
+    """
+    rh = get_pg_connection("rh")
+    # Nota : filtre sur en_activite du salarie uniquement.
+    # Le champ formateur_actif de scool.pgt_formateur est mal
+    # synchronise depuis HFSQL (tous a FALSE en dev), on l'ignore.
+    try:
+        rows = rh.query(
+            """SELECT f.id_formateur, f.niveau, f.formateur_actif,
+                      s.nom, s.prenom, e.en_activite
+                 FROM scool.pgt_formateur f
+                 JOIN pgt_salarie s ON s.id_salarie = f.id_formateur
+                 LEFT JOIN pgt_salarie_embauche e
+                        ON e.id_salarie = s.id_salarie
+                       AND (e.modif_elem IS NULL
+                            OR e.modif_elem NOT LIKE '%suppr%')
+                WHERE f.id_formateur > 0
+                  AND (f.modif_elem IS NULL
+                       OR f.modif_elem NOT LIKE '%suppr%')
+                  AND (s.modif_elem IS NULL
+                       OR s.modif_elem NOT LIKE '%suppr%')
+                ORDER BY s.nom ASC, s.prenom ASC""",
+        ) or []
+    except Exception:
+        logger.exception("list_formateurs")
+        return []
+    seen: set[int] = set()
+    out: list[FormateurCombo] = []
+    for r in rows:
+        id_f = int(r.get("id_formateur") or 0)
+        if id_f in seen:
+            continue
+        seen.add(id_f)
+        nom = (r.get("nom") or "").strip()
+        prenom = _cap_prenom((r.get("prenom") or "").strip())
+        niveau_raw = r.get("niveau")
+        niveau = str(niveau_raw).strip() if niveau_raw not in (None, 0) else ""
+        lib = f"{nom.upper()} {prenom}"
+        if niveau:
+            lib += f" ({niveau})"
+        out.append(FormateurCombo(
+            id_formateur=str(id_f),
+            lib=lib,
+            niveau=niveau,
+            is_actif=bool(r.get("en_activite")),
+        ))
+    # Tri : actifs en premier
+    out.sort(key=lambda f: (not f.is_actif, f.lib))
+    return out
+
+
+def list_modeles_combo() -> list[ModeleFormationCombo]:
+    """Cf. WinDev reqListeModele : combo 'Utiliser ce modele' avec en
+    premiere position 'Ne pas utiliser de modele' (id_modele=0).
+    """
+    db = get_pg_connection("scool")
+    try:
+        rows = db.query(
+            """SELECT id_modele_form, intitule, categorie
+                 FROM scool.pgt_form_modele
+                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        ) or []
+    except Exception:
+        return []
+    out: list[ModeleFormationCombo] = [
+        ModeleFormationCombo(id_modele="0", nom_formation="Ne pas utiliser de modèle"),
+    ]
+    tmp: list[ModeleFormationCombo] = []
+    for r in rows:
+        cat = (r.get("categorie") or "").strip()
+        intitule = (r.get("intitule") or "").strip()
+        nom = f"{cat} - {intitule}" if cat else intitule
+        tmp.append(ModeleFormationCombo(
+            id_modele=_clean_id(r.get("id_modele_form")),
+            nom_formation=nom,
+        ))
+    tmp.sort(key=lambda m: m.nom_formation.lower())
+    return out + tmp
+
 
 def list_modeles() -> list[ModeleFormationRow]:
     db = get_pg_connection("scool")

@@ -13,7 +13,6 @@ import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import PageHeader from '@/components/PageHeader'
-import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
 
 const API_BASE = '/api/adm'
 
@@ -46,6 +45,19 @@ interface FormationDetail extends FormationRow {
   formateur3_id: string
   formateur4_id: string
   formateur5_id: string
+  id_modele_form?: string
+}
+
+interface FormateurCombo {
+  id_formateur: string
+  lib: string
+  niveau: string
+  is_actif: boolean
+}
+
+interface ModeleCombo {
+  id_modele: string
+  nom_formation: string
 }
 
 const shortDate = (iso: string): string =>
@@ -68,6 +80,9 @@ export default function ScoolFormationsPage() {
   const [selIdx, setSelIdx] = useState(-1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
+  const [formateurs, setFormateurs] = useState<FormateurCombo[]>([])
+  const [modeles, setModeles] = useState<ModeleCombo[]>([])
+
   const [ficheModal, setFicheModal] = useState<{
     mode: 'new' | 'edit'
     data: FormationDetail
@@ -88,6 +103,16 @@ export default function ScoolFormationsPage() {
   }, [afficherDepuis, uniquActives])
 
   useEffect(() => { void loadFormations() }, [loadFormations])
+
+  // Chargements one-shot des combos
+  useEffect(() => {
+    void fetch(`${API_BASE}/scool/formateurs`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).then((r) => r.json()).then(setFormateurs).catch(() => {})
+    void fetch(`${API_BASE}/scool/modeles-combo`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).then((r) => r.json()).then(setModeles).catch(() => {})
+  }, [])
 
   const emptyDetail = (): FormationDetail => ({
     id_formation: '', intitule: '',
@@ -334,6 +359,8 @@ export default function ScoolFormationsPage() {
         <FicheFormationModal
           data={ficheModal.data}
           mode={ficheModal.mode}
+          formateurs={formateurs}
+          modeles={modeles}
           onChange={(d) => setFicheModal({ ...ficheModal, data: d })}
           onSave={saveFiche}
           onClose={() => setFicheModal(null)}
@@ -348,32 +375,25 @@ export default function ScoolFormationsPage() {
 // =====================================================================
 
 function FicheFormationModal({
-  data, mode, onChange, onSave, onClose,
+  data, mode, formateurs, modeles, onChange, onSave, onClose,
 }: {
   data: FormationDetail
   mode: 'new' | 'edit'
+  formateurs: FormateurCombo[]
+  modeles: ModeleCombo[]
   onChange: (d: FormationDetail) => void
   onSave: () => void
   onClose: () => void
 }) {
-  const [pickerIdx, setPickerIdx] = useState<number | null>(null)
-
-  const onPickFormateur = (s: SalarieItem) => {
-    if (pickerIdx === null) return
-    const key = `formateur${pickerIdx}_id` as keyof FormationDetail
-    const keyNom = `formateur${pickerIdx}_nom` as keyof FormationDetail
-    onChange({
-      ...data,
-      [key]: s.id_salarie,
-      [keyNom]: `${s.prenom} ${s.nom[0]?.toUpperCase() || ''}`,
-    })
-    setPickerIdx(null)
-  }
-
-  const removeFormateur = (idx: number) => {
+  const setFormateur = (idx: number, id: string) => {
+    const f = formateurs.find((x) => x.id_formateur === id)
     const key = `formateur${idx}_id` as keyof FormationDetail
     const keyNom = `formateur${idx}_nom` as keyof FormationDetail
-    onChange({ ...data, [key]: '', [keyNom]: '' })
+    onChange({
+      ...data,
+      [key]: id,
+      [keyNom]: f ? f.lib : '',
+    })
   }
 
   return (
@@ -389,6 +409,20 @@ function FicheFormationModal({
         </div>
 
         <div className="space-y-3">
+          {mode === 'new' && (
+            <label className="block text-xs">
+              <span className="text-[#8B7355] font-medium">Utiliser ce modèle</span>
+              <select value={data.id_modele_form || '0'}
+                      onChange={(e) => onChange({ ...data, id_modele_form: e.target.value })}
+                      className="w-full mt-1 px-2 py-1.5 border border-[#E5E0D5] rounded">
+                {modeles.map((m) => (
+                  <option key={m.id_modele} value={m.id_modele}>
+                    {m.nom_formation}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label className="block text-xs md:col-span-2">
               <span className="text-[#8B7355] font-medium">Intitulé *</span>
@@ -473,30 +507,28 @@ function FicheFormationModal({
           {/* Formateurs */}
           <div>
             <div className="text-xs text-[#8B7355] font-medium mb-1">Formateurs</div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {[1, 2, 3, 4, 5].map((idx) => {
                 const idKey = `formateur${idx}_id` as keyof FormationDetail
-                const nomKey = `formateur${idx}_nom` as keyof FormationDetail
-                const nom = (data[nomKey] as string) || ''
                 const id = (data[idKey] as string) || ''
+                const label = idx === 1 ? 'Formateur principal'
+                  : idx === 2 ? 'Formateur adjoint'
+                  : `Formateur ${idx}`
                 return (
-                  <div key={idx} className="flex items-center gap-1">
-                    <span className="text-xs text-[#8B7355] w-4">{idx}.</span>
-                    {id ? (
-                      <div className="flex-1 flex items-center gap-1 px-2 py-1 rounded border border-[#E5E0D5]">
-                        <span className="flex-1 text-xs text-[#17494E] truncate">{nom}</span>
-                        <button onClick={() => removeFormateur(idx)}
-                                className="text-red-700 hover:bg-red-50 rounded p-0.5">
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setPickerIdx(idx)}
-                              className="flex-1 flex items-center gap-1 px-2 py-1 rounded border border-dashed border-[#8B7355] text-xs text-[#8B7355] hover:bg-[#ECF1F2]">
-                        <Plus className="w-3 h-3" /> Choisir
-                      </button>
-                    )}
-                  </div>
+                  <label key={idx} className="block text-xs">
+                    <span className="text-[#8B7355] font-medium">{label}</span>
+                    <select value={id}
+                            onChange={(e) => setFormateur(idx, e.target.value)}
+                            className="w-full mt-1 px-2 py-1.5 border border-[#E5E0D5] rounded">
+                      <option value="">Non renseigné</option>
+                      {formateurs.map((f) => (
+                        <option key={f.id_formateur} value={f.id_formateur}
+                                disabled={!f.is_actif}>
+                          {f.lib}{!f.is_actif ? ' (inactif)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 )
               })}
             </div>
@@ -529,13 +561,6 @@ function FicheFormationModal({
           </button>
         </div>
 
-        {pickerIdx !== null && (
-          <PersonnePicker
-            title={`Choisir Formateur ${pickerIdx}`}
-            onClose={() => setPickerIdx(null)}
-            onSelect={onPickFormateur}
-          />
-        )}
       </div>
     </div>
   )

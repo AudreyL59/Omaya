@@ -15,8 +15,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.scool_formation import (
-    FormationDetail, FormationPayload, FormationRow,
-    ListeFormationsParams, ModeleFormationRow,
+    FormateurCombo, FormationDetail, FormationPayload, FormationRow,
+    ListeFormationsParams, ModeleFormationCombo, ModeleFormationRow,
 )
 from app.intranets.adm.services import scool_formation as svc
 
@@ -107,3 +107,21 @@ def dup_formation(
 def get_modeles(user: UserToken = Depends(get_current_user)):
     _require_droit(user, "FormScool")
     return svc.list_modeles()
+
+
+@router.get("/modeles-combo", response_model=list[ModeleFormationCombo])
+def get_modeles_combo(user: UserToken = Depends(get_current_user)):
+    """Combo 'Utiliser ce modele' de Fen_ScoolFormation_Ajout.
+    Premier item = 'Ne pas utiliser de modele' (id=0).
+    """
+    _require_droit(user, "FormScool")
+    return svc.list_modeles_combo()
+
+
+@router.get("/formateurs", response_model=list[FormateurCombo])
+def get_formateurs(user: UserToken = Depends(get_current_user)):
+    """Combos Formateur1..5 de Fen_ScoolFormation_Ajout : formateurs
+    actifs (JOIN pgt_formateur + pgt_salarie + pgt_salarie_embauche).
+    """
+    _require_droit(user, "FormScool")
+    return svc.list_formateurs()
