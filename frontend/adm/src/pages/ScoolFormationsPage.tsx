@@ -36,6 +36,61 @@ interface FormationRow {
   formation_cloturee: boolean
 }
 
+interface EffectifRow {
+  periode: string
+  date: string
+  nb_vend: number
+  nb_vend_prod: number
+  nb_ctt_brut: number
+  nb_ctt_hr: number
+  nb_cqt: number
+  nb_cqt_hr: number
+  nb_mig: number
+  nb_mig_hr: number
+  nb_mob_brut: number
+  nb_mob_hr: number
+}
+
+interface StagiaireRow {
+  id_stagiaire: string
+  nom: string
+  prenom: string
+  du: string
+  au: string
+  en_activite: boolean
+  type_sortie: string
+  livrable: boolean
+  nb_fibre_brut: number
+  nb_fibre_hr: number
+  nb_cqt_brut: number
+  nb_cqt_hr: number
+  nb_mig_brut: number
+  nb_mig_hr: number
+  nb_mob_brut: number
+  nb_mob_hr: number
+}
+
+interface AnalyseFormation {
+  id_formation: string
+  intitule: string
+  ville_formation: string
+  du: string
+  au: string
+  formation_cloturee: boolean
+  presents: number
+  retenus: number
+  jo: number
+  intermediaires: number
+  finaux: number
+  nb_jours_terrain: number
+  total_prod: number
+  total_livrable: number
+  total_cqt: number
+  obj_cqt: number
+  effectif: EffectifRow[]
+  stagiaires: StagiaireRow[]
+}
+
 interface FormationDetail extends FormationRow {
   dest_promo: string
   formateur3_nom: string
@@ -84,6 +139,8 @@ export default function ScoolFormationsPage() {
 
   const [formateurs, setFormateurs] = useState<FormateurCombo[]>([])
   const [modeles, setModeles] = useState<ModeleCombo[]>([])
+  const [analyses, setAnalyses] = useState<AnalyseFormation[]>([])
+  const [analyseLoading, setAnalyseLoading] = useState(false)
 
   const [ficheModal, setFicheModal] = useState<{
     mode: 'new' | 'edit'
@@ -212,15 +269,33 @@ export default function ScoolFormationsPage() {
     else setSelected(new Set(formations.map((f) => f.id_formation)))
   }
 
-  const doAnalyse = () => {
+  const doAnalyse = async () => {
     if (selected.size === 0) {
       showToast('Coche au moins une formation', 'info')
       return
     }
-    showToast(
-      `Analyse de ${selected.size} formation(s) - à venir (FI_AnalysePromoScool)`,
-      'info',
-    )
+    setAnalyseLoading(true)
+    try {
+      const r = await fetch(
+        `${API_BASE}/scool/formations/analyse-promo`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ id_formations: Array.from(selected) }),
+        },
+      )
+      if (!r.ok) { showToast('Erreur analyse', 'error'); return }
+      const d: AnalyseFormation[] = await r.json()
+      setAnalyses(d)
+      showToast(`${d.length} formation(s) analysée(s)`, 'success')
+      // Scroll vers le bas
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+      }, 100)
+    } finally { setAnalyseLoading(false) }
   }
 
   return (
@@ -344,12 +419,24 @@ export default function ScoolFormationsPage() {
         {/* Btn Analyse (bas) */}
         <div className="flex items-center gap-3 mb-4">
           <button onClick={doAnalyse}
-                  disabled={selected.size === 0}
+                  disabled={selected.size === 0 || analyseLoading}
                   className="flex items-center gap-2 px-4 py-2 rounded bg-[#17494E] text-white hover:bg-[#0F3438] disabled:opacity-40">
             <Search className="w-4 h-4" />
             Faire l'analyse des sessions sélectionnées ({selected.size})
           </button>
         </div>
+
+        {/* Résultats analyse promo */}
+        {analyses.length > 0 && (
+          <div className="space-y-6">
+            <h2 className="text-lg font-semibold text-[#17494E] flex items-center gap-2">
+              <Search className="w-4 h-4" /> Analyse des promotions
+            </h2>
+            {analyses.map((a) => (
+              <AnalysePromoCard key={a.id_formation} data={a} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Fiche formation modale */}
@@ -559,6 +646,167 @@ function FicheFormationModal({
           </button>
         </div>
 
+      </div>
+    </div>
+  )
+}
+
+// =====================================================================
+// AnalysePromoCard - une fiche d'analyse par formation
+// =====================================================================
+
+function AnalysePromoCard({ data: a }: { data: AnalyseFormation }) {
+  const txLiv = a.jo > 0 ? Math.round((a.total_livrable / a.jo) * 1000) / 10 : 0
+  const txCqt = a.obj_cqt > 0 ? Math.round((a.total_cqt / a.obj_cqt) * 1000) / 10 : 0
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="mb-4 pb-3 border-b border-[#F0EDE5]">
+        <h3 className="text-base font-semibold text-[#17494E]">
+          {a.intitule}
+          {a.ville_formation && (
+            <span className="ml-2 text-[#8B7355] font-normal">// {a.ville_formation}</span>
+          )}
+        </h3>
+        <div className="flex gap-4 mt-1 text-xs text-[#8B7355]">
+          <span>Promo du {shortDate(a.du)} au {shortDate(a.au)}</span>
+          <span>nb Jours Terrain : <b className="text-[#17494E]">{a.nb_jours_terrain}</b></span>
+          {a.formation_cloturee && (
+            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 text-[10px]">
+              Formation Clôturée
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4 text-xs">
+        <div className="p-3 rounded bg-[#F5F5F0]">
+          <div className="text-[#8B7355] mb-1">Recrutement</div>
+          <div className="text-[#17494E] text-sm">
+            <b>{a.presents}</b> présents · <b>{a.retenus}</b> retenus · <b>{a.jo}</b> JO
+          </div>
+        </div>
+        <div className="p-3 rounded bg-[#F5F5F0]">
+          <div className="text-[#8B7355] mb-1">Bulletins édités</div>
+          <div className="text-[#17494E] text-sm">
+            <b>{a.intermediaires}</b> intermédiaires · <b>{a.finaux}</b> finaux
+          </div>
+        </div>
+        <div className="p-3 rounded bg-[#F5F5F0]">
+          <div className="text-[#8B7355] mb-1">Résultats Promo</div>
+          <div className="text-[#17494E] text-sm">
+            <b>{a.total_prod}</b> nb Prod · <b>{a.total_livrable}</b> livrable ·{' '}
+            <b className={txLiv >= 100 ? 'text-green-700' : 'text-orange-700'}>
+              {txLiv.toFixed(1)}%
+            </b>
+          </div>
+        </div>
+        <div className="p-3 rounded bg-[#F5F5F0]">
+          <div className="text-[#8B7355] mb-1">Résultats CQT Premium</div>
+          <div className="text-[#17494E] text-sm">
+            <b>{a.total_cqt}</b> / <b>{a.obj_cqt}</b> ·{' '}
+            <b className={txCqt >= 100 ? 'text-green-700' : 'text-orange-700'}>
+              {txCqt.toFixed(1)}%
+            </b>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <h4 className="text-sm font-semibold text-[#17494E] mb-2">Effectifs et prod Promo</h4>
+        <div className="overflow-x-auto">
+          <table className="text-xs w-full">
+            <thead className="bg-[#17494E] text-white">
+              <tr>
+                <th className="py-1.5 px-2 text-left">Période</th>
+                <th className="py-1.5 px-2 text-left">Date</th>
+                <th className="py-1.5 px-2 text-right">NB Vend</th>
+                <th className="py-1.5 px-2 text-right">nb Vend Prod</th>
+                <th className="py-1.5 px-2 text-right">Fibre brut</th>
+                <th className="py-1.5 px-2 text-right">Fibre HR*</th>
+                <th className="py-1.5 px-2 text-right">CQT Brut</th>
+                <th className="py-1.5 px-2 text-right">CQT HR*</th>
+                <th className="py-1.5 px-2 text-right">Mig Brut</th>
+                <th className="py-1.5 px-2 text-right">Mig HR*</th>
+                <th className="py-1.5 px-2 text-right">Mob Brut</th>
+                <th className="py-1.5 px-2 text-right">Mob HR*</th>
+              </tr>
+            </thead>
+            <tbody>
+              {a.effectif.map((e, i) => (
+                <tr key={i} className="border-b border-[#F0EDE5]">
+                  <td className="py-1 px-2 font-medium">{e.periode}</td>
+                  <td className="py-1 px-2 tabular-nums">{shortDate(e.date)}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_vend}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_vend_prod}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_ctt_brut}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_ctt_hr}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_cqt}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_cqt_hr}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_mig}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_mig_hr}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_mob_brut}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{e.nb_mob_hr}</td>
+                </tr>
+              ))}
+              {a.effectif.length === 0 && (
+                <tr><td colSpan={12} className="py-4 text-center text-gray-400">Aucune étape</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-[#17494E] mb-2">
+          Stagiaires ({a.stagiaires.length})
+        </h4>
+        <div className="overflow-x-auto">
+          <table className="text-xs w-full">
+            <thead className="bg-[#17494E] text-white">
+              <tr>
+                <th className="py-1.5 px-2 text-left">Nom</th>
+                <th className="py-1.5 px-2 text-left">Prénom</th>
+                <th className="py-1.5 px-2 text-left">Du</th>
+                <th className="py-1.5 px-2 text-left">Au</th>
+                <th className="py-1.5 px-2 text-center">Actif</th>
+                <th className="py-1.5 px-2 text-left">Type sortie</th>
+                <th className="py-1.5 px-2 text-center">Livrable</th>
+                <th className="py-1.5 px-2 text-right">Fibre brut</th>
+                <th className="py-1.5 px-2 text-right">Fibre HR*</th>
+                <th className="py-1.5 px-2 text-right">CQT brut</th>
+                <th className="py-1.5 px-2 text-right">CQT HR*</th>
+              </tr>
+            </thead>
+            <tbody>
+              {a.stagiaires.map((s, i) => (
+                <tr key={i} className="border-b border-[#F0EDE5] hover:bg-[#ECF1F2]">
+                  <td className="py-1 px-2 font-medium">{s.nom}</td>
+                  <td className="py-1 px-2">{s.prenom}</td>
+                  <td className="py-1 px-2 tabular-nums">{shortDate(s.du)}</td>
+                  <td className="py-1 px-2 tabular-nums">{shortDate(s.au)}</td>
+                  <td className="py-1 px-2 text-center">
+                    {s.en_activite
+                      ? <Check className="w-3 h-3 inline text-green-700" />
+                      : ''}
+                  </td>
+                  <td className="py-1 px-2">{s.type_sortie}</td>
+                  <td className="py-1 px-2 text-center">
+                    {s.livrable ? <Check className="w-3 h-3 inline text-green-700" /> : ''}
+                  </td>
+                  <td className="py-1 px-2 text-right tabular-nums">{s.nb_fibre_brut || ''}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{s.nb_fibre_hr || ''}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{s.nb_cqt_brut || ''}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">{s.nb_cqt_hr || ''}</td>
+                </tr>
+              ))}
+              {a.stagiaires.length === 0 && (
+                <tr><td colSpan={11} className="py-4 text-center text-gray-400">Aucun stagiaire</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-red-700 italic mt-2">* HR : Hors Rejet</p>
       </div>
     </div>
   )
