@@ -22,7 +22,9 @@ from app.intranets.adm.schemas.scool_formation import (
     EvenementPayload, EvenementRow,
     FormateurCombo, FormationDetail,
     FormationPayload, FormationRow,
-    ListeFormationsParams, ModeleFormationCombo, ModeleFormationRow,
+    ListeFormationsParams, ModeleFormationCombo,
+    ModeleFormationPayload, ModeleFormationRow,
+    ModeleProgrammePayload, ModeleProgrammeRow,
     ProgrammePayload, ProgrammeRow,
     SessionRecrutPayload, SessionRecrutRow,
 )
@@ -483,3 +485,115 @@ def del_bareme(
     op_id = int(user.id_salarie or 0)
     ok = svc.delete_bareme(id_bareme, op_id)
     return {"ok": ok}
+
+
+# ====================================================================
+# FEN_SCOOLFORMMODELE - Modeles de plan de formation
+# ====================================================================
+
+@router.post("/modeles")
+def post_modele(
+    payload: ModeleFormationPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    if not payload.intitule.strip():
+        raise HTTPException(400, "Intitulé requis")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.create_modele(payload, op_id)
+    return {"ok": bool(new_id), "id_modele": new_id}
+
+
+@router.put("/modeles/{id_modele}")
+def put_modele(
+    id_modele: str,
+    payload: ModeleFormationPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.update_modele(id_modele, payload, op_id)
+    return {"ok": ok}
+
+
+@router.delete("/modeles/{id_modele}")
+def del_modele(
+    id_modele: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_modele(id_modele, op_id)
+    return {"ok": ok}
+
+
+@router.post("/modeles/{id_modele}/dupliquer")
+def dup_modele(
+    id_modele: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.duplicate_modele(id_modele, op_id)
+    return {"ok": bool(new_id), "id_modele": new_id}
+
+
+# --- Programme du modele ---
+
+@router.get("/modeles/{id_modele}/programme",
+            response_model=list[ModeleProgrammeRow])
+def get_modele_programme(
+    id_modele: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    return svc.list_modele_programme(id_modele)
+
+
+@router.post("/modeles/{id_modele}/programme")
+def post_modele_programme(
+    id_modele: str,
+    payload: ModeleProgrammePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.add_modele_programme(id_modele, payload, op_id)
+    return {"ok": bool(new_id), "id_prog": new_id}
+
+
+@router.put("/modeles/{id_modele}/programme/{id_prog}")
+def put_modele_programme(
+    id_modele: str,
+    id_prog: str,
+    payload: ModeleProgrammePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.update_modele_programme(id_prog, payload, op_id)
+    return {"ok": ok}
+
+
+@router.delete("/modeles/{id_modele}/programme/{id_prog}")
+def del_modele_programme(
+    id_modele: str,
+    id_prog: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_modele_programme(id_prog, op_id)
+    return {"ok": ok}
+
+
+@router.post("/modeles/{id_modele}/programme/{id_prog}/dupliquer")
+def dup_modele_programme(
+    id_modele: str,
+    id_prog: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.duplicate_modele_programme(id_prog, op_id)
+    return {"ok": bool(new_id), "id_prog": new_id}

@@ -94,6 +94,35 @@ class ModeleFormationCombo(BaseModel):
     nom_formation: str    # 'Categorie - Intitule'
 
 
+class ModeleFormationPayload(BaseModel):
+    """CRUD modele (Fen_ScoolFormModele)."""
+    intitule: str
+    categorie: str = ""
+    nb_heure_salle: int = 0
+    nb_heure_terrain: int = 0
+    heure_jour_salle: int = 8
+    heure_jour_terrain: int = 8
+
+
+class ModeleProgrammeRow(BaseModel):
+    """Ligne Table_ReqProgrammeForm_ByIdModele."""
+    id_modele_programme: str = ""
+    id_modele_form: str = ""
+    num_jour: int = 0
+    salle: int = 0
+    terrain: int = 0
+    duree: int = 0
+    horaires: str = ""
+
+
+class ModeleProgrammePayload(BaseModel):
+    num_jour: int = 0
+    salle: int = 0
+    terrain: int = 0
+    duree: int = 0
+    horaires: str = ""
+
+
 # --------------------------------------------------------------------
 # Programme de formation (onglet 1)
 # --------------------------------------------------------------------

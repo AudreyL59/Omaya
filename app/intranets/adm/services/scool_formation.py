@@ -22,7 +22,8 @@ from app.intranets.adm.schemas.scool_formation import (
     EvenementPayload, EvenementRow,
     FormateurCombo, FormationDetail,
     FormationPayload, FormationRow, ListeFormationsParams,
-    ModeleFormationCombo, ModeleFormationRow,
+    ModeleFormationCombo, ModeleFormationPayload, ModeleFormationRow,
+    ModeleProgrammePayload, ModeleProgrammeRow,
     ProgrammePayload, ProgrammeRow,
     SessionRecrutPayload, SessionRecrutRow,
     StagiaireRow,
@@ -1738,3 +1739,274 @@ def delete_bareme(id_bareme: str, op_id: int) -> bool:
         (int(op_id), int(id_bareme)),
     )
     return True
+
+
+# ====================================================================
+# FEN_SCOOLFORMMODELE - Modeles de plan de formation
+# ====================================================================
+
+def create_modele(p: ModeleFormationPayload, op_id: int) -> str:
+    """Cf. WinDev Btn Nouveau Modele -> Fen_ScoolFormModele_AjoutEdit."""
+    if not p.intitule.strip():
+        return ""
+    db = get_pg_connection("scool")
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_form_modele
+              (id_modele_form, intitule, categorie,
+               nb_heure_salle, nb_heure_terrain,
+               heure_jour_salle, heure_jour_terrain,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, p.intitule.strip(), p.categorie.strip(),
+            int(p.nb_heure_salle), int(p.nb_heure_terrain),
+            int(p.heure_jour_salle), int(p.heure_jour_terrain),
+            int(op_id),
+        ),
+    )
+    return str(new_id)
+
+
+def update_modele(
+    id_modele: str, p: ModeleFormationPayload, op_id: int,
+) -> bool:
+    if not id_modele or id_modele == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_form_modele
+              SET intitule = ?, categorie = ?,
+                  nb_heure_salle = ?, nb_heure_terrain = ?,
+                  heure_jour_salle = ?, heure_jour_terrain = ?,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_modele_form = ?""",
+        (
+            p.intitule.strip(), p.categorie.strip(),
+            int(p.nb_heure_salle), int(p.nb_heure_terrain),
+            int(p.heure_jour_salle), int(p.heure_jour_terrain),
+            int(op_id), int(id_modele),
+        ),
+    )
+    return True
+
+
+def delete_modele(id_modele: str, op_id: int) -> bool:
+    """Cf. WinDev Btn Supprimer (haut)."""
+    if not id_modele or id_modele == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_form_modele
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_modele_form = ?""",
+        (int(op_id), int(id_modele)),
+    )
+    return True
+
+
+def duplicate_modele(id_modele: str, op_id: int) -> str:
+    """Cf. WinDev Btn Dupliquer (haut) : clone le modele + son programme."""
+    if not id_modele or id_modele == "0":
+        return ""
+    db = get_pg_connection("scool")
+    m = db.query_one(
+        """SELECT intitule, categorie,
+                  nb_heure_salle, nb_heure_terrain,
+                  heure_jour_salle, heure_jour_terrain
+             FROM scool.pgt_form_modele
+            WHERE id_modele_form = ?""",
+        (int(id_modele),),
+    )
+    if not m:
+        return ""
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_form_modele
+              (id_modele_form, intitule, categorie,
+               nb_heure_salle, nb_heure_terrain,
+               heure_jour_salle, heure_jour_terrain,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, (m.get("intitule") or "") + " - Copie",
+            m.get("categorie") or "",
+            int(m.get("nb_heure_salle") or 0),
+            int(m.get("nb_heure_terrain") or 0),
+            int(m.get("heure_jour_salle") or 0),
+            int(m.get("heure_jour_terrain") or 0),
+            int(op_id),
+        ),
+    )
+    # Clone du programme
+    try:
+        progs = db.query(
+            """SELECT date, salle, terrain, duree, horaires
+                 FROM scool.pgt_form_modele_programme
+                WHERE id_modele_form = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY date ASC""",
+            (int(id_modele),),
+        ) or []
+    except Exception:
+        progs = []
+    for p in progs:
+        try:
+            db.execute(
+                """INSERT INTO scool.pgt_form_modele_programme
+                      (id_modele_programme, id_modele_form, date,
+                       salle, terrain, duree, horaires,
+                       modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+                (
+                    _new_id(), new_id,
+                    int(p.get("date") or 0),
+                    int(p.get("salle") or 0),
+                    int(p.get("terrain") or 0),
+                    int(p.get("duree") or 0),
+                    (p.get("horaires") or "").strip(),
+                    int(op_id),
+                ),
+            )
+        except Exception:
+            logger.exception("duplicate_modele INSERT prog")
+    return str(new_id)
+
+
+# --- Programme du modele ---
+
+def list_modele_programme(id_modele: str) -> list[ModeleProgrammeRow]:
+    if not id_modele or id_modele == "0":
+        return []
+    db = get_pg_connection("scool")
+    try:
+        rows = db.query(
+            """SELECT id_modele_programme, id_modele_form, date,
+                      salle, terrain, duree, horaires
+                 FROM scool.pgt_form_modele_programme
+                WHERE id_modele_form = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY date ASC""",
+            (int(id_modele),),
+        ) or []
+    except Exception:
+        logger.exception("list_modele_programme")
+        return []
+    return [
+        ModeleProgrammeRow(
+            id_modele_programme=_clean_id(r.get("id_modele_programme")),
+            id_modele_form=_clean_id(r.get("id_modele_form")),
+            num_jour=int(r.get("date") or 0),
+            salle=int(r.get("salle") or 0),
+            terrain=int(r.get("terrain") or 0),
+            duree=int(r.get("duree") or 0),
+            horaires=(r.get("horaires") or "").strip(),
+        )
+        for r in rows
+    ]
+
+
+def add_modele_programme(
+    id_modele: str, p: ModeleProgrammePayload, op_id: int,
+) -> str:
+    """Cf. WinDev Btn Ajouter un jour : num_jour = MAX(date) + 1 si
+    payload.num_jour <= 0.
+    """
+    if not id_modele or id_modele == "0":
+        return ""
+    db = get_pg_connection("scool")
+    num_jour = int(p.num_jour or 0)
+    if num_jour <= 0:
+        try:
+            r = db.query_one(
+                """SELECT COALESCE(MAX(date), 0) AS m
+                     FROM scool.pgt_form_modele_programme
+                    WHERE id_modele_form = ?
+                      AND (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')""",
+                (int(id_modele),),
+            )
+            num_jour = int((r.get("m") if r else 0) or 0) + 1
+        except Exception:
+            num_jour = 1
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_form_modele_programme
+              (id_modele_programme, id_modele_form, date,
+               salle, terrain, duree, horaires,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, int(id_modele), num_jour,
+            int(p.salle), int(p.terrain), int(p.duree),
+            p.horaires.strip(), int(op_id),
+        ),
+    )
+    return str(new_id)
+
+
+def update_modele_programme(
+    id_prog: str, p: ModeleProgrammePayload, op_id: int,
+) -> bool:
+    if not id_prog or id_prog == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_form_modele_programme
+              SET date = ?, salle = ?, terrain = ?, duree = ?,
+                  horaires = ?,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_modele_programme = ?""",
+        (
+            int(p.num_jour), int(p.salle), int(p.terrain),
+            int(p.duree), p.horaires.strip(),
+            int(op_id), int(id_prog),
+        ),
+    )
+    return True
+
+
+def delete_modele_programme(id_prog: str, op_id: int) -> bool:
+    if not id_prog or id_prog == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_form_modele_programme
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_modele_programme = ?""",
+        (int(op_id), int(id_prog)),
+    )
+    return True
+
+
+def duplicate_modele_programme(id_prog: str, op_id: int) -> str:
+    """Cf. WinDev Btn Dupliquer bas."""
+    if not id_prog or id_prog == "0":
+        return ""
+    db = get_pg_connection("scool")
+    r = db.query_one(
+        """SELECT id_modele_form, date, salle, terrain, duree, horaires
+             FROM scool.pgt_form_modele_programme
+            WHERE id_modele_programme = ?""",
+        (int(id_prog),),
+    )
+    if not r:
+        return ""
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_form_modele_programme
+              (id_modele_programme, id_modele_form, date,
+               salle, terrain, duree, horaires,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, int(r.get("id_modele_form") or 0),
+            int(r.get("date") or 0),
+            int(r.get("salle") or 0),
+            int(r.get("terrain") or 0),
+            int(r.get("duree") or 0),
+            (r.get("horaires") or "").strip() + " - Copie",
+            int(op_id),
+        ),
+    )
+    return str(new_id)

@@ -326,7 +326,7 @@ export default function ScoolFormationsPage() {
               Éditer
             </button>
             <button
-              onClick={() => showToast('Modèles de formation - à venir', 'info')}
+              onClick={() => nav('/scool/modeles')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] text-sm">
               Modèle Formation
             </button>
