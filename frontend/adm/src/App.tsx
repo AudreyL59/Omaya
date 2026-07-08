@@ -40,6 +40,7 @@ import TableauxDiversPage from '@/pages/TableauxDiversPage'
 import GestionPodiumPage from '@/pages/GestionPodiumPage'
 import CalculPointsPage from '@/pages/CalculPointsPage'
 import TableauSalariePage from '@/pages/TableauSalariePage'
+import SmsPerfPage from '@/pages/SmsPerfPage'
 import GestionRecruteursPageAdm from '@/pages/GestionRecruteursPage'
 import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
@@ -148,6 +149,7 @@ function App() {
           <Route path="comm/podium" element={<GestionPodiumPage />} />
           <Route path="paies/points" element={<CalculPointsPage />} />
           <Route path="paies/tableau-salarie" element={<TableauSalariePage />} />
+          <Route path="comm/sms-perf" element={<SmsPerfPage />} />
           <Route path="recrutement/recruteurs" element={<GestionRecruteursPageAdm />} />
           <Route path="recrutement/parametres" element={<ParametresCVPage />} />
           <Route path="imports/contrats" element={<ImportsHubPage />} />
