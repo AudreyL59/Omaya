@@ -36,10 +36,12 @@ from pydantic import BaseModel
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.sms_perf import (
-    DestinatairePayload, DestinataireRow, EquipeScorePayload, EquipeScoreRow,
+    DestinatairePayload, DestinataireRow, EnvoyerSmsParams, EnvoyerSmsResult,
+    EquipeScorePayload, EquipeScoreRow,
     RegleEnvoi, RegleEnvoiPayload, StaffItem, StaffSaveParams, TogglePayload,
 )
 from app.intranets.adm.services import sms_perf as svc
+from app.intranets.adm.services import sms_perf_envoi as svc_envoi
 
 router = APIRouter(prefix="/comm/sms-perf", tags=["adm-comm-sms-perf"])
 
@@ -264,3 +266,30 @@ def dup_eq(
     op_id = int(user.id_salarie or 0)
     new_id = svc.duplicate_equipe_score(id_eq, op_id)
     return {"ok": bool(new_id), "id_orga_periode": new_id}
+
+
+# --------------------------------------------------------------------
+# Envoi SMS (proc Animation_SmsPerf)
+# --------------------------------------------------------------------
+
+class EnvoyerSmsPayload(EnvoyerSmsParams):
+    simulation: bool = True
+
+
+@router.post("/envoyer", response_model=EnvoyerSmsResult)
+def post_envoyer(
+    payload: EnvoyerSmsPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Btn Envoyer SMS : lance Animation_SmsPerf(DateJour).
+
+    En mode simulation (par defaut) : calcule les messages sans les envoyer.
+    En mode reel : envoie les SMS via smsmode.com + historise pour eviter
+    les doublons.
+    """
+    _require_droit(user, "GestPerfExo")
+    op_id = int(user.id_salarie or 0)
+    return svc_envoi.animation_sms_perf(
+        EnvoyerSmsParams(date_jour=payload.date_jour),
+        op_id, simulation=payload.simulation,
+    )

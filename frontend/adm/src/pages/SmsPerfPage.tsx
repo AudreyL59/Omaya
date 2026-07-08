@@ -237,12 +237,27 @@ export default function SmsPerfPage() {
 
   // ----- Envoi SMS -----
 
-  const doEnvoyer = async () => {
+  const doEnvoyer = async (simulation: boolean) => {
     if (!await showConfirm({
-      title: 'Envoyer les SMS',
-      message: `Renvoyer les SMS Perf-Exo pour la date ${renvoiDate} ?`,
+      title: simulation ? 'Simuler l\'envoi' : 'Envoyer les SMS RÉELLEMENT',
+      message: simulation
+        ? `Calculer les scores + composer les SMS Perf-Exo pour ${renvoiDate} (sans envoyer) ?`
+        : `⚠️ Envoi RÉEL des SMS Perf-Exo pour ${renvoiDate}. Continuer ?`,
     })) return
-    showToast('L\'envoi effectif est prévu dans le commit 2/2', 'info')
+    setLoading(true)
+    try {
+      const r = await fetch(`${API_BASE}/comm/sms-perf/envoyer`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ date_jour: renvoiDate, simulation }),
+      })
+      const d = await r.json()
+      if (!d.ok) { showToast(d.message || 'Erreur', 'error'); return }
+      showToast(d.message || '', 'success')
+    } finally { setLoading(false) }
   }
 
   const regleSel = selRegleIdx >= 0 ? regles[selRegleIdx] : null
@@ -337,8 +352,18 @@ export default function SmsPerfPage() {
                        onChange={(e) => setRenvoiDate(e.target.value)}
                        className="px-2 py-1 border border-[#E5E0D5] rounded" />
               </label>
-              <button onClick={doEnvoyer}
-                      className="p-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438]">
+              <button
+                onClick={() => doEnvoyer(true)}
+                disabled={loading}
+                title="Simuler (aucun SMS envoyé)"
+                className="p-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40">
+                Simu
+              </button>
+              <button
+                onClick={() => doEnvoyer(false)}
+                disabled={loading}
+                title="Envoyer réellement les SMS"
+                className="p-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] disabled:opacity-40">
                 <Send className="w-4 h-4" />
               </button>
             </div>
