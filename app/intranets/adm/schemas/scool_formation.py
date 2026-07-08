@@ -177,6 +177,98 @@ class StagiaireRow(BaseModel):
     nb_mob_hr: int = 0
 
 
+# --------------------------------------------------------------------
+# Onglet Evenement
+# --------------------------------------------------------------------
+
+class EvenementRow(BaseModel):
+    id_evenement: str = ""
+    date: str = ""
+    id_salarie: str = ""
+    nom_prenom: str = ""
+    intitule: str = ""
+
+
+class EvenementPayload(BaseModel):
+    date: str
+    id_salarie: str
+    intitule: str
+
+
+# --------------------------------------------------------------------
+# Onglet Eleves (stagiaires enrichis)
+# --------------------------------------------------------------------
+
+class EleveRow(BaseModel):
+    id_salarie: str = ""
+    nom: str = ""
+    prenom: str = ""
+    du: str = ""
+    au: str = ""
+    en_activite: bool = True
+    type_sortie: str = ""
+    livrable: bool = False
+    nb_fibre_brut: int = 0
+    nb_fibre_hr: int = 0
+    nb_cqt_brut: int = 0
+    nb_cqt_hr: int = 0
+
+
+class EleveAjoutPayload(BaseModel):
+    id_salarie: str
+
+
+# --------------------------------------------------------------------
+# Onglet Session de recrut
+# --------------------------------------------------------------------
+
+class SessionRecrutRow(BaseModel):
+    id_formation_prev_recrut: str = ""
+    id_prevision_recrut: str = ""
+    idorganigramme: str = ""
+    lib_orga: str = ""
+    date_debut: str = ""
+    date_fin: str = ""
+    date_session: str = ""
+    lib_lieu: str = ""
+
+
+class SessionRecrutPayload(BaseModel):
+    id_prevision_recrut: str
+
+
+# --------------------------------------------------------------------
+# Onglet Bulletins
+# --------------------------------------------------------------------
+
+class BulletinRow(BaseModel):
+    id_bulletin: str = ""
+    id_salarie: str = ""
+    stagiaire: str = ""
+    du: str = ""
+    au: str = ""
+    type_bulletin: int = 0     # 1 = final, autres = intermediaire
+
+
+# --------------------------------------------------------------------
+# Onglet Bareme Notes
+# --------------------------------------------------------------------
+
+class BaremeNoteRow(BaseModel):
+    id_bareme: str = ""
+    type_note: str = ""
+    palier: float = 0.0
+    note: float = 0.0
+    sens_recherche: str = "ASC"     # 'ASC' = >= palier, 'DESC' = <= palier
+
+
+class BaremeNotePayload(BaseModel):
+    type_note: str
+    palier: float = 0.0
+    note: float = 0.0
+    sens_recherche: str = "ASC"
+
+
 class AnalyseFormationResult(BaseModel):
     id_formation: str
     intitule: str = ""

@@ -16,10 +16,14 @@ from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.scool_formation import (
     AnalyseFormationResult, AnalysePromoParams,
-    ConvertirModelePayload, FormateurCombo, FormationDetail,
+    BaremeNotePayload, BaremeNoteRow, BulletinRow,
+    ConvertirModelePayload, EleveAjoutPayload, EleveRow,
+    EvenementPayload, EvenementRow,
+    FormateurCombo, FormationDetail,
     FormationPayload, FormationRow,
     ListeFormationsParams, ModeleFormationCombo, ModeleFormationRow,
     ProgrammePayload, ProgrammeRow,
+    SessionRecrutPayload, SessionRecrutRow,
 )
 from app.intranets.adm.services import scool_formation as svc
 
@@ -228,11 +232,223 @@ def post_analyse_promo(
     payload: AnalysePromoParams,
     user: UserToken = Depends(get_current_user),
 ):
-    """Cf. WinDev Btn 'Faire l'analyse des sessions selectionnees'.
-
-    Retourne une analyse par formation demandee : recrutement (presents/
-    retenus/JO), bulletins, jours terrain, table effectif (Demarrage +
-    Bilan N + Livraison), stagiaires + production SFR par vendeur.
-    """
+    """Cf. WinDev Btn 'Faire l'analyse des sessions selectionnees'."""
     _require_droit(user, "FormScool")
     return svc.analyser_promotions(payload)
+
+
+# ====================================================================
+# Onglet Evenement
+# ====================================================================
+
+@router.get("/formations/{id_formation}/evenements",
+            response_model=list[EvenementRow])
+def get_evenements(
+    id_formation: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    return svc.list_evenements(id_formation)
+
+
+@router.post("/formations/{id_formation}/evenements")
+def post_evenement(
+    id_formation: str,
+    payload: EvenementPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.add_evenement(id_formation, payload, op_id)
+    return {"ok": bool(new_id), "id_evenement": new_id}
+
+
+@router.put("/formations/{id_formation}/evenements/{id_evenement}")
+def put_evenement(
+    id_formation: str,
+    id_evenement: str,
+    payload: EvenementPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.update_evenement(id_evenement, payload, op_id)
+    return {"ok": ok}
+
+
+@router.delete("/formations/{id_formation}/evenements/{id_evenement}")
+def del_evenement(
+    id_formation: str,
+    id_evenement: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_evenement(id_evenement, op_id)
+    return {"ok": ok}
+
+
+# ====================================================================
+# Onglet Eleves
+# ====================================================================
+
+@router.get("/formations/{id_formation}/eleves",
+            response_model=list[EleveRow])
+def get_eleves(
+    id_formation: str,
+    uniquement_actifs: bool = False,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    return svc.list_eleves(id_formation, uniquement_actifs)
+
+
+@router.post("/formations/{id_formation}/eleves")
+def post_eleve(
+    id_formation: str,
+    payload: EleveAjoutPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.add_eleve(id_formation, payload, op_id)
+    return {"ok": ok}
+
+
+@router.post("/formations/{id_formation}/eleves/{id_salarie}/toggle-livrable")
+def post_toggle_livrable(
+    id_formation: str,
+    id_salarie: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.toggle_livrable(id_formation, id_salarie, op_id)
+    return {"ok": ok}
+
+
+@router.delete("/formations/{id_formation}/eleves/{id_salarie}")
+def del_eleve(
+    id_formation: str,
+    id_salarie: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_eleve(id_formation, id_salarie, op_id)
+    return {"ok": ok}
+
+
+# ====================================================================
+# Onglet Session de recrut
+# ====================================================================
+
+@router.get("/formations/{id_formation}/sessions-recrut",
+            response_model=list[SessionRecrutRow])
+def get_sessions_recrut(
+    id_formation: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    return svc.list_sessions_recrut(id_formation)
+
+
+@router.post("/formations/{id_formation}/sessions-recrut")
+def post_session_recrut(
+    id_formation: str,
+    payload: SessionRecrutPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.add_session_recrut(id_formation, payload, op_id)
+    return {"ok": bool(new_id), "id_session": new_id}
+
+
+@router.delete("/formations/{id_formation}/sessions-recrut/{id_session}")
+def del_session_recrut(
+    id_formation: str,
+    id_session: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_session_recrut(id_session, op_id)
+    return {"ok": ok}
+
+
+# ====================================================================
+# Onglet Bulletins
+# ====================================================================
+
+@router.get("/formations/{id_formation}/bulletins",
+            response_model=list[BulletinRow])
+def get_bulletins(
+    id_formation: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    return svc.list_bulletins(id_formation)
+
+
+@router.delete("/formations/{id_formation}/bulletins/{id_bulletin}")
+def del_bulletin(
+    id_formation: str,
+    id_bulletin: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_bulletin(id_bulletin, op_id)
+    return {"ok": ok}
+
+
+# ====================================================================
+# Onglet Bareme Notes
+# ====================================================================
+
+@router.get("/formations/{id_formation}/baremes",
+            response_model=list[BaremeNoteRow])
+def get_baremes(
+    id_formation: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    return svc.list_baremes(id_formation)
+
+
+@router.post("/formations/{id_formation}/baremes")
+def post_bareme(
+    id_formation: str,
+    payload: BaremeNotePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.add_bareme(id_formation, payload, op_id)
+    return {"ok": bool(new_id), "id_bareme": new_id}
+
+
+@router.put("/formations/{id_formation}/baremes/{id_bareme}")
+def put_bareme(
+    id_formation: str,
+    id_bareme: str,
+    payload: BaremeNotePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.update_bareme(id_bareme, payload, op_id)
+    return {"ok": ok}
+
+
+@router.delete("/formations/{id_formation}/baremes/{id_bareme}")
+def del_bareme(
+    id_formation: str,
+    id_bareme: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_bareme(id_bareme, op_id)
+    return {"ok": ok}

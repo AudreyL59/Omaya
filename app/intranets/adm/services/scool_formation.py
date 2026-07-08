@@ -16,10 +16,16 @@ from datetime import timedelta
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.schemas.scool_formation import (
     AnalyseFormationResult, AnalysePromoParams,
-    ConvertirModelePayload, EffectifRow, FormateurCombo, FormationDetail,
+    BaremeNotePayload, BaremeNoteRow, BulletinRow,
+    ConvertirModelePayload, EffectifRow,
+    EleveAjoutPayload, EleveRow,
+    EvenementPayload, EvenementRow,
+    FormateurCombo, FormationDetail,
     FormationPayload, FormationRow, ListeFormationsParams,
     ModeleFormationCombo, ModeleFormationRow,
-    ProgrammePayload, ProgrammeRow, StagiaireRow,
+    ProgrammePayload, ProgrammeRow,
+    SessionRecrutPayload, SessionRecrutRow,
+    StagiaireRow,
 )
 
 
@@ -1284,3 +1290,451 @@ def analyser_promotions(
 ) -> list[AnalyseFormationResult]:
     """Cf. WinDev Btn 'Faire l'analyse des sessions selectionnees'."""
     return [analyser_formation(id_f) for id_f in p.id_formations if id_f]
+
+
+# ====================================================================
+# ONGLET EVENEMENT
+# ====================================================================
+
+def list_evenements(id_formation: str) -> list[EvenementRow]:
+    if not id_formation or id_formation == "0":
+        return []
+    db = get_pg_connection("rh")
+    try:
+        rows = db.query(
+            """SELECT e.id_formation_evenement, e.date, e.id_salarie,
+                      e.intitule, s.nom, s.prenom
+                 FROM scool.pgt_formation_evenement e
+                 LEFT JOIN pgt_salarie s ON s.id_salarie = e.id_salarie
+                WHERE e.id_formation = ?
+                  AND (e.modif_elem IS NULL OR e.modif_elem NOT LIKE '%suppr%')
+                ORDER BY e.date DESC NULLS LAST""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        return []
+    return [
+        EvenementRow(
+            id_evenement=_clean_id(r.get("id_formation_evenement")),
+            date=_iso_date(r.get("date")),
+            id_salarie=_clean_id(r.get("id_salarie")),
+            nom_prenom=(
+                f"{(r.get('nom') or '').strip()} "
+                f"{_cap_prenom((r.get('prenom') or '').strip())}"
+            ).strip(),
+            intitule=(r.get("intitule") or "").strip(),
+        )
+        for r in rows
+    ]
+
+
+def add_evenement(
+    id_formation: str, p: EvenementPayload, op_id: int,
+) -> str:
+    if not id_formation or id_formation == "0":
+        return ""
+    if not p.date or len(p.date) < 10:
+        return ""
+    db = get_pg_connection("scool")
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_formation_evenement
+              (id_formation_evenement, id_formation, id_salarie,
+               date, intitule, modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, int(id_formation),
+            int(p.id_salarie) if p.id_salarie.isdigit() else 0,
+            p.date[:10], p.intitule.strip(),
+            int(op_id),
+        ),
+    )
+    return str(new_id)
+
+
+def update_evenement(
+    id_evenement: str, p: EvenementPayload, op_id: int,
+) -> bool:
+    if not id_evenement or id_evenement == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_evenement
+              SET date = ?, id_salarie = ?, intitule = ?,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_formation_evenement = ?""",
+        (
+            p.date[:10],
+            int(p.id_salarie) if p.id_salarie.isdigit() else 0,
+            p.intitule.strip(), int(op_id), int(id_evenement),
+        ),
+    )
+    return True
+
+
+def delete_evenement(id_evenement: str, op_id: int) -> bool:
+    if not id_evenement or id_evenement == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_evenement
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_formation_evenement = ?""",
+        (int(op_id), int(id_evenement)),
+    )
+    return True
+
+
+# ====================================================================
+# ONGLET ELEVES (stagiaires)
+# ====================================================================
+
+def list_eleves(
+    id_formation: str, uniquement_actifs: bool = False,
+) -> list[EleveRow]:
+    if not id_formation or id_formation == "0":
+        return []
+    detail = get_formation(id_formation)
+    if not detail:
+        return []
+
+    rh = get_pg_connection("rh")
+    try:
+        rows = rh.query(
+            """SELECT fs.id_salarie, fs.date_debut, fs.date_fin,
+                      fs.livrable,
+                      s.nom, s.prenom,
+                      e.en_activite, e.date_debut AS date_embauche,
+                      ss.date_sortie_demandee, ts.lib_sortie
+                 FROM scool.pgt_formation_salarie fs
+                 JOIN pgt_salarie s ON s.id_salarie = fs.id_salarie
+                 LEFT JOIN pgt_salarie_embauche e
+                        ON e.id_salarie = fs.id_salarie
+                       AND (e.modif_elem IS NULL
+                            OR e.modif_elem NOT LIKE '%suppr%')
+                 LEFT JOIN pgt_salarie_sortie ss ON ss.id_salarie = fs.id_salarie
+                        AND (ss.modif_elem IS NULL
+                             OR ss.modif_elem NOT LIKE '%suppr%')
+                 LEFT JOIN pgt_type_sortie_salarie ts
+                        ON ts.id_type_sortie = ss.id_type_sortie
+                WHERE fs.id_formation = ?
+                  AND (fs.modif_elem IS NULL
+                       OR fs.modif_elem NOT LIKE '%suppr%')
+                ORDER BY s.nom ASC, s.prenom ASC""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        return []
+
+    out: list[EleveRow] = []
+    for r in rows:
+        actif = bool(r.get("en_activite"))
+        if uniquement_actifs and not actif:
+            continue
+        id_sal = int(r.get("id_salarie") or 0)
+        date_ref_fin = detail.date_fin or detail.date_debut
+        prod = _calcul_prod_sfr_stagiaire(
+            id_sal, detail.date_debut, date_ref_fin,
+        )
+        out.append(EleveRow(
+            id_salarie=str(id_sal),
+            nom=(r.get("nom") or "").strip(),
+            prenom=_cap_prenom((r.get("prenom") or "").strip()),
+            du=_iso_date(r.get("date_embauche")),
+            au=_iso_date(r.get("date_sortie_demandee")),
+            en_activite=actif,
+            type_sortie=(r.get("lib_sortie") or "").strip(),
+            livrable=bool(r.get("livrable")),
+            nb_fibre_brut=prod["nb_fibre_brut"],
+            nb_fibre_hr=prod["nb_fibre_hr"],
+            nb_cqt_brut=prod["nb_cqt_brut"],
+            nb_cqt_hr=prod["nb_cqt_hr"],
+        ))
+    return out
+
+
+def add_eleve(
+    id_formation: str, p: EleveAjoutPayload, op_id: int,
+) -> bool:
+    if not id_formation or id_formation == "0":
+        return False
+    if not p.id_salarie.isdigit():
+        return False
+    db = get_pg_connection("scool")
+    # Cherche si existe deja (peut-etre soft deleted)
+    r = db.query_one(
+        """SELECT id_formation_id_salarie
+             FROM scool.pgt_formation_salarie
+            WHERE id_formation = ? AND id_salarie = ?
+            LIMIT 1""",
+        (int(id_formation), int(p.id_salarie)),
+    )
+    if r:
+        # Reactive
+        db.execute(
+            """UPDATE scool.pgt_formation_salarie
+                  SET modif_date = NOW(), modif_op = ?, modif_elem = 'new'
+                WHERE id_formation = ? AND id_salarie = ?""",
+            (int(op_id), int(id_formation), int(p.id_salarie)),
+        )
+        return True
+    key = f"{id_formation}_{p.id_salarie}"
+    db.execute(
+        """INSERT INTO scool.pgt_formation_salarie
+              (id_formation_id_salarie, id_salarie, id_formation,
+               livrable, modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, FALSE, NOW(), ?, 'new')""",
+        (key, int(p.id_salarie), int(id_formation), int(op_id)),
+    )
+    return True
+
+
+def toggle_livrable(id_formation: str, id_salarie: str, op_id: int) -> bool:
+    if not id_formation or not id_salarie:
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_salarie
+              SET livrable = NOT COALESCE(livrable, FALSE),
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_formation = ? AND id_salarie = ?""",
+        (int(op_id), int(id_formation), int(id_salarie)),
+    )
+    return True
+
+
+def delete_eleve(id_formation: str, id_salarie: str, op_id: int) -> bool:
+    if not id_formation or not id_salarie:
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_salarie
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_formation = ? AND id_salarie = ?""",
+        (int(op_id), int(id_formation), int(id_salarie)),
+    )
+    return True
+
+
+# ====================================================================
+# ONGLET SESSION DE RECRUT
+# ====================================================================
+
+def list_sessions_recrut(id_formation: str) -> list[SessionRecrutRow]:
+    if not id_formation or id_formation == "0":
+        return []
+    rh = get_pg_connection("rh")
+    try:
+        rows = rh.query(
+            """SELECT fp.id_formation_prev_recrut,
+                      pr.id_prevision_recrut,
+                      pr.idorganigramme,
+                      pr.date_debut, pr.date_fin, pr.date_session,
+                      o.lib_orga,
+                      l.lib_lieu
+                 FROM scool.pgt_formation_prev_recrut fp
+                 JOIN recrutement.pgt_prev_recrut pr
+                      ON pr.id_prevision_recrut = fp.id_prevision_recrut
+                 LEFT JOIN pgt_organigramme o
+                        ON o.idorganigramme = pr.idorganigramme
+                 LEFT JOIN recrutement.pgt_cv_lieu_rdv l
+                        ON l.id_cv_lieu_rdv = pr.id_cv_lieu_rdv
+                WHERE fp.id_formation = ?
+                  AND (fp.modif_elem IS NULL
+                       OR fp.modif_elem NOT LIKE '%suppr%')
+                ORDER BY pr.date_debut DESC NULLS LAST""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        logger.exception("list_sessions_recrut")
+        return []
+    return [
+        SessionRecrutRow(
+            id_formation_prev_recrut=_clean_id(r.get("id_formation_prev_recrut")),
+            id_prevision_recrut=_clean_id(r.get("id_prevision_recrut")),
+            idorganigramme=_clean_id(r.get("idorganigramme")),
+            lib_orga=(r.get("lib_orga") or "").strip(),
+            date_debut=_iso_date(r.get("date_debut")),
+            date_fin=_iso_date(r.get("date_fin")),
+            date_session=_iso_date(r.get("date_session")),
+            lib_lieu=(r.get("lib_lieu") or "").strip(),
+        )
+        for r in rows
+    ]
+
+
+def add_session_recrut(
+    id_formation: str, p: SessionRecrutPayload, op_id: int,
+) -> str:
+    if not id_formation or id_formation == "0":
+        return ""
+    if not p.id_prevision_recrut.isdigit():
+        return ""
+    db = get_pg_connection("scool")
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_formation_prev_recrut
+              (id_formation_prev_recrut, id_formation, id_prevision_recrut,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, int(id_formation), int(p.id_prevision_recrut),
+            int(op_id),
+        ),
+    )
+    return str(new_id)
+
+
+def delete_session_recrut(
+    id_formation_prev_recrut: str, op_id: int,
+) -> bool:
+    if not id_formation_prev_recrut or id_formation_prev_recrut == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_prev_recrut
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_formation_prev_recrut = ?""",
+        (int(op_id), int(id_formation_prev_recrut)),
+    )
+    return True
+
+
+# ====================================================================
+# ONGLET BULLETINS
+# ====================================================================
+
+def list_bulletins(id_formation: str) -> list[BulletinRow]:
+    if not id_formation or id_formation == "0":
+        return []
+    db = get_pg_connection("rh")
+    try:
+        rows = db.query(
+            """SELECT b.id_formation_bulletin, b.id_salarie,
+                      b.du, b.au, b.type_bulletin,
+                      s.nom, s.prenom
+                 FROM scool.pgt_formation_bulletin b
+                 LEFT JOIN pgt_salarie s ON s.id_salarie = b.id_salarie
+                WHERE b.id_formation = ?
+                  AND (b.modif_elem IS NULL OR b.modif_elem NOT LIKE '%suppr%')
+                ORDER BY b.du DESC NULLS LAST, s.nom ASC""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        return []
+    return [
+        BulletinRow(
+            id_bulletin=_clean_id(r.get("id_formation_bulletin")),
+            id_salarie=_clean_id(r.get("id_salarie")),
+            stagiaire=(
+                f"{(r.get('nom') or '').strip()} "
+                f"{_cap_prenom((r.get('prenom') or '').strip())}"
+            ).strip(),
+            du=_iso_date(r.get("du")),
+            au=_iso_date(r.get("au")),
+            type_bulletin=int(r.get("type_bulletin") or 0),
+        )
+        for r in rows
+    ]
+
+
+def delete_bulletin(id_bulletin: str, op_id: int) -> bool:
+    if not id_bulletin or id_bulletin == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_bulletin
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_formation_bulletin = ?""",
+        (int(op_id), int(id_bulletin)),
+    )
+    return True
+
+
+# ====================================================================
+# ONGLET BAREME NOTES
+# ====================================================================
+
+def list_baremes(id_formation: str) -> list[BaremeNoteRow]:
+    if not id_formation or id_formation == "0":
+        return []
+    db = get_pg_connection("scool")
+    try:
+        rows = db.query(
+            """SELECT id_formation_bareme_note, type_note, palier,
+                      note, sens_recherche
+                 FROM scool.pgt_formation_bareme_note
+                WHERE id_formation = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY type_note ASC, palier ASC""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        return []
+    return [
+        BaremeNoteRow(
+            id_bareme=_clean_id(r.get("id_formation_bareme_note")),
+            type_note=(r.get("type_note") or "").strip(),
+            palier=float(r.get("palier") or 0),
+            note=float(r.get("note") or 0),
+            sens_recherche=(r.get("sens_recherche") or "ASC"),
+        )
+        for r in rows
+    ]
+
+
+def add_bareme(
+    id_formation: str, p: BaremeNotePayload, op_id: int,
+) -> str:
+    if not id_formation or id_formation == "0":
+        return ""
+    if not p.type_note.strip():
+        return ""
+    db = get_pg_connection("scool")
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_formation_bareme_note
+              (id_formation_bareme_note, id_formation, type_note, palier,
+               note, sens_recherche,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, int(id_formation), p.type_note.strip(),
+            float(p.palier), float(p.note),
+            (p.sens_recherche.strip() or "ASC"), int(op_id),
+        ),
+    )
+    return str(new_id)
+
+
+def update_bareme(
+    id_bareme: str, p: BaremeNotePayload, op_id: int,
+) -> bool:
+    if not id_bareme or id_bareme == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_bareme_note
+              SET type_note = ?, palier = ?, note = ?, sens_recherche = ?,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_formation_bareme_note = ?""",
+        (
+            p.type_note.strip(), float(p.palier), float(p.note),
+            (p.sens_recherche.strip() or "ASC"),
+            int(op_id), int(id_bareme),
+        ),
+    )
+    return True
+
+
+def delete_bareme(id_bareme: str, op_id: int) -> bool:
+    if not id_bareme or id_bareme == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_bareme_note
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_formation_bareme_note = ?""",
+        (int(op_id), int(id_bareme)),
+    )
+    return True
