@@ -327,164 +327,154 @@ export default function SmsPerfPage() {
           </div>
         </div>
 
-        {/* Tableau Régles + actions */}
-        <div className="bg-white rounded-lg shadow p-4 mb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <button
-              onClick={newRegle}
-              title="Ajouter"
-              className="p-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438]">
-              <Plus className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => selRegleIdx >= 0 && editRegle(selRegleIdx)}
-              disabled={selRegleIdx < 0}
-              title="Modifier"
-              className="p-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40">
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => selRegleIdx >= 0 && duplicateRegle(selRegleIdx)}
-              disabled={selRegleIdx < 0}
-              title="Dupliquer"
-              className="p-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40">
-              <Copy className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => selRegleIdx >= 0 && deleteRegle(selRegleIdx)}
-              disabled={selRegleIdx < 0}
-              title="Supprimer"
-              className="p-1.5 rounded border border-[#B91C1C] text-[#B91C1C] hover:bg-red-50 disabled:opacity-40">
-              <Trash2 className="w-4 h-4" />
-            </button>
+        {/* Barre d'actions haute (envoi SMS) */}
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            onClick={newRegle}
+            title="Ajouter une règle"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] text-sm">
+            <Plus className="w-4 h-4" /> Nouvelle règle
+          </button>
+          <button
+            onClick={() => selRegleIdx >= 0 && duplicateRegle(selRegleIdx)}
+            disabled={selRegleIdx < 0}
+            title="Dupliquer"
+            className="p-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40">
+            <Copy className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => selRegleIdx >= 0 && deleteRegle(selRegleIdx)}
+            disabled={selRegleIdx < 0}
+            title="Supprimer"
+            className="p-1.5 rounded border border-[#B91C1C] text-[#B91C1C] hover:bg-red-50 disabled:opacity-40">
+            <Trash2 className="w-4 h-4" />
+          </button>
 
-            <div className="ml-auto flex items-center gap-2">
-              <label className="flex items-center gap-2 text-xs text-[#8B7355]">
-                Renvoyer les sms du
-                <input type="date" value={renvoiDate}
-                       onChange={(e) => setRenvoiDate(e.target.value)}
-                       className="px-2 py-1 border border-[#E5E0D5] rounded" />
-              </label>
-              <button
-                onClick={() => doEnvoyer(true)}
-                disabled={loading}
-                title="Simuler (aucun SMS envoyé)"
-                className="p-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40">
-                Simu
-              </button>
-              <button
-                onClick={() => doEnvoyer(false)}
-                disabled={loading}
-                title="Envoyer réellement les SMS"
-                className="p-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] disabled:opacity-40">
-                <Send className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto max-h-[40vh] overflow-y-auto">
-            <table className="text-xs w-full">
-              <thead className="sticky top-0 bg-[#F5F5F0]">
-                <tr>
-                  <th className="py-1.5 px-2 text-left">Code Animation</th>
-                  <th className="py-1.5 px-2 text-right">Envoi</th>
-                  <th className="py-1.5 px-2 text-right">Sig Deb</th>
-                  <th className="py-1.5 px-2 text-right">Sig Fin</th>
-                  <th className="py-1.5 px-2 text-right">Ordre</th>
-                  <th className="py-1.5 px-2 text-left">Partenaire</th>
-                  <th className="py-1.5 px-2 text-left">Prod</th>
-                  <th className="py-1.5 px-2 text-left">Période</th>
-                  <th className="py-1.5 px-2 text-center">Grp</th>
-                  <th className="py-1.5 px-2 text-center">Actif</th>
-                </tr>
-              </thead>
-              <tbody>
-                {regles.map((r, i) => (
-                  <tr key={i} onClick={() => setSelRegleIdx(i)}
-                      className={`cursor-pointer border-b border-[#F0EDE5] hover:bg-[#ECF1F2] ${
-                        selRegleIdx === i ? 'bg-[#FFF5E0] ring-1 ring-[#8B7355]' : ''
-                      }`}>
-                    <td className="py-1 px-2 font-medium">{r.code_animation}</td>
-                    <td className="py-1 px-2 text-right tabular-nums">{r.heure_envoi}h</td>
-                    <td className="py-1 px-2 text-right tabular-nums">{r.heure_debut}h</td>
-                    <td className="py-1 px-2 text-right tabular-nums">{r.heure_fin}h</td>
-                    <td className="py-1 px-2 text-right tabular-nums">{r.ordre}</td>
-                    <td className="py-1 px-2">{r.partenaire}</td>
-                    <td className="py-1 px-2">
-                      {r.prod_groupe === 1 ? 'Vendeur' : r.prod_groupe === 2 ? 'Équipe' : 'Agence'}
-                    </td>
-                    <td className="py-1 px-2">
-                      {r.periode_calcul === 1 ? 'Jour' : r.periode_calcul === 2 ? 'Hebdo' : 'Mensuel'}
-                    </td>
-                    <td className="py-1 px-2 text-center">{r.sms_groupe ? '✓' : ''}</td>
-                    <td className="py-1 px-2 text-center">
-                      {r.is_actif ? <Check className="w-3 h-3 inline text-green-700" /> : ''}
-                    </td>
-                  </tr>
-                ))}
-                {regles.length === 0 && !loading && (
-                  <tr><td colSpan={10} className="py-6 text-center text-gray-400">
-                    Aucune règle - Ajoute avec +
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
+          <div className="ml-auto flex items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-[#8B7355]">
+              Renvoyer les sms du
+              <input type="date" value={renvoiDate}
+                     onChange={(e) => setRenvoiDate(e.target.value)}
+                     className="px-2 py-1 border border-[#E5E0D5] rounded" />
+            </label>
+            <button
+              onClick={() => doEnvoyer(true)}
+              disabled={loading}
+              title="Simuler (aucun SMS envoyé)"
+              className="px-2 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40 text-xs">
+              Simu
+            </button>
+            <button
+              onClick={() => doEnvoyer(false)}
+              disabled={loading}
+              title="Envoyer réellement les SMS"
+              className="p-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] disabled:opacity-40">
+              <Send className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Onglets bas */}
-        {(regleSel || formMode) && (
-          <>
-            <div className="flex border-b border-[#E5E0D5] mb-4">
-              {[
-                { key: 'regles' as Tab, label: 'Règles d\'envoi des SMS' },
-                { key: 'scores' as Tab, label: 'Destinataires et Scores' },
-              ].map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 ${
-                    tab === t.key
-                      ? 'border-[#17494E] text-[#17494E]'
-                      : 'border-transparent text-gray-500 hover:text-[#17494E]'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            {tab === 'regles' && (
-              formMode ? (
-                <FormRegleInline
-                  data={formData}
-                  mode={formMode}
-                  onChange={setFormData}
-                  onSave={saveRegle}
-                  onCancel={cancelForm}
-                />
-              ) : (
-                <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-500">
-                  Sélectionne <b>Modifier</b> (crayon) ou <b>Ajouter</b> (+) pour
-                  éditer une règle
-                  {regleSel && (
-                    <>. Actuellement : "<b className="text-[#17494E]">{regleSel.code_animation}</b>"</>
+        {/* Layout 2 colonnes : tableau à gauche, config règle à droite */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
+          {/* Colonne gauche : tableau règles */}
+          <div className="bg-white rounded-lg shadow p-3">
+            <h3 className="text-sm font-semibold text-[#17494E] mb-2 flex items-center gap-2">
+              Règles ({regles.length})
+            </h3>
+            <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+              <table className="text-xs w-full">
+                <thead className="sticky top-0 bg-[#F5F5F0]">
+                  <tr>
+                    <th className="py-1.5 px-2 text-left">Code Animation</th>
+                    <th className="py-1.5 px-2 text-right">Env</th>
+                    <th className="py-1.5 px-2 text-left">Part.</th>
+                    <th className="py-1.5 px-2 text-left">Prod</th>
+                    <th className="py-1.5 px-2 text-left">Pér.</th>
+                    <th className="py-1.5 px-2 text-center">Grp</th>
+                    <th className="py-1.5 px-2 text-center">✓</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {regles.map((r, i) => (
+                    <tr key={i} onClick={() => editRegle(i)}
+                        className={`cursor-pointer border-b border-[#F0EDE5] hover:bg-[#ECF1F2] ${
+                          selRegleIdx === i ? 'bg-[#FFF5E0] ring-1 ring-[#8B7355]' : ''
+                        }`}>
+                      <td className="py-1 px-2 font-medium">{r.code_animation}</td>
+                      <td className="py-1 px-2 text-right tabular-nums">{r.heure_envoi}h</td>
+                      <td className="py-1 px-2">{r.partenaire}</td>
+                      <td className="py-1 px-2">
+                        {r.prod_groupe === 1 ? 'Vend' : r.prod_groupe === 2 ? 'Éq' : 'Ag'}
+                      </td>
+                      <td className="py-1 px-2">
+                        {r.periode_calcul === 1 ? 'J' : r.periode_calcul === 2 ? 'H' : 'M'}
+                      </td>
+                      <td className="py-1 px-2 text-center">{r.sms_groupe ? '✓' : ''}</td>
+                      <td className="py-1 px-2 text-center">
+                        {r.is_actif ? <Check className="w-3 h-3 inline text-green-700" /> : ''}
+                      </td>
+                    </tr>
+                  ))}
+                  {regles.length === 0 && !loading && (
+                    <tr><td colSpan={7} className="py-6 text-center text-gray-400">
+                      Aucune règle - Ajoute avec + Nouvelle règle
+                    </td></tr>
                   )}
-                  .
-                </div>
-              )
-            )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-            {tab === 'scores' && regleSel && (
-              <ScoresTab codeAnim={regleSel.code_animation} />
-            )}
-            {tab === 'scores' && !regleSel && (
-              <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-500">
-                Enregistre d'abord la règle pour gérer ses destinataires et scores.
+          {/* Colonne droite : contenu (formulaire + destinataires/scores) */}
+          <div className="flex flex-col gap-4">
+            {(regleSel || formMode) ? (
+              <>
+                <div className="flex border-b border-[#E5E0D5]">
+                  {[
+                    { key: 'regles' as Tab, label: 'Règle d\'envoi' },
+                    { key: 'scores' as Tab, label: 'Destinataires et Scores' },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => setTab(t.key)}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 ${
+                        tab === t.key
+                          ? 'border-[#17494E] text-[#17494E]'
+                          : 'border-transparent text-gray-500 hover:text-[#17494E]'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {tab === 'regles' && formMode && (
+                  <FormRegleInline
+                    data={formData}
+                    mode={formMode}
+                    onChange={setFormData}
+                    onSave={saveRegle}
+                    onCancel={cancelForm}
+                  />
+                )}
+
+                {tab === 'scores' && regleSel && (
+                  <ScoresTab codeAnim={regleSel.code_animation} />
+                )}
+                {tab === 'scores' && !regleSel && (
+                  <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-500">
+                    Enregistre d'abord la règle pour gérer ses destinataires et scores.
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-400 text-center">
+                Sélectionne une règle dans le tableau pour l'éditer,
+                ou clique sur <b>+ Nouvelle règle</b>.
               </div>
             )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
 
       {/* Modales */}
