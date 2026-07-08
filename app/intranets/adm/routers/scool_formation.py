@@ -11,6 +11,7 @@ Endpoints (droit 'FormScool') :
   GET  /adm/scool/modeles                       - Liste modeles
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -235,6 +236,36 @@ def post_analyse_promo(
     """Cf. WinDev Btn 'Faire l'analyse des sessions selectionnees'."""
     _require_droit(user, "FormScool")
     return svc.analyser_promotions(payload)
+
+
+@router.get("/formations/{id_formation}/analyse-promo-pdf")
+def get_analyse_promo_pdf(
+    id_formation: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Btn Version PDF de FI_AnalysePromoScool.
+
+    Genere l'etat Etat_ScoolAnalysePromo (paysage A4) via WeasyPrint
+    et retourne le PDF en attachment.
+    """
+    _require_droit(user, "FormScool")
+    from app.intranets.adm.services import scool_pdf
+    analyse = svc.analyser_formation(id_formation)
+    if not analyse.intitule:
+        raise HTTPException(404, "Formation introuvable")
+    try:
+        pdf_bytes = scool_pdf.build_analyse_pdf(analyse)
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    filename = (
+        f"AnalysePromo_{analyse.intitule[:30].strip().replace(' ', '_')}"
+        f"_{id_formation}.pdf"
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ====================================================================

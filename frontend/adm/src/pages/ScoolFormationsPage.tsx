@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Plus, Copy, Trash2, BookOpen, Save, X, Search, Check,
+  Plus, Copy, Trash2, BookOpen, Save, X, Search, Check, FileText,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
@@ -659,24 +659,47 @@ function AnalysePromoCard({ data: a }: { data: AnalyseFormation }) {
   const txLiv = a.jo > 0 ? Math.round((a.total_livrable / a.jo) * 1000) / 10 : 0
   const txCqt = a.obj_cqt > 0 ? Math.round((a.total_cqt / a.obj_cqt) * 1000) / 10 : 0
 
+  const downloadPdf = async () => {
+    const r = await fetch(
+      `${API_BASE}/scool/formations/${a.id_formation}/analyse-promo-pdf`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    )
+    if (!r.ok) return
+    const blob = await r.blob()
+    const url = URL.createObjectURL(blob)
+    const disp = r.headers.get('Content-Disposition') || ''
+    const m = disp.match(/filename="?([^";]+)"?/)
+    const fic = m ? m[1] : 'analyse.pdf'
+    const link = document.createElement('a')
+    link.href = url; link.download = fic; link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 30_000)
+  }
+
   return (
     <div className="bg-white rounded-lg shadow p-4">
-      <div className="mb-4 pb-3 border-b border-[#F0EDE5]">
-        <h3 className="text-base font-semibold text-[#17494E]">
-          {a.intitule}
-          {a.ville_formation && (
-            <span className="ml-2 text-[#8B7355] font-normal">// {a.ville_formation}</span>
-          )}
-        </h3>
-        <div className="flex gap-4 mt-1 text-xs text-[#8B7355]">
-          <span>Promo du {shortDate(a.du)} au {shortDate(a.au)}</span>
-          <span>nb Jours Terrain : <b className="text-[#17494E]">{a.nb_jours_terrain}</b></span>
-          {a.formation_cloturee && (
-            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 text-[10px]">
-              Formation Clôturée
-            </span>
-          )}
+      <div className="mb-4 pb-3 border-b border-[#F0EDE5] flex items-start gap-2">
+        <div className="flex-1">
+          <h3 className="text-base font-semibold text-[#17494E]">
+            {a.intitule}
+            {a.ville_formation && (
+              <span className="ml-2 text-[#8B7355] font-normal">// {a.ville_formation}</span>
+            )}
+          </h3>
+          <div className="flex gap-4 mt-1 text-xs text-[#8B7355]">
+            <span>Promo du {shortDate(a.du)} au {shortDate(a.au)}</span>
+            <span>nb Jours Terrain : <b className="text-[#17494E]">{a.nb_jours_terrain}</b></span>
+            {a.formation_cloturee && (
+              <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 text-[10px]">
+                Formation Clôturée
+              </span>
+            )}
+          </div>
         </div>
+        <button onClick={downloadPdf}
+                title="Télécharger la version PDF"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] text-sm">
+          <FileText className="w-4 h-4" /> PDF
+        </button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4 text-xs">
