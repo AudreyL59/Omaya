@@ -294,6 +294,7 @@ export default function ScoolFormationFichePage() {
       <div className="max-w-full mx-auto">
         <PageHeader
           icon={BookOpen}
+          backTo="/scool/formations"
           title={`Fiche Formation : ${data.intitule}`}
           subtitle={`${shortDate(data.date_debut)} - ${shortDate(data.date_fin)}`}
           right={
