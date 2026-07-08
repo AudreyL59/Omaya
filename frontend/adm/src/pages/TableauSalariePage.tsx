@@ -1,7 +1,7 @@
 /**
  * Fen_TableauSalarie - Tableau des salaries par equipe.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Loader2, Search, Download, Users, Check, X as XIcon,
 } from 'lucide-react'
@@ -9,14 +9,12 @@ import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import PageHeader from '@/components/PageHeader'
+import SearchPicker, {
+  type PickerItem,
+} from '@shared/tickets/forms/SearchPicker'
 
 const API_BASE = '/api/adm'
 
-interface OrgaCombo {
-  id_orga: string
-  lib_orga: string
-  lib_parent: string
-}
 interface VendeurRow {
   id_salarie: string
   nom: string
@@ -45,25 +43,12 @@ const shortDate = (iso: string): string =>
 export default function TableauSalariePage() {
   useDocumentTitle('Tableau Salarié')
 
-  const [orgas, setOrgas] = useState<OrgaCombo[]>([])
   const [idOrga, setIdOrga] = useState('')
+  const [libOrga, setLibOrga] = useState('')
+  const [orgaPickerOpen, setOrgaPickerOpen] = useState(false)
   const [moisPaie, setMoisPaie] = useState(currentMoisPaie())
   const [lignes, setLignes] = useState<VendeurRow[]>([])
   const [loading, setLoading] = useState(false)
-
-  const loadOrgas = useCallback(async () => {
-    try {
-      const r = await fetch(
-        `${API_BASE}/paies/tableau-salarie/orgas`,
-        { headers: { Authorization: `Bearer ${getToken()}` } },
-      )
-      const d: OrgaCombo[] = await r.json()
-      setOrgas(d || [])
-    } catch { /* silent */ }
-  }, [])
-  useEffect(() => { void loadOrgas() }, [loadOrgas])
-
-  const orgaSel = orgas.find((o) => o.id_orga === idOrga)
 
   const doRechercher = async () => {
     if (!idOrga) { showToast('Choisis une équipe', 'info'); return }
@@ -93,7 +78,7 @@ export default function TableauSalariePage() {
     if (lignes.length === 0) {
       showToast('Aucune ligne', 'info'); return
     }
-    if (!orgaSel) return
+    if (!idOrga) return
     setLoading(true)
     try {
       const r = await fetch(
@@ -106,7 +91,7 @@ export default function TableauSalariePage() {
           },
           body: JSON.stringify({
             id_orga: idOrga,
-            lib_orga: `${orgaSel.lib_parent} > ${orgaSel.lib_orga}`,
+            lib_orga: libOrga,
             mois_paiement: moisPaie,
             lignes,
           }),
@@ -147,18 +132,18 @@ export default function TableauSalariePage() {
         {/* Filtres */}
         <div className="bg-white rounded-lg shadow p-4 mb-4">
           <div className="flex items-end gap-3 flex-wrap">
-            <label className="flex flex-col text-xs gap-1 min-w-[320px]">
+            <div className="flex flex-col text-xs gap-1 min-w-[320px]">
               <span className="text-[#8B7355] font-medium">Équipe</span>
-              <select value={idOrga} onChange={(e) => setIdOrga(e.target.value)}
-                      className="px-2 py-1.5 border border-[#E5E0D5] rounded">
-                <option value="">Choisir...</option>
-                {orgas.map((o) => (
-                  <option key={o.id_orga} value={o.id_orga}>
-                    {o.lib_parent ? `${o.lib_parent} > ` : ''}{o.lib_orga}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <button
+                onClick={() => setOrgaPickerOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 border border-[#E5E0D5] rounded text-left hover:bg-[#ECF1F2]"
+              >
+                <Users className="w-4 h-4 text-[#17494E] shrink-0" />
+                <span className={`flex-1 truncate ${libOrga ? 'text-[#17494E]' : 'text-gray-400'}`}>
+                  {libOrga || 'Choisir l\'équipe...'}
+                </span>
+              </button>
+            </div>
             <label className="flex flex-col text-xs gap-1">
               <span className="text-[#8B7355] font-medium">Mois Paiement MM-AAAA</span>
               <input type="month" value={moisPaie}
@@ -258,6 +243,25 @@ export default function TableauSalariePage() {
           )}
         </div>
       </div>
+
+      {orgaPickerOpen && (
+        <SearchPicker
+          apiBase={API_BASE}
+          getToken={getToken}
+          title="Choisir l'équipe"
+          path="/tickets/organigrammes/search"
+          mapItem={(o: { id_organigramme: string; lib_orga: string }) => ({
+            id: o.id_organigramme,
+            label: o.lib_orga,
+          })}
+          onClose={() => setOrgaPickerOpen(false)}
+          onPick={(it: PickerItem) => {
+            setOrgaPickerOpen(false)
+            setIdOrga(it.id)
+            setLibOrga(it.label)
+          }}
+        />
+      )}
     </div>
   )
 }
