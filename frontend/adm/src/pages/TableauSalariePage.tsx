@@ -9,9 +9,7 @@ import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import PageHeader from '@/components/PageHeader'
-import SearchPicker, {
-  type PickerItem,
-} from '@shared/tickets/forms/SearchPicker'
+import OrgaTreePickerModal from '@/components/OrgaTreePickerModal'
 
 const API_BASE = '/api/adm'
 
@@ -245,20 +243,13 @@ export default function TableauSalariePage() {
       </div>
 
       {orgaPickerOpen && (
-        <SearchPicker
-          apiBase={API_BASE}
-          getToken={getToken}
-          title="Choisir l'équipe"
-          path="/tickets/organigrammes/search"
-          mapItem={(o: { id_organigramme: string; lib_orga: string }) => ({
-            id: o.id_organigramme,
-            label: o.lib_orga,
-          })}
+        <OrgaTreePickerModal
+          title="Choisir l'équipe / agence"
           onClose={() => setOrgaPickerOpen(false)}
-          onPick={(it: PickerItem) => {
+          onSelect={(id, lib) => {
+            setIdOrga(id)
+            setLibOrga(lib)
             setOrgaPickerOpen(false)
-            setIdOrga(it.id)
-            setLibOrga(it.label)
           }}
         />
       )}
