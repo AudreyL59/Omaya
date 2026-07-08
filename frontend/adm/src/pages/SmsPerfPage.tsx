@@ -91,9 +91,8 @@ export default function SmsPerfPage() {
   const [staffPickerOpen, setStaffPickerOpen] = useState(false)
   const [regles, setRegles] = useState<RegleEnvoi[]>([])
   const [selRegleIdx, setSelRegleIdx] = useState<number>(-1)
-  const [regleModal, setRegleModal] = useState<{
-    mode: 'new' | 'edit'; data: RegleEnvoi
-  } | null>(null)
+  const [formMode, setFormMode] = useState<'new' | 'edit' | null>(null)
+  const [formData, setFormData] = useState<RegleEnvoi>({ id_regle: '', ...EMPTY_REGLE })
   const [tab, setTab] = useState<Tab>('regles')
 
   const [renvoiDate, setRenvoiDate] = useState(
@@ -187,17 +186,32 @@ export default function SmsPerfPage() {
 
   // ----- CRUD Régles -----
 
+  // Handlers CRUD Regle (formulaire inline dans l'onglet 1)
+  const newRegle = () => {
+    setFormMode('new')
+    setFormData({ id_regle: '', ...EMPTY_REGLE })
+    setSelRegleIdx(-1)
+    setTab('regles')
+  }
+
+  const editRegle = (idx: number) => {
+    setFormMode('edit')
+    setFormData({ ...regles[idx] })
+    setSelRegleIdx(idx)
+    setTab('regles')
+  }
+
   const saveRegle = async () => {
-    if (!regleModal) return
-    if (!regleModal.data.code_animation.trim()) {
+    if (!formMode) return
+    if (!formData.code_animation.trim()) {
       showToast('Code Animation requis', 'info')
       return
     }
-    const url = regleModal.mode === 'new'
+    const url = formMode === 'new'
       ? `${API_BASE}/comm/sms-perf/regles`
-      : `${API_BASE}/comm/sms-perf/regles/${regleModal.data.id_regle}`
-    const method = regleModal.mode === 'new' ? 'POST' : 'PUT'
-    const { id_regle: _, type_sms: __, ...payload } = regleModal.data
+      : `${API_BASE}/comm/sms-perf/regles/${formData.id_regle}`
+    const method = formMode === 'new' ? 'POST' : 'PUT'
+    const { id_regle: _, type_sms: __, ...payload } = formData
     const r = await fetch(url, {
       method,
       headers: {
@@ -209,9 +223,13 @@ export default function SmsPerfPage() {
     const d = await r.json()
     if (d.ok) {
       showToast('Enregistré', 'success')
-      setRegleModal(null)
+      setFormMode(null)
       await loadRegles()
     } else showToast('Erreur', 'error')
+  }
+
+  const cancelForm = () => {
+    setFormMode(null)
   }
 
   const duplicateRegle = async (idx: number) => {
@@ -313,18 +331,13 @@ export default function SmsPerfPage() {
         <div className="bg-white rounded-lg shadow p-4 mb-4">
           <div className="flex items-center gap-2 mb-3">
             <button
-              onClick={() => setRegleModal({
-                mode: 'new',
-                data: { id_regle: '', ...EMPTY_REGLE },
-              })}
+              onClick={newRegle}
               title="Ajouter"
               className="p-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438]">
               <Plus className="w-4 h-4" />
             </button>
             <button
-              onClick={() => selRegleIdx >= 0 && setRegleModal({
-                mode: 'edit', data: { ...regles[selRegleIdx] },
-              })}
+              onClick={() => selRegleIdx >= 0 && editRegle(selRegleIdx)}
               disabled={selRegleIdx < 0}
               title="Modifier"
               className="p-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] disabled:opacity-40">
@@ -420,7 +433,7 @@ export default function SmsPerfPage() {
         </div>
 
         {/* Onglets bas */}
-        {regleSel && (
+        {(regleSel || formMode) && (
           <>
             <div className="flex border-b border-[#E5E0D5] mb-4">
               {[
@@ -442,14 +455,30 @@ export default function SmsPerfPage() {
             </div>
 
             {tab === 'regles' && (
-              <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-500">
-                Sélectionne <b>Modifier</b> (crayon) pour éditer la règle
-                "<b className="text-[#17494E]">{regleSel.code_animation}</b>".
-              </div>
+              formMode ? (
+                <FormRegleInline
+                  data={formData}
+                  mode={formMode}
+                  onChange={setFormData}
+                  onSave={saveRegle}
+                  onCancel={cancelForm}
+                />
+              ) : (
+                <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-500">
+                  Sélectionne <b>Modifier</b> (crayon) ou <b>Ajouter</b> (+) pour
+                  éditer une règle. Actuellement :
+                  "<b className="text-[#17494E]">{regleSel.code_animation}</b>".
+                </div>
+              )
             )}
 
-            {tab === 'scores' && (
+            {tab === 'scores' && regleSel && (
               <ScoresTab codeAnim={regleSel.code_animation} />
+            )}
+            {tab === 'scores' && !regleSel && (
+              <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-500">
+                Enregistre d'abord la règle pour gérer ses destinataires et scores.
+              </div>
             )}
           </>
         )}
@@ -464,14 +493,6 @@ export default function SmsPerfPage() {
         />
       )}
 
-      {regleModal && (
-        <ModalRegle
-          data={regleModal.data}
-          onChange={(d) => setRegleModal({ ...regleModal, data: d })}
-          onSave={saveRegle}
-          onClose={() => setRegleModal(null)}
-        />
-      )}
     </div>
   )
 }
@@ -727,23 +748,28 @@ function ScoresTab({ codeAnim }: { codeAnim: string }) {
 // Modales
 // =====================================================================
 
-function ModalRegle({
-  data, onChange, onSave, onClose,
+function FormRegleInline({
+  data, mode, onChange, onSave, onCancel,
 }: {
   data: RegleEnvoi
+  mode: 'new' | 'edit'
   onChange: (d: RegleEnvoi) => void
   onSave: () => void
-  onClose: () => void
+  onCancel: () => void
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-4 my-8">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-[#17494E]">Règle d'envoi SMS</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100"><X className="w-4 h-4" /></button>
-        </div>
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-[#17494E]">
+          Configuration du SMS
+          <span className="ml-2 text-xs text-gray-500 font-normal">
+            ({mode === 'new' ? 'nouvelle règle' : `édition de ${data.code_animation}`})
+          </span>
+        </h3>
+      </div>
 
-        <div className="space-y-3">
+      <div className="space-y-3">
+
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs">
               <span className="text-[#8B7355] font-medium">Code Animation</span>
@@ -870,16 +896,15 @@ function ModalRegle({
           </label>
         </div>
 
-        <div className="flex gap-2 mt-4">
-          <button onClick={onSave}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded bg-[#17494E] text-white hover:bg-[#0F3438]">
-            <Save className="w-4 h-4" /> Enregistrer
-          </button>
-          <button onClick={onClose}
-                  className="flex-1 px-3 py-2 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2]">
-            Annuler
-          </button>
-        </div>
+      <div className="flex gap-2 mt-4">
+        <button onClick={onSave}
+                className="flex items-center gap-2 px-4 py-2 rounded bg-[#17494E] text-white hover:bg-[#0F3438]">
+          <Save className="w-4 h-4" /> Enregistrer
+        </button>
+        <button onClick={onCancel}
+                className="px-4 py-2 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2]">
+          Annuler
+        </button>
       </div>
     </div>
   )
