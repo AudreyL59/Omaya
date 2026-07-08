@@ -41,7 +41,7 @@ def _droit(user: UserToken, code: str | None) -> bool:
 # référence (id_salarie=6), masqué pour les autres.
 _CODED_ITEMS: set[str] = {"agenda_rec", "stats_rh", "organigramme", "suivi_production", "registre_rh", "dpae", "ctt_travail", "parc_auto", "ulease_docs", "ulease_recherche", "formations_iag", "mutuelle", "params_rh", "recherche_cv", "recherche_cv_kw", "lieu_rdv", "saisie_cv", "prevision_rec", "cv_presaisis", "villes_favori", "gestion_recruteurs", "params_cvtheque", "import_contrats", "import_masse", "import_colonnes", "import_notations", "suivi_factures", "suivi_sfr", "suivi_energie", "rech_ville", "ctt_courtage", "suivi_distributeurs", "suivi_docs_distrib", "exo_cash", "module_paies", "fiches_salaire", "export_tr", "tableaux_divers", "podiums",
                               "calcul_points", "tableau_salarie", "sms_perf",
-                              "formations_liste"}
+                              "formations_liste", "planning_scool"}
 _CODED_HEADER: set[str] = {"organigramme", "tickets", "search", "societes"}
 
 # User de référence pour qui les items non codés restent visibles (en grisé)
