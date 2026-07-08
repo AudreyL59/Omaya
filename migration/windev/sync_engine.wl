@@ -319,6 +319,7 @@ PROCEDURE INTERNE SyncIncremental(LOCAL sSchema, sTableHF, sTablePG is string, .
                          LOCAL tabCols is array of STColMap, ...
                          LOCAL sColPK_HF, sColPK_PG is string)
     dtCurseur is DateTime = GetLastModif(sSchema, sTableHF)
+    dtCurseur..Jour -= 7
     dtMax is DateTime = dtCurseur
     nRows is int = 0
     nPos  is int = 0

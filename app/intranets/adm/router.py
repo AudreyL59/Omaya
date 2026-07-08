@@ -41,6 +41,7 @@ from app.intranets.adm.routers.export_tr import router as export_tr_router
 from app.intranets.adm.routers.tableau_divers import router as tableau_divers_router
 from app.intranets.adm.routers.podium import router as podium_router
 from app.intranets.adm.routers.calcul_points_bs import router as calcul_points_bs_router
+from app.intranets.adm.routers.tableau_salarie import router as tableau_salarie_router
 from app.shared.production.router import router as production_router
 from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
@@ -91,6 +92,7 @@ router.include_router(export_tr_router)
 router.include_router(tableau_divers_router)
 router.include_router(podium_router)
 router.include_router(calcul_points_bs_router)
+router.include_router(tableau_salarie_router)
 router.include_router(production_router)
 # Module recrutement/recherche-cv shared (ADM voit tout)
 router.include_router(get_recherche_cv_router("adm"))
