@@ -446,11 +446,15 @@ def load_documents(id_tk_liste: int, client_pro: bool = False) -> dict:
 def load_lettre_resil(id_tk_liste: int, id_panier: int) -> dict:
     """Detecte la Lettre de resiliation pour une ligne de panier donnee.
 
-    Convention : <IDTicket>_<IDPanier>_LettreResil.{pdf|png}
+    Convention (par ordre de priorite) :
+      1. <IDTicket>_<IDPanier>_LettreResil.{pdf|png}  (specifique a la ligne)
+      2. <IDTicket>_LettreResil.{pdf|png}             (fallback au niveau ticket)
     """
     url, kind = _first_existing(
         f"{DOC_BASE_URL}/{id_tk_liste}_{id_panier}_LettreResil.pdf",
         f"{DOC_BASE_URL}/{id_tk_liste}_{id_panier}_LettreResil.png",
+        f"{DOC_BASE_URL}/{id_tk_liste}_LettreResil.pdf",
+        f"{DOC_BASE_URL}/{id_tk_liste}_LettreResil.png",
     )
     return {"url": url, "kind": kind}
 
