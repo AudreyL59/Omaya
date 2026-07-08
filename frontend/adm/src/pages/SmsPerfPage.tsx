@@ -466,8 +466,11 @@ export default function SmsPerfPage() {
               ) : (
                 <div className="bg-white rounded-lg shadow p-4 text-sm text-gray-500">
                   Sélectionne <b>Modifier</b> (crayon) ou <b>Ajouter</b> (+) pour
-                  éditer une règle. Actuellement :
-                  "<b className="text-[#17494E]">{regleSel.code_animation}</b>".
+                  éditer une règle
+                  {regleSel && (
+                    <>. Actuellement : "<b className="text-[#17494E]">{regleSel.code_animation}</b>"</>
+                  )}
+                  .
                 </div>
               )
             )}
