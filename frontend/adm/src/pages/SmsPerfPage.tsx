@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Loader2, Plus, Pencil, Copy, Trash2, Save, Send, X, Users,
+  Plus, Pencil, Copy, Trash2, Save, Send, X, Users,
   MessageSquare, Check,
 } from 'lucide-react'
 import { getToken } from '@/api'
