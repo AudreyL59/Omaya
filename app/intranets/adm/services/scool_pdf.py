@@ -57,57 +57,65 @@ def _pourcent(num: int, den: int) -> str:
 _CSS = """
 @page {
   size: A4 landscape;
-  margin: 12mm 10mm 15mm 10mm;
+  margin: 10mm 8mm 12mm 8mm;
   @bottom-right {
     content: counter(page) " / " counter(pages);
-    font-size: 8pt;
+    font-size: 7pt;
     color: #666;
   }
 }
 * { box-sizing: border-box; }
 body {
   font-family: Arial, sans-serif;
-  font-size: 8pt;
+  font-size: 7pt;
   color: #17494E;
 }
-h1 { font-size: 14pt; margin: 0 0 4px 0; color: #17494E; }
-h2 { font-size: 10pt; margin: 12px 0 4px 0; color: #17494E;
+h1 { font-size: 13pt; margin: 0 0 4px 0; color: #17494E; }
+h2 { font-size: 9pt; margin: 10px 0 4px 0; color: #17494E;
      border-bottom: 1px solid #8B7355; padding-bottom: 2px; }
 .header {
   display: flex; justify-content: space-between;
-  border-bottom: 2px solid #17494E; padding-bottom: 6px;
-  margin-bottom: 8px;
+  border-bottom: 2px solid #17494E; padding-bottom: 5px;
+  margin-bottom: 6px;
 }
-.header .right { text-align: right; font-size: 8pt; color: #666; }
 .compteurs {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1fr;
-  gap: 6px; margin-bottom: 10px;
+  gap: 5px; margin-bottom: 8px;
 }
 .compteurs .cell {
   background: #F5F5F0; border: 1px solid #E5E0D5;
-  padding: 6px; border-radius: 3px;
+  padding: 5px; border-radius: 3px;
 }
 .compteurs .cell .title {
-  font-size: 7pt; color: #8B7355; text-transform: uppercase;
+  font-size: 6.5pt; color: #8B7355; text-transform: uppercase;
 }
 .compteurs .cell .value {
-  font-weight: bold; color: #17494E; font-size: 9pt; margin-top: 2px;
+  font-weight: bold; color: #17494E; font-size: 8.5pt; margin-top: 2px;
 }
 .compteurs .cell .taux {
-  display: inline-block; margin-left: 4px; padding: 1px 5px;
-  border-radius: 3px; background: #ECF1F2; font-size: 8pt;
+  display: inline-block; margin-left: 3px; padding: 1px 4px;
+  border-radius: 3px; background: #ECF1F2; font-size: 7.5pt;
 }
 table {
   width: 100%; border-collapse: collapse; margin-top: 4px;
+  table-layout: fixed;
 }
 table th, table td {
-  border: 1px solid #E5E0D5; padding: 3px 4px;
-  text-align: right; white-space: nowrap;
+  border: 1px solid #E5E0D5; padding: 2px 3px;
+  text-align: right;
+  overflow: hidden;
 }
 table th {
   background: #17494E; color: white;
-  font-size: 7.5pt; text-transform: uppercase;
+  font-size: 6.5pt; text-transform: uppercase;
+  white-space: normal; word-wrap: break-word;
+  vertical-align: middle; text-align: center;
+  line-height: 1.1;
+}
+table td {
+  font-size: 7pt;
+  white-space: nowrap;
 }
 table th.left, table td.left { text-align: left; }
 table th.center, table td.center { text-align: center; }
@@ -115,6 +123,22 @@ tfoot td {
   font-weight: bold; background: #F5F5F0;
   border-top: 2px solid #8B7355;
 }
+
+/* Table Analyse Production - 12 colonnes */
+.tbl-prod col.c-per { width: 8%; }
+.tbl-prod col.c-date { width: 8%; }
+.tbl-prod col.c-nb { width: 7%; }
+
+/* Table Analyse Effectif - 15 colonnes */
+.tbl-eff col.c-nom { width: 8%; }
+.tbl-eff col.c-pre { width: 7%; }
+.tbl-eff col.c-dt  { width: 7%; }
+.tbl-eff col.c-act { width: 5%; }
+.tbl-eff col.c-sortie { width: 8%; }
+.tbl-eff col.c-livr { width: 5%; }
+.tbl-eff col.c-n   { width: 4.8%; }
+.tbl-eff td { font-size: 6.8pt; }
+.tbl-eff td:nth-child(6) { white-space: normal; word-wrap: break-word; }
 """
 
 
@@ -228,7 +252,15 @@ def _render_html(a: AnalyseFormationResult) -> str:
 
     html_effectif = f"""
     <h2>Analyse Production</h2>
-    <table>
+    <table class="tbl-prod">
+      <colgroup>
+        <col class="c-per" /><col class="c-date" />
+        <col class="c-nb" /><col class="c-nb" />
+        <col class="c-nb" /><col class="c-nb" />
+        <col class="c-nb" /><col class="c-nb" />
+        <col class="c-nb" /><col class="c-nb" />
+        <col class="c-nb" /><col class="c-nb" />
+      </colgroup>
       <thead>
         <tr>
           <th class="left">Période</th>
@@ -285,30 +317,39 @@ def _render_html(a: AnalyseFormationResult) -> str:
 
     html_stagiaires = f"""
     <h2>Analyse Effectif</h2>
-    <table>
+    <table class="tbl-eff">
+      <colgroup>
+        <col class="c-nom" /><col class="c-pre" />
+        <col class="c-dt" /><col class="c-dt" />
+        <col class="c-act" /><col class="c-sortie" /><col class="c-livr" />
+        <col class="c-n" /><col class="c-n" />
+        <col class="c-n" /><col class="c-n" />
+        <col class="c-n" /><col class="c-n" />
+        <col class="c-n" /><col class="c-n" />
+      </colgroup>
       <thead>
         <tr>
           <th class="left">NOM</th>
           <th class="left">PRÉNOM</th>
           <th>DU</th>
           <th>AU</th>
-          <th>En activité</th>
-          <th class="left">Type de sortie</th>
-          <th>Livrable</th>
-          <th>Nb Fibre brut</th>
-          <th>Nb Fibre HR*</th>
-          <th>Nb CQT brut</th>
-          <th>Nb CQT HR*</th>
-          <th>nb Mig Brut</th>
-          <th>nb Mig HR*</th>
-          <th>Nb Mob Brut</th>
-          <th>NB Mob HR*</th>
+          <th>Actif</th>
+          <th class="left">Type sortie</th>
+          <th>Livr.</th>
+          <th>Fibre brut</th>
+          <th>Fibre HR*</th>
+          <th>CQT brut</th>
+          <th>CQT HR*</th>
+          <th>Mig Brut</th>
+          <th>Mig HR*</th>
+          <th>Mob Brut</th>
+          <th>Mob HR*</th>
         </tr>
       </thead>
       <tbody>{lignes_s}</tbody>
       <tfoot>{tfoot_s}</tfoot>
     </table>
-    <p style="font-size:7pt; color:#B91C1C; font-style:italic; margin-top:4px;">
+    <p style="font-size:6.5pt; color:#B91C1C; font-style:italic; margin-top:4px;">
       * HR : Hors Rejet
     </p>"""
 
