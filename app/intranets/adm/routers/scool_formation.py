@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.scool_formation import (
+    AnalyseFormationResult, AnalysePromoParams,
     ConvertirModelePayload, FormateurCombo, FormationDetail,
     FormationPayload, FormationRow,
     ListeFormationsParams, ModeleFormationCombo, ModeleFormationRow,
@@ -215,3 +216,23 @@ def post_convertir_modele(
     op_id = int(user.id_salarie or 0)
     new_id = svc.convertir_en_modele(id_formation, payload, op_id)
     return {"ok": bool(new_id), "id_modele": new_id}
+
+
+# --------------------------------------------------------------------
+# FI_AnalysePromoScool
+# --------------------------------------------------------------------
+
+@router.post("/formations/analyse-promo",
+             response_model=list[AnalyseFormationResult])
+def post_analyse_promo(
+    payload: AnalysePromoParams,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Btn 'Faire l'analyse des sessions selectionnees'.
+
+    Retourne une analyse par formation demandee : recrutement (presents/
+    retenus/JO), bulletins, jours terrain, table effectif (Demarrage +
+    Bilan N + Livraison), stagiaires + production SFR par vendeur.
+    """
+    _require_droit(user, "FormScool")
+    return svc.analyser_promotions(payload)

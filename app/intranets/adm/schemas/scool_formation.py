@@ -131,3 +131,73 @@ class ConvertirModelePayload(BaseModel):
     nb_heure_terrain: int = 0
     heure_jour_salle: int = 0
     heure_jour_terrain: int = 0
+
+
+# --------------------------------------------------------------------
+# FI_AnalysePromoScool - analyse d'une formation
+# --------------------------------------------------------------------
+
+class AnalysePromoParams(BaseModel):
+    id_formations: list[str]
+
+
+class EffectifRow(BaseModel):
+    """Ligne TableEffectif : evolution par etape (Demarrage/Bilan N/Livraison)."""
+    periode: str = ""
+    date: str = ""
+    nb_vend: int = 0
+    nb_vend_prod: int = 0
+    nb_ctt_brut: int = 0        # nb Fibre brut
+    nb_ctt_hr: int = 0          # nb Fibre HR
+    nb_cqt: int = 0             # nb CQT Fibre Brut
+    nb_cqt_hr: int = 0          # nb CQT HR
+    nb_mig: int = 0             # nb Mig Fibre Brut
+    nb_mig_hr: int = 0
+    nb_mob_brut: int = 0
+    nb_mob_hr: int = 0
+
+
+class StagiaireRow(BaseModel):
+    """Ligne Table_ReqStagaireFormation1."""
+    id_stagiaire: str = ""
+    nom: str = ""
+    prenom: str = ""
+    du: str = ""
+    au: str = ""
+    en_activite: bool = True
+    type_sortie: str = ""
+    livrable: bool = False
+    nb_fibre_brut: int = 0
+    nb_fibre_hr: int = 0
+    nb_cqt_brut: int = 0
+    nb_cqt_hr: int = 0
+    nb_mig_brut: int = 0
+    nb_mig_hr: int = 0
+    nb_mob_brut: int = 0
+    nb_mob_hr: int = 0
+
+
+class AnalyseFormationResult(BaseModel):
+    id_formation: str
+    intitule: str = ""
+    ville_formation: str = ""
+    du: str = ""
+    au: str = ""
+    formation_cloturee: bool = False
+    # Compteurs recrutement
+    presents: int = 0
+    retenus: int = 0
+    jo: int = 0
+    # Bulletins
+    intermediaires: int = 0
+    finaux: int = 0
+    # Jours terrain
+    nb_jours_terrain: int = 0
+    # Livraison/CQT
+    total_prod: int = 0
+    total_livrable: int = 0
+    total_cqt: int = 0
+    obj_cqt: int = 0
+    # Tables
+    effectif: list[EffectifRow] = Field(default_factory=list)
+    stagiaires: list[StagiaireRow] = Field(default_factory=list)

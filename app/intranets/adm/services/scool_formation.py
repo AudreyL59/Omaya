@@ -15,10 +15,11 @@ from datetime import timedelta
 
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.schemas.scool_formation import (
-    ConvertirModelePayload, FormateurCombo, FormationDetail,
+    AnalyseFormationResult, AnalysePromoParams,
+    ConvertirModelePayload, EffectifRow, FormateurCombo, FormationDetail,
     FormationPayload, FormationRow, ListeFormationsParams,
     ModeleFormationCombo, ModeleFormationRow,
-    ProgrammePayload, ProgrammeRow,
+    ProgrammePayload, ProgrammeRow, StagiaireRow,
 )
 
 
@@ -933,3 +934,353 @@ def convertir_en_modele(
             logger.exception("convertir modele INSERT prog")
 
     return str(new_id)
+
+
+# --------------------------------------------------------------------
+# FI_AnalysePromoScool - Analyse d'une formation
+# --------------------------------------------------------------------
+
+def _calcul_prod_sfr_stagiaire(
+    id_salarie: int, date_deb: str, date_fin: str,
+) -> dict:
+    """Cf. WinDev CalculProdSFR : par stagiaire, compte les contrats
+    SFR entre date_deb et date_fin (INCLUS mais avec IDTypeEtat != 9).
+    Renvoie compteurs {nb_fibre_brut, nb_fibre_hr, nb_cqt_brut, nb_cqt_hr,
+    nb_mig_brut, nb_mig_hr, nb_mob_brut, nb_mob_hr, nb_cqt_premium_hr}.
+    """
+    out = {
+        "nb_fibre_brut": 0, "nb_fibre_hr": 0,
+        "nb_cqt_brut": 0, "nb_cqt_hr": 0,
+        "nb_mig_brut": 0, "nb_mig_hr": 0,
+        "nb_mob_brut": 0, "nb_mob_hr": 0,
+        "nb_cqt_premium_hr": 0,
+    }
+    db = get_pg_connection("rh")
+    try:
+        rows = db.query(
+            """SELECT COUNT(c.id_contrat) AS nbctt,
+                      p.famille, p.sous_fam,
+                      e.id_type_etat, c.type_vente
+                 FROM adv.pgt_sfr_produit p
+                 JOIN adv.pgt_sfr_contrat c ON c.id_produit = p.id_produit
+                 JOIN adv.pgt_sfr_etat_contrat e ON e.id_etat = c.id_etat_contrat
+                WHERE (c.modif_elem IS NULL OR c.modif_elem NOT LIKE '%suppr%')
+                  AND c.id_salarie = ?
+                  AND c.date_signature BETWEEN ? AND ?
+                  AND e.id_type_etat <> 9
+                GROUP BY p.famille, p.sous_fam, e.id_type_etat, c.type_vente""",
+            (int(id_salarie), date_deb, date_fin),
+        ) or []
+    except Exception:
+        return out
+
+    for r in rows:
+        fam = (r.get("famille") or "").strip()
+        sous_fam = (r.get("sous_fam") or "").strip()
+        etat = int(r.get("id_type_etat") or 0)
+        type_vente = int(r.get("type_vente") or 0)
+        n = int(r.get("nbctt") or 0)
+        is_hr = etat != 3  # 3 = rejete
+        if fam == "FIBRE":
+            out["nb_fibre_brut"] += n
+            if is_hr:
+                out["nb_fibre_hr"] += n
+            if type_vente in (1, 2):
+                out["nb_cqt_brut"] += n
+                if is_hr:
+                    out["nb_cqt_hr"] += n
+                    if sous_fam == "Premium":
+                        out["nb_cqt_premium_hr"] += n
+            else:
+                out["nb_mig_brut"] += n
+                if is_hr:
+                    out["nb_mig_hr"] += n
+        else:
+            out["nb_mob_brut"] += n
+            if is_hr:
+                out["nb_mob_hr"] += n
+    return out
+
+
+def _count_rdv_by_categorie(id_formation: int) -> tuple[int, int, int]:
+    """Cf. WinDev Code Init reqRDV : compte les RDV agenda par IDCategorie
+    JOIN Formation_PrevRecrut. Return (presents, retenus, jo).
+    """
+    rh = get_pg_connection("rh")
+    try:
+        rows = rh.query(
+            """SELECT COUNT(a.id_agenda_evenement) AS comptage,
+                      a.id_categorie
+                 FROM recrutement.pgt_agenda_evenement a
+                 JOIN scool.pgt_formation_prev_recrut fp
+                      ON fp.id_prevision_recrut = a.id_prevision_recrut
+                WHERE (a.modif_elem IS NULL OR a.modif_elem NOT LIKE '%suppr%')
+                  AND (fp.modif_elem IS NULL OR fp.modif_elem NOT LIKE '%suppr%')
+                  AND fp.id_formation = ?
+                GROUP BY a.id_categorie""",
+            (id_formation,),
+        ) or []
+    except Exception:
+        return (0, 0, 0)
+    presents = retenus = jo = 0
+    for r in rows:
+        cat = int(r.get("id_categorie") or 0)
+        n = int(r.get("comptage") or 0)
+        if cat in (4, 7):
+            presents += n
+        elif cat in (2, 3):
+            presents += n
+            retenus += n
+        elif cat == 8:
+            presents += n
+            retenus += n
+            jo += n
+    return (presents, retenus, jo)
+
+
+def _load_stagiaires(id_formation: int) -> list[dict]:
+    """Charge la liste des stagiaires d'une formation."""
+    db = get_pg_connection("rh")
+    try:
+        rows = db.query(
+            """SELECT DISTINCT fs.id_salarie, s.nom, s.prenom, fs.livrable
+                 FROM scool.pgt_formation_salarie fs
+                 JOIN pgt_salarie s ON s.id_salarie = fs.id_salarie
+                WHERE fs.id_formation = ?
+                  AND (fs.modif_elem IS NULL OR fs.modif_elem NOT LIKE '%suppr%')""",
+            (id_formation,),
+        ) or []
+    except Exception:
+        return []
+    return rows
+
+
+def _load_salarie_status(id_salarie: int, ref_date: str) -> dict:
+    """Retourne { en_activite, date_embauche, date_sortie_demandee,
+    type_sortie }."""
+    db = get_pg_connection("rh")
+    try:
+        r = db.query_one(
+            """SELECT e.en_activite, e.date_debut AS date_embauche,
+                      ss.date_sortie_demandee,
+                      ts.lib_sortie
+                 FROM pgt_salarie_embauche e
+                 LEFT JOIN pgt_salarie_sortie ss ON ss.id_salarie = e.id_salarie
+                       AND (ss.modif_elem IS NULL
+                            OR ss.modif_elem NOT LIKE '%suppr%')
+                 LEFT JOIN pgt_type_sortie_salarie ts
+                       ON ts.id_type_sortie = ss.id_type_sortie
+                WHERE e.id_salarie = ?
+                ORDER BY e.date_debut DESC NULLS LAST
+                LIMIT 1""",
+            (id_salarie,),
+        )
+    except Exception:
+        return {}
+    return r or {}
+
+
+def _load_effectif_dates(
+    id_formation: int, date_debut: str,
+) -> list[tuple[str, str]]:
+    """Return liste (periode, date_iso) : Demarrage puis chaque Bilan
+    et Livraison detectes dans le programme.
+    """
+    db = get_pg_connection("scool")
+    try:
+        rows = db.query(
+            """SELECT date, horaires
+                 FROM scool.pgt_formation_programme
+                WHERE id_formation = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                  AND (UPPER(horaires) LIKE '%BILAN%'
+                       OR UPPER(horaires) LIKE '%REMISE%DIPLOME%')
+                ORDER BY date ASC""",
+            (id_formation,),
+        ) or []
+    except Exception:
+        rows = []
+    out: list[tuple[str, str]] = [("Démarrage", date_debut)]
+    num_bilan = 1
+    seen_dates: set[str] = {date_debut}
+    for r in rows:
+        d = _iso_date(r.get("date"))
+        if not d or d in seen_dates:
+            continue
+        seen_dates.add(d)
+        horaires = (r.get("horaires") or "").upper()
+        if "BILAN" in horaires:
+            out.append((f"Bilan {num_bilan}", d))
+            num_bilan += 1
+        else:
+            out.append(("Livraison", d))
+    return out
+
+
+def _count_bulletins(id_formation: int) -> tuple[int, int]:
+    """Return (intermediaires, finaux)."""
+    db = get_pg_connection("scool")
+    try:
+        rows = db.query(
+            """SELECT type_bulletin, COUNT(*) AS n
+                 FROM scool.pgt_formation_bulletin
+                WHERE id_formation = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                GROUP BY type_bulletin""",
+            (id_formation,),
+        ) or []
+    except Exception:
+        return (0, 0)
+    inter = final = 0
+    for r in rows:
+        t = int(r.get("type_bulletin") or 0)
+        n = int(r.get("n") or 0)
+        if t == 1:
+            final += n
+        else:
+            inter += n
+    return (inter, final)
+
+
+def _sum_nb_jours_terrain(id_formation: int) -> int:
+    db = get_pg_connection("scool")
+    try:
+        r = db.query_one(
+            """SELECT COALESCE(SUM(terrain), 0) AS n
+                 FROM scool.pgt_formation_programme
+                WHERE id_formation = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (id_formation,),
+        )
+    except Exception:
+        return 0
+    return int(r.get("n") or 0) if r else 0
+
+
+def analyser_formation(id_formation: str) -> AnalyseFormationResult:
+    """Cf. WinDev FI_AnalysePromoScool Code Init."""
+    detail = get_formation(id_formation)
+    if not detail:
+        return AnalyseFormationResult(id_formation=id_formation)
+
+    id_form_int = int(id_formation)
+    presents, retenus, jo = _count_rdv_by_categorie(id_form_int)
+    stagiaires_raw = _load_stagiaires(id_form_int)
+    nb_stagiaires_debut = len(stagiaires_raw)
+    intermediaires, finaux = _count_bulletins(id_form_int)
+    nb_jours_terrain = _sum_nb_jours_terrain(id_form_int)
+
+    # Table effectif : Demarrage + Bilan/Livraison
+    dates_effectif = _load_effectif_dates(id_form_int, detail.date_debut)
+
+    # Salarie infos + calc prod SFR pour chaque stagiaire
+    # (production de la fin de formation)
+    date_ref_fin = detail.date_fin or (
+        dates_effectif[-1][1] if dates_effectif else detail.date_debut
+    )
+    stagiaires: list[StagiaireRow] = []
+    total_livrable = 0
+    total_cqt = 0
+    for s in stagiaires_raw:
+        id_sal = int(s.get("id_salarie") or 0)
+        if not id_sal:
+            continue
+        info = _load_salarie_status(id_sal, date_ref_fin)
+        prod = _calcul_prod_sfr_stagiaire(
+            id_sal, detail.date_debut, date_ref_fin,
+        )
+        stagiaires.append(StagiaireRow(
+            id_stagiaire=str(id_sal),
+            nom=(s.get("nom") or "").strip(),
+            prenom=_cap_prenom((s.get("prenom") or "").strip()),
+            du=_iso_date(info.get("date_embauche")),
+            au=_iso_date(info.get("date_sortie_demandee")),
+            en_activite=bool(info.get("en_activite")),
+            type_sortie=(info.get("lib_sortie") or "").strip(),
+            livrable=bool(s.get("livrable")),
+            nb_fibre_brut=prod["nb_fibre_brut"],
+            nb_fibre_hr=prod["nb_fibre_hr"],
+            nb_cqt_brut=prod["nb_cqt_brut"],
+            nb_cqt_hr=prod["nb_cqt_hr"],
+            nb_mig_brut=prod["nb_mig_brut"],
+            nb_mig_hr=prod["nb_mig_hr"],
+            nb_mob_brut=prod["nb_mob_brut"],
+            nb_mob_hr=prod["nb_mob_hr"],
+        ))
+        total_cqt += prod["nb_cqt_premium_hr"]
+        if s.get("livrable"):
+            total_livrable += 1
+
+    # Table effectif : par etape, recompte le nb_vend (retire ceux
+    # sortis avant la date de l'etape) et somme les prods
+    effectif: list[EffectifRow] = []
+    for periode, d in dates_effectif:
+        # nb_vend = nb_stagiaires - sortis avant cette date
+        nb_vend = nb_stagiaires_debut
+        for s in stagiaires_raw:
+            id_sal = int(s.get("id_salarie") or 0)
+            info = _load_salarie_status(id_sal, d)
+            date_sortie = _iso_date(info.get("date_sortie_demandee"))
+            if (not info.get("en_activite")) and date_sortie and date_sortie < d:
+                nb_vend -= 1
+
+        # Agrege la prod pour tous les stagiaires du debut a cette date
+        agg = {
+            "nb_ctt_brut": 0, "nb_ctt_hr": 0,
+            "nb_cqt": 0, "nb_cqt_hr": 0,
+            "nb_mig": 0, "nb_mig_hr": 0,
+            "nb_mob_brut": 0, "nb_mob_hr": 0,
+        }
+        nb_vend_prod = 0
+        for s in stagiaires_raw:
+            id_sal = int(s.get("id_salarie") or 0)
+            if not id_sal:
+                continue
+            prod = _calcul_prod_sfr_stagiaire(
+                id_sal, detail.date_debut, d,
+            )
+            has_prod = any(v > 0 for v in prod.values())
+            if has_prod:
+                nb_vend_prod += 1
+            agg["nb_ctt_brut"] += prod["nb_fibre_brut"]
+            agg["nb_ctt_hr"] += prod["nb_fibre_hr"]
+            agg["nb_cqt"] += prod["nb_cqt_brut"]
+            agg["nb_cqt_hr"] += prod["nb_cqt_hr"]
+            agg["nb_mig"] += prod["nb_mig_brut"]
+            agg["nb_mig_hr"] += prod["nb_mig_hr"]
+            agg["nb_mob_brut"] += prod["nb_mob_brut"]
+            agg["nb_mob_hr"] += prod["nb_mob_hr"]
+
+        effectif.append(EffectifRow(
+            periode=periode, date=d,
+            nb_vend=nb_vend, nb_vend_prod=nb_vend_prod,
+            **agg,
+        ))
+
+    total_prod = effectif[-1].nb_vend_prod if effectif else 0
+    obj_cqt = nb_jours_terrain * 8
+
+    return AnalyseFormationResult(
+        id_formation=id_formation,
+        intitule=detail.intitule,
+        ville_formation=detail.ville_formation,
+        du=detail.date_debut,
+        au=detail.date_fin,
+        formation_cloturee=detail.formation_cloturee,
+        presents=presents, retenus=retenus, jo=jo,
+        intermediaires=intermediaires, finaux=finaux,
+        nb_jours_terrain=nb_jours_terrain,
+        total_prod=total_prod,
+        total_livrable=total_livrable,
+        total_cqt=total_cqt,
+        obj_cqt=obj_cqt,
+        effectif=effectif,
+        stagiaires=stagiaires,
+    )
+
+
+def analyser_promotions(
+    p: AnalysePromoParams,
+) -> list[AnalyseFormationResult]:
+    """Cf. WinDev Btn 'Faire l'analyse des sessions selectionnees'."""
+    return [analyser_formation(id_f) for id_f in p.id_formations if id_f]
