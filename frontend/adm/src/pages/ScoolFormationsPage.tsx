@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Copy, Trash2, BookOpen, Save, X, Search, Check, FileText,
+  Loader2,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
@@ -658,21 +659,29 @@ function FicheFormationModal({
 function AnalysePromoCard({ data: a }: { data: AnalyseFormation }) {
   const txLiv = a.jo > 0 ? Math.round((a.total_livrable / a.jo) * 1000) / 10 : 0
   const txCqt = a.obj_cqt > 0 ? Math.round((a.total_cqt / a.obj_cqt) * 1000) / 10 : 0
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   const downloadPdf = async () => {
-    const r = await fetch(
-      `${API_BASE}/scool/formations/${a.id_formation}/analyse-promo-pdf`,
-      { headers: { Authorization: `Bearer ${getToken()}` } },
-    )
-    if (!r.ok) return
-    const blob = await r.blob()
-    const url = URL.createObjectURL(blob)
-    const disp = r.headers.get('Content-Disposition') || ''
-    const m = disp.match(/filename="?([^";]+)"?/)
-    const fic = m ? m[1] : 'analyse.pdf'
-    const link = document.createElement('a')
-    link.href = url; link.download = fic; link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    if (pdfLoading) return
+    setPdfLoading(true)
+    try {
+      const r = await fetch(
+        `${API_BASE}/scool/formations/${a.id_formation}/analyse-promo-pdf`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) {
+        showToast('Erreur génération PDF', 'error')
+        return
+      }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const disp = r.headers.get('Content-Disposition') || ''
+      const m = disp.match(/filename="?([^";]+)"?/)
+      const fic = m ? m[1] : 'analyse.pdf'
+      const link = document.createElement('a')
+      link.href = url; link.download = fic; link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    } finally { setPdfLoading(false) }
   }
 
   return (
@@ -696,9 +705,12 @@ function AnalysePromoCard({ data: a }: { data: AnalyseFormation }) {
           </div>
         </div>
         <button onClick={downloadPdf}
+                disabled={pdfLoading}
                 title="Télécharger la version PDF"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] text-sm">
-          <FileText className="w-4 h-4" /> PDF
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#8B7355] text-[#8B7355] hover:bg-[#ECF1F2] text-sm disabled:opacity-60 disabled:cursor-wait">
+          {pdfLoading
+            ? <><Loader2 className="w-4 h-4 animate-spin" /> Génération...</>
+            : <><FileText className="w-4 h-4" /> PDF</>}
         </button>
       </div>
 
