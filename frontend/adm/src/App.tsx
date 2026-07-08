@@ -42,6 +42,7 @@ import CalculPointsPage from '@/pages/CalculPointsPage'
 import TableauSalariePage from '@/pages/TableauSalariePage'
 import SmsPerfPage from '@/pages/SmsPerfPage'
 import ScoolFormationsPage from '@/pages/ScoolFormationsPage'
+import ScoolFormationFichePage from '@/pages/ScoolFormationFichePage'
 import GestionRecruteursPageAdm from '@/pages/GestionRecruteursPage'
 import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
@@ -152,6 +153,7 @@ function App() {
           <Route path="paies/tableau-salarie" element={<TableauSalariePage />} />
           <Route path="comm/sms-perf" element={<SmsPerfPage />} />
           <Route path="scool/formations" element={<ScoolFormationsPage />} />
+          <Route path="scool/formations/:id" element={<ScoolFormationFichePage />} />
           <Route path="recrutement/recruteurs" element={<GestionRecruteursPageAdm />} />
           <Route path="recrutement/parametres" element={<ParametresCVPage />} />
           <Route path="imports/contrats" element={<ImportsHubPage />} />

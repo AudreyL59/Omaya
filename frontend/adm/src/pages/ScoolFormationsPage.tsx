@@ -6,6 +6,7 @@
  * Tableau : Prod / Ville / Intitule / Du / Au / Cloturee / H Salle / H Terrain
  */
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Plus, Copy, Trash2, BookOpen, Save, X, Search, Check,
 } from 'lucide-react'
@@ -71,6 +72,7 @@ const CATEGORIES = ['Formation initiale', 'Perfectionnement', 'Reprise', 'Autre'
 
 export default function ScoolFormationsPage() {
   useDocumentTitle('Formations S\'Cool')
+  const nav = useNavigate()
 
   const [formations, setFormations] = useState<FormationRow[]>([])
   const [afficherDepuis, setAfficherDepuis] = useState(currentDate())
@@ -132,13 +134,8 @@ export default function ScoolFormationsPage() {
     mode: 'new', data: emptyDetail(),
   })
 
-  const editer = async (idx: number) => {
-    const r = await fetch(
-      `${API_BASE}/scool/formations/${formations[idx].id_formation}`,
-      { headers: { Authorization: `Bearer ${getToken()}` } },
-    )
-    const d: FormationDetail = await r.json()
-    setFicheModal({ mode: 'edit', data: d })
+  const editer = (idx: number) => {
+    nav(`/scool/formations/${formations[idx].id_formation}`)
   }
 
   const dupliquer = async (idx: number) => {
@@ -309,6 +306,7 @@ export default function ScoolFormationsPage() {
                 {formations.map((f, i) => (
                   <tr key={i}
                       onClick={() => setSelIdx(i)}
+                      onDoubleClick={() => editer(i)}
                       className={`border-b border-[#F0EDE5] hover:bg-[#ECF1F2] cursor-pointer ${
                         selIdx === i ? 'bg-[#FFF5E0] ring-1 ring-[#8B7355]' : ''
                       }`}>
