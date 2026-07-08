@@ -15,8 +15,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.intranets.adm.schemas.scool_formation import (
-    FormateurCombo, FormationDetail, FormationPayload, FormationRow,
+    ConvertirModelePayload, FormateurCombo, FormationDetail,
+    FormationPayload, FormationRow,
     ListeFormationsParams, ModeleFormationCombo, ModeleFormationRow,
+    ProgrammePayload, ProgrammeRow,
 )
 from app.intranets.adm.services import scool_formation as svc
 
@@ -125,3 +127,91 @@ def get_formateurs(user: UserToken = Depends(get_current_user)):
     """
     _require_droit(user, "FormScool")
     return svc.list_formateurs()
+
+
+# --------------------------------------------------------------------
+# Programme de formation (onglet 1 Fen_ScoolFormation_Fiche)
+# --------------------------------------------------------------------
+
+@router.get("/formations/{id_formation}/programme",
+            response_model=list[ProgrammeRow])
+def get_programme(
+    id_formation: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    return svc.list_programme(id_formation)
+
+
+@router.post("/formations/{id_formation}/programme")
+def post_programme(
+    id_formation: str,
+    payload: ProgrammePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.add_programme(id_formation, payload, op_id)
+    return {"ok": bool(new_id), "id_programme": new_id}
+
+
+@router.put("/formations/{id_formation}/programme/{id_programme}")
+def put_programme(
+    id_formation: str,
+    id_programme: str,
+    payload: ProgrammePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.update_programme(id_programme, payload, op_id)
+    return {"ok": ok}
+
+
+@router.delete("/formations/{id_formation}/programme/{id_programme}")
+def del_programme(
+    id_formation: str,
+    id_programme: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    ok = svc.delete_programme(id_programme, op_id)
+    return {"ok": ok}
+
+
+@router.delete("/formations/{id_formation}/programme")
+def del_programme_all(
+    id_formation: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Btn Supprimer la date - clic fleche."""
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    n = svc.delete_programme_all(id_formation, op_id)
+    return {"ok": bool(n)}
+
+
+@router.post("/formations/{id_formation}/programme/{id_programme}/dupliquer")
+def dup_programme(
+    id_formation: str,
+    id_programme: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.duplicate_programme(id_programme, op_id)
+    return {"ok": bool(new_id), "id_programme": new_id}
+
+
+@router.post("/formations/{id_formation}/convertir-modele")
+def post_convertir_modele(
+    id_formation: str,
+    payload: ConvertirModelePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Btn Convertir en modele."""
+    _require_droit(user, "FormScool")
+    op_id = int(user.id_salarie or 0)
+    new_id = svc.convertir_en_modele(id_formation, payload, op_id)
+    return {"ok": bool(new_id), "id_modele": new_id}

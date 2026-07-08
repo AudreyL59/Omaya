@@ -92,3 +92,42 @@ class ModeleFormationCombo(BaseModel):
     """
     id_modele: str
     nom_formation: str    # 'Categorie - Intitule'
+
+
+# --------------------------------------------------------------------
+# Programme de formation (onglet 1)
+# --------------------------------------------------------------------
+
+class ProgrammeRow(BaseModel):
+    """Ligne de Table_ProgrammeFormation (pgt_formation_programme)."""
+    id_programme: str = ""
+    id_formation: str = ""
+    num_semaine: int = 0
+    date: str = ""       # YYYY-MM-DD
+    salle: int = 0
+    terrain: int = 0
+    duree: int = 0
+    horaires: str = ""
+    objectif: int = 0
+
+
+class ProgrammePayload(BaseModel):
+    date: str
+    num_semaine: int = 0
+    salle: int = 0
+    terrain: int = 0
+    duree: int = 0
+    horaires: str = ""
+    objectif: int = 0
+
+
+class ConvertirModelePayload(BaseModel):
+    """Cf. WinDev Btn Convertir en modele : reprend l'intitule, categorie,
+    heures + programme courant pour creer un modele.
+    """
+    intitule: str
+    categorie: str = ""
+    nb_heure_salle: int = 0
+    nb_heure_terrain: int = 0
+    heure_jour_salle: int = 0
+    heure_jour_terrain: int = 0

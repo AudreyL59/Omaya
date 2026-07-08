@@ -15,8 +15,10 @@ from datetime import timedelta
 
 from app.core.database.pg import get_pg_connection
 from app.intranets.adm.schemas.scool_formation import (
-    FormateurCombo, FormationDetail, FormationPayload, FormationRow,
-    ListeFormationsParams, ModeleFormationCombo, ModeleFormationRow,
+    ConvertirModelePayload, FormateurCombo, FormationDetail,
+    FormationPayload, FormationRow, ListeFormationsParams,
+    ModeleFormationCombo, ModeleFormationRow,
+    ProgrammePayload, ProgrammeRow,
 )
 
 
@@ -682,3 +684,252 @@ def list_modeles() -> list[ModeleFormationRow]:
         )
         for r in rows
     ]
+
+
+# --------------------------------------------------------------------
+# Programme de formation (onglet 1)
+# --------------------------------------------------------------------
+
+def list_programme(id_formation: str) -> list[ProgrammeRow]:
+    """Cf. WinDev Table_ProgrammeFormation."""
+    if not id_formation or id_formation == "0":
+        return []
+    db = get_pg_connection("scool")
+    try:
+        rows = db.query(
+            """SELECT id_formation_programme, id_formation, num_semaine,
+                      date, salle, terrain, duree, horaires, objectif
+                 FROM scool.pgt_formation_programme
+                WHERE id_formation = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY date ASC NULLS LAST, id_formation_programme ASC""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        logger.exception("list_programme")
+        return []
+    return [
+        ProgrammeRow(
+            id_programme=_clean_id(r.get("id_formation_programme")),
+            id_formation=_clean_id(r.get("id_formation")),
+            num_semaine=int(r.get("num_semaine") or 0),
+            date=_iso_date(r.get("date")),
+            salle=int(r.get("salle") or 0),
+            terrain=int(r.get("terrain") or 0),
+            duree=int(r.get("duree") or 0),
+            horaires=(r.get("horaires") or "").strip(),
+            objectif=int(r.get("objectif") or 0),
+        )
+        for r in rows
+    ]
+
+
+def _calc_num_semaine(date_debut_form: str, date_prog: str) -> int:
+    """Cf. WinDev DateVersNumeroDeSemaine - semRef."""
+    from datetime import date as _date
+    try:
+        d0 = _date.fromisoformat(date_debut_form[:10])
+        d = _date.fromisoformat(date_prog[:10])
+    except Exception:
+        return 1
+    sem_ref = d0.isocalendar()[1] - 1
+    n = d.isocalendar()[1] - sem_ref
+    return max(1, n)
+
+
+def add_programme(
+    id_formation: str, p: ProgrammePayload, op_id: int,
+) -> str:
+    """Cf. WinDev Btn Ajouter une date."""
+    if not id_formation or id_formation == "0":
+        return ""
+    if not p.date or len(p.date) < 10:
+        return ""
+    db = get_pg_connection("scool")
+    row = db.query_one(
+        "SELECT date_debut FROM scool.pgt_formation WHERE id_formation = ?",
+        (int(id_formation),),
+    )
+    date_debut = (
+        str(row.get("date_debut"))[:10]
+        if row and row.get("date_debut") else p.date
+    )
+    num_sem = p.num_semaine if p.num_semaine > 0 else _calc_num_semaine(
+        date_debut, p.date,
+    )
+
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_formation_programme
+              (id_formation_programme, id_formation, num_semaine, date,
+               salle, terrain, duree, horaires, objectif,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, int(id_formation), num_sem, p.date[:10],
+            int(p.salle), int(p.terrain), int(p.duree),
+            p.horaires.strip(), int(p.objectif),
+            int(op_id),
+        ),
+    )
+    return str(new_id)
+
+
+def update_programme(
+    id_programme: str, p: ProgrammePayload, op_id: int,
+) -> bool:
+    if not id_programme or id_programme == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_programme
+              SET date = ?, num_semaine = ?,
+                  salle = ?, terrain = ?, duree = ?,
+                  horaires = ?, objectif = ?,
+                  modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+            WHERE id_formation_programme = ?""",
+        (
+            p.date[:10], int(p.num_semaine),
+            int(p.salle), int(p.terrain), int(p.duree),
+            p.horaires.strip(), int(p.objectif),
+            int(op_id), int(id_programme),
+        ),
+    )
+    return True
+
+
+def delete_programme(id_programme: str, op_id: int) -> bool:
+    if not id_programme or id_programme == "0":
+        return False
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_programme
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_formation_programme = ?""",
+        (int(op_id), int(id_programme)),
+    )
+    return True
+
+
+def delete_programme_all(id_formation: str, op_id: int) -> int:
+    """Cf. WinDev Btn Supprimer la date - clic fleche."""
+    if not id_formation or id_formation == "0":
+        return 0
+    db = get_pg_connection("scool")
+    db.execute(
+        """UPDATE scool.pgt_formation_programme
+              SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+            WHERE id_formation = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (int(op_id), int(id_formation)),
+    )
+    return 1
+
+
+def duplicate_programme(id_programme: str, op_id: int) -> str:
+    """Cf. WinDev Btn Dupliquer (onglet Prog)."""
+    if not id_programme or id_programme == "0":
+        return ""
+    db = get_pg_connection("scool")
+    r = db.query_one(
+        """SELECT id_formation, num_semaine, date, salle, terrain,
+                  duree, horaires, objectif
+             FROM scool.pgt_formation_programme
+            WHERE id_formation_programme = ?""",
+        (int(id_programme),),
+    )
+    if not r:
+        return ""
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_formation_programme
+              (id_formation_programme, id_formation, num_semaine, date,
+               salle, terrain, duree, horaires, objectif,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id, int(r.get("id_formation") or 0),
+            int(r.get("num_semaine") or 0),
+            r.get("date"),
+            int(r.get("salle") or 0),
+            int(r.get("terrain") or 0),
+            int(r.get("duree") or 0),
+            (r.get("horaires") or "").strip() + " - Copie",
+            int(r.get("objectif") or 0),
+            int(op_id),
+        ),
+    )
+    return str(new_id)
+
+
+# --------------------------------------------------------------------
+# Convertir en modele (Btn Convertir en modele)
+# --------------------------------------------------------------------
+
+def convertir_en_modele(
+    id_formation: str, p: ConvertirModelePayload, op_id: int,
+) -> str:
+    """Cf. WinDev Btn Convertir en modele.
+
+    Cree un pgt_form_modele avec intitule 'Export - <intitule>' + copie
+    de toutes les lignes pgt_formation_programme dans
+    pgt_form_modele_programme.
+    """
+    if not id_formation or id_formation == "0":
+        return ""
+    if not p.intitule.strip():
+        return ""
+    db = get_pg_connection("scool")
+
+    new_id = _new_id()
+    db.execute(
+        """INSERT INTO scool.pgt_form_modele
+              (id_modele_form, intitule, categorie,
+               nb_heure_salle, nb_heure_terrain,
+               heure_jour_salle, heure_jour_terrain,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+        (
+            new_id,
+            "Export - " + p.intitule.strip(),
+            p.categorie.strip(),
+            int(p.nb_heure_salle), int(p.nb_heure_terrain),
+            int(p.heure_jour_salle), int(p.heure_jour_terrain),
+            int(op_id),
+        ),
+    )
+
+    try:
+        progs = db.query(
+            """SELECT date, salle, terrain, duree, horaires
+                 FROM scool.pgt_formation_programme
+                WHERE id_formation = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY date ASC""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        progs = []
+
+    for prog in progs:
+        try:
+            db.execute(
+                """INSERT INTO scool.pgt_form_modele_programme
+                      (id_modele_programme, id_modele_form, date,
+                       salle, terrain, duree, horaires,
+                       modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, 'new')""",
+                (
+                    _new_id(), new_id,
+                    prog.get("date"),
+                    int(prog.get("salle") or 0),
+                    int(prog.get("terrain") or 0),
+                    int(prog.get("duree") or 0),
+                    (prog.get("horaires") or "").strip(),
+                    int(op_id),
+                ),
+            )
+        except Exception:
+            logger.exception("convertir modele INSERT prog")
+
+    return str(new_id)
