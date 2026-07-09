@@ -1079,6 +1079,7 @@ interface BulletinRow {
 
 function BulletinsTab({ idFormation }: { idFormation: string }) {
   const [rows, setRows] = useState<BulletinRow[]>([])
+  const nav = useNavigate()
 
   const load = useCallback(async () => {
     const r = await fetch(
@@ -1100,11 +1101,20 @@ function BulletinsTab({ idFormation }: { idFormation: string }) {
     await load()
   }
 
+  const nouveau = () => {
+    const idSal = window.prompt('ID salarié pour le nouveau bulletin :', '')
+    if (!idSal || !idSal.trim()) return
+    nav(`/scool/formations/${idFormation}/bulletin/nouveau?id_salarie=${idSal.trim()}`)
+  }
+
   return (
     <div className="bg-white rounded-lg shadow p-4">
-      <p className="text-xs text-gray-500 mb-2 italic">
-        La saisie complète du bulletin (notes, mentions...) sera dispo dans une prochaine session.
-      </p>
+      <div className="flex items-center gap-2 mb-3">
+        <button onClick={nouveau}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] text-sm">
+          <Plus className="w-4 h-4" /> Nouveau bulletin
+        </button>
+      </div>
 
       <table className="text-xs w-full">
         <thead className="bg-[#17494E] text-white">
@@ -1118,7 +1128,9 @@ function BulletinsTab({ idFormation }: { idFormation: string }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id_bulletin} className="border-b border-[#F0EDE5]">
+            <tr key={r.id_bulletin}
+                onClick={() => nav(`/scool/formations/${idFormation}/bulletin/${r.id_bulletin}`)}
+                className="border-b border-[#F0EDE5] hover:bg-[#ECF1F2] cursor-pointer">
               <td className="py-1.5 px-2 font-medium">{r.stagiaire}</td>
               <td className="py-1.5 px-2 tabular-nums">{shortDate(r.du)}</td>
               <td className="py-1.5 px-2 tabular-nums">{shortDate(r.au)}</td>
@@ -1128,7 +1140,7 @@ function BulletinsTab({ idFormation }: { idFormation: string }) {
                   : ''}
               </td>
               <td className="py-1.5 px-2 text-right">
-                <button onClick={() => supprimer(r)}
+                <button onClick={(e) => { e.stopPropagation(); void supprimer(r) }}
                         className="p-0.5 rounded hover:bg-red-50 text-[#B91C1C]">
                   <Trash2 className="w-3 h-3" />
                 </button>
