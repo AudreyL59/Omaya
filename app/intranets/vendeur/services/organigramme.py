@@ -354,36 +354,30 @@ def get_organigramme(
             children_map.setdefault(parent_id, []).append(oid)
 
     # Détection des racines :
-    # - ProdRezo : racine = orga avec id = 0 (méta-racine incluse dans MonOrga)
+    # - ADM (acces global) : toutes les orgas non supprimees avec id_parent=0
     # - Sinon : racine = orga avec PARENT_ID = 0 (ou "") dans le scope
     if acces_global:
-        # Cherche l'orga d'id 0 parmi les orgas accessibles
-        roots = [
-            _to_int(o.get("idorganigramme"))
-            for o in orgas_accessible
-            if _to_int(o.get("idorganigramme")) == 0
-        ]
-        # Fallback si pas d'orga id=0 en base : tous les orgas avec PARENT_ID=0
-        if not roots:
-            roots = [
-                _to_int(o.get("idorganigramme"))
-                for o in orgas_accessible
-                if _to_int(o.get("id_parent")) == 0
-            ]
-    else:
-        # Orgas avec PARENT_ID vide dans le scope
-        roots = [
+        # Toutes les orgas racines non supprimees (cf. demande utilisateur),
+        # triees par id_organigramme croissant.
+        roots = sorted(
             _to_int(o.get("idorganigramme"))
             for o in orgas_accessible
             if _to_int(o.get("id_parent")) == 0
-        ]
+        )
+    else:
+        # Orgas avec PARENT_ID vide dans le scope
+        roots = sorted(
+            _to_int(o.get("idorganigramme"))
+            for o in orgas_accessible
+            if _to_int(o.get("id_parent")) == 0
+        )
         # Fallback : orgas dont le parent n'est pas accessible
         if not roots:
-            roots = [
+            roots = sorted(
                 _to_int(o.get("idorganigramme"))
                 for o in orgas_accessible
                 if _to_int(o.get("id_parent")) not in accessible_ids
-            ]
+            )
 
     orga_by_id = {
         _to_int(o.get("idorganigramme")): o for o in orgas_accessible

@@ -23,12 +23,6 @@ import {
   Scale,
   HeartPulse,
   IdCard,
-  CalendarCheck,
-  TrendingUp,
-  LineChart,
-  FileText,
-  ClipboardList,
-  FileSignature,
   Plus,
   Pencil,
   MoveRight,
@@ -1114,6 +1108,9 @@ function SalariePopup({
 }) {
   const has = (d: string) => droits.includes(d)
   const [showFiche, setShowFiche] = useState(false)
+  // Intranet ADM : seule la Fiche Salarié est exposée ici (les autres
+  // actions - declaratifs, ADF, bilan, etc. sont accessibles depuis les
+  // ecrans dedies de l'ADM et n'ont pas leur place dans cette popup).
   const actions: {
     label: string
     icon: React.ReactNode
@@ -1125,36 +1122,6 @@ function SalariePopup({
       icon: <IdCard className="w-4 h-4 text-[#A68D8A]" />,
       visible: has('FicheVend'),
       onClick: () => setShowFiche(true),
-    },
-    {
-      label: 'Déclaratif de présence',
-      icon: <CalendarCheck className="w-4 h-4 text-[#A68D8A]" />,
-      visible: has('TkSortieRH'),
-    },
-    {
-      label: 'Déclaratif de prod',
-      icon: <TrendingUp className="w-4 h-4 text-[#A68D8A]" />,
-      visible: true,
-    },
-    {
-      label: "Bilan d'évolution",
-      icon: <LineChart className="w-4 h-4 text-[#A68D8A]" />,
-      visible: has('ProgEvo'),
-    },
-    {
-      label: 'ADF',
-      icon: <FileText className="w-4 h-4 text-[#A68D8A]" />,
-      visible: has('ProgEvo'),
-    },
-    {
-      label: 'Feuille de pointe',
-      icon: <ClipboardList className="w-4 h-4 text-[#A68D8A]" />,
-      visible: true,
-    },
-    {
-      label: 'Demander un Ctt W',
-      icon: <FileSignature className="w-4 h-4 text-[#A68D8A]" />,
-      visible: has('Tk_DemCttW'),
     },
   ]
   const visibleActions = actions.filter((a) => a.visible)
