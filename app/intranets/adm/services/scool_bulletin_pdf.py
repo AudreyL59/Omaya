@@ -150,11 +150,12 @@ def _load_infos_societe() -> dict:
     db = get_pg_connection("rh")
     try:
         r = db.query_one(
-            """SELECT lib_societe, cachet_cial, gerant_signature, logo
+            """SELECT raison_sociale, cachet_cial, gerant_signature, logo
                  FROM pgt_societe WHERE id_ste = ?""",
             (_ID_STE_BULLETIN,),
         )
     except Exception:
+        logger.exception("_load_infos_societe")
         return {}
     return dict(r or {})
 
