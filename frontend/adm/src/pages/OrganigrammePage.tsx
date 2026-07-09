@@ -1158,6 +1158,78 @@ function SalariePopup({
     },
   ]
   const visibleActions = actions.filter((a) => a.visible)
+
+  // --- Actions Sortie RH / Distrib (ADM uniquement) --------------------
+  // Cf. WinDev sortirSalarie(TypeSortie) + sortirDistrib.
+  // 1=Annul DUE, 2=FPE Salarie, 3=FPE Entreprise, 4=Demission,
+  // 5=Licenciement (autres codes possibles cote backend).
+  const canSortieRH = has('TkSortieRH')
+  const [pendingSortie, setPendingSortie] = useState<string | null>(null)
+
+  const doSortieRH = async (typeSortie: number, lib: string) => {
+    if (!await showConfirm({
+      title: `Sortir en ${lib}`,
+      message: `Confirmer la ${lib} de ${salarie.nom} ${salarie.prenom} ?`,
+    })) return
+    setPendingSortie(lib)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${salarie.id_salarie}/sortie`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ type_sortie: typeSortie }),
+        },
+      )
+      const d = await r.json()
+      if (d.ok) {
+        showToast(
+          `${lib} enregistrée${d.mail_envoye ? ' + mail envoyé' : ''}`,
+          'success',
+        )
+        onFicheClosed?.()
+        onClose()
+      } else {
+        showToast('Erreur', 'error')
+      }
+    } finally { setPendingSortie(null) }
+  }
+
+  const doSortieDistrib = async () => {
+    if (!await showConfirm({
+      title: 'Sortie DISTRIB',
+      message: `Confirmer la sortie DISTRIB de ${salarie.nom} ${salarie.prenom} ?`,
+    })) return
+    setPendingSortie('Distrib')
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${salarie.id_salarie}/sortie-distrib`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      const d = await r.json()
+      if (d.ok) {
+        showToast('Sortie DISTRIB enregistrée', 'success')
+        onFicheClosed?.()
+        onClose()
+      } else {
+        showToast('Erreur', 'error')
+      }
+    } finally { setPendingSortie(null) }
+  }
+
+  const sortieButtons = [
+    { type: 1, lib: 'Annul DUE' },
+    { type: 3, lib: 'FPE Entreprise' },
+    { type: 4, lib: 'Démission' },
+    { type: 2, lib: 'FPE Salarié' },
+    { type: 5, lib: 'Licenciement' },
+  ]
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -1229,6 +1301,42 @@ function SalariePopup({
                 </button>
               ))}
             </div>
+          )}
+
+          {canSortieRH && (
+            <>
+              <div className="mt-5 pt-4 border-t border-[#E5DDDC]">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-[#A68D8A] mb-2 text-left">
+                  Sortie RH
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {sortieButtons.map((b) => (
+                    <button
+                      key={b.type}
+                      onClick={() => doSortieRH(b.type, b.lib)}
+                      disabled={!!pendingSortie}
+                      className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-red-50 rounded-lg text-xs text-[#7A2419] text-left transition-colors disabled:opacity-50">
+                      {pendingSortie === b.lib
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <UserX className="w-4 h-4" />}
+                      <span className="truncate">{b.lib}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <button
+                  onClick={doSortieDistrib}
+                  disabled={!!pendingSortie}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-red-50 rounded-lg text-xs text-[#7A2419] border border-[#E5DDDC] transition-colors disabled:opacity-50">
+                  {pendingSortie === 'Distrib'
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <UserX className="w-4 h-4" />}
+                  Sortie DISTRIB
+                </button>
+              </div>
+            </>
           )}
         </div>
       </motion.div>

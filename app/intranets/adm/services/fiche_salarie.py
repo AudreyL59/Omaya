@@ -707,6 +707,103 @@ def sortir_salarie(id_salarie: int, payload: dict, demandeur_id: int) -> dict:
     }
 
 
+def sortir_distrib(id_salarie: int, demandeur_id: int) -> dict:
+    """Sortie DISTRIB (cf. WinDev sortirDistrib).
+
+    Difference avec sortir_salarie :
+    - IDTypeSortie = 0 (au lieu d'un type reel)
+    - PAS d'envoi de mail
+    - PAS de ticket TK_DemandeSortieRH
+    - Mais garde : EnActivite=FALSE + ticket demande code Ohm si applicable
+    """
+    db_rh = get_pg_connection("rh")
+
+    # Garantit l'existence des lignes
+    for tbl in ("rh.pgt_salarie_embauche", "rh.pgt_salarie_sortie"):
+        if not db_rh.query_one(
+            f"SELECT 1 FROM {tbl} WHERE id_salarie = ?", (id_salarie,),
+        ):
+            db_rh.query(
+                f"INSERT INTO {tbl} (id_salarie, modif_date, modif_elem) "
+                f"VALUES ({_int(id_salarie)}, NOW(), 'new')",
+            )
+
+    # EnActivite = FALSE
+    db_rh.query(
+        f"""UPDATE rh.pgt_salarie_embauche SET
+                en_activite = FALSE,
+                modif_date = NOW(),
+                modif_op = {_int(demandeur_id)},
+                modif_elem = 'modif'
+            WHERE id_salarie = {_int(id_salarie)}""",
+    )
+
+    # salarie_sortie : id_type_sortie = 0
+    db_rh.query(
+        f"""UPDATE rh.pgt_salarie_sortie SET
+                id_type_sortie = 0,
+                date_sortie_demandee = NOW(),
+                demandeur_sortie = {_int(demandeur_id)},
+                modif_date = NOW(),
+                modif_op = {_int(demandeur_id)},
+                modif_elem = 'modif'
+            WHERE id_salarie = {_int(id_salarie)}""",
+    )
+    db_rh.query(
+        f"""UPDATE rh.pgt_salarie SET modif_date = NOW()
+            WHERE id_salarie = {_int(id_salarie)}""",
+    )
+
+    # Ticket demande code Ohm si le salarie a un code
+    id_ticket_codes_ohm = ""
+    try:
+        sp = db_rh.query_one(
+            f"""SELECT code, login, mdp
+                 FROM rh.pgt_salarie_partenaire
+                WHERE id_partenaire = {ID_PARTENAIRE_OHM}
+                  AND id_salarie = ?
+                  AND mdp IS NOT NULL AND mdp <> ''
+                  AND modif_elem <> 'supp'""",
+            (id_salarie,),
+        )
+        if sp:
+            id_new = _new_ticket_id()
+            id_ticket_codes_ohm = str(id_new)
+            db_bo = get_pg_connection("ticket_bo")
+            db_bo.query(
+                f"""INSERT INTO ticket_bo.pgt_tk_demande_code_vendeur
+                        (id_tk_demande_code_vendeur, id_tk_liste, type_ori,
+                         id_elem, id_partenaire, code, login, mdp,
+                         modif_date, modif_elem, modif_op)
+                    VALUES ({id_new}, {id_new}, 'DPAE',
+                            {_int(id_salarie)}, {ID_PARTENAIRE_OHM},
+                            '{_sql_str(sp.get('code'))}',
+                            '{_sql_str(sp.get('login'))}',
+                            '{_sql_str(sp.get('mdp'))}',
+                            NOW(), 'new', {_int(demandeur_id)})""",
+            )
+            db_ticket = get_pg_connection("ticket")
+            db_ticket.query(
+                f"""INSERT INTO ticket.pgt_tk_liste
+                        (id_tk_liste, id_tk_liste_auto, date_crea,
+                         op_crea, op_dest, service,
+                         id_tk_type_demande, id_tk_statut,
+                         cloturee, modif_date, modif_op, modif_elem,
+                         op_traitement_staff, ordre_traitement_staff)
+                    VALUES ({id_new}, {id_new}, NOW(),
+                            {_int(demandeur_id)}, {_int(demandeur_id)},
+                            'BO', 39, 1, FALSE,
+                            NOW(), {_int(demandeur_id)}, 'new', 0, 0)""",
+            )
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+
+    return {
+        "ok": True,
+        "id_ticket_codes_ohm": id_ticket_codes_ohm,
+    }
+
+
 def _capitalize_first(s: str) -> str:
     return s[:1].upper() + s[1:].lower() if s else ""
 

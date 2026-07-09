@@ -349,6 +349,19 @@ def sortir(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
+@router.post("/{id_salarie}/sortie-distrib")
+def sortir_distrib(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev sortirDistrib. Pas d'email, pas de ticket sortie RH."""
+    try:
+        return svc.sortir_distrib(id_salarie, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 @router.post("/{id_salarie}/embauche", response_model=SaveResponse)
 def save_embauche(
     payload: SaveEmbauchePayload,
