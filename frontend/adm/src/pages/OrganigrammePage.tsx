@@ -26,6 +26,10 @@ import {
   UserCog,
   Send,
   Check,
+  Ban,
+  LogOut,
+  UserMinus,
+  DoorOpen,
   Plus,
   Pencil,
   MoveRight,
@@ -1234,12 +1238,38 @@ function SalariePopup({
     } finally { setPendingSortie(null) }
   }
 
-  const sortieButtons = [
-    { type: 1, lib: 'Annul DUE' },
-    { type: 3, lib: 'FPE Entreprise' },
-    { type: 4, lib: 'Démission' },
-    { type: 2, lib: 'FPE Salarié' },
-    { type: 5, lib: 'Licenciement' },
+  // Icones colorees par type de sortie (aligne sur les codes couleurs
+  // salarie_embauche : jaune = annulation, bleu = entreprise, cyan =
+  // demission salarie, orange = FPE salarie, rouge = licenciement).
+  const sortieButtons: {
+    type: number; lib: string
+    icon: React.ReactNode; color: string
+  }[] = [
+    {
+      type: 1, lib: 'Annul DUE',
+      icon: <Ban className="w-4 h-4 text-white" />,
+      color: 'bg-yellow-600',
+    },
+    {
+      type: 3, lib: 'FPE Entreprise',
+      icon: <UserMinus className="w-4 h-4 text-white" />,
+      color: 'bg-blue-700',
+    },
+    {
+      type: 4, lib: 'Démission',
+      icon: <DoorOpen className="w-4 h-4 text-white" />,
+      color: 'bg-cyan-600',
+    },
+    {
+      type: 2, lib: 'FPE Salarié',
+      icon: <UserX className="w-4 h-4 text-white" />,
+      color: 'bg-orange-500',
+    },
+    {
+      type: 5, lib: 'Licenciement',
+      icon: <UserX className="w-4 h-4 text-white" />,
+      color: 'bg-red-700',
+    },
   ]
   return (
     <motion.div
@@ -1378,10 +1408,12 @@ function SalariePopup({
                       key={b.type}
                       onClick={() => doSortieRH(b.type, b.lib)}
                       disabled={!!pendingSortie}
-                      className="flex items-center gap-2 px-3 py-2 bg-white hover:bg-red-50 rounded-lg text-xs text-[#7A2419] text-left transition-colors disabled:opacity-50">
-                      {pendingSortie === b.lib
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <UserX className="w-4 h-4" />}
+                      className="flex items-center gap-2 px-2 py-1.5 bg-white hover:bg-red-50 rounded-lg text-xs text-[#7A2419] text-left transition-colors disabled:opacity-50">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center ${b.color} shrink-0`}>
+                        {pendingSortie === b.lib
+                          ? <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          : b.icon}
+                      </div>
                       <span className="truncate">{b.lib}</span>
                     </button>
                   ))}
@@ -1392,11 +1424,13 @@ function SalariePopup({
                 <button
                   onClick={doSortieDistrib}
                   disabled={!!pendingSortie}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-red-50 rounded-lg text-xs text-[#7A2419] border border-[#E5DDDC] transition-colors disabled:opacity-50">
-                  {pendingSortie === 'Distrib'
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <UserX className="w-4 h-4" />}
-                  Sortie DISTRIB
+                  className="w-full flex items-center gap-2 px-2 py-1.5 bg-white hover:bg-red-50 rounded-lg text-xs text-[#7A2419] border border-[#E5DDDC] transition-colors disabled:opacity-50">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center bg-slate-600 shrink-0">
+                    {pendingSortie === 'Distrib'
+                      ? <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      : <LogOut className="w-4 h-4 text-white" />}
+                  </div>
+                  <span>Sortie DISTRIB</span>
                 </button>
               </div>
             </>
