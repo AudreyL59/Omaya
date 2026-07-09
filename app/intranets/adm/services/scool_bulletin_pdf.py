@@ -76,6 +76,56 @@ def _pdf_first_page_to_png(pdf_bytes: bytes) -> bytes:
         return b""
 
 
+def _compose_signature_cachet(
+    cachet_bytes: bytes, signature_bytes: bytes,
+) -> bytes:
+    """Compose signature au-dessus du cachet dans une seule image PNG.
+
+    WeasyPrint gere mal position:absolute + object-fit sur img. On
+    fait la superposition cote serveur avec PIL.
+    """
+    try:
+        from PIL import Image  # noqa: PLC0415
+        import io as _io  # noqa: PLC0415
+    except ImportError:
+        return b""
+    # Cachet en fond
+    if not cachet_bytes:
+        return signature_bytes or b""
+    try:
+        cachet = Image.open(_io.BytesIO(cachet_bytes)).convert("RGBA")
+    except Exception:
+        return signature_bytes or b""
+    if not signature_bytes:
+        buf = _io.BytesIO()
+        cachet.save(buf, format="PNG")
+        return buf.getvalue()
+    try:
+        signature = Image.open(_io.BytesIO(signature_bytes)).convert("RGBA")
+    except Exception:
+        buf = _io.BytesIO()
+        cachet.save(buf, format="PNG")
+        return buf.getvalue()
+
+    # Adapte la signature a la meme largeur que le cachet (max), en
+    # gardant les proportions. Puis colle au centre.
+    ratio_sig = signature.width / signature.height
+    target_w = cachet.width
+    target_h = int(target_w / ratio_sig)
+    if target_h > cachet.height:
+        target_h = cachet.height
+        target_w = int(target_h * ratio_sig)
+    signature = signature.resize(
+        (target_w, target_h), Image.LANCZOS,
+    )
+    off_x = (cachet.width - target_w) // 2
+    off_y = (cachet.height - target_h) // 2
+    cachet.alpha_composite(signature, dest=(off_x, off_y))
+    buf = _io.BytesIO()
+    cachet.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def _img_b64(v) -> str:
     """Convertit bytes/memoryview en data URI base64.
 
@@ -233,19 +283,7 @@ table.notes td.right { text-align: right; }
   border-top: 1px solid #E5E0D5;
   text-align: center;
 }
-.signature-cachet .stack {
-  position: relative; display: inline-block;
-  width: 300px; height: 130px;
-}
-.signature-cachet .cachet {
-  position: absolute; top: 0; left: 0;
-  width: 100%; height: 100%; object-fit: contain;
-}
-.signature-cachet .signature {
-  position: absolute; top: 0; left: 0;
-  width: 100%; height: 100%; object-fit: contain;
-  z-index: 2;
-}
+.signature-cachet img { max-width: 280px; max-height: 140px; }
 .signature-cachet .lib {
   font-size: 8pt; color: #8B7355; margin-top: 4px;
 }
@@ -260,8 +298,27 @@ def _render_html(b: BulletinDetail) -> str:
     type_lib = "Bulletin définitif" if b.type_bulletin == 1 else "Bulletin intermédiaire"
 
     logo_b64 = _img_b64(so.get("logo"))
-    cachet_b64 = _img_b64(so.get("cachet_cial"))
-    signature_b64 = _img_b64(so.get("gerant_signature"))
+    # Signature superposee au cachet (composition PIL cote serveur car
+    # WeasyPrint gere mal position:absolute + object-fit sur img).
+    # Le cachet stocke en PDF est converti en PNG en amont via _img_b64,
+    # donc on repasse les bytes bruts PNG a la composition.
+    def _to_png_bytes(v) -> bytes:
+        if v is None:
+            return b""
+        if hasattr(v, "tobytes"):
+            v = v.tobytes()
+        b = bytes(v)
+        mime = _detect_image_mime(b)
+        if mime == "application/pdf":
+            return _pdf_first_page_to_png(b)
+        return b
+    cachet_png = _to_png_bytes(so.get("cachet_cial"))
+    signature_png = _to_png_bytes(so.get("gerant_signature"))
+    combined = _compose_signature_cachet(cachet_png, signature_png)
+    signature_cachet_b64 = (
+        "data:image/png;base64," + base64.b64encode(combined).decode("ascii")
+        if combined else ""
+    )
     mention_lib = _mention_lib(b.id_bulletin_mention)
 
     notes_rows = [
@@ -349,10 +406,7 @@ def _render_html(b: BulletinDetail) -> str:
   </div>
 
   <div class="signature-cachet">
-    <div class="stack">
-      {'<img class="cachet" src="' + cachet_b64 + '" />' if cachet_b64 else ''}
-      {'<img class="signature" src="' + signature_b64 + '" />' if signature_b64 else ''}
-    </div>
+    {'<img src="' + signature_cachet_b64 + '" />' if signature_cachet_b64 else ''}
     <div class="lib">Signature et cachet</div>
   </div>
 </body></html>"""
