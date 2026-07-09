@@ -375,9 +375,13 @@ def copier_orga(
 
 def deplacer_salarie(p: DeplacerSalariePayload, op_id: int) -> dict:
     """Cf. WinDev DeplacerSalarie :
-    - Ferme les rattachements en cours (date_fin = date_changement - 1)
+    - Parcourt tous les rattachements du salarie (ORDER BY date_debut DESC)
+    - Pour chaque ratt actif (date_fin invalide / vide) : ferme avec
+      date_fin = date_changement - 1 et cale date_debut si besoin
     - Ajoute une nouvelle ligne salarie_organigramme
     """
+    from app.core.utils.sentinel_dates import is_sentinel
+
     if not p.id_salarie or not p.id_orga_cible or not p.date_changement:
         return {"ok": False, "err": "Parametres invalides"}
     d = p.date_changement[:10]
@@ -399,28 +403,57 @@ def deplacer_salarie(p: DeplacerSalariePayload, op_id: int) -> dict:
     )
     id_ste = int((orga or {}).get("id_ste") or 0)
 
-    # Ferme les rattachements dont date_fin est vide (en cours)
+    # 1) Parcourt les rattachements existants (comme WinDev)
     try:
-        rh.execute(
-            """UPDATE pgt_salarie_organigramme
-                  SET date_fin = ?,
-                      date_debut = CASE
-                          WHEN date_debut > ? THEN ? ELSE date_debut END,
-                      aff_actif = FALSE,
-                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+        ratts = rh.query(
+            """SELECT id_salarie_organigramme,
+                      date_debut, date_fin
+                 FROM pgt_salarie_organigramme
                 WHERE id_salarie = ?
-                  AND (date_fin IS NULL
-                       OR date_fin = '1900-01-01'
-                       OR date_fin = '0001-01-01')
                   AND (modif_elem IS NULL
-                       OR modif_elem NOT LIKE '%suppr%')""",
-            (d_fin_prev, d_fin_prev, d_fin_prev, op_id, id_sal),
-        )
-    except Exception:
-        logger.exception("deplacer_salarie close old")
-        return {"ok": False, "err": "Erreur fermeture ratt. en cours"}
+                       OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY date_debut DESC""",
+            (id_sal,),
+        ) or []
+    except Exception as e:
+        logger.exception("deplacer_salarie select ratts")
+        return {"ok": False, "err": f"SELECT ratts : {e}"}
 
-    # Insert le nouveau rattachement
+    # 2) Ferme uniquement les ratt dont date_fin est invalide (=en cours)
+    for r in ratts:
+        df = r.get("date_fin")
+        # Rattachement encore en cours = date_fin NULL ou sentinelle 1900
+        if df is not None and not is_sentinel(df):
+            continue
+        rid = int(r.get("id_salarie_organigramme"))
+        dd = r.get("date_debut")
+        # Si date_debut > d_fin_prev, on la ramene a d_fin_prev
+        new_dd = None
+        if dd and not is_sentinel(dd):
+            try:
+                dd_iso = dd.isoformat() if hasattr(dd, "isoformat") else str(dd)[:10]
+                new_dd = d_fin_prev if dd_iso > d_fin_prev else dd_iso
+            except Exception:
+                new_dd = None
+        try:
+            rh.execute(
+                """UPDATE pgt_salarie_organigramme
+                      SET date_fin = ?,
+                          date_debut = COALESCE(?, date_debut),
+                          aff_actif = FALSE,
+                          modif_date = NOW(), modif_op = ?,
+                          modif_elem = 'modif'
+                    WHERE id_salarie_organigramme = ?""",
+                (d_fin_prev, new_dd, op_id, rid),
+            )
+        except Exception as e:
+            logger.exception("deplacer_salarie close ratt %s", rid)
+            return {
+                "ok": False,
+                "err": f"Fermeture ratt {rid} : {e}",
+            }
+
+    # 3) Insert le nouveau rattachement
     try:
         new_id = _new_id()
         rh.execute(
@@ -431,9 +464,9 @@ def deplacer_salarie(p: DeplacerSalariePayload, op_id: int) -> dict:
                VALUES (?, ?, ?, ?, NULL, TRUE, ?, NOW(), ?, 'new')""",
             (new_id, id_sal, id_orga, d, id_ste, op_id),
         )
-    except Exception:
+    except Exception as e:
         logger.exception("deplacer_salarie insert")
-        return {"ok": False, "err": "Erreur ajout rattachement"}
+        return {"ok": False, "err": f"INSERT ratt : {e}"}
     return {"ok": True}
 
 
