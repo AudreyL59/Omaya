@@ -48,24 +48,27 @@ def _collect_orga_tree(id_orga: int) -> list[dict]:
     try:
         rows = rh.query(
             """WITH RECURSIVE tree AS (
-                   SELECT idorganigramme AS id, id_parent, lib_orga
+                   SELECT idorganigramme AS id, id_parent, lib_orga, 0 AS depth
                      FROM pgt_organigramme
                     WHERE idorganigramme = ?
                       AND (modif_elem IS NULL
                            OR modif_elem NOT LIKE '%suppr%')
                    UNION ALL
-                   SELECT o.idorganigramme, o.id_parent, o.lib_orga
+                   SELECT o.idorganigramme, o.id_parent, o.lib_orga,
+                          t.depth + 1
                      FROM pgt_organigramme o
                      JOIN tree t ON o.id_parent = t.id
                     WHERE (o.modif_elem IS NULL
                            OR o.modif_elem NOT LIKE '%suppr%')
+                      AND t.depth < 20
                )
                SELECT id, id_parent, lib_orga FROM tree""",
             (id_orga,),
         ) or []
-    except Exception:
-        logger.exception("_collect_orga_tree")
-        return []
+    except Exception as e:
+        logger.exception("_collect_orga_tree id_orga=%s", id_orga)
+        # Remonte l'erreur pour que l'endpoint expose un 500 explicite
+        raise RuntimeError(f"CTE arbre orga : {e}") from e
     # Map id -> lib pour resoudre le parent_lib
     lib_by_id = {int(r.get("id") or 0): (r.get("lib_orga") or "").strip()
                  for r in rows}
@@ -265,23 +268,45 @@ def export_orga_selection_xlsx(id_orga: str) -> bytes:
     except (TypeError, ValueError):
         raise ValueError("id_orga invalide")
 
+    logger.info("[export_orga] id=%s : step 1 collect tree", id_o)
     orgas = _collect_orga_tree(id_o)
     if not orgas:
         raise ValueError("Bloc introuvable")
     orga_ids = [o["id"] for o in orgas]
     orga_by_id = {o["id"]: o for o in orgas}
+    logger.info(
+        "[export_orga] id=%s : tree=%d orgas", id_o, len(orga_ids),
+    )
 
     today = _date.today().isoformat()
-    salaries = _load_salaries_by_orga(orga_ids, today)
+    try:
+        salaries = _load_salaries_by_orga(orga_ids, today)
+    except Exception as e:
+        raise RuntimeError(f"Chargement salaries : {e}") from e
+    logger.info(
+        "[export_orga] id=%s : %d salaries", id_o, len(salaries),
+    )
     stes, postes = _resolve_lookups(salaries)
     ids_sal = {int(r.get("id_salarie") or 0) for r in salaries}
-    dernier_ctt = _load_dernier_ctt(ids_sal, today)
-    docrh = _load_docrh_stats(ids_sal)
+    try:
+        dernier_ctt = _load_dernier_ctt(ids_sal, today)
+    except Exception as e:
+        logger.exception("dernier_ctt")
+        dernier_ctt = {}
+    try:
+        docrh = _load_docrh_stats(ids_sal)
+    except Exception as e:
+        logger.exception("docrh")
+        docrh = {}
     ids_abs = {
         int(r.get("id_absence") or 0)
         for r in salaries if r.get("en_pause")
     } - {0}
-    abs_debut = _load_absences_debut(ids_abs)
+    try:
+        abs_debut = _load_absences_debut(ids_abs)
+    except Exception as e:
+        logger.exception("abs_debut")
+        abs_debut = {}
 
     wb = Workbook()
     ws = wb.active

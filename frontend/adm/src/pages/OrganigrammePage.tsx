@@ -797,7 +797,19 @@ function OrgaCard({
         `/api/adm/organigramme/${node.id}/export-xlsx`,
         { headers: { Authorization: `Bearer ${getToken()}` } },
       )
-      if (!r.ok) { showToast('Erreur export', 'error'); return }
+      if (!r.ok) {
+        // Recupere le detail JSON (FastAPI HTTPException) si dispo
+        let detail = `HTTP ${r.status}`
+        try {
+          const j = await r.json()
+          if (j?.detail) detail = String(j.detail)
+        } catch { /* pas de JSON, garde le status */ }
+        showToast(`Erreur export : ${detail}`, 'error')
+        console.error(
+          `[export orga ${node.id} "${node.lib}"] ${r.status} ${detail}`,
+        )
+        return
+      }
       const blob = await r.blob()
       const u = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -805,6 +817,9 @@ function OrgaCard({
       a.download = `ExportOrganigramme_${node.lib.replace(/[^\w-]/g, '_')}.xlsx`
       document.body.appendChild(a); a.click(); a.remove()
       setTimeout(() => URL.revokeObjectURL(u), 5000)
+    } catch (e) {
+      showToast(`Erreur export : ${(e as Error).message}`, 'error')
+      console.error(`[export orga ${node.id}]`, e)
     } finally { setExporting(false) }
   }
   const others = node.salaries.filter((s) => s.id_salarie !== manager?.id_salarie)
