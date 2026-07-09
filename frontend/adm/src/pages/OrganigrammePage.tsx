@@ -30,6 +30,7 @@ import {
   LogOut,
   UserMinus,
   DoorOpen,
+  Download,
   Plus,
   Pencil,
   MoveRight,
@@ -849,6 +850,33 @@ function OrgaCard({
                 className="p-1 rounded-md hover:bg-white/20"
                 title="Supprimer">
                 <Trash2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const url = `/api/adm/organigramme/${node.id}/export-xlsx`
+                  fetch(url, {
+                    headers: { Authorization: `Bearer ${getToken()}` },
+                  }).then((r) => {
+                    if (!r.ok) {
+                      showToast('Erreur export', 'error'); return null
+                    }
+                    return r.blob()
+                  }).then((blob) => {
+                    if (!blob) return
+                    const u = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = u
+                    a.download = `ExportOrganigramme_${node.lib.replace(/[^\w-]/g, '_')}.xlsx`
+                    document.body.appendChild(a)
+                    a.click()
+                    a.remove()
+                    setTimeout(() => URL.revokeObjectURL(u), 5000)
+                  })
+                }}
+                className="p-1 rounded-md hover:bg-white/20"
+                title="Exporter la sélection (XLSX)">
+                <Download className="w-3.5 h-3.5" />
               </button>
             </div>
           )}

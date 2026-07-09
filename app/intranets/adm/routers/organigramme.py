@@ -1,7 +1,9 @@
 import sys
 import traceback
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -125,6 +127,34 @@ def del_orga(
     _require_droit(user, "Menu_Salariés")
     op_id = int(user.id_salarie or 0)
     return crud.delete_orga(id_orga, op_id)
+
+
+@router.get("/{id_orga}/export-xlsx")
+def get_export_xlsx(
+    id_orga: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Btn 'Exporter la selection'."""
+    _require_droit(user, "Menu_Salariés")
+    from app.intranets.adm.services.orga_export import (
+        export_orga_selection_xlsx,
+    )
+    try:
+        xlsx = export_orga_selection_xlsx(id_orga)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(500, f"{type(e).__name__}: {e}")
+    fname = f"{datetime.now():%Y%m%d_%H%M%S}_ExportOrganigramme.xlsx"
+    return Response(
+        content=xlsx,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
 
 
 @router.post("/{id_orga}/copier")
