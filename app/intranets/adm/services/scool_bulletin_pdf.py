@@ -285,11 +285,14 @@ table.notes td.right { text-align: right; }
 .signature-cachet {
   margin-top: 20px; padding-top: 10px;
   border-top: 1px solid #E5E0D5;
-  text-align: center;
+  text-align: right;
 }
-.signature-cachet img { max-width: 280px; max-height: 140px; }
+.signature-cachet img {
+  max-width: 280px; max-height: 140px;
+  display: block; margin-left: auto;
+}
 .signature-cachet .lib {
-  font-size: 8pt; color: #8B7355; margin-top: 4px;
+  font-size: 8pt; color: #8B7355; margin-bottom: 4px;
 }
 """
 
@@ -304,8 +307,8 @@ def _render_html(b: BulletinDetail) -> str:
     logo_b64 = _img_b64(so.get("logo"))
     # Signature superposee au cachet (composition PIL cote serveur car
     # WeasyPrint gere mal position:absolute + object-fit sur img).
-    # Le cachet stocke en PDF est converti en PNG en amont via _img_b64,
-    # donc on repasse les bytes bruts PNG a la composition.
+    # Le cachet stocke en PDF est converti en PNG en amont, donc on
+    # repasse les bytes bruts PNG a la composition.
     def _to_png_bytes(v) -> bytes:
         if v is None:
             return b""
@@ -316,38 +319,9 @@ def _render_html(b: BulletinDetail) -> str:
         if mime == "application/pdf":
             return _pdf_first_page_to_png(b)
         return b
-    cachet_raw = _to_png_bytes(so.get("cachet_cial")) if so.get("cachet_cial") else b""
-    signature_raw = _to_png_bytes(so.get("gerant_signature")) if so.get("gerant_signature") else b""
-
-    # Diag temporaire pour tracer d'ou vient le probleme
-    diag_parts = []
-    try:
-        import fitz
-        diag_parts.append(f"PyMuPDF v{fitz.__version__}")
-    except ImportError:
-        diag_parts.append("PyMuPDF ABSENT")
-    try:
-        from PIL import __version__ as pil_ver
-        diag_parts.append(f"Pillow v{pil_ver}")
-    except ImportError:
-        diag_parts.append("Pillow ABSENT")
-    cachet_bytes_raw = so.get("cachet_cial")
-    if cachet_bytes_raw:
-        cb = bytes(cachet_bytes_raw.tobytes() if hasattr(cachet_bytes_raw, "tobytes") else cachet_bytes_raw)
-        diag_parts.append(
-            f"cachet_raw={len(cb)}B mime={_detect_image_mime(cb) or 'inconnu'}"
-        )
-    else:
-        diag_parts.append("cachet_raw=ABSENT")
-    diag_parts.append(f"cachet_png={len(cachet_raw)}B")
-    diag_parts.append(f"signature={len(signature_raw)}B")
-
-    cachet_png = cachet_raw
-    signature_png = signature_raw
+    cachet_png = _to_png_bytes(so.get("cachet_cial"))
+    signature_png = _to_png_bytes(so.get("gerant_signature"))
     combined = _compose_signature_cachet(cachet_png, signature_png)
-    diag_parts.append(f"combined={len(combined)}B")
-    diag_debug = " | ".join(diag_parts)
-
     signature_cachet_b64 = (
         "data:image/png;base64," + base64.b64encode(combined).decode("ascii")
         if combined else ""
@@ -439,11 +413,8 @@ def _render_html(b: BulletinDetail) -> str:
   </div>
 
   <div class="signature-cachet">
-    {'<img src="' + signature_cachet_b64 + '" />' if signature_cachet_b64 else ''}
     <div class="lib">Signature et cachet</div>
-    <div style="font-size:6pt;color:#B91C1C;margin-top:8px;font-family:monospace;">
-      DIAG: {escape(diag_debug)}
-    </div>
+    {'<img src="' + signature_cachet_b64 + '" />' if signature_cachet_b64 else ''}
   </div>
 </body></html>"""
 
