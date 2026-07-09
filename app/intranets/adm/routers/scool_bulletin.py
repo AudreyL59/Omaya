@@ -103,6 +103,42 @@ def post_calculer_notes(
     return svc.calculer_notes(payload)
 
 
+@router.get("/debug/signature-cachet")
+def get_debug_signature_cachet(
+    user: UserToken = Depends(get_current_user),
+):
+    """Diagnostic : retourne l'image composee signature+cachet en PNG."""
+    _require_droit(user, "FormScool")
+    from app.intranets.adm.services import scool_bulletin_pdf as pdfsvc
+    so = pdfsvc._load_infos_societe()
+
+    def _to_png(v):
+        if v is None:
+            return b""
+        if hasattr(v, "tobytes"):
+            v = v.tobytes()
+        b = bytes(v)
+        if pdfsvc._detect_image_mime(b) == "application/pdf":
+            return pdfsvc._pdf_first_page_to_png(b)
+        return b
+
+    cachet_png = _to_png(so.get("cachet_cial"))
+    signature_png = _to_png(so.get("gerant_signature"))
+    combined = pdfsvc._compose_signature_cachet(cachet_png, signature_png)
+    if not combined:
+        raise HTTPException(
+            500,
+            f"Composition KO : cachet={len(cachet_png)} bytes, "
+            f"signature={len(signature_png)} bytes. "
+            f"Verifie Pillow + PyMuPDF installes.",
+        )
+    return Response(
+        content=combined,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
+
 @router.get("/{id_bulletin}/pdf")
 def get_pdf(
     id_bulletin: str,
