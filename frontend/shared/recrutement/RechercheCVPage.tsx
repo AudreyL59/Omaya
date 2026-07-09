@@ -26,11 +26,15 @@ import { getToken } from '@/api'
 import { showToast } from '../ui/dialog'
 import CVSaisieModal from './CVSaisieModal'
 
-const COL_BRUN = '#4E1D17'
-const COL_PRIMARY = '#17494E'
-const COL_PRIMARY_LIGHT = '#6a8d91'
-const COL_BORDER = '#E5DDDC'
-const COL_BG_SOFT = '#F8F5F4'
+// Pallette dynamique via les tokens CSS (--color-c-*) definis par
+// chaque intranet dans son src/index.css. ADM -> charte marron/vert,
+// Vendeur -> charte emerald par defaut. Change avec l'intranet
+// automatiquement.
+const COL_BRUN = 'var(--color-c-ink)'
+const COL_PRIMARY = 'var(--color-c-brand)'
+const COL_PRIMARY_LIGHT = 'var(--color-c-brand-strong)'
+const COL_BORDER = 'var(--color-c-line)'
+const COL_BG_SOFT = 'var(--color-c-surface-soft)'
 
 interface ComboItem { id: string; label: string }
 interface CommuneItem {
