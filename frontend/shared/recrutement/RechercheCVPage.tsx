@@ -206,16 +206,24 @@ export default function RechercheCVPage({
   // Charger combos une fois + cleanup orphans
   useEffect(() => {
     const h = { Authorization: `Bearer ${getToken()}` }
+    // Garde defensive : si l'API renvoie {detail: "..."} en cas d'erreur,
+    // on garde le state a [] au lieu de crasher au premier .forEach().
+    const safeArr = <T,>(v: unknown): T[] => Array.isArray(v) ? (v as T[]) : []
     fetch(`${apiBase}/recrutement/cv/sources`, { headers: h })
-      .then(r => r.json()).then(setSources)
+      .then(r => r.json()).then(d => setSources(safeArr(d)))
+      .catch(() => setSources([]))
     fetch(`${apiBase}/recrutement/cv/statuts`, { headers: h })
-      .then(r => r.json()).then(setStatuts)
+      .then(r => r.json()).then(d => setStatuts(safeArr(d)))
+      .catch(() => setStatuts([]))
     fetch(`${apiBase}/recrutement/cv/postes`, { headers: h })
-      .then(r => r.json()).then(setPostes)
+      .then(r => r.json()).then(d => setPostes(safeArr(d)))
+      .catch(() => setPostes([]))
     fetch(`${apiBase}/recrutement/cv/annonceurs`, { headers: h })
-      .then(r => r.json()).then(setAnnonceurs)
+      .then(r => r.json()).then(d => setAnnonceurs(safeArr(d)))
+      .catch(() => setAnnonceurs([]))
     fetch(`${apiBase}/recrutement/cv/societes`, { headers: h })
-      .then(r => r.json()).then(setSocietes)
+      .then(r => r.json()).then(d => setSocietes(safeArr(d)))
+      .catch(() => setSocietes([]))
     // Libere mes claims orphelins (sessions interrompues)
     fetch(`${apiBase}/recrutement/cv/orphans/release`, {
       method: 'POST', headers: h,
