@@ -107,36 +107,55 @@ def post_calculer_notes(
 def get_debug_signature_cachet(
     user: UserToken = Depends(get_current_user),
 ):
-    """Diagnostic : retourne l'image composee signature+cachet en PNG."""
+    """Diagnostic : verifie Pillow + PyMuPDF + composition."""
     _require_droit(user, "FormScool")
     from app.intranets.adm.services import scool_bulletin_pdf as pdfsvc
-    so = pdfsvc._load_infos_societe()
 
-    def _to_png(v):
+    diag: dict = {}
+    # Test PyMuPDF
+    try:
+        import fitz
+        diag["pymupdf"] = f"OK v{fitz.__version__}"
+    except ImportError as e:
+        diag["pymupdf"] = f"KO : {e}"
+    # Test Pillow
+    try:
+        from PIL import Image, __version__ as pil_ver
+        diag["pillow"] = f"OK v{pil_ver}"
+    except ImportError as e:
+        diag["pillow"] = f"KO : {e}"
+
+    so = pdfsvc._load_infos_societe()
+    diag["raison_sociale"] = so.get("raison_sociale")
+
+    def _to_bytes(v):
         if v is None:
             return b""
         if hasattr(v, "tobytes"):
             v = v.tobytes()
-        b = bytes(v)
-        if pdfsvc._detect_image_mime(b) == "application/pdf":
-            return pdfsvc._pdf_first_page_to_png(b)
-        return b
+        return bytes(v)
 
-    cachet_png = _to_png(so.get("cachet_cial"))
-    signature_png = _to_png(so.get("gerant_signature"))
+    cachet_raw = _to_bytes(so.get("cachet_cial"))
+    signature_raw = _to_bytes(so.get("gerant_signature"))
+    diag["cachet_raw_bytes"] = len(cachet_raw)
+    diag["signature_raw_bytes"] = len(signature_raw)
+    diag["cachet_mime"] = pdfsvc._detect_image_mime(cachet_raw)
+    diag["signature_mime"] = pdfsvc._detect_image_mime(signature_raw)
+
+    # Conversion PDF -> PNG si necessaire
+    if diag["cachet_mime"] == "application/pdf":
+        cachet_png = pdfsvc._pdf_first_page_to_png(cachet_raw)
+        diag["cachet_pdf_to_png_bytes"] = len(cachet_png)
+    else:
+        cachet_png = cachet_raw
+
+    signature_png = signature_raw
+
+    # Composition
     combined = pdfsvc._compose_signature_cachet(cachet_png, signature_png)
-    if not combined:
-        raise HTTPException(
-            500,
-            f"Composition KO : cachet={len(cachet_png)} bytes, "
-            f"signature={len(signature_png)} bytes. "
-            f"Verifie Pillow + PyMuPDF installes.",
-        )
-    return Response(
-        content=combined,
-        media_type="image/png",
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
-    )
+    diag["combined_bytes"] = len(combined)
+
+    return diag
 
 
 @router.get("/{id_bulletin}/pdf")
