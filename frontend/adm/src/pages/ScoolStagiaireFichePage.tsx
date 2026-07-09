@@ -222,18 +222,7 @@ export default function ScoolStagiaireFichePage() {
     return m
   }, [motifs])
 
-  const backTo = `/scool/formations/${id_formation}`
-
-  if (!fiche && !loading) {
-    return (
-      <div className="min-h-screen bg-[#F5F1E8]">
-        <PageHeader title="Fiche stagiaire" backTo={backTo} />
-        <div className="text-center text-gray-500 py-20">Chargement…</div>
-      </div>
-    )
-  }
-
-  // Groupement production par semaine
+  // Groupement production par semaine (hooks avant tout early return)
   const eniBySem = useMemo(() => {
     const out: Record<string, ProdEniRow[]> = {}
     for (const r of fiche?.prod_eni || []) {
@@ -250,6 +239,17 @@ export default function ScoolStagiaireFichePage() {
     }
     return out
   }, [fiche?.prod_sfr])
+
+  const backTo = `/scool/formations/${id_formation}`
+
+  if (!fiche && !loading) {
+    return (
+      <div className="min-h-screen bg-[#F5F1E8]">
+        <PageHeader title="Fiche stagiaire" backTo={backTo} />
+        <div className="text-center text-gray-500 py-20">Chargement…</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#F5F1E8]">
