@@ -245,6 +245,8 @@ class EleveRow(BaseModel):
 
 class EleveAjoutPayload(BaseModel):
     id_salarie: str
+    date_debut: str = ""    # YYYY-MM-DD (optionnel)
+    date_fin: str = ""      # YYYY-MM-DD (optionnel)
 
 
 # --------------------------------------------------------------------

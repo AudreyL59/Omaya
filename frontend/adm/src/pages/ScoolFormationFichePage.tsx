@@ -595,7 +595,10 @@ export default function ScoolFormationFichePage() {
               <EvenementTab idFormation={id} />
             )}
             {tab === 'eleves' && id && data && (
-              <ElevesTab idFormation={id} typeProd={data.type_produit} />
+              <ElevesTab idFormation={id}
+                         typeProd={data.type_produit}
+                         dateDebut={data.date_debut}
+                         dateFin={data.date_fin} />
             )}
             {tab === 'session' && id && (
               <SessionRecrutTab idFormation={id} />
@@ -823,13 +826,22 @@ interface EleveRow {
 }
 
 function ElevesTab(
-  { idFormation, typeProd }:
-    { idFormation: string; typeProd: string },
+  { idFormation, typeProd, dateDebut, dateFin }:
+    {
+      idFormation: string; typeProd: string
+      dateDebut: string; dateFin: string
+    },
 ) {
   const nav = useNavigate()
   const [rows, setRows] = useState<EleveRow[]>([])
   const [uniquActifs, setUniquActifs] = useState(true)
+  // Fen_ScoolStagiaire_Ajout : modale locale + picker imbrique
+  const [ajoutOpen, setAjoutOpen] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [selStag, setSelStag] = useState<SalarieItem | null>(null)
+  const [du, setDu] = useState('')
+  const [au, setAu] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     const r = await fetch(
@@ -840,21 +852,52 @@ function ElevesTab(
   }, [idFormation, uniquActifs])
   useEffect(() => { void load() }, [load])
 
-  const onPick = async (s: SalarieItem) => {
+  const openAjout = () => {
+    setSelStag(null)
+    setDu(dateDebut || '')
+    setAu(dateFin || '')
+    setAjoutOpen(true)
+  }
+
+  const closeAjout = () => {
+    setAjoutOpen(false)
+    setSelStag(null)
+  }
+
+  const onPick = (s: SalarieItem) => {
     setPickerOpen(false)
-    const r = await fetch(
-      `${API_BASE}/scool/formations/${idFormation}/eleves`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getToken()}`,
-          'Content-Type': 'application/json',
+    setSelStag(s)
+  }
+
+  const enregistrer = async () => {
+    if (!selStag) {
+      showToast('Choisir un stagiaire', 'error'); return
+    }
+    setSaving(true)
+    try {
+      const r = await fetch(
+        `${API_BASE}/scool/formations/${idFormation}/eleves`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id_salarie: selStag.id_salarie,
+            date_debut: du, date_fin: au,
+          }),
         },
-        body: JSON.stringify({ id_salarie: s.id_salarie }),
-      },
-    )
-    const d = await r.json()
-    if (d.ok) { showToast('Élève ajouté', 'success'); await load() }
+      )
+      const d = await r.json()
+      if (d.ok) {
+        showToast('Stagiaire ajouté', 'success')
+        closeAjout()
+        await load()
+      } else {
+        showToast('Erreur', 'error')
+      }
+    } finally { setSaving(false) }
   }
 
   const toggleLivrable = async (r: EleveRow) => {
@@ -880,7 +923,7 @@ function ElevesTab(
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <div className="flex items-center gap-3 mb-3 flex-wrap">
-        <button onClick={() => setPickerOpen(true)}
+        <button onClick={openAjout}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] text-sm">
           <UserPlus className="w-4 h-4" /> Ajouter un élève
         </button>
@@ -965,9 +1008,62 @@ function ElevesTab(
         </table>
       </div>
 
+      {/* Fen_ScoolStagiaire_Ajout */}
+      {ajoutOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
+             onClick={closeAjout}>
+          <div className="bg-[#F5F1E8] rounded-lg shadow-xl w-full max-w-md p-5"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#17494E]
+                             flex items-center gap-2">
+                <UserPlus className="w-5 h-5" /> Ajouter un stagiaire
+              </h3>
+              <button onClick={closeAjout}
+                      className="p-1 rounded hover:bg-white/50 text-[#17494E]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <button onClick={() => setPickerOpen(true)}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded bg-white border border-[#D4C9A8] hover:bg-[#ECF1F2] text-sm mb-3">
+              <UserPlus className="w-4 h-4 text-[#17494E]" />
+              <span className={selStag ? 'font-semibold text-[#17494E]' : 'text-[#8B7355]'}>
+                {selStag
+                  ? `${selStag.nom} ${selStag.prenom}`
+                  : 'Choisir le stagiaire'}
+              </span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <label className="text-xs">
+                <div className="text-[#8B7355] mb-0.5">Du</div>
+                <input type="date" value={du}
+                       onChange={(e) => setDu(e.target.value)}
+                       className="w-full border border-[#D4C9A8] rounded px-2 py-1.5" />
+              </label>
+              <label className="text-xs">
+                <div className="text-[#8B7355] mb-0.5">Au</div>
+                <input type="date" value={au}
+                       onChange={(e) => setAu(e.target.value)}
+                       className="w-full border border-[#D4C9A8] rounded px-2 py-1.5" />
+              </label>
+            </div>
+
+            <button onClick={enregistrer} disabled={!selStag || saving}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded bg-[#17494E] text-white hover:bg-[#0F3438] text-sm disabled:opacity-50">
+              {saving
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Save className="w-4 h-4" />}
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      )}
+
       {pickerOpen && (
         <PersonnePicker
-          title="Ajouter un élève"
+          title="Choisir le stagiaire"
           onClose={() => setPickerOpen(false)}
           onSelect={onPick}
         />

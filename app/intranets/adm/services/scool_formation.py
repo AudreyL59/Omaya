@@ -1461,6 +1461,8 @@ def add_eleve(
         return False
     if not p.id_salarie.isdigit():
         return False
+    du = p.date_debut[:10] if p.date_debut else None
+    au = p.date_fin[:10] if p.date_fin else None
     db = get_pg_connection("scool")
     # Cherche si existe deja (peut-etre soft deleted)
     r = db.query_one(
@@ -1471,21 +1473,24 @@ def add_eleve(
         (int(id_formation), int(p.id_salarie)),
     )
     if r:
-        # Reactive
+        # Reactive + met a jour les dates si fournies
         db.execute(
             """UPDATE scool.pgt_formation_salarie
-                  SET modif_date = NOW(), modif_op = ?, modif_elem = 'new'
+                  SET date_debut = COALESCE(?, date_debut),
+                      date_fin = COALESCE(?, date_fin),
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'new'
                 WHERE id_formation = ? AND id_salarie = ?""",
-            (int(op_id), int(id_formation), int(p.id_salarie)),
+            (du, au, int(op_id), int(id_formation), int(p.id_salarie)),
         )
         return True
     key = f"{id_formation}_{p.id_salarie}"
     db.execute(
         """INSERT INTO scool.pgt_formation_salarie
               (id_formation_id_salarie, id_salarie, id_formation,
-               livrable, modif_date, modif_op, modif_elem)
-           VALUES (?, ?, ?, FALSE, NOW(), ?, 'new')""",
-        (key, int(p.id_salarie), int(id_formation), int(op_id)),
+               date_debut, date_fin, livrable,
+               modif_date, modif_op, modif_elem)
+           VALUES (?, ?, ?, ?, ?, FALSE, NOW(), ?, 'new')""",
+        (key, int(p.id_salarie), int(id_formation), du, au, int(op_id)),
     )
     return True
 
