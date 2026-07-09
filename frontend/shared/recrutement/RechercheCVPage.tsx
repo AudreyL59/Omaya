@@ -74,6 +74,8 @@ interface RechercheCVPageProps {
   myUserId?: string                // id_salarie du user connecte (pour couleurs)
   onOpenFiche?: (id_cvtheque: string) => void   // double-click ouvre Fen_CVFiche
   removedIds?: string[]            // ids a filtrer (suppression depuis le modal)
+  hideSource?: boolean             // cache le combo Source (cf. WinDev
+                                   // COMBO_IDcvsource..Visible = VerifDroit)
 }
 
 interface Filtres {
@@ -163,7 +165,7 @@ function ThSortable({ col, sortKey, sortDir, onClick }: {
 
 export default function RechercheCVPage({
   apiBase, filtresForces = {}, myUserId = '', onOpenFiche,
-  removedIds = [],
+  removedIds = [], hideSource = false,
 }: RechercheCVPageProps) {
   const today = new Date().toISOString().slice(0, 10)
   const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)
@@ -554,7 +556,8 @@ export default function RechercheCVPage({
             <FiltresCommuns filtres={filtres} setFiltres={setFiltres}
                             sources={sources} postes={postes} annonceurs={annonceurs}
                             societes={societes} statuts={statuts}
-                            filtresForces={filtresForces} />
+                            filtresForces={filtresForces}
+                            hideSource={hideSource} />
           )}
 
           <button type="button" onClick={lancer} disabled={loading}
@@ -835,7 +838,7 @@ function FiltresCP({ filtres, setFiltres, communesSel, setCommunesSel, apiBase }
 
 function FiltresCommuns({
   filtres, setFiltres, sources, postes, annonceurs, societes, statuts,
-  filtresForces,
+  filtresForces, hideSource = false,
 }: {
   filtres: Filtres
   setFiltres: (f: Filtres) => void
@@ -845,6 +848,7 @@ function FiltresCommuns({
   societes: ComboItem[]
   statuts: ComboItem[]
   filtresForces: Partial<Filtres>
+  hideSource?: boolean
 }) {
   const sourceLocked = !!filtresForces.id_cvsource
   return (
@@ -914,7 +918,8 @@ function FiltresCommuns({
         )}
       </div>
 
-      {/* Source */}
+      {/* Source (cache pour Vendeur sans droit CV_VoirComplet) */}
+      {!hideSource && (
       <div>
         <label className="text-xs font-semibold" style={{ color: COL_BRUN }}>Source</label>
         <select value={filtres.id_cvsource || ''} disabled={sourceLocked}
@@ -934,6 +939,7 @@ function FiltresCommuns({
           </select>
         )}
       </div>
+      )}
 
       {/* Societe */}
       <div>

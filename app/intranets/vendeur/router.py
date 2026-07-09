@@ -12,6 +12,7 @@ from app.intranets.vendeur.routers.organigramme import router as organigramme_ro
 from app.intranets.vendeur.routers.gestion_ohm import router as gestion_ohm_router
 from app.intranets.vendeur.routers.scool import router as scool_router
 from app.shared.production.router import router as production_router
+from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
 from app.intranets.vendeur.routers.clusters import router as clusters_router
 from app.intranets.vendeur.routers.tickets import router as tickets_router
@@ -34,6 +35,9 @@ router.include_router(cooptation_router)
 router.include_router(agenda_recrutement_router)
 router.include_router(agenda_cial_router)
 router.include_router(cvtheque_router)
+# Nouvelle CVtheque (partagee ADM/Vendeur/Call RH) : filtre auto
+# id_cvsource=1 + id_elem_source=user cote factory pour Vendeur.
+router.include_router(get_recherche_cv_router("vendeur"))
 router.include_router(organigramme_router)
 router.include_router(gestion_ohm_router)
 router.include_router(scool_router)

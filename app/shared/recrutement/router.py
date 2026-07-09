@@ -79,7 +79,9 @@ def get_recherche_cv_router(intranet_key: str) -> APIRouter:
         user: UserToken = Depends(get_current_user),
     ):
         # Filtre auto Vendeur : force id_cvsource=1 + id_elem_source=user
-        if intranet_key == "vendeur":
+        # UNIQUEMENT si le user n'a pas le droit CV_VoirComplet
+        # (cf. WinDev : COMBO_IDcvsource..Visible = VerifDroit).
+        if intranet_key == "vendeur" and "CV_VoirComplet" not in (user.droits or []):
             filtres.id_cvsource = "1"
             filtres.id_elem_source = str(user.id_salarie)
         return svc.search_cv(filtres)
