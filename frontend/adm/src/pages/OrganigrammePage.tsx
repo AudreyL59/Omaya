@@ -29,7 +29,14 @@ import {
   FileText,
   ClipboardList,
   FileSignature,
+  Plus,
+  Pencil,
+  MoveRight,
+  Trash2,
+  Save,
 } from 'lucide-react'
+import OrgaTreePickerModal from '@/components/OrgaTreePickerModal'
+import { showConfirm, showToast } from '@shared/ui/dialog'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -161,6 +168,11 @@ export default function OrganigrammePage() {
   const [zoom, setZoom] = useState(1)
   const [selectedSalarie, setSelectedSalarie] = useState<Salarie | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  // Orga CRUD (droit GestionOrga)
+  const canGestionOrga = droits.includes('GestionOrga')
+  const [addUnder, setAddUnder] = useState<OrgaNode | null>(null)
+  const [editing, setEditing] = useState<OrgaNode | null>(null)
+  const [moving, setMoving] = useState<OrgaNode | null>(null)
   const [roots, setRoots] = useState<OrgaNode[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -464,6 +476,11 @@ export default function OrganigrammePage() {
                 collapsed={collapsed}
                 onToggle={toggleCollapse}
                 onSelectSalarie={setSelectedSalarie}
+                canGestionOrga={canGestionOrga}
+                onAddChild={(n) => setAddUnder(n)}
+                onEdit={(n) => setEditing(n)}
+                onMove={(n) => setMoving(n)}
+                onDelete={handleDeleteOrga}
               />
             </div>
           ) : null}
@@ -480,8 +497,80 @@ export default function OrganigrammePage() {
           />
         )}
       </AnimatePresence>
+
+      {addUnder && (
+        <OrgaEditModal
+          mode="add"
+          idParent={addUnder.id}
+          parentLib={addUnder.lib}
+          onClose={() => setAddUnder(null)}
+          onSaved={() => {
+            setAddUnder(null)
+            setReloadKey((k) => k + 1)
+          }}
+        />
+      )}
+      {editing && (
+        <OrgaEditModal
+          mode="edit"
+          idOrga={editing.id}
+          initialLib={editing.lib}
+          initialIdTypeNiveau={editing.id_type_niveau}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            setReloadKey((k) => k + 1)
+          }}
+        />
+      )}
+      {moving && (
+        <OrgaTreePickerModal
+          title={`Déplacer "${moving.lib}" vers…`}
+          onClose={() => setMoving(null)}
+          onSelect={async (idNew) => {
+            await handleMoveOrga(moving.id, idNew)
+            setMoving(null)
+          }}
+        />
+      )}
     </div>
   )
+
+  async function handleDeleteOrga(node: OrgaNode) {
+    if (!await showConfirm({
+      title: 'Supprimer',
+      message: `Supprimer le bloc "${node.lib}" ?`,
+    })) return
+    const r = await fetch(`/api/adm/organigramme/${node.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+    const d = await r.json()
+    if (d.ok) {
+      showToast('Bloc supprimé', 'success')
+      setReloadKey((k) => k + 1)
+    } else {
+      showToast(d.err || 'Erreur', 'error')
+    }
+  }
+
+  async function handleMoveOrga(idOrga: string, idParentNew: string) {
+    const r = await fetch(`/api/adm/organigramme/${idOrga}/move`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ id_parent_new: idParentNew }),
+    })
+    const d = await r.json()
+    if (d.ok) {
+      showToast('Bloc déplacé', 'success')
+      setReloadKey((k) => k + 1)
+    } else {
+      showToast(d.err || 'Erreur', 'error')
+    }
+  }
 }
 
 function StatCard({
@@ -514,6 +603,20 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 
 // --- Tree (recursive) ----------------------------------------------------
 
+interface OrgaTreeProps {
+  node: OrgaNode
+  depth: number
+  searchLower: string
+  collapsed: Set<string>
+  onToggle: (id: string) => void
+  onSelectSalarie: (s: Salarie) => void
+  canGestionOrga: boolean
+  onAddChild: (n: OrgaNode) => void
+  onEdit: (n: OrgaNode) => void
+  onMove: (n: OrgaNode) => void
+  onDelete: (n: OrgaNode) => void
+}
+
 function OrgaTree({
   node,
   depth,
@@ -521,14 +624,12 @@ function OrgaTree({
   collapsed,
   onToggle,
   onSelectSalarie,
-}: {
-  node: OrgaNode
-  depth: number
-  searchLower: string
-  collapsed: Set<string>
-  onToggle: (id: string) => void
-  onSelectSalarie: (s: Salarie) => void
-}) {
+  canGestionOrga,
+  onAddChild,
+  onEdit,
+  onMove,
+  onDelete,
+}: OrgaTreeProps) {
   const isCollapsed = collapsed.has(node.id)
   const hasChildren = node.children.length > 0
 
@@ -549,6 +650,11 @@ function OrgaTree({
         hasChildren={hasChildren}
         onToggle={() => onToggle(node.id)}
         onSelectSalarie={onSelectSalarie}
+        canGestionOrga={canGestionOrga}
+        onAddChild={onAddChild}
+        onEdit={onEdit}
+        onMove={onMove}
+        onDelete={onDelete}
       />
 
       {hasChildren && !isCollapsed && (
@@ -571,6 +677,11 @@ function OrgaTree({
                   collapsed={collapsed}
                   onToggle={onToggle}
                   onSelectSalarie={onSelectSalarie}
+                  canGestionOrga={canGestionOrga}
+                  onAddChild={onAddChild}
+                  onEdit={onEdit}
+                  onMove={onMove}
+                  onDelete={onDelete}
                 />
               </div>
             ))}
@@ -590,6 +701,11 @@ function OrgaCard({
   hasChildren,
   onToggle,
   onSelectSalarie,
+  canGestionOrga,
+  onAddChild,
+  onEdit,
+  onMove,
+  onDelete,
 }: {
   node: OrgaNode
   depth: number
@@ -599,6 +715,11 @@ function OrgaCard({
   hasChildren: boolean
   onToggle: () => void
   onSelectSalarie: (s: Salarie) => void
+  canGestionOrga: boolean
+  onAddChild: (n: OrgaNode) => void
+  onEdit: (n: OrgaNode) => void
+  onMove: (n: OrgaNode) => void
+  onDelete: (n: OrgaNode) => void
 }) {
   const cfg = styleForDepth(depth)
   const nbTotal = countStats(node).total
@@ -629,6 +750,34 @@ function OrgaCard({
             {node.lib_niveau || `Niveau ${depth + 1}`}
           </div>
           <div className="flex-1" />
+          {canGestionOrga && (
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddChild(node) }}
+                className="p-1 rounded-md hover:bg-white/20"
+                title="Ajouter un sous-bloc">
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit(node) }}
+                className="p-1 rounded-md hover:bg-white/20"
+                title="Éditer">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onMove(node) }}
+                className="p-1 rounded-md hover:bg-white/20"
+                title="Déplacer">
+                <MoveRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(node) }}
+                className="p-1 rounded-md hover:bg-white/20"
+                title="Supprimer">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           {hasChildren && (
             <div className="p-1 rounded-md">
               {collapsed ? (
@@ -1030,6 +1179,179 @@ function SalariePopup({
     </motion.div>
   )
 }
+
+// --- Modal Ajout/Edition d'un bloc orga ----------------------------------
+
+interface OrgaCombo { id: number; lib: string }
+
+interface OrgaEditModalProps {
+  mode: 'add' | 'edit'
+  idParent?: string
+  parentLib?: string
+  idOrga?: string
+  initialLib?: string
+  initialIdTypeNiveau?: number
+  onClose: () => void
+  onSaved: () => void
+}
+
+function OrgaEditModal(p: OrgaEditModalProps) {
+  const [lib, setLib] = useState(p.initialLib || '')
+  const [idTypeNiveau, setIdTypeNiveau] = useState<number>(
+    p.initialIdTypeNiveau || 0,
+  )
+  const [ville, setVille] = useState('')
+  const [secteur, setSecteur] = useState('')
+  const [memo, setMemo] = useState('')
+  const [invPodium, setInvPodium] = useState(false)
+  const [invEffectif, setInvEffectif] = useState(false)
+  const [types, setTypes] = useState<OrgaCombo[]>([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/adm/organigramme/types-niveau', {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    }).then((r) => r.json()).then(setTypes).catch(() => setTypes([]))
+  }, [])
+
+  const save = async () => {
+    if (!lib.trim()) { showToast('Libellé requis', 'error'); return }
+    setSaving(true)
+    try {
+      const body = {
+        id_parent: p.idParent || '',
+        lib_orga: lib.trim(),
+        id_type_niveau_orga: idTypeNiveau,
+        ville: ville.trim(),
+        secteur: secteur.trim(),
+        memo: memo.trim(),
+        invisible_podium: invPodium,
+        invisible_effectif: invEffectif,
+      }
+      const r = p.mode === 'add'
+        ? await fetch('/api/adm/organigramme', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${getToken()}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          })
+        : await fetch(`/api/adm/organigramme/${p.idOrga}`, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${getToken()}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          })
+      const d = await r.json()
+      if (d.ok) {
+        showToast(p.mode === 'add' ? 'Bloc créé' : 'Bloc modifié', 'success')
+        p.onSaved()
+      } else { showToast(d.err || 'Erreur', 'error') }
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+         onClick={p.onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-[#4E1D17]">
+            {p.mode === 'add' ? 'Ajouter un sous-bloc' : 'Éditer le bloc'}
+          </h3>
+          <button onClick={p.onClose}
+                  className="p-1 rounded-md hover:bg-[#EFE9E7] text-[#A68D8A]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {p.mode === 'add' && p.parentLib && (
+          <div className="text-xs text-[#A68D8A] mb-3">
+            Sous : <b>{p.parentLib}</b>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <label className="block text-xs">
+            <span className="text-[#A68D8A] font-medium">Libellé *</span>
+            <input type="text" value={lib}
+                   onChange={(e) => setLib(e.target.value)}
+                   className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+          </label>
+
+          <label className="block text-xs">
+            <span className="text-[#A68D8A] font-medium">Type de niveau</span>
+            <select value={idTypeNiveau}
+                    onChange={(e) => setIdTypeNiveau(Number(e.target.value))}
+                    className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded">
+              <option value={0}>
+                {p.mode === 'add' ? '(automatique : parent + 1)' : '(inchangé)'}
+              </option>
+              {types.map((t) => (
+                <option key={t.id} value={t.id}>{t.lib}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs">
+              <span className="text-[#A68D8A] font-medium">Ville</span>
+              <input type="text" value={ville}
+                     onChange={(e) => setVille(e.target.value)}
+                     className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+            </label>
+            <label className="block text-xs">
+              <span className="text-[#A68D8A] font-medium">Secteur</span>
+              <input type="text" value={secteur}
+                     onChange={(e) => setSecteur(e.target.value)}
+                     className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+            </label>
+          </div>
+
+          <label className="block text-xs">
+            <span className="text-[#A68D8A] font-medium">Mémo</span>
+            <textarea rows={2} value={memo}
+                      onChange={(e) => setMemo(e.target.value)}
+                      className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+          </label>
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={invPodium}
+                     onChange={(e) => setInvPodium(e.target.checked)}
+                     className="accent-[#4E1D17]" />
+              <span className="text-[#4E1D17]">Invisible podium</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={invEffectif}
+                     onChange={(e) => setInvEffectif(e.target.checked)}
+                     className="accent-[#4E1D17]" />
+              <span className="text-[#4E1D17]">Invisible effectif</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={save} disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded bg-[#4E1D17] text-white hover:bg-[#3A1510] disabled:opacity-50 text-sm">
+            {saving
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Save className="w-4 h-4" />}
+            Enregistrer
+          </button>
+          <button onClick={p.onClose}
+                  className="flex-1 px-3 py-2 rounded border border-[#A68D8A] text-[#A68D8A] hover:bg-[#EFE9E7] text-sm">
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // --- Helpers -------------------------------------------------------------
 
