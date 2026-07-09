@@ -176,7 +176,7 @@ def create_orga(p: OrgaCreatePayload, op_id: int) -> str:
                    id_type_niveau_orga, id_type_orga,
                    id_ste, id_distri, id_type_produit,
                    ville, secteur, memo,
-                   invisible_podium, invisible_effectif,
+                   in_visible_podium, in_visible_effectif,
                    modif_date, modif_op, modif_elem)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                        NOW(), ?, 'new')""",
@@ -211,7 +211,7 @@ def update_orga(id_orga: str, p: OrgaUpdatePayload, op_id: int) -> bool:
                       id_type_orga = ?, id_ste = ?, id_distri = ?,
                       id_type_produit = ?,
                       ville = ?, secteur = ?, memo = ?,
-                      invisible_podium = ?, invisible_effectif = ?,
+                      in_visible_podium = ?, in_visible_effectif = ?,
                       modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
                 WHERE idorganigramme = ?""",
             (
@@ -294,7 +294,7 @@ def _copy_one_orga(
         """SELECT lib_orga, id_type_niveau_orga, id_type_orga,
                   id_ste, id_distri, id_type_produit,
                   ville, secteur, memo,
-                  invisible_podium, invisible_effectif
+                  in_visible_podium, in_visible_effectif
              FROM pgt_organigramme
             WHERE idorganigramme = ?""",
         (id_source,),
@@ -309,7 +309,7 @@ def _copy_one_orga(
                    id_type_niveau_orga, id_type_orga,
                    id_ste, id_distri, id_type_produit,
                    ville, secteur, memo,
-                   invisible_podium, invisible_effectif,
+                   in_visible_podium, in_visible_effectif,
                    modif_date, modif_op, modif_elem)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                        NOW(), ?, 'new')""",
@@ -324,8 +324,8 @@ def _copy_one_orga(
                 (src.get("ville") or "").strip(),
                 (src.get("secteur") or "").strip(),
                 (src.get("memo") or "").strip(),
-                bool(src.get("invisible_podium")),
-                bool(src.get("invisible_effectif")),
+                bool(src.get("in_visible_podium")),
+                bool(src.get("in_visible_effectif")),
                 op_id,
             ),
         )
