@@ -10,7 +10,7 @@
  * - 2 onglets : Declaratif de presence / Production (ENI ou SFR)
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import {
   Save, RefreshCw, FileText, Plus, Loader2, Check,
 } from 'lucide-react'
@@ -104,7 +104,6 @@ const clsPct = (v: number, seuil: number, inverse = false) => {
 
 export default function ScoolStagiaireFichePage() {
   useDocumentTitle('Fiche Stagiaire')
-  const nav = useNavigate()
   const { id_formation, id_salarie } = useParams()
   const [sp] = useSearchParams()
   const typeProd = (sp.get('type_prod') || '').toUpperCase()
