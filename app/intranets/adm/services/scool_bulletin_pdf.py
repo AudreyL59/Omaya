@@ -316,9 +316,38 @@ def _render_html(b: BulletinDetail) -> str:
         if mime == "application/pdf":
             return _pdf_first_page_to_png(b)
         return b
-    cachet_png = _to_png_bytes(so.get("cachet_cial"))
-    signature_png = _to_png_bytes(so.get("gerant_signature"))
+    cachet_raw = _to_png_bytes(so.get("cachet_cial")) if so.get("cachet_cial") else b""
+    signature_raw = _to_png_bytes(so.get("gerant_signature")) if so.get("gerant_signature") else b""
+
+    # Diag temporaire pour tracer d'ou vient le probleme
+    diag_parts = []
+    try:
+        import fitz
+        diag_parts.append(f"PyMuPDF v{fitz.__version__}")
+    except ImportError:
+        diag_parts.append("PyMuPDF ABSENT")
+    try:
+        from PIL import __version__ as pil_ver
+        diag_parts.append(f"Pillow v{pil_ver}")
+    except ImportError:
+        diag_parts.append("Pillow ABSENT")
+    cachet_bytes_raw = so.get("cachet_cial")
+    if cachet_bytes_raw:
+        cb = bytes(cachet_bytes_raw.tobytes() if hasattr(cachet_bytes_raw, "tobytes") else cachet_bytes_raw)
+        diag_parts.append(
+            f"cachet_raw={len(cb)}B mime={_detect_image_mime(cb) or 'inconnu'}"
+        )
+    else:
+        diag_parts.append("cachet_raw=ABSENT")
+    diag_parts.append(f"cachet_png={len(cachet_raw)}B")
+    diag_parts.append(f"signature={len(signature_raw)}B")
+
+    cachet_png = cachet_raw
+    signature_png = signature_raw
     combined = _compose_signature_cachet(cachet_png, signature_png)
+    diag_parts.append(f"combined={len(combined)}B")
+    diag_debug = " | ".join(diag_parts)
+
     signature_cachet_b64 = (
         "data:image/png;base64," + base64.b64encode(combined).decode("ascii")
         if combined else ""
@@ -412,6 +441,9 @@ def _render_html(b: BulletinDetail) -> str:
   <div class="signature-cachet">
     {'<img src="' + signature_cachet_b64 + '" />' if signature_cachet_b64 else ''}
     <div class="lib">Signature et cachet</div>
+    <div style="font-size:6pt;color:#B91C1C;margin-top:8px;font-family:monospace;">
+      DIAG: {escape(diag_debug)}
+    </div>
   </div>
 </body></html>"""
 
