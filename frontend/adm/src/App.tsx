@@ -46,6 +46,7 @@ import ScoolFormationFichePage from '@/pages/ScoolFormationFichePage'
 import ScoolPlanningPage from '@/pages/ScoolPlanningPage'
 import ScoolFormModelesPage from '@/pages/ScoolFormModelesPage'
 import ScoolBulletinPage from '@/pages/ScoolBulletinPage'
+import ScoolStagiaireFichePage from '@/pages/ScoolStagiaireFichePage'
 import GestionRecruteursPageAdm from '@/pages/GestionRecruteursPage'
 import ParametresCVPage from '@/pages/ParametresCVPage'
 import ImportsHubPage from '@/pages/ImportsHubPage'
@@ -163,6 +164,8 @@ function App() {
                  element={<ScoolBulletinPage />} />
           <Route path="scool/formations/:id_formation/bulletin/nouveau"
                  element={<ScoolBulletinPage />} />
+          <Route path="scool/formations/:id_formation/stagiaires/:id_salarie"
+                 element={<ScoolStagiaireFichePage />} />
           <Route path="recrutement/recruteurs" element={<GestionRecruteursPageAdm />} />
           <Route path="recrutement/parametres" element={<ParametresCVPage />} />
           <Route path="imports/contrats" element={<ImportsHubPage />} />

@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Save, Plus, Copy, Trash2, X, ArrowLeft, BookOpen, FileText,
-  Loader2, Check, UserPlus,
+  Loader2, Check, UserPlus, Eye,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
@@ -595,7 +595,7 @@ export default function ScoolFormationFichePage() {
               <EvenementTab idFormation={id} />
             )}
             {tab === 'eleves' && id && data && (
-              <ElevesTab idFormation={id} />
+              <ElevesTab idFormation={id} typeProd={data.type_produit} />
             )}
             {tab === 'session' && id && (
               <SessionRecrutTab idFormation={id} />
@@ -822,7 +822,11 @@ interface EleveRow {
   nb_cqt_hr: number
 }
 
-function ElevesTab({ idFormation }: { idFormation: string }) {
+function ElevesTab(
+  { idFormation, typeProd }:
+    { idFormation: string; typeProd: string },
+) {
+  const nav = useNavigate()
   const [rows, setRows] = useState<EleveRow[]>([])
   const [uniquActifs, setUniquActifs] = useState(true)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -904,12 +908,18 @@ function ElevesTab({ idFormation }: { idFormation: string }) {
               <th className="py-1.5 px-2 text-right">Fibre HR*</th>
               <th className="py-1.5 px-2 text-right">CQT brut</th>
               <th className="py-1.5 px-2 text-right">CQT HR*</th>
-              <th className="py-1.5 px-2 w-8"></th>
+              <th className="py-1.5 px-2 w-16"></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id_salarie} className="border-b border-[#F0EDE5] hover:bg-[#ECF1F2]">
+              <tr key={r.id_salarie}
+                  onDoubleClick={() => nav(
+                    `/scool/formations/${idFormation}/stagiaires/${r.id_salarie}` +
+                    `?type_prod=${encodeURIComponent(typeProd)}`,
+                  )}
+                  className="border-b border-[#F0EDE5] hover:bg-[#ECF1F2] cursor-pointer"
+                  title="Double-clic : ouvrir la fiche stagiaire">
                 <td className="py-1 px-2 font-medium">{r.nom}</td>
                 <td className="py-1 px-2">{r.prenom}</td>
                 <td className="py-1 px-2 tabular-nums">{shortDate(r.du)}</td>
@@ -931,7 +941,15 @@ function ElevesTab({ idFormation }: { idFormation: string }) {
                 <td className="py-1 px-2 text-right tabular-nums">{r.nb_fibre_hr || ''}</td>
                 <td className="py-1 px-2 text-right tabular-nums">{r.nb_cqt_brut || ''}</td>
                 <td className="py-1 px-2 text-right tabular-nums">{r.nb_cqt_hr || ''}</td>
-                <td className="py-1 px-2 text-right">
+                <td className="py-1 px-2 text-right whitespace-nowrap">
+                  <button onClick={() => nav(
+                    `/scool/formations/${idFormation}/stagiaires/${r.id_salarie}` +
+                    `?type_prod=${encodeURIComponent(typeProd)}`,
+                  )}
+                          className="p-0.5 rounded hover:bg-[#ECF1F2] text-[#17494E] mr-1"
+                          title="Afficher info stagiaire">
+                    <Eye className="w-3 h-3" />
+                  </button>
                   <button onClick={() => supprimer(r)}
                           className="p-0.5 rounded hover:bg-red-50 text-[#B91C1C]"
                           title="Retirer">
