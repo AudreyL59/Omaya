@@ -38,8 +38,50 @@ def _fmt_date(iso: str) -> str:
     return f"{iso[8:10]}/{iso[5:7]}/{iso[0:4]}"
 
 
+def _detect_image_mime(b: bytes) -> str:
+    """Detecte le type MIME depuis les magic bytes."""
+    if not b or len(b) < 8:
+        return ""
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if b[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if b[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if b[:4] == b"%PDF":
+        return "application/pdf"
+    return ""
+
+
+def _pdf_first_page_to_png(pdf_bytes: bytes) -> bytes:
+    """Convertit la 1ere page d'un PDF en PNG via PyMuPDF."""
+    try:
+        import fitz  # noqa: PLC0415
+    except ImportError:
+        logger.warning("PyMuPDF non installe : impossible de convertir PDF -> PNG")
+        return b""
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        if doc.page_count == 0:
+            doc.close()
+            return b""
+        page = doc.load_page(0)
+        # Rendu haute res (150 DPI) pour la qualite
+        pix = page.get_pixmap(matrix=fitz.Matrix(150 / 72, 150 / 72), alpha=True)
+        png = pix.tobytes("png")
+        doc.close()
+        return png
+    except Exception:
+        logger.exception("_pdf_first_page_to_png")
+        return b""
+
+
 def _img_b64(v) -> str:
-    """Convertit bytes/memoryview en data URI base64."""
+    """Convertit bytes/memoryview en data URI base64.
+
+    Si le contenu est un PDF, convertit la 1ere page en PNG via PyMuPDF
+    (les navigateurs / WeasyPrint ne rendent pas les PDF comme <img>).
+    """
     if v is None:
         return ""
     if hasattr(v, "tobytes"):
@@ -48,8 +90,18 @@ def _img_b64(v) -> str:
         v = v.tobytes()
     if not isinstance(v, (bytes, bytearray)):
         return ""
+    b = bytes(v)
+    mime = _detect_image_mime(b)
+    if mime == "application/pdf":
+        png = _pdf_first_page_to_png(b)
+        if not png:
+            return ""
+        return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    if not mime:
+        # Fallback : suppose PNG (comportement legacy)
+        mime = "image/png"
     try:
-        return "data:image/png;base64," + base64.b64encode(v).decode("ascii")
+        return f"data:{mime};base64," + base64.b64encode(b).decode("ascii")
     except Exception:
         return ""
 
