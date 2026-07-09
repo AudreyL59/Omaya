@@ -787,6 +787,26 @@ function OrgaCard({
   const cfg = styleForDepth(depth)
   const nbTotal = countStats(node).total
   const manager = node.salaries.find((s) => s.is_resp) || null
+  const [exporting, setExporting] = useState(false)
+
+  const doExport = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const r = await fetch(
+        `/api/adm/organigramme/${node.id}/export-xlsx`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      if (!r.ok) { showToast('Erreur export', 'error'); return }
+      const blob = await r.blob()
+      const u = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = u
+      a.download = `ExportOrganigramme_${node.lib.replace(/[^\w-]/g, '_')}.xlsx`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(u), 5000)
+    } finally { setExporting(false) }
+  }
   const others = node.salaries.filter((s) => s.id_salarie !== manager?.id_salarie)
   const [showAll, setShowAll] = useState(false)
   const INITIAL_LIMIT = 4
@@ -852,31 +872,15 @@ function OrgaCard({
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const url = `/api/adm/organigramme/${node.id}/export-xlsx`
-                  fetch(url, {
-                    headers: { Authorization: `Bearer ${getToken()}` },
-                  }).then((r) => {
-                    if (!r.ok) {
-                      showToast('Erreur export', 'error'); return null
-                    }
-                    return r.blob()
-                  }).then((blob) => {
-                    if (!blob) return
-                    const u = URL.createObjectURL(blob)
-                    const a = document.createElement('a')
-                    a.href = u
-                    a.download = `ExportOrganigramme_${node.lib.replace(/[^\w-]/g, '_')}.xlsx`
-                    document.body.appendChild(a)
-                    a.click()
-                    a.remove()
-                    setTimeout(() => URL.revokeObjectURL(u), 5000)
-                  })
-                }}
-                className="p-1 rounded-md hover:bg-white/20"
-                title="Exporter la sélection (XLSX)">
-                <Download className="w-3.5 h-3.5" />
+                onClick={(e) => { e.stopPropagation(); void doExport() }}
+                disabled={exporting}
+                className="p-1 rounded-md hover:bg-white/20 disabled:opacity-70"
+                title={exporting
+                  ? 'Export en cours…'
+                  : 'Exporter la sélection (XLSX)'}>
+                {exporting
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Download className="w-3.5 h-3.5" />}
               </button>
             </div>
           )}
