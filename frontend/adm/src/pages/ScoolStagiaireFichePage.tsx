@@ -223,33 +223,41 @@ export default function ScoolStagiaireFichePage() {
     return m
   }, [motifs])
 
+  const backTo = `/scool/formations/${id_formation}`
+
   if (!fiche && !loading) {
     return (
       <div className="min-h-screen bg-[#F5F1E8]">
-        <PageHeader onBack={() => nav(-1)} />
+        <PageHeader title="Fiche stagiaire" backTo={backTo} />
         <div className="text-center text-gray-500 py-20">Chargement…</div>
       </div>
     )
   }
 
   // Groupement production par semaine
-  const rowsProd = typeProd === 'ENI'
-    ? (fiche?.prod_eni || [])
-    : typeProd === 'SFR' ? (fiche?.prod_sfr || []) : []
-  const groupedBySem = useMemo(() => {
-    const out: Record<string, typeof rowsProd> = {}
-    rowsProd.forEach((r) => {
+  const eniBySem = useMemo(() => {
+    const out: Record<string, ProdEniRow[]> = {}
+    for (const r of fiche?.prod_eni || []) {
       const k = r.sem_prod || `Semaine ${r.num_sem}`
-      if (!out[k]) out[k] = []
-      ;(out[k] as typeof rowsProd).push(r)
-    })
+      ;(out[k] ??= []).push(r)
+    }
     return out
-  }, [rowsProd])
+  }, [fiche?.prod_eni])
+  const sfrBySem = useMemo(() => {
+    const out: Record<string, ProdSfrRow[]> = {}
+    for (const r of fiche?.prod_sfr || []) {
+      const k = r.sem_prod || `Semaine ${r.num_sem}`
+      ;(out[k] ??= []).push(r)
+    }
+    return out
+  }, [fiche?.prod_sfr])
 
   return (
     <div className="min-h-screen bg-[#F5F1E8]">
       <PageHeader
-        onBack={() => nav(`/scool/formations/${id_formation}`)}
+        title={fiche?.nom_prenom || 'Fiche stagiaire'}
+        subtitle={fiche?.lib_formation}
+        backTo={backTo}
       />
 
       <div className="max-w-[1600px] mx-auto px-4 py-4">
@@ -326,7 +334,7 @@ export default function ScoolStagiaireFichePage() {
 
         {tab === 'prod' && typeProd === 'ENI' && fiche && (
           <ProdEniTab
-            rowsBySem={groupedBySem as Record<string, ProdEniRow[]>}
+            rowsBySem={eniBySem}
             fiche={fiche}
             onAjoutLigne={onAjoutLigne}
             axe1={axe1} axe2={axe2}
@@ -337,7 +345,7 @@ export default function ScoolStagiaireFichePage() {
         )}
         {tab === 'prod' && typeProd === 'SFR' && fiche && (
           <ProdSfrTab
-            rowsBySem={groupedBySem as Record<string, ProdSfrRow[]>}
+            rowsBySem={sfrBySem}
             fiche={fiche}
             onAjoutLigne={onAjoutLigne}
             axe1={axe1} axe2={axe2}
@@ -745,9 +753,13 @@ function ProdSfrTab(
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] text-sm">
           <Plus className="w-4 h-4" /> Ajouter une ligne au tableau
         </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#17494E]/10 hover:bg-[#17494E]/20 text-sm text-[#17494E]"
+        <button onClick={onPdf} disabled={pdfLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#17494E]/10 hover:bg-[#17494E]/20 text-sm text-[#17494E] disabled:opacity-50"
                 title="Cf. WinDev : imprime EtatProdStagiareScoolFibre">
-          <FileText className="w-4 h-4" /> Imprimer
+          {pdfLoading
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <FileText className="w-4 h-4" />}
+          {pdfLoading ? 'Génération…' : 'Imprimer'}
         </button>
       </div>
 
