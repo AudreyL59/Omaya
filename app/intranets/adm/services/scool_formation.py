@@ -1329,6 +1329,79 @@ def list_evenements(id_formation: str) -> list[EvenementRow]:
     ]
 
 
+_SCOOL_CATEGORIE_AGENDA = 9   # cf. TODO : evenement S'Cool -> categorie 9
+
+
+def _upsert_agenda_scool(
+    id_formation_evenement: int, id_salarie: int,
+    date_iso: str, intitule: str, op_id: int,
+    is_new: bool,
+) -> None:
+    """Cree ou met a jour la ligne agenda liee a un evenement S'Cool.
+    Convention : id_agenda_evenement = id_formation_evenement (timestamp
+    unique, aucune collision entre les 2 bases).
+    """
+    if not date_iso:
+        return
+    rec = get_pg_connection("recrutement")
+    # DATE 08:00 -> 18:00 (evenement journee)
+    dt_deb = f"{date_iso[:10]} 08:00:00"
+    dt_fin = f"{date_iso[:10]} 18:00:00"
+    titre = intitule.strip() or "Événement S'Cool"
+    if is_new:
+        try:
+            rec.execute(
+                """INSERT INTO recrutement.pgt_agenda_evenement
+                      (id_agenda_evenement_auto, id_agenda_evenement,
+                       id_salarie, id_cv_suivi, id_categorie,
+                       titre, contenu, date_debut, date_fin,
+                       id_cv_lieux, id_salon_visio, id_prevision_recrut,
+                       id_tk_liste, pb_presentation, pb_elocution,
+                       pb_motivation, pb_horaires,
+                       op_crea, date_crea, modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, 0, ?, ?, '', ?, ?,
+                           0, 0, 0, 0, FALSE, FALSE, FALSE, FALSE,
+                           ?, NOW(), NOW(), ?, 'new')""",
+                (
+                    id_formation_evenement, id_formation_evenement,
+                    id_salarie, _SCOOL_CATEGORIE_AGENDA,
+                    titre, dt_deb, dt_fin,
+                    op_id, op_id,
+                ),
+            )
+        except Exception:
+            logger.exception("_upsert_agenda_scool insert")
+    else:
+        try:
+            rec.execute(
+                """UPDATE recrutement.pgt_agenda_evenement
+                      SET id_salarie = ?, titre = ?,
+                          date_debut = ?, date_fin = ?,
+                          modif_date = NOW(), modif_op = ?,
+                          modif_elem = 'modif'
+                    WHERE id_agenda_evenement = ?""",
+                (
+                    id_salarie, titre, dt_deb, dt_fin,
+                    op_id, id_formation_evenement,
+                ),
+            )
+        except Exception:
+            logger.exception("_upsert_agenda_scool update")
+
+
+def _softdel_agenda_scool(id_formation_evenement: int, op_id: int) -> None:
+    rec = get_pg_connection("recrutement")
+    try:
+        rec.execute(
+            """UPDATE recrutement.pgt_agenda_evenement
+                  SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
+                WHERE id_agenda_evenement = ?""",
+            (op_id, id_formation_evenement),
+        )
+    except Exception:
+        logger.exception("_softdel_agenda_scool")
+
+
 def add_evenement(
     id_formation: str, p: EvenementPayload, op_id: int,
 ) -> str:
@@ -1338,17 +1411,21 @@ def add_evenement(
         return ""
     db = get_pg_connection("scool")
     new_id = _new_id()
+    id_sal = int(p.id_salarie) if p.id_salarie.isdigit() else 0
     db.execute(
         """INSERT INTO scool.pgt_formation_evenement
               (id_formation_evenement, id_formation, id_salarie,
                date, intitule, modif_date, modif_op, modif_elem)
            VALUES (?, ?, ?, ?, ?, NOW(), ?, 'new')""",
         (
-            new_id, int(id_formation),
-            int(p.id_salarie) if p.id_salarie.isdigit() else 0,
+            new_id, int(id_formation), id_sal,
             p.date[:10], p.intitule.strip(),
             int(op_id),
         ),
+    )
+    # Cf. TODO : ajoute egalement une ligne dans l'agenda (categorie 9)
+    _upsert_agenda_scool(
+        new_id, id_sal, p.date, p.intitule, int(op_id), is_new=True,
     )
     return str(new_id)
 
@@ -1359,16 +1436,17 @@ def update_evenement(
     if not id_evenement or id_evenement == "0":
         return False
     db = get_pg_connection("scool")
+    id_ev = int(id_evenement)
+    id_sal = int(p.id_salarie) if p.id_salarie.isdigit() else 0
     db.execute(
         """UPDATE scool.pgt_formation_evenement
               SET date = ?, id_salarie = ?, intitule = ?,
                   modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
             WHERE id_formation_evenement = ?""",
-        (
-            p.date[:10],
-            int(p.id_salarie) if p.id_salarie.isdigit() else 0,
-            p.intitule.strip(), int(op_id), int(id_evenement),
-        ),
+        (p.date[:10], id_sal, p.intitule.strip(), int(op_id), id_ev),
+    )
+    _upsert_agenda_scool(
+        id_ev, id_sal, p.date, p.intitule, int(op_id), is_new=False,
     )
     return True
 
@@ -1377,12 +1455,14 @@ def delete_evenement(id_evenement: str, op_id: int) -> bool:
     if not id_evenement or id_evenement == "0":
         return False
     db = get_pg_connection("scool")
+    id_ev = int(id_evenement)
     db.execute(
         """UPDATE scool.pgt_formation_evenement
               SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
             WHERE id_formation_evenement = ?""",
-        (int(op_id), int(id_evenement)),
+        (int(op_id), id_ev),
     )
+    _softdel_agenda_scool(id_ev, int(op_id))
     return True
 
 
