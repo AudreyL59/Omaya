@@ -168,8 +168,10 @@ export default function OrganigrammePage() {
   const [zoom, setZoom] = useState(1)
   const [selectedSalarie, setSelectedSalarie] = useState<Salarie | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-  // Orga CRUD (droit GestionOrga)
-  const canGestionOrga = droits.includes('GestionOrga')
+  // Orga CRUD : accessible a tout utilisateur ADM qui voit l'organigramme
+  // (la page est deja restreinte par le droit 'Menu_Salaries').
+  const canGestionOrga = droits.includes('Menu_Salariés')
+    || droits.includes('Menu_Salaries')
   const [addUnder, setAddUnder] = useState<OrgaNode | null>(null)
   const [editing, setEditing] = useState<OrgaNode | null>(null)
   const [moving, setMoving] = useState<OrgaNode | null>(null)
