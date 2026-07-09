@@ -9,7 +9,9 @@ from app.intranets.adm.schemas.organigramme import OrgaTreeNode
 from app.intranets.adm.services.organigramme import get_organigramme_adm
 from app.intranets.adm.services import orga_crud as crud
 from app.intranets.adm.services.orga_crud import (
-    OrgaCombo, OrgaCreatePayload, OrgaMovePayload, OrgaUpdatePayload,
+    DeplacerSalariePayload,
+    OrgaCombo, OrgaCopierPayload, OrgaCreatePayload,
+    OrgaMovePayload, OrgaUpdatePayload,
 )
 
 
@@ -93,3 +95,26 @@ def del_orga(
     _require_droit(user, "GestionOrga")
     op_id = int(user.id_salarie or 0)
     return crud.delete_orga(id_orga, op_id)
+
+
+@router.post("/{id_orga}/copier")
+def post_orga_copier(
+    id_orga: str,
+    payload: OrgaCopierPayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Orga_Copier."""
+    _require_droit(user, "GestionOrga")
+    op_id = int(user.id_salarie or 0)
+    return crud.copier_orga(id_orga, payload, op_id)
+
+
+@router.post("/deplacer-salarie")
+def post_deplacer_salarie(
+    payload: DeplacerSalariePayload,
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev DeplacerSalarie / Orga_AjoutSa."""
+    _require_droit(user, "GestionOrga")
+    op_id = int(user.id_salarie or 0)
+    return crud.deplacer_salarie(payload, op_id)

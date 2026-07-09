@@ -62,6 +62,24 @@ class OrgaMovePayload(BaseModel):
     id_parent_new: str
 
 
+class OrgaCopierPayload(BaseModel):
+    """Cf. WinDev Orga_Copier : duplique un bloc sous un nouveau parent.
+    include_children_deep_1 : recopie aussi les fils directs.
+    include_children_deep_2 : recopie aussi les petits-fils.
+    """
+    id_parent_new: str
+    include_children_deep_1: bool = False
+    include_children_deep_2: bool = False
+
+
+class DeplacerSalariePayload(BaseModel):
+    """Cf. WinDev DeplacerSalarie : change le rattachement orga d'un
+    salarie a une date donnee."""
+    id_salarie: str
+    id_orga_cible: str
+    date_changement: str      # YYYY-MM-DD
+
+
 # --------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------
@@ -264,6 +282,158 @@ def move_orga(id_orga: str, id_parent_new: str, op_id: int) -> dict:
     except Exception:
         logger.exception("move_orga")
         return {"ok": False, "err": "Erreur base de donnees"}
+    return {"ok": True}
+
+
+def _copy_one_orga(
+    id_source: int, id_parent_new: int, op_id: int,
+) -> int:
+    """Copie une ligne orga sous un nouveau parent, retourne le new id."""
+    rh = get_pg_connection("rh")
+    src = rh.query_one(
+        """SELECT lib_orga, id_type_niveau_orga, id_type_orga,
+                  id_ste, id_distri, id_type_produit,
+                  ville, secteur, memo,
+                  invisible_podium, invisible_effectif
+             FROM pgt_organigramme
+            WHERE idorganigramme = ?""",
+        (id_source,),
+    )
+    if not src:
+        return 0
+    new_id = _new_id()
+    try:
+        rh.execute(
+            """INSERT INTO pgt_organigramme
+                  (idorganigramme, id_parent, lib_orga,
+                   id_type_niveau_orga, id_type_orga,
+                   id_ste, id_distri, id_type_produit,
+                   ville, secteur, memo,
+                   invisible_podium, invisible_effectif,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       NOW(), ?, 'new')""",
+            (
+                new_id, id_parent_new,
+                (src.get("lib_orga") or "").strip(),
+                int(src.get("id_type_niveau_orga") or 0),
+                int(src.get("id_type_orga") or 0),
+                int(src.get("id_ste") or 0),
+                int(src.get("id_distri") or 0),
+                int(src.get("id_type_produit") or 0),
+                (src.get("ville") or "").strip(),
+                (src.get("secteur") or "").strip(),
+                (src.get("memo") or "").strip(),
+                bool(src.get("invisible_podium")),
+                bool(src.get("invisible_effectif")),
+                op_id,
+            ),
+        )
+    except Exception:
+        logger.exception("_copy_one_orga")
+        return 0
+    return new_id
+
+
+def copier_orga(
+    id_orga: str, p: OrgaCopierPayload, op_id: int,
+) -> dict:
+    """Cf. WinDev Orga_Copier."""
+    if not id_orga or id_orga == "0":
+        return {"ok": False, "err": "ID bloc invalide"}
+    id_src = int(id_orga)
+    id_new_parent = _to_int(p.id_parent_new)
+    # Copie le bloc racine
+    new_root = _copy_one_orga(id_src, id_new_parent, op_id)
+    if not new_root:
+        return {"ok": False, "err": "Erreur copie du bloc"}
+    if not p.include_children_deep_1:
+        return {"ok": True, "id": str(new_root)}
+    # Copie fils directs
+    rh = get_pg_connection("rh")
+    fils = rh.query(
+        """SELECT idorganigramme FROM pgt_organigramme
+            WHERE id_parent = ?
+              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        (id_src,),
+    ) or []
+    for f in fils:
+        id_f = int(f.get("idorganigramme"))
+        new_f = _copy_one_orga(id_f, new_root, op_id)
+        if new_f and p.include_children_deep_2:
+            petits_fils = rh.query(
+                """SELECT idorganigramme FROM pgt_organigramme
+                    WHERE id_parent = ?
+                      AND (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')""",
+                (id_f,),
+            ) or []
+            for pf in petits_fils:
+                _copy_one_orga(int(pf.get("idorganigramme")), new_f, op_id)
+    return {"ok": True, "id": str(new_root)}
+
+
+def deplacer_salarie(p: DeplacerSalariePayload, op_id: int) -> dict:
+    """Cf. WinDev DeplacerSalarie :
+    - Ferme les rattachements en cours (date_fin = date_changement - 1)
+    - Ajoute une nouvelle ligne salarie_organigramme
+    """
+    if not p.id_salarie or not p.id_orga_cible or not p.date_changement:
+        return {"ok": False, "err": "Parametres invalides"}
+    d = p.date_changement[:10]
+    from datetime import date as _date, timedelta
+    try:
+        d_dt = _date.fromisoformat(d)
+    except ValueError:
+        return {"ok": False, "err": "Date invalide"}
+    d_fin_prev = (d_dt - timedelta(days=1)).isoformat()
+
+    rh = get_pg_connection("rh")
+    id_sal = int(p.id_salarie)
+    id_orga = int(p.id_orga_cible)
+
+    # Recupere id_ste de l'orga cible (heritage cf. WinDev)
+    orga = rh.query_one(
+        "SELECT id_ste FROM pgt_organigramme WHERE idorganigramme = ?",
+        (id_orga,),
+    )
+    id_ste = int((orga or {}).get("id_ste") or 0)
+
+    # Ferme les rattachements dont date_fin est vide (en cours)
+    try:
+        rh.execute(
+            """UPDATE pgt_salarie_organigramme
+                  SET date_fin = ?,
+                      date_debut = CASE
+                          WHEN date_debut > ? THEN ? ELSE date_debut END,
+                      aff_actif = FALSE,
+                      modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
+                WHERE id_salarie = ?
+                  AND (date_fin IS NULL
+                       OR date_fin = '1900-01-01'
+                       OR date_fin = '0001-01-01')
+                  AND (modif_elem IS NULL
+                       OR modif_elem NOT LIKE '%suppr%')""",
+            (d_fin_prev, d_fin_prev, d_fin_prev, op_id, id_sal),
+        )
+    except Exception:
+        logger.exception("deplacer_salarie close old")
+        return {"ok": False, "err": "Erreur fermeture ratt. en cours"}
+
+    # Insert le nouveau rattachement
+    try:
+        new_id = _new_id()
+        rh.execute(
+            """INSERT INTO pgt_salarie_organigramme
+                  (id_salarie_organigramme, id_salarie, idorganigramme,
+                   date_debut, date_fin, aff_actif, id_ste,
+                   modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, NULL, TRUE, ?, NOW(), ?, 'new')""",
+            (new_id, id_sal, id_orga, d, id_ste, op_id),
+        )
+    except Exception:
+        logger.exception("deplacer_salarie insert")
+        return {"ok": False, "err": "Erreur ajout rattachement"}
     return {"ok": True}
 
 

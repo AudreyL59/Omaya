@@ -34,8 +34,11 @@ import {
   MoveRight,
   Trash2,
   Save,
+  Copy,
+  UserPlus,
 } from 'lucide-react'
 import OrgaTreePickerModal from '@/components/OrgaTreePickerModal'
+import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
@@ -173,6 +176,12 @@ export default function OrganigrammePage() {
   const [addUnder, setAddUnder] = useState<OrgaNode | null>(null)
   const [editing, setEditing] = useState<OrgaNode | null>(null)
   const [moving, setMoving] = useState<OrgaNode | null>(null)
+  const [copying, setCopying] = useState<OrgaNode | null>(null)
+  const [addingSalarie, setAddingSalarie] = useState<OrgaNode | null>(null)
+  // Etape 2 : quand on a choisi le salarie, on demande la date
+  const [deplacerModal, setDeplacerModal] = useState<{
+    node: OrgaNode; salarie: SalarieItem
+  } | null>(null)
   const [roots, setRoots] = useState<OrgaNode[]>([])
   const [selectedRootId, setSelectedRootId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -481,6 +490,8 @@ export default function OrganigrammePage() {
                 onEdit={(n) => setEditing(n)}
                 onMove={(n) => setMoving(n)}
                 onDelete={handleDeleteOrga}
+                onCopy={(n) => setCopying(n)}
+                onAddSalarie={(n) => setAddingSalarie(n)}
               />
             </div>
           ) : null}
@@ -530,6 +541,41 @@ export default function OrganigrammePage() {
           onSelect={async (idNew) => {
             await handleMoveOrga(moving.id, idNew)
             setMoving(null)
+          }}
+        />
+      )}
+
+      {copying && (
+        <OrgaCopierModal
+          node={copying}
+          onClose={() => setCopying(null)}
+          onDone={() => {
+            setCopying(null)
+            setReloadKey((k) => k + 1)
+          }}
+        />
+      )}
+
+      {addingSalarie && (
+        <PersonnePicker
+          title={`Ajouter un salarié à "${addingSalarie.lib}"`}
+          onClose={() => setAddingSalarie(null)}
+          onSelect={(s) => {
+            const node = addingSalarie
+            setAddingSalarie(null)
+            setDeplacerModal({ node, salarie: s })
+          }}
+        />
+      )}
+
+      {deplacerModal && (
+        <DeplacerSalarieModal
+          orga={deplacerModal.node}
+          salarie={deplacerModal.salarie}
+          onClose={() => setDeplacerModal(null)}
+          onDone={() => {
+            setDeplacerModal(null)
+            setReloadKey((k) => k + 1)
           }}
         />
       )}
@@ -615,6 +661,8 @@ interface OrgaTreeProps {
   onEdit: (n: OrgaNode) => void
   onMove: (n: OrgaNode) => void
   onDelete: (n: OrgaNode) => void
+  onCopy: (n: OrgaNode) => void
+  onAddSalarie: (n: OrgaNode) => void
 }
 
 function OrgaTree({
@@ -629,6 +677,8 @@ function OrgaTree({
   onEdit,
   onMove,
   onDelete,
+  onCopy,
+  onAddSalarie,
 }: OrgaTreeProps) {
   const isCollapsed = collapsed.has(node.id)
   const hasChildren = node.children.length > 0
@@ -655,6 +705,8 @@ function OrgaTree({
         onEdit={onEdit}
         onMove={onMove}
         onDelete={onDelete}
+        onCopy={onCopy}
+        onAddSalarie={onAddSalarie}
       />
 
       {hasChildren && !isCollapsed && (
@@ -682,6 +734,8 @@ function OrgaTree({
                   onEdit={onEdit}
                   onMove={onMove}
                   onDelete={onDelete}
+                  onCopy={onCopy}
+                  onAddSalarie={onAddSalarie}
                 />
               </div>
             ))}
@@ -706,6 +760,8 @@ function OrgaCard({
   onEdit,
   onMove,
   onDelete,
+  onCopy,
+  onAddSalarie,
 }: {
   node: OrgaNode
   depth: number
@@ -720,6 +776,8 @@ function OrgaCard({
   onEdit: (n: OrgaNode) => void
   onMove: (n: OrgaNode) => void
   onDelete: (n: OrgaNode) => void
+  onCopy: (n: OrgaNode) => void
+  onAddSalarie: (n: OrgaNode) => void
 }) {
   const cfg = styleForDepth(depth)
   const nbTotal = countStats(node).total
@@ -759,10 +817,22 @@ function OrgaCard({
                 <Plus className="w-3.5 h-3.5" />
               </button>
               <button
+                onClick={(e) => { e.stopPropagation(); onAddSalarie(node) }}
+                className="p-1 rounded-md hover:bg-white/20"
+                title="Ajouter / déplacer un salarié ici">
+                <UserPlus className="w-3.5 h-3.5" />
+              </button>
+              <button
                 onClick={(e) => { e.stopPropagation(); onEdit(node) }}
                 className="p-1 rounded-md hover:bg-white/20"
                 title="Éditer">
                 <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onCopy(node) }}
+                className="p-1 rounded-md hover:bg-white/20"
+                title="Dupliquer">
+                <Copy className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onMove(node) }}
@@ -1343,6 +1413,190 @@ function OrgaEditModal(p: OrgaEditModalProps) {
             Enregistrer
           </button>
           <button onClick={p.onClose}
+                  className="flex-1 px-3 py-2 rounded border border-[#A68D8A] text-[#A68D8A] hover:bg-[#EFE9E7] text-sm">
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// --- Modal Copier bloc ---------------------------------------------------
+
+function OrgaCopierModal(
+  { node, onClose, onDone }:
+    { node: OrgaNode; onClose: () => void; onDone: () => void },
+) {
+  const [pickerOpen, setPickerOpen] = useState(true)
+  const [target, setTarget] = useState<{ id: string; lib: string } | null>(null)
+  const [deep1, setDeep1] = useState(true)
+  const [deep2, setDeep2] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const doCopy = async () => {
+    if (!target) return
+    setSaving(true)
+    try {
+      const r = await fetch(`/api/adm/organigramme/${node.id}/copier`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_parent_new: target.id,
+          include_children_deep_1: deep1,
+          include_children_deep_2: deep1 && deep2,
+        }),
+      })
+      const d = await r.json()
+      if (d.ok) {
+        showToast('Bloc dupliqué', 'success')
+        onDone()
+      } else {
+        showToast(d.err || 'Erreur', 'error')
+      }
+    } finally { setSaving(false) }
+  }
+
+  if (pickerOpen) {
+    return (
+      <OrgaTreePickerModal
+        title={`Copier "${node.lib}" sous…`}
+        onClose={onClose}
+        onSelect={(id, lib) => {
+          setTarget({ id, lib })
+          setPickerOpen(false)
+        }}
+      />
+    )
+  }
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+         onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-[#4E1D17]">
+            Dupliquer un bloc
+          </h3>
+          <button onClick={onClose}
+                  className="p-1 rounded-md hover:bg-[#EFE9E7] text-[#A68D8A]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="text-sm text-[#4E1D17] mb-3">
+          Copier <b>{node.lib}</b> sous <b>{target?.lib || 'Racine'}</b>
+        </div>
+        <div className="space-y-2 mb-4 text-xs">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={deep1}
+                   onChange={(e) => setDeep1(e.target.checked)}
+                   className="accent-[#4E1D17]" />
+            <span className="text-[#4E1D17]">Copier aussi les sous-blocs directs</span>
+          </label>
+          <label className="flex items-center gap-2 ml-5">
+            <input type="checkbox" checked={deep2} disabled={!deep1}
+                   onChange={(e) => setDeep2(e.target.checked)}
+                   className="accent-[#4E1D17]" />
+            <span className={deep1 ? 'text-[#4E1D17]' : 'text-gray-400'}>
+              …et leurs propres sous-blocs (2 niveaux)
+            </span>
+          </label>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={doCopy} disabled={!target || saving}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded bg-[#4E1D17] text-white hover:bg-[#3A1510] disabled:opacity-50 text-sm">
+            {saving
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Copy className="w-4 h-4" />}
+            Dupliquer
+          </button>
+          <button onClick={onClose}
+                  className="flex-1 px-3 py-2 rounded border border-[#A68D8A] text-[#A68D8A] hover:bg-[#EFE9E7] text-sm">
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// --- Modal Deplacer salarie ---------------------------------------------
+
+function DeplacerSalarieModal(
+  { orga, salarie, onClose, onDone }:
+    {
+      orga: OrgaNode; salarie: SalarieItem
+      onClose: () => void; onDone: () => void
+    },
+) {
+  const [date, setDate] = useState(
+    salarie.date_embauche || new Date().toISOString().slice(0, 10),
+  )
+  const [saving, setSaving] = useState(false)
+
+  const doMove = async () => {
+    if (!date) { showToast('Date requise', 'error'); return }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/adm/organigramme/deplacer-salarie', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_salarie: salarie.id_salarie,
+          id_orga_cible: orga.id,
+          date_changement: date,
+        }),
+      })
+      const d = await r.json()
+      if (d.ok) {
+        showToast('Salarié déplacé', 'success')
+        onDone()
+      } else { showToast(d.err || 'Erreur', 'error') }
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+         onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-[#4E1D17]">
+            Transfert de {salarie.nom} {salarie.prenom}
+          </h3>
+          <button onClick={onClose}
+                  className="p-1 rounded-md hover:bg-[#EFE9E7] text-[#A68D8A]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="text-sm text-[#4E1D17] mb-4">
+          Vers : <b>{orga.lib}</b>
+        </div>
+        <label className="block text-xs mb-4">
+          <span className="text-[#A68D8A] font-medium">
+            Date de changement d'équipe
+          </span>
+          <input type="date" value={date}
+                 onChange={(e) => setDate(e.target.value)}
+                 className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+        </label>
+        <div className="flex gap-2">
+          <button onClick={doMove} disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded bg-[#4E1D17] text-white hover:bg-[#3A1510] disabled:opacity-50 text-sm">
+            {saving
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <UserPlus className="w-4 h-4" />}
+            Confirmer le transfert
+          </button>
+          <button onClick={onClose}
                   className="flex-1 px-3 py-2 rounded border border-[#A68D8A] text-[#A68D8A] hover:bg-[#EFE9E7] text-sm">
             Annuler
           </button>
