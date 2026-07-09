@@ -1516,52 +1516,71 @@ function OrgaEditModal(p: OrgaEditModalProps) {
   const [saving, setSaving] = useState(false)
   const [distriPickerOpen, setDistriPickerOpen] = useState(false)
 
-  // Load combos + detail (edit)
+  // Combos independantes du type (chargees une fois)
   useEffect(() => {
     const auth = { Authorization: `Bearer ${getToken()}` }
     const fj = (u: string) => fetch(u, { headers: auth })
       .then((r) => r.ok ? r.json() : [])
     Promise.all([
       fj('/api/adm/organigramme/types-orga'),
-      fj('/api/adm/organigramme/types-niveau'),
       fj('/api/adm/organigramme/societes-combo'),
-      fj('/api/adm/organigramme/types-produit'),
-    ]).then(([to, tn, so, tp]: OrgaCombo[][]) => {
-      setTypesOrga(to || []); setNiveaux(tn || [])
-      setSocietes(so || []); setTypesProduit(tp || [])
+    ]).then(([to, so]: OrgaCombo[][]) => {
+      setTypesOrga(to || []); setSocietes(so || [])
     })
+  }, [])
 
-    if (p.mode === 'edit' && p.idOrga) {
-      fetch(`/api/adm/organigramme/detail/${p.idOrga}`, { headers: auth })
-        .then((r) => r.ok ? r.json() : null)
-        .then((d: OrgaDetail | null) => {
-          if (!d) return
-          setIdTypeOrga(d.id_type_orga || 0)
-          setIdTypeNiveau(d.id_type_niveau_orga || 0)
-          setIdSte(d.id_ste || 0)
-          setIdTypeProduit(d.id_type_produit || 0)
-          setIdDistri(d.id_distri || 0)
-          setIdDistriLib(d.id_distri_lib || '')
-          setVille(d.ville || '')
-          setNomResp(d.nom_resp || '')
-          setCapacite(d.capacite || 0)
-          // Cf. WinDev : auto-fill Ville/NomResp si vides ET libOrga commence
-          // par "Equipe " ou "Agence "
-          const lib = d.lib_orga || ''
-          if (!d.nom_resp && !d.ville) {
-            if (lib.startsWith('Equipe ')) {
-              setIdTypeNiveau(4)
-              const rest = lib.replace('Equipe ', '')
-              const parts = rest.split('/')
-              setNomResp(parts[0] || '')
-              setVille(parts[1] || '')
-            } else if (lib.startsWith('Agence ')) {
-              setIdTypeNiveau(3)
-              setVille(lib.replace('Agence ', ''))
-            }
+  // Combos filtrees par TypeNiveau (STAFF si type_orga=4, sinon FDV).
+  // Cf. WinDev : ListeNiveauOrga et IDTypeProduit sont filtres par Type.
+  const typeFilter = idTypeOrga === 4 ? 'STAFF' : 'FDV'
+  useEffect(() => {
+    const auth = { Authorization: `Bearer ${getToken()}` }
+    fetch(
+      `/api/adm/organigramme/types-niveau?type=${typeFilter}`,
+      { headers: auth },
+    )
+      .then((r) => r.ok ? r.json() : [])
+      .then((tn: OrgaCombo[]) => setNiveaux(tn || []))
+    fetch(
+      `/api/adm/organigramme/types-produit?type=${typeFilter}`,
+      { headers: auth },
+    )
+      .then((r) => r.ok ? r.json() : [])
+      .then((tp: OrgaCombo[]) => setTypesProduit(tp || []))
+  }, [typeFilter])
+
+  // Prefill detail (edit only)
+  useEffect(() => {
+    if (p.mode !== 'edit' || !p.idOrga) return
+    const auth = { Authorization: `Bearer ${getToken()}` }
+    fetch(`/api/adm/organigramme/detail/${p.idOrga}`, { headers: auth })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d: OrgaDetail | null) => {
+        if (!d) return
+        setIdTypeOrga(d.id_type_orga || 0)
+        setIdTypeNiveau(d.id_type_niveau_orga || 0)
+        setIdSte(d.id_ste || 0)
+        setIdTypeProduit(d.id_type_produit || 0)
+        setIdDistri(d.id_distri || 0)
+        setIdDistriLib(d.id_distri_lib || '')
+        setVille(d.ville || '')
+        setNomResp(d.nom_resp || '')
+        setCapacite(d.capacite || 0)
+        // Cf. WinDev : auto-fill Ville/NomResp si vides ET libOrga commence
+        // par "Equipe " ou "Agence "
+        const lib = d.lib_orga || ''
+        if (!d.nom_resp && !d.ville) {
+          if (lib.startsWith('Equipe ')) {
+            setIdTypeNiveau(4)
+            const rest = lib.replace('Equipe ', '')
+            const parts = rest.split('/')
+            setNomResp(parts[0] || '')
+            setVille(parts[1] || '')
+          } else if (lib.startsWith('Agence ')) {
+            setIdTypeNiveau(3)
+            setVille(lib.replace('Agence ', ''))
           }
-        })
-    }
+        }
+      })
   }, [p.mode, p.idOrga])
 
   // Labels utilitaires

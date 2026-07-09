@@ -1,7 +1,7 @@
 import sys
 import traceback
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -38,9 +38,12 @@ def get_tree(user: UserToken = Depends(get_current_user)):
 # --------------------------------------------------------------------
 
 @router.get("/types-niveau", response_model=list[OrgaCombo])
-def get_types_niveau(user: UserToken = Depends(get_current_user)):
+def get_types_niveau(
+    type: str = Query("", description="'STAFF' | 'FDV' | ''"),
+    user: UserToken = Depends(get_current_user),
+):
     _ = user
-    return crud.list_types_niveau()
+    return crud.list_types_niveau(type)
 
 
 @router.get("/types-orga", response_model=list[OrgaCombo])
@@ -50,9 +53,12 @@ def get_types_orga(user: UserToken = Depends(get_current_user)):
 
 
 @router.get("/types-produit", response_model=list[OrgaCombo])
-def get_types_produit(user: UserToken = Depends(get_current_user)):
+def get_types_produit(
+    type: str = Query("", description="'STAFF' | 'FDV' | ''"),
+    user: UserToken = Depends(get_current_user),
+):
     _ = user
-    return crud.list_types_produit()
+    return crud.list_types_produit(type)
 
 
 @router.get("/societes-combo", response_model=list[OrgaCombo])

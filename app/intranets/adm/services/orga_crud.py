@@ -137,15 +137,31 @@ def _deduce_id_type_niveau(id_parent: int) -> int:
 # Combos
 # --------------------------------------------------------------------
 
-def list_types_niveau() -> list[OrgaCombo]:
+def list_types_niveau(type_filter: str = "") -> list[OrgaCombo]:
+    """Cf. WinDev : filtre par Type = 'TOUT' OR Type = {param}.
+    type_filter = 'STAFF' | 'FDV' | '' (retourne TOUT + le param).
+    """
     rh = get_pg_connection("rh")
+    tf = (type_filter or "").strip().upper()
     try:
-        rows = rh.query(
-            """SELECT id_type_niveau_orga, lib_niveau
-                 FROM pgt_type_niveau_orga
-                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                ORDER BY id_type_niveau_orga ASC""",
-        ) or []
+        if tf:
+            rows = rh.query(
+                """SELECT id_type_niveau_orga, lib_niveau
+                     FROM pgt_type_niveau_orga
+                    WHERE (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')
+                      AND (UPPER(type) = 'TOUT' OR UPPER(type) = ?)
+                    ORDER BY id_type_niveau_orga ASC""",
+                (tf,),
+            ) or []
+        else:
+            rows = rh.query(
+                """SELECT id_type_niveau_orga, lib_niveau
+                     FROM pgt_type_niveau_orga
+                    WHERE (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')
+                    ORDER BY id_type_niveau_orga ASC""",
+            ) or []
     except Exception:
         logger.exception("list_types_niveau")
         return []
@@ -179,16 +195,29 @@ def list_types_orga() -> list[OrgaCombo]:
     ]
 
 
-def list_types_produit() -> list[OrgaCombo]:
-    """Combo Type Produit (pgt_type_produit)."""
+def list_types_produit(type_filter: str = "") -> list[OrgaCombo]:
+    """Cf. WinDev : filtre par TypeProduit.Type = {param}."""
     rh = get_pg_connection("rh")
+    tf = (type_filter or "").strip().upper()
     try:
-        rows = rh.query(
-            """SELECT id_type_produit, lib
-                 FROM pgt_type_produit
-                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
-                ORDER BY lib ASC""",
-        ) or []
+        if tf:
+            rows = rh.query(
+                """SELECT id_type_produit, lib
+                     FROM pgt_type_produit
+                    WHERE (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')
+                      AND UPPER(type) = ?
+                    ORDER BY lib ASC""",
+                (tf,),
+            ) or []
+        else:
+            rows = rh.query(
+                """SELECT id_type_produit, lib
+                     FROM pgt_type_produit
+                    WHERE (modif_elem IS NULL
+                           OR modif_elem NOT LIKE '%suppr%')
+                    ORDER BY lib ASC""",
+            ) or []
     except Exception:
         logger.exception("list_types_produit")
         return []
