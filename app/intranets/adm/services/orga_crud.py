@@ -54,6 +54,28 @@ class OrgaUpdatePayload(BaseModel):
     ville: str = ""
     secteur: str = ""
     memo: str = ""
+    nom_resp: str = ""
+    capacite: int = 0
+    invisible_podium: bool = False
+    invisible_effectif: bool = False
+
+
+class OrgaDetail(BaseModel):
+    """Detail complet d'un bloc orga pour prefill du modal edition."""
+    id: str
+    id_parent: str = ""
+    lib_orga: str = ""
+    id_type_niveau_orga: int = 0
+    id_type_orga: int = 0
+    id_ste: int = 0
+    id_distri: int = 0
+    id_distri_lib: str = ""
+    id_type_produit: int = 0
+    ville: str = ""
+    secteur: str = ""
+    memo: str = ""
+    nom_resp: str = ""
+    capacite: int = 0
     invisible_podium: bool = False
     invisible_effectif: bool = False
 
@@ -157,6 +179,105 @@ def list_types_orga() -> list[OrgaCombo]:
     ]
 
 
+def list_types_produit() -> list[OrgaCombo]:
+    """Combo Type Produit (pgt_type_produit)."""
+    rh = get_pg_connection("rh")
+    try:
+        rows = rh.query(
+            """SELECT id_type_produit, lib
+                 FROM pgt_type_produit
+                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY lib ASC""",
+        ) or []
+    except Exception:
+        logger.exception("list_types_produit")
+        return []
+    return [
+        OrgaCombo(
+            id=int(r.get("id_type_produit") or 0),
+            lib=(r.get("lib") or "").strip(),
+        )
+        for r in rows
+    ]
+
+
+def list_societes_orga() -> list[OrgaCombo]:
+    """Combo Societes (pgt_societe, non archivees)."""
+    rh = get_pg_connection("rh")
+    try:
+        rows = rh.query(
+            """SELECT id_ste, raison_sociale
+                 FROM pgt_societe
+                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY raison_sociale ASC""",
+        ) or []
+    except Exception:
+        logger.exception("list_societes_orga")
+        return []
+    return [
+        OrgaCombo(
+            id=int(r.get("id_ste") or 0),
+            lib=(r.get("raison_sociale") or "").strip(),
+        )
+        for r in rows
+    ]
+
+
+def get_orga_detail(id_orga: str) -> OrgaDetail | None:
+    """Detail d'un bloc pour prefill du modal edition."""
+    if not id_orga or id_orga == "0":
+        return None
+    rh = get_pg_connection("rh")
+    try:
+        r = rh.query_one(
+            """SELECT idorganigramme, id_parent, lib_orga,
+                      id_type_niveau_orga, id_type_orga,
+                      id_ste, id_distri, id_type_produit,
+                      ville, secteur, memo,
+                      nom_resp, capacite,
+                      in_visible_podium, in_visible_effectif
+                 FROM pgt_organigramme
+                WHERE idorganigramme = ?""",
+            (int(id_orga),),
+        )
+    except Exception:
+        logger.exception("get_orga_detail")
+        return None
+    if not r:
+        return None
+    # Recupere raison sociale du distri (si idDistri != 0)
+    lib_distri = ""
+    id_distri = int(r.get("id_distri") or 0)
+    if id_distri:
+        try:
+            sr = rh.query_one(
+                """SELECT raison_sociale FROM pgt_societe
+                    WHERE id_ste = ? LIMIT 1""",
+                (id_distri,),
+            )
+            lib_distri = (sr.get("raison_sociale") or "").strip() if sr else ""
+        except Exception:
+            pass
+    return OrgaDetail(
+        id=str(int(r.get("idorganigramme"))),
+        id_parent=str(int(r.get("id_parent") or 0)),
+        lib_orga=(r.get("lib_orga") or "").strip(),
+        id_type_niveau_orga=int(r.get("id_type_niveau_orga") or 0),
+        id_type_orga=int(r.get("id_type_orga") or 0),
+        id_ste=int(r.get("id_ste") or 0),
+        id_distri=id_distri,
+        id_distri_lib=lib_distri,
+        id_type_produit=int(r.get("id_type_produit") or 0),
+        ville=(r.get("ville") or "").strip(),
+        secteur=(r.get("secteur") or "").strip(),
+        memo=(r.get("memo") or "").strip(),
+        nom_resp=(r.get("nom_resp") or "").strip(),
+        capacite=int(r.get("capacite") or 0),
+        invisible_podium=bool(r.get("in_visible_podium")),
+        invisible_effectif=bool(r.get("in_visible_effectif")),
+    )
+
+
 # --------------------------------------------------------------------
 # CRUD
 # --------------------------------------------------------------------
@@ -211,6 +332,7 @@ def update_orga(id_orga: str, p: OrgaUpdatePayload, op_id: int) -> bool:
                       id_type_orga = ?, id_ste = ?, id_distri = ?,
                       id_type_produit = ?,
                       ville = ?, secteur = ?, memo = ?,
+                      nom_resp = ?, capacite = ?,
                       in_visible_podium = ?, in_visible_effectif = ?,
                       modif_date = NOW(), modif_op = ?, modif_elem = 'modif'
                 WHERE idorganigramme = ?""",
@@ -219,6 +341,7 @@ def update_orga(id_orga: str, p: OrgaUpdatePayload, op_id: int) -> bool:
                 p.id_type_niveau_orga,
                 p.id_type_orga, p.id_ste, p.id_distri, p.id_type_produit,
                 p.ville.strip(), p.secteur.strip(), p.memo.strip(),
+                p.nom_resp.strip(), int(p.capacite),
                 bool(p.invisible_podium), bool(p.invisible_effectif),
                 op_id, int(id_orga),
             ),

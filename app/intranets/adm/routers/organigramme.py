@@ -10,7 +10,7 @@ from app.intranets.adm.services.organigramme import get_organigramme_adm
 from app.intranets.adm.services import orga_crud as crud
 from app.intranets.adm.services.orga_crud import (
     DeplacerSalariePayload,
-    OrgaCombo, OrgaCopierPayload, OrgaCreatePayload,
+    OrgaCombo, OrgaCopierPayload, OrgaCreatePayload, OrgaDetail,
     OrgaMovePayload, OrgaUpdatePayload,
 )
 
@@ -47,6 +47,30 @@ def get_types_niveau(user: UserToken = Depends(get_current_user)):
 def get_types_orga(user: UserToken = Depends(get_current_user)):
     _ = user
     return crud.list_types_orga()
+
+
+@router.get("/types-produit", response_model=list[OrgaCombo])
+def get_types_produit(user: UserToken = Depends(get_current_user)):
+    _ = user
+    return crud.list_types_produit()
+
+
+@router.get("/societes-combo", response_model=list[OrgaCombo])
+def get_societes_combo(user: UserToken = Depends(get_current_user)):
+    _ = user
+    return crud.list_societes_orga()
+
+
+@router.get("/detail/{id_orga}", response_model=OrgaDetail)
+def get_orga_detail(
+    id_orga: str,
+    user: UserToken = Depends(get_current_user),
+):
+    _require_droit(user, "Menu_Salariés")
+    d = crud.get_orga_detail(id_orga)
+    if not d:
+        raise HTTPException(404, "Bloc introuvable")
+    return d
 
 
 # --------------------------------------------------------------------

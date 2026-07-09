@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import OrgaTreePickerModal from '@/components/OrgaTreePickerModal'
 import PersonnePicker, { type SalarieItem } from '@/components/PersonnePicker'
+import SocieteDistribPicker from '@/components/societe/SocieteDistribPicker'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 import { getToken } from '@/api'
 import { useAuth } from '@/hooks/useAuth'
@@ -1463,9 +1464,23 @@ function SalariePopup({
   )
 }
 
-// --- Modal Ajout/Edition d'un bloc orga ----------------------------------
+// --- Modal Ajout/Edition d'un bloc orga (cf. WinDev Fen_OrgaModif) -------
 
 interface OrgaCombo { id: number; lib: string }
+
+interface OrgaDetail {
+  id: string; id_parent: string
+  lib_orga: string
+  id_type_niveau_orga: number
+  id_type_orga: number
+  id_ste: number
+  id_distri: number
+  id_distri_lib: string
+  id_type_produit: number
+  ville: string; secteur: string; memo: string
+  nom_resp: string; capacite: number
+  invisible_podium: boolean; invisible_effectif: boolean
+}
 
 interface OrgaEditModalProps {
   mode: 'add' | 'edit'
@@ -1479,37 +1494,138 @@ interface OrgaEditModalProps {
 }
 
 function OrgaEditModal(p: OrgaEditModalProps) {
-  const [lib, setLib] = useState(p.initialLib || '')
+  // Champs binds
+  const [idTypeOrga, setIdTypeOrga] = useState(0)
   const [idTypeNiveau, setIdTypeNiveau] = useState<number>(
     p.initialIdTypeNiveau || 0,
   )
+  const [idSte, setIdSte] = useState(0)
+  const [idTypeProduit, setIdTypeProduit] = useState(0)
+  const [idDistri, setIdDistri] = useState(0)
+  const [idDistriLib, setIdDistriLib] = useState('')
   const [ville, setVille] = useState('')
-  const [secteur, setSecteur] = useState('')
-  const [memo, setMemo] = useState('')
-  const [invPodium, setInvPodium] = useState(false)
-  const [invEffectif, setInvEffectif] = useState(false)
-  const [types, setTypes] = useState<OrgaCombo[]>([])
-  const [saving, setSaving] = useState(false)
+  const [nomResp, setNomResp] = useState('')
+  const [capacite, setCapacite] = useState(0)
 
+  // Combos
+  const [typesOrga, setTypesOrga] = useState<OrgaCombo[]>([])
+  const [niveaux, setNiveaux] = useState<OrgaCombo[]>([])
+  const [societes, setSocietes] = useState<OrgaCombo[]>([])
+  const [typesProduit, setTypesProduit] = useState<OrgaCombo[]>([])
+
+  const [saving, setSaving] = useState(false)
+  const [distriPickerOpen, setDistriPickerOpen] = useState(false)
+
+  // Load combos + detail (edit)
   useEffect(() => {
-    fetch('/api/adm/organigramme/types-niveau', {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    }).then((r) => r.json()).then(setTypes).catch(() => setTypes([]))
-  }, [])
+    const auth = { Authorization: `Bearer ${getToken()}` }
+    const fj = (u: string) => fetch(u, { headers: auth })
+      .then((r) => r.ok ? r.json() : [])
+    Promise.all([
+      fj('/api/adm/organigramme/types-orga'),
+      fj('/api/adm/organigramme/types-niveau'),
+      fj('/api/adm/organigramme/societes-combo'),
+      fj('/api/adm/organigramme/types-produit'),
+    ]).then(([to, tn, so, tp]: OrgaCombo[][]) => {
+      setTypesOrga(to || []); setNiveaux(tn || [])
+      setSocietes(so || []); setTypesProduit(tp || [])
+    })
+
+    if (p.mode === 'edit' && p.idOrga) {
+      fetch(`/api/adm/organigramme/detail/${p.idOrga}`, { headers: auth })
+        .then((r) => r.ok ? r.json() : null)
+        .then((d: OrgaDetail | null) => {
+          if (!d) return
+          setIdTypeOrga(d.id_type_orga || 0)
+          setIdTypeNiveau(d.id_type_niveau_orga || 0)
+          setIdSte(d.id_ste || 0)
+          setIdTypeProduit(d.id_type_produit || 0)
+          setIdDistri(d.id_distri || 0)
+          setIdDistriLib(d.id_distri_lib || '')
+          setVille(d.ville || '')
+          setNomResp(d.nom_resp || '')
+          setCapacite(d.capacite || 0)
+          // Cf. WinDev : auto-fill Ville/NomResp si vides ET libOrga commence
+          // par "Equipe " ou "Agence "
+          const lib = d.lib_orga || ''
+          if (!d.nom_resp && !d.ville) {
+            if (lib.startsWith('Equipe ')) {
+              setIdTypeNiveau(4)
+              const rest = lib.replace('Equipe ', '')
+              const parts = rest.split('/')
+              setNomResp(parts[0] || '')
+              setVille(parts[1] || '')
+            } else if (lib.startsWith('Agence ')) {
+              setIdTypeNiveau(3)
+              setVille(lib.replace('Agence ', ''))
+            }
+          }
+        })
+    }
+  }, [p.mode, p.idOrga])
+
+  // Labels utilitaires
+  const libNiveau = (id: number) =>
+    niveaux.find((n) => n.id === id)?.lib || ''
+  const libTypeProduit = (id: number) =>
+    typesProduit.find((t) => t.id === id)?.lib || ''
+
+  // ConstruireNom (cf. WinDev)
+  const isStaff = idTypeOrga === 4
+  const showFDV = !isStaff        // GrFDV..Visible
+  const showBtnDistri = idSte === 4
+
+  const showResp = idTypeNiveau > 1
+  const showCapacite = idTypeNiveau > 1
+    && idTypeNiveau !== 2 && idTypeNiveau !== 3
+  const villeLabel =
+    idTypeNiveau <= 1 ? 'Nom'
+    : idTypeNiveau === 2 ? 'Région'
+    : 'Ville'
+
+  const libNomOrga = useMemo(() => {
+    // Cf. WinDev ConstruireNom()
+    if (idTypeNiveau <= 1) return ville
+    const lvl = libNiveau(idTypeNiveau)
+    let out = lvl
+    if (nomResp) out += ' ' + nomResp
+    if (ville) {
+      out += (out === lvl ? ' ' : '/') + ville.toUpperCase()
+    }
+    if (idTypeProduit) {
+      const lp = libTypeProduit(idTypeProduit)
+      if (lp) out += (out === lvl ? ' ' : '/') + lp
+    }
+    if (capacite > 0) out += '/' + capacite + 'PL'
+    return out
+  }, [
+    idTypeNiveau, nomResp, ville, idTypeProduit, capacite,
+    niveaux, typesProduit,
+  ])
+
+  // Bouton Valider actif (cf. WinDev)
+  const validerActif = useMemo(() => {
+    if (idTypeNiveau <= 1) return true       // niveau 0/1 : toujours
+    if (idTypeNiveau < 4) return true        // niveaux 2/3 : toujours
+    if (nomResp || ville) return true        // niveau 4+ : ok si resp ou ville
+    return false
+  }, [idTypeNiveau, nomResp, ville])
 
   const save = async () => {
-    if (!lib.trim()) { showToast('Libellé requis', 'error'); return }
+    if (!validerActif) return
     setSaving(true)
     try {
       const body = {
         id_parent: p.idParent || '',
-        lib_orga: lib.trim(),
+        lib_orga: libNomOrga,
         id_type_niveau_orga: idTypeNiveau,
+        id_type_orga: idTypeOrga,
+        id_ste: idSte,
+        id_distri: idDistri,
+        id_type_produit: idTypeProduit,
         ville: ville.trim(),
-        secteur: secteur.trim(),
-        memo: memo.trim(),
-        invisible_podium: invPodium,
-        invisible_effectif: invEffectif,
+        nom_resp: nomResp.trim(),
+        capacite: capacite || 0,
       }
       const r = p.mode === 'add'
         ? await fetch('/api/adm/organigramme', {
@@ -1539,7 +1655,7 @@ function OrgaEditModal(p: OrgaEditModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
          onClick={p.onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5"
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-[#4E1D17]">
@@ -1558,78 +1674,139 @@ function OrgaEditModal(p: OrgaEditModalProps) {
         )}
 
         <div className="space-y-3">
-          <label className="block text-xs">
-            <span className="text-[#A68D8A] font-medium">Libellé *</span>
-            <input type="text" value={lib}
-                   onChange={(e) => setLib(e.target.value)}
-                   className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
-          </label>
-
-          <label className="block text-xs">
-            <span className="text-[#A68D8A] font-medium">Type de niveau</span>
-            <select value={idTypeNiveau}
-                    onChange={(e) => setIdTypeNiveau(Number(e.target.value))}
-                    className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded">
-              <option value={0}>
-                {p.mode === 'add' ? '(automatique : parent + 1)' : '(inchangé)'}
-              </option>
-              {types.map((t) => (
-                <option key={t.id} value={t.id}>{t.lib}</option>
-              ))}
-            </select>
-          </label>
-
+          {/* Ligne 1 : Type Orga + Niveau */}
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs">
-              <span className="text-[#A68D8A] font-medium">Ville</span>
-              <input type="text" value={ville}
-                     onChange={(e) => setVille(e.target.value)}
-                     className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+              <span className="text-[#A68D8A] font-medium">Type Orga</span>
+              <select value={idTypeOrga}
+                      onChange={(e) => setIdTypeOrga(Number(e.target.value))}
+                      className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded">
+                <option value={0}>—</option>
+                {typesOrga.map((t) => (
+                  <option key={t.id} value={t.id}>{t.lib}</option>
+                ))}
+              </select>
             </label>
             <label className="block text-xs">
-              <span className="text-[#A68D8A] font-medium">Secteur</span>
-              <input type="text" value={secteur}
-                     onChange={(e) => setSecteur(e.target.value)}
-                     className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+              <span className="text-[#A68D8A] font-medium">Niveau</span>
+              <select value={idTypeNiveau}
+                      onChange={(e) => setIdTypeNiveau(Number(e.target.value))}
+                      className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded">
+                <option value={0}>—</option>
+                {niveaux.map((n) => (
+                  <option key={n.id} value={n.id}>{n.lib}</option>
+                ))}
+              </select>
             </label>
           </div>
 
-          <label className="block text-xs">
-            <span className="text-[#A68D8A] font-medium">Mémo</span>
-            <textarea rows={2} value={memo}
-                      onChange={(e) => setMemo(e.target.value)}
-                      className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
-          </label>
+          {/* Ligne 2 : Societe + Type Produit */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs">
+              <span className="text-[#A68D8A] font-medium">Société</span>
+              <select value={idSte}
+                      onChange={(e) => {
+                        const v = Number(e.target.value)
+                        setIdSte(v)
+                        if (v !== 4) { setIdDistri(0); setIdDistriLib('') }
+                      }}
+                      className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded">
+                <option value={0}>—</option>
+                {societes.map((s) => (
+                  <option key={s.id} value={s.id}>{s.lib}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs">
+              <span className="text-[#A68D8A] font-medium">Type Produit</span>
+              <select value={idTypeProduit}
+                      onChange={(e) => setIdTypeProduit(Number(e.target.value))}
+                      className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded">
+                <option value={0}>—</option>
+                {typesProduit.map((t) => (
+                  <option key={t.id} value={t.id}>{t.lib}</option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={invPodium}
-                     onChange={(e) => setInvPodium(e.target.checked)}
-                     className="accent-[#4E1D17]" />
-              <span className="text-[#4E1D17]">Invisible podium</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={invEffectif}
-                     onChange={(e) => setInvEffectif(e.target.checked)}
-                     className="accent-[#4E1D17]" />
-              <span className="text-[#4E1D17]">Invisible effectif</span>
-            </label>
+          {/* Btn Choisir société distributrice (visible si idSte = 4) */}
+          {showBtnDistri && (
+            <button
+              type="button"
+              onClick={() => setDistriPickerOpen(true)}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded border border-[#E5DDDC] hover:bg-[#EFE9E7] text-xs text-[#4E1D17]">
+              <Users className="w-4 h-4 text-[#A68D8A]" />
+              <span className={idDistriLib ? 'font-medium' : 'text-[#A68D8A]'}>
+                {idDistriLib || 'Choisir la société distributrice'}
+              </span>
+            </button>
+          )}
+
+          {/* GrFDV (masque si Type Orga = 4 STAFF) */}
+          {showFDV && (
+            <div className="space-y-3">
+              <label className="block text-xs">
+                <span className="text-[#A68D8A] font-medium">{villeLabel}</span>
+                <input type="text" value={ville}
+                       onChange={(e) => setVille(e.target.value)}
+                       className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+              </label>
+
+              {showResp && (
+                <label className="block text-xs">
+                  <span className="text-[#A68D8A] font-medium">Nom du responsable</span>
+                  <input type="text" value={nomResp}
+                         onChange={(e) => setNomResp(e.target.value)}
+                         className="w-full mt-1 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+                </label>
+              )}
+
+              {showCapacite && (
+                <label className="block text-xs">
+                  <span className="text-[#A68D8A] font-medium">Capacité</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <input type="number" value={capacite} min={0}
+                           onChange={(e) => setCapacite(Number(e.target.value) || 0)}
+                           className="w-24 px-2 py-1.5 border border-[#E5DDDC] rounded" />
+                    <span className="text-[#A68D8A] text-xs">PL</span>
+                  </div>
+                </label>
+              )}
+            </div>
+          )}
+
+          {/* Nom final calcule */}
+          <div className="text-xs pt-2 border-t border-[#E5DDDC]">
+            <span className="text-[#A68D8A]">Nom final : </span>
+            <b className="text-[#4E1D17]">{libNomOrga || '—'}</b>
           </div>
         </div>
 
         <div className="flex gap-2 mt-5">
-          <button onClick={save} disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded bg-[#4E1D17] text-white hover:bg-[#3A1510] disabled:opacity-50 text-sm">
+          <button onClick={save} disabled={saving || !validerActif}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded bg-[#4E1D17] text-white hover:bg-[#3A1510] disabled:opacity-40 text-sm">
             {saving
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Save className="w-4 h-4" />}
-            Enregistrer
+            Valider
           </button>
           <button onClick={p.onClose}
                   className="flex-1 px-3 py-2 rounded border border-[#A68D8A] text-[#A68D8A] hover:bg-[#EFE9E7] text-sm">
             Annuler
           </button>
         </div>
+
+        {distriPickerOpen && (
+          <SocieteDistribPicker
+            onClose={() => setDistriPickerOpen(false)}
+            onSelect={(id, lib) => {
+              setIdDistri(Number(id))
+              setIdDistriLib(lib)
+              setDistriPickerOpen(false)
+            }}
+          />
+        )}
       </div>
     </div>
   )
