@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Save, Plus, Copy, Trash2, X, ArrowLeft, BookOpen, FileText,
-  Loader2, Check, UserPlus, Eye,
+  Loader2, Check, UserPlus, Eye, Search,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast, showConfirm } from '@shared/ui/dialog'
@@ -600,8 +600,9 @@ export default function ScoolFormationFichePage() {
                          dateDebut={data.date_debut}
                          dateFin={data.date_fin} />
             )}
-            {tab === 'session' && id && (
-              <SessionRecrutTab idFormation={id} />
+            {tab === 'session' && id && data && (
+              <SessionRecrutTab idFormation={id}
+                                dateDebutForm={data.date_debut} />
             )}
             {tab === 'bulletins' && id && (
               <BulletinsTab idFormation={id} />
@@ -1087,8 +1088,21 @@ interface SessionRecrutRow {
   lib_lieu: string
 }
 
-function SessionRecrutTab({ idFormation }: { idFormation: string }) {
+interface PrevRecPickerRow {
+  id_prevision_recrut: string
+  date_debut: string; date_fin: string
+  date_session: string
+  lib_lieu: string; localisation: string
+  lib_etat: string
+  potentiel_accueil: number
+}
+
+function SessionRecrutTab(
+  { idFormation, dateDebutForm }:
+    { idFormation: string; dateDebutForm: string },
+) {
   const [rows, setRows] = useState<SessionRecrutRow[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const load = useCallback(async () => {
     const r = await fetch(
@@ -1099,11 +1113,8 @@ function SessionRecrutTab({ idFormation }: { idFormation: string }) {
   }, [idFormation])
   useEffect(() => { void load() }, [load])
 
-  const ajouter = async () => {
-    const id = window.prompt(
-      'ID de la prévision de recrutement à associer :', '',
-    )
-    if (!id || !id.trim() || !/^\d+$/.test(id.trim())) return
+  const onValider = async (idPrev: string) => {
+    setPickerOpen(false)
     const r = await fetch(
       `${API_BASE}/scool/formations/${idFormation}/sessions-recrut`,
       {
@@ -1112,7 +1123,7 @@ function SessionRecrutTab({ idFormation }: { idFormation: string }) {
           Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ id_prevision_recrut: id.trim() }),
+        body: JSON.stringify({ id_prevision_recrut: idPrev }),
       },
     )
     const d = await r.json()
@@ -1135,11 +1146,19 @@ function SessionRecrutTab({ idFormation }: { idFormation: string }) {
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <div className="flex items-center gap-2 mb-3">
-        <button onClick={ajouter}
+        <button onClick={() => setPickerOpen(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] text-sm">
           <Plus className="w-4 h-4" /> Associer une session
         </button>
       </div>
+
+      {pickerOpen && (
+        <PrevRecPickerModal
+          dateDebutForm={dateDebutForm}
+          onClose={() => setPickerOpen(false)}
+          onValider={onValider}
+        />
+      )}
 
       <table className="text-xs w-full">
         <thead className="bg-[#F5F5F0]">
@@ -1178,6 +1197,150 @@ function SessionRecrutTab({ idFormation }: { idFormation: string }) {
     </div>
   )
 }
+
+// -----------------------------------------------------------------
+// Fen_PrevRec_RecherchePeriode
+// -----------------------------------------------------------------
+
+function PrevRecPickerModal(
+  { dateDebutForm, onClose, onValider }:
+    {
+      dateDebutForm: string
+      onClose: () => void
+      onValider: (idPrev: string) => void
+    },
+) {
+  // Cf. WinDev init : DateRef = DateDeb - 15j, DateRef1 = DateDeb
+  const computeDefaults = () => {
+    if (dateDebutForm && dateDebutForm.length >= 10) {
+      const d = new Date(dateDebutForm)
+      const debut = new Date(d)
+      debut.setDate(debut.getDate() - 15)
+      return {
+        du: debut.toISOString().slice(0, 10),
+        au: dateDebutForm.slice(0, 10),
+      }
+    }
+    // Sinon DateRef = today - 7j
+    const now = new Date()
+    const past = new Date(now); past.setDate(now.getDate() - 7)
+    return {
+      du: past.toISOString().slice(0, 10),
+      au: now.toISOString().slice(0, 10),
+    }
+  }
+  const defs = computeDefaults()
+  const [du, setDu] = useState(defs.du)
+  const [au, setAu] = useState(defs.au)
+  const [rows, setRows] = useState<PrevRecPickerRow[]>([])
+  const [sel, setSel] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+
+  const search = useCallback(async () => {
+    if (!du || !au) return
+    setLoading(true)
+    try {
+      const r = await fetch(
+        `${API_BASE}/scool/prev-recrut/search?du=${du}&au=${au}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      )
+      setRows(await r.json())
+    } finally { setLoading(false) }
+  }, [du, au])
+
+  useEffect(() => { void search() }, [search])
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
+         onClick={onClose}>
+      <div className="bg-[#F5F1E8] rounded-lg shadow-xl w-full max-w-5xl p-5 max-h-[90vh] flex flex-col"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold text-[#17494E]">
+            Rechercher une prévision de recrutement
+          </h3>
+          <button onClick={onClose}
+                  className="p-1 rounded hover:bg-white/50 text-[#17494E]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
+          <label className="text-xs">
+            <span className="text-[#8B7355] mr-1">Date session du</span>
+            <input type="date" value={du}
+                   onChange={(e) => setDu(e.target.value)}
+                   className="border border-[#D4C9A8] rounded px-2 py-1" />
+          </label>
+          <label className="text-xs">
+            <span className="text-[#8B7355] mr-1">au</span>
+            <input type="date" value={au}
+                   onChange={(e) => setAu(e.target.value)}
+                   className="border border-[#D4C9A8] rounded px-2 py-1" />
+          </label>
+          <button onClick={search} disabled={loading}
+                  className="p-1.5 rounded bg-[#17494E] text-white hover:bg-[#0F3438] disabled:opacity-50"
+                  title="Rechercher">
+            {loading
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Search className="w-4 h-4" />}
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto bg-white rounded border border-[#D4C9A8]">
+          <table className="text-xs w-full">
+            <thead className="bg-[#17494E] text-white sticky top-0">
+              <tr>
+                <th className="py-1.5 px-2 text-left">Du</th>
+                <th className="py-1.5 px-2 text-left">Au</th>
+                <th className="py-1.5 px-2 text-left">Date session</th>
+                <th className="py-1.5 px-2 text-left">Lieu entretien</th>
+                <th className="py-1.5 px-2 text-left">Localisation</th>
+                <th className="py-1.5 px-2 text-left">État session</th>
+                <th className="py-1.5 px-2 text-right">Potentiel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id_prevision_recrut}
+                    onClick={() => setSel(r.id_prevision_recrut)}
+                    onDoubleClick={() => onValider(r.id_prevision_recrut)}
+                    className={`cursor-pointer border-b border-[#F0EDE5] ${
+                      sel === r.id_prevision_recrut
+                        ? 'bg-[#17494E]/10'
+                        : 'hover:bg-[#ECF1F2]'
+                    }`}>
+                  <td className="py-1 px-2 tabular-nums">{shortDate(r.date_debut)}</td>
+                  <td className="py-1 px-2 tabular-nums">{shortDate(r.date_fin)}</td>
+                  <td className="py-1 px-2 tabular-nums">{shortDate(r.date_session)}</td>
+                  <td className="py-1 px-2">{r.lib_lieu}</td>
+                  <td className="py-1 px-2">{r.localisation}</td>
+                  <td className="py-1 px-2">{r.lib_etat}</td>
+                  <td className="py-1 px-2 text-right tabular-nums">
+                    {r.potentiel_accueil || ''}
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && !loading && (
+                <tr><td colSpan={7} className="py-6 text-center text-gray-400">
+                  Aucune prévision sur cette période
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex justify-center mt-4">
+          <button onClick={() => sel && onValider(sel)} disabled={!sel}
+                  className="flex items-center gap-2 px-4 py-2 rounded bg-[#17494E] text-white hover:bg-[#0F3438] disabled:opacity-50 text-sm">
+            <Save className="w-4 h-4" /> Valider
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 
 // =====================================================================
 // Onglet Bulletins (lecture + delete)

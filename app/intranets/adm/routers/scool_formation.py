@@ -25,6 +25,7 @@ from app.intranets.adm.schemas.scool_formation import (
     ListeFormationsParams, ModeleFormationCombo,
     ModeleFormationPayload, ModeleFormationRow,
     ModeleProgrammePayload, ModeleProgrammeRow,
+    PrevRecPickerRow,
     ProgrammePayload, ProgrammeRow,
     SessionRecrutPayload, SessionRecrutRow,
 )
@@ -375,6 +376,18 @@ def del_eleve(
 # ====================================================================
 # Onglet Session de recrut
 # ====================================================================
+
+@router.get("/prev-recrut/search",
+            response_model=list[PrevRecPickerRow])
+def get_prev_recrut_search(
+    du: str = Query(..., description="YYYY-MM-DD"),
+    au: str = Query(..., description="YYYY-MM-DD"),
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Fen_PrevRec_RecherchePeriode."""
+    _require_droit(user, "FormScool")
+    return svc.search_prev_recrut_periode(du, au)
+
 
 @router.get("/formations/{id_formation}/sessions-recrut",
             response_model=list[SessionRecrutRow])

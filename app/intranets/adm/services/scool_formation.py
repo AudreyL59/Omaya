@@ -1649,6 +1649,56 @@ def list_sessions_recrut(id_formation: str) -> list[SessionRecrutRow]:
     ]
 
 
+def search_prev_recrut_periode(du: str, au: str) -> list:
+    """Cf. WinDev Fen_PrevRec_RecherchePeriode : liste des previsions
+    de recrutement dont date_session est comprise entre Du et Au.
+    """
+    from app.intranets.adm.schemas.scool_formation import PrevRecPickerRow
+    if not du or not au:
+        return []
+    db = get_pg_connection("recrutement")
+    try:
+        rows = db.query(
+            """SELECT p.id_prevision_recrut,
+                      p.date_debut, p.date_fin, p.date_session,
+                      p.potentiel_accueil,
+                      l.lib_lieu,
+                      e.lib_etat,
+                      c.nom_ville, c.code_postal
+                 FROM recrutement.pgt_prev_recrut p
+                 LEFT JOIN recrutement.pgt_cv_lieu_rdv l
+                        ON l.id_cv_lieu_rdv = p.id_cv_lieu_rdv
+                 LEFT JOIN recrutement.pgt_prev_recrut_etat e
+                        ON e.id_prev_recrut_etat = p.id_prev_recrut_etat
+                 LEFT JOIN divers.pgt_communes_france c
+                        ON c.id_communes_france = p.id_communes_france
+                WHERE p.date_session BETWEEN ? AND ?
+                  AND (p.modif_elem IS NULL
+                       OR p.modif_elem NOT LIKE '%suppr%')
+                ORDER BY p.date_session ASC""",
+            (du[:10], au[:10]),
+        ) or []
+    except Exception:
+        logger.exception("search_prev_recrut_periode")
+        return []
+    out: list = []
+    for r in rows:
+        ville = (r.get("nom_ville") or "").strip()
+        cp = (r.get("code_postal") or "").strip()
+        loc = f"{ville} ({cp})" if ville else ""
+        out.append(PrevRecPickerRow(
+            id_prevision_recrut=_clean_id(r.get("id_prevision_recrut")),
+            date_debut=_iso_date(r.get("date_debut")),
+            date_fin=_iso_date(r.get("date_fin")),
+            date_session=_iso_date(r.get("date_session")),
+            lib_lieu=(r.get("lib_lieu") or "").strip(),
+            localisation=loc,
+            lib_etat=(r.get("lib_etat") or "").strip(),
+            potentiel_accueil=int(r.get("potentiel_accueil") or 0),
+        ))
+    return out
+
+
 def add_session_recrut(
     id_formation: str, p: SessionRecrutPayload, op_id: int,
 ) -> str:

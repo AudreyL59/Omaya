@@ -268,6 +268,18 @@ class SessionRecrutPayload(BaseModel):
     id_prevision_recrut: str
 
 
+class PrevRecPickerRow(BaseModel):
+    """Ligne du picker Fen_PrevRec_RecherchePeriode."""
+    id_prevision_recrut: str
+    date_debut: str = ""     # 'Du'
+    date_fin: str = ""       # 'Au'
+    date_session: str = ""
+    lib_lieu: str = ""       # Lieu Entretien
+    localisation: str = ""   # 'NomVille (CodePostal)'
+    lib_etat: str = ""       # Etat session
+    potentiel_accueil: int = 0
+
+
 # --------------------------------------------------------------------
 # Onglet Bulletins
 # --------------------------------------------------------------------
