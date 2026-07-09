@@ -362,6 +362,20 @@ def sortir_distrib(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
+@router.post("/{id_salarie}/renvoyer-codes")
+def renvoyer_codes(
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Cf. WinDev Btn Renvoyer code Omaya. Envoie login + MDP par
+    mail (+ SMS si tel_mob renseigne)."""
+    try:
+        return svc.renvoyer_codes_omaya(id_salarie, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 @router.post("/{id_salarie}/toggle-flag")
 def toggle_flag(
     payload: dict,

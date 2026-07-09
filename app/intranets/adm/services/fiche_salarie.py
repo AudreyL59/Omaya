@@ -738,6 +738,156 @@ def sortir_salarie(id_salarie: int, payload: dict, demandeur_id: int) -> dict:
     }
 
 
+def renvoyer_codes_omaya(id_salarie: int, demandeur_id: int) -> dict:
+    """Cf. WinDev Fen_Organigramme.Btn Renvoyer code Omaya.
+
+    Regenere le LOGIN si absent/desync avec l'email, genere un nouveau
+    MDP si aucun n'existe (sinon garde l'existant en le dechiffrant),
+    envoie un mail + SMS avec les codes.
+    """
+    from app.core.auth.security import (
+        decrypt_password, encrypt_password, generate_password,
+    )
+    from app.shared.notifications.mail import envoi_mail
+    from app.shared.notifications.sms import envoi_sms
+
+    db_rh = get_pg_connection("rh")
+
+    # 1) Salarie (nom, prenom, login, mdp_crypte)
+    sal = db_rh.query_one(
+        """SELECT id_salarie, nom, prenom, login, mdp_crypte, modif_elem
+             FROM rh.pgt_salarie
+            WHERE id_salarie = ?""",
+        (int(id_salarie),),
+    )
+    if not sal:
+        return {"ok": False, "err": "Salarié introuvable"}
+    if "supp" in (str(sal.get("modif_elem") or "")):
+        return {
+            "ok": False,
+            "err": "Salarié supprimé, opération non autorisée",
+        }
+
+    # 2) Coordonnees (mail, tel_mob)
+    coord = db_rh.query_one(
+        """SELECT mail, tel_mob FROM rh.pgt_salarie_coordonnees
+            WHERE id_salarie = ? LIMIT 1""",
+        (int(id_salarie),),
+    ) or {}
+    mail = (coord.get("mail") or "").strip()
+    tel_mob = (coord.get("tel_mob") or "").strip()
+
+    # 3) Regenere le LOGIN si vide ou desync avec le mail
+    current_login = (sal.get("login") or "").strip()
+    if current_login == "" or (mail and current_login.lower() != mail.lower()):
+        new_login = mail
+        # Verifie unicite - fallback sur Nom+Hasard(999) si mail deja pris
+        for _ in range(10):
+            existing = db_rh.query_one(
+                "SELECT 1 FROM rh.pgt_salarie WHERE LOWER(login) = LOWER(?) "
+                "AND id_salarie <> ? LIMIT 1",
+                (new_login, int(id_salarie)),
+            )
+            if not existing:
+                break
+            import random
+            new_login = f"{sal.get('nom', '')}{random.randint(1, 999)}"
+        try:
+            db_rh.query(
+                """UPDATE rh.pgt_salarie
+                      SET login = ?, modif_op = ?, modif_date = NOW(),
+                          modif_elem = 'modif'
+                    WHERE id_salarie = ?""",
+                (new_login, int(demandeur_id), int(id_salarie)),
+            )
+            current_login = new_login
+        except Exception:
+            logger.exception("renvoyer_codes_omaya update login")
+
+    # 4) Recupere / genere le MDP
+    encrypted = sal.get("mdp_crypte")
+    plain_mdp = decrypt_password(encrypted) if encrypted else None
+    if not plain_mdp:
+        plain_mdp = generate_password(12)
+        try:
+            db_rh.query(
+                """UPDATE rh.pgt_salarie
+                      SET mdp_crypte = ?, modif_op = ?, modif_date = NOW(),
+                          modif_elem = 'modif'
+                    WHERE id_salarie = ?""",
+                (encrypt_password(plain_mdp), int(demandeur_id), int(id_salarie)),
+            )
+        except Exception:
+            logger.exception("renvoyer_codes_omaya update mdp_crypte")
+            return {"ok": False, "err": "Erreur mise à jour du mot de passe"}
+
+    # 5) Envoi du mail (destinataire = mail + CCI intranet/user)
+    dest_mail = mail
+    if not dest_mail:
+        return {"ok": False, "err": "Aucun email dans les coordonnées"}
+
+    # CCI : intranet@omaya.fr + login du demandeur (sauf pour idSalarie 6/4/224)
+    cci = ["intranet@omaya.fr"]
+    if int(id_salarie) not in (4, 6, 224):
+        dem_row = db_rh.query_one(
+            "SELECT sc.mail FROM rh.pgt_salarie_coordonnees sc "
+            "WHERE sc.id_salarie = ? LIMIT 1",
+            (int(demandeur_id),),
+        )
+        dem_mail = ((dem_row or {}).get("mail") or "").strip()
+        if dem_mail and dem_mail.lower() != "intranet@omaya.fr":
+            cci.append(dem_mail)
+
+    html = (
+        "<font face=\"arial\" style=\"font-size:10pt;\"><p>Bonjour,</p>"
+        "<p>https://groupe-exo.omaya.fr</p>"
+        f"<p>Votre accès à l'intranet a été validé pour cet identifiant : "
+        f"<b>{current_login}</b></p>"
+        f"<p>Votre mot de passe : <b>{plain_mdp}</b></p>"
+        "<p>Cdt<br/>Service INTRANET</p></font>"
+    )
+    mail_ok = False
+    try:
+        mail_ok = envoi_mail(
+            sujet="Code accès Intranet OMAYA",
+            html=html,
+            destinataires=[dest_mail],
+            cci=cci,
+            expediteur="intranet@omaya.fr",
+        )
+    except Exception:
+        logger.exception("renvoyer_codes_omaya envoi mail")
+
+    # 6) SMS si tel_mob renseigne
+    sms_result = ""
+    if tel_mob:
+        gsm = tel_mob
+        for c in (".", "/", "-", " "):
+            gsm = gsm.replace(c, "")
+        nom_sal = (
+            f"{_capitalize_first((sal.get('prenom') or '').strip())} "
+            f"{(sal.get('nom') or '').strip()}"
+        ).strip()
+        texte_sms = (
+            "Vos codes intranet\n"
+            "https://groupe-exo.omaya.fr\n"
+            f"Votre identifiant : {current_login}\n"
+            f"Votre mot de passe : {plain_mdp}"
+        )
+        try:
+            sms_result = envoi_sms(texte_sms, gsm, "", "OMAYA-Info")
+            _ = nom_sal  # noqa: F841 (nom conserve pour parite WinDev)
+        except Exception:
+            logger.exception("renvoyer_codes_omaya envoi sms")
+
+    return {
+        "ok": True,
+        "mail_ok": bool(mail_ok),
+        "sms_result": sms_result,
+        "login": current_login,
+    }
+
+
 def sortir_distrib(id_salarie: int, demandeur_id: int) -> dict:
     """Sortie DISTRIB (cf. WinDev sortirDistrib).
 

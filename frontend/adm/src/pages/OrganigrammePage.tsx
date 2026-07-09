@@ -1181,6 +1181,38 @@ function SalariePopup({
   const canSortieRH = has('TkSortieRH')
   const [pendingSortie, setPendingSortie] = useState<string | null>(null)
   const [profilOmayaOpen, setProfilOmayaOpen] = useState(false)
+  const [renvoiCodesLoading, setRenvoiCodesLoading] = useState(false)
+
+  const doRenvoyerCodes = async () => {
+    if (!await showConfirm({
+      title: 'Renvoyer les codes OMAYA ?',
+      message:
+        `Un email (+ SMS si mobile) avec les identifiants va être envoyé à ${salarie.nom} ${salarie.prenom}. Continuer ?`,
+      confirmLabel: 'Renvoyer',
+    })) return
+    setRenvoiCodesLoading(true)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${salarie.id_salarie}/renvoyer-codes`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}` },
+        },
+      )
+      const d = await r.json()
+      if (d.ok) {
+        const parts = []
+        if (d.mail_ok) parts.push('mail envoyé')
+        if (d.sms_result) parts.push(`SMS : ${d.sms_result}`)
+        showToast(
+          parts.length ? parts.join(' + ') : 'Codes régénérés',
+          'success',
+        )
+      } else {
+        showToast(d.err || d.detail || 'Erreur', 'error')
+      }
+    } finally { setRenvoiCodesLoading(false) }
+  }
 
   const doSortieRH = async (typeSortie: number, lib: string) => {
     if (!await showConfirm({
@@ -1387,12 +1419,12 @@ function SalariePopup({
               <span>Attribuer Profil Omaya</span>
             </button>
             <button
-              onClick={() => showToast(
-                "Renvoyer les Codes OMAYA : à implémenter (envoie le TXT WinDev)",
-                'info',
-              )}
-              className="w-full flex items-center gap-2 px-3 py-2 bg-white hover:bg-[#EFE9E7] rounded-lg text-xs text-[#4E1D17] transition-colors">
-              <Send className="w-4 h-4 text-[#A68D8A]" />
+              onClick={doRenvoyerCodes}
+              disabled={renvoiCodesLoading}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-white hover:bg-[#EFE9E7] rounded-lg text-xs text-[#4E1D17] transition-colors disabled:opacity-50">
+              {renvoiCodesLoading
+                ? <Loader2 className="w-4 h-4 animate-spin text-[#A68D8A]" />
+                : <Send className="w-4 h-4 text-[#A68D8A]" />}
               <span>Renvoyer les Codes OMAYA</span>
             </button>
           </div>
