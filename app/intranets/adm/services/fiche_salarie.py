@@ -262,6 +262,37 @@ def set_en_activite(id_salarie: int, value: bool) -> dict:
     return {"ok": True}
 
 
+# Flags booleens directement modifiables sur pgt_salarie_embauche (whitelist)
+_TOGGLABLE_EMBAUCHE_FLAGS = {"resp_equipe", "resp_adjoint", "chauffeur", "en_pause"}
+
+
+def toggle_flag_embauche(
+    id_salarie: int, field: str, value: bool, op_id: int,
+) -> dict:
+    """Bascule un des 4 flags booleens de pgt_salarie_embauche :
+    resp_equipe, resp_adjoint, chauffeur, en_pause.
+
+    Cf. WinDev menu contextuel salarie (Fen_Organigramme) : options
+    activees/desactivees directement depuis la popup, sans autre dialogue.
+    """
+    if field not in _TOGGLABLE_EMBAUCHE_FLAGS:
+        return {"ok": False, "err": f"Champ non modifiable : {field}"}
+    db = get_pg_connection("rh")
+    # Si en_pause -> False, on remet id_absence a 0 (cf. set_en_pause).
+    extra = ""
+    if field == "en_pause" and not value:
+        extra = ", id_absence = 0"
+    db.query(
+        f"""UPDATE rh.pgt_salarie_embauche
+               SET {field} = {'TRUE' if value else 'FALSE'}{extra},
+                   modif_date = NOW(),
+                   modif_op = {_int(op_id)},
+                   modif_elem = 'modif'
+             WHERE id_salarie = {_int(id_salarie)}""",
+    )
+    return {"ok": True, "field": field, "value": bool(value)}
+
+
 def set_en_pause(id_salarie: int, value: bool, id_absence: int = 0) -> dict:
     """Bascule le statut En pause (salarie_embauche.en_pause).
 

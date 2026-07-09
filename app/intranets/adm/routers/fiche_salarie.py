@@ -362,6 +362,25 @@ def sortir_distrib(
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
 
+@router.post("/{id_salarie}/toggle-flag")
+def toggle_flag(
+    payload: dict,
+    id_salarie: int = Path(...),
+    user: UserToken = Depends(get_current_user),
+):
+    """Bascule un flag booleen de salarie_embauche : resp_equipe /
+    resp_adjoint / chauffeur / en_pause.
+    Body : {"field": "resp_equipe", "value": true}
+    """
+    field = str(payload.get("field") or "")
+    value = bool(payload.get("value"))
+    try:
+        return svc.toggle_flag_embauche(id_salarie, field, value, user.id_salarie)
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 @router.post("/{id_salarie}/embauche", response_model=SaveResponse)
 def save_embauche(
     payload: SaveEmbauchePayload,

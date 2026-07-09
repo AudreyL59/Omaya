@@ -23,6 +23,9 @@ import {
   Scale,
   HeartPulse,
   IdCard,
+  UserCog,
+  Send,
+  Check,
   Plus,
   Pencil,
   MoveRight,
@@ -1126,12 +1129,51 @@ function SalariePopup({
   ]
   const visibleActions = actions.filter((a) => a.visible)
 
+  // --- Flags rapides (Pause / Resp Equipe / Resp Adjoint / Chauffeur) --
+  // Cf. WinDev menu contextuel salarie -> bascule les booleens
+  // pgt_salarie_embauche.
+  const [flags, setFlags] = useState({
+    en_pause: !!salarie.en_pause,
+    resp_equipe: !!salarie.is_resp,
+    resp_adjoint: !!salarie.is_resp_adjoint,
+    chauffeur: !!salarie.chauffeur,
+  })
+  const [pendingFlag, setPendingFlag] = useState<string | null>(null)
+
+  const toggleFlag = async (
+    field: 'en_pause' | 'resp_equipe' | 'resp_adjoint' | 'chauffeur',
+  ) => {
+    const nextVal = !flags[field]
+    setPendingFlag(field)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${salarie.id_salarie}/toggle-flag`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${getToken()}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ field, value: nextVal }),
+        },
+      )
+      const d = await r.json()
+      if (d.ok) {
+        setFlags((f) => ({ ...f, [field]: nextVal }))
+        onFicheClosed?.()
+      } else {
+        showToast(d.err || 'Erreur', 'error')
+      }
+    } finally { setPendingFlag(null) }
+  }
+
   // --- Actions Sortie RH / Distrib (ADM uniquement) --------------------
   // Cf. WinDev sortirSalarie(TypeSortie) + sortirDistrib.
   // 1=Annul DUE, 2=FPE Salarie, 3=FPE Entreprise, 4=Demission,
   // 5=Licenciement (autres codes possibles cote backend).
   const canSortieRH = has('TkSortieRH')
   const [pendingSortie, setPendingSortie] = useState<string | null>(null)
+  const [profilOmayaOpen, setProfilOmayaOpen] = useState(false)
 
   const doSortieRH = async (typeSortie: number, lib: string) => {
     if (!await showConfirm({
@@ -1270,6 +1312,58 @@ function SalariePopup({
             </div>
           )}
 
+          {/* Flags rapides (Pause / Resp Equipe / Resp Adjoint / Chauffeur) */}
+          <div className="mt-5 pt-4 border-t border-[#E5DDDC] text-left">
+            <FlagRow
+              label="Pause" icon={<Pause className="w-4 h-4 text-white" />}
+              color="bg-gray-500" checked={flags.en_pause}
+              loading={pendingFlag === 'en_pause'}
+              onToggle={() => toggleFlag('en_pause')}
+            />
+            <FlagRow
+              label="Responsable d'équipe"
+              icon={<Crown className="w-4 h-4 text-white" />}
+              color="bg-red-600" checked={flags.resp_equipe}
+              loading={pendingFlag === 'resp_equipe'}
+              onToggle={() => toggleFlag('resp_equipe')}
+            />
+            <FlagRow
+              label="Responsable Adjoint"
+              icon={<Crown className="w-4 h-4 text-white" />}
+              color="bg-orange-500" checked={flags.resp_adjoint}
+              loading={pendingFlag === 'resp_adjoint'}
+              onToggle={() => toggleFlag('resp_adjoint')}
+            />
+            <FlagRow
+              label="Chauffeur" icon={<Car className="w-4 h-4 text-white" />}
+              color="bg-purple-600" checked={flags.chauffeur}
+              loading={pendingFlag === 'chauffeur'}
+              onToggle={() => toggleFlag('chauffeur')}
+            />
+          </div>
+
+          {/* Section Omaya (2 actions) */}
+          <div className="mt-4 pt-4 border-t border-[#E5DDDC] text-left">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[#A68D8A] mb-2">
+              Omaya
+            </div>
+            <button
+              onClick={() => setProfilOmayaOpen(true)}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-white hover:bg-[#EFE9E7] rounded-lg text-xs text-[#4E1D17] transition-colors mb-1.5">
+              <UserCog className="w-4 h-4 text-[#A68D8A]" />
+              <span>Attribuer Profil Omaya</span>
+            </button>
+            <button
+              onClick={() => showToast(
+                "Renvoyer les Codes OMAYA : à implémenter (envoie le TXT WinDev)",
+                'info',
+              )}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-white hover:bg-[#EFE9E7] rounded-lg text-xs text-[#4E1D17] transition-colors">
+              <Send className="w-4 h-4 text-[#A68D8A]" />
+              <span>Renvoyer les Codes OMAYA</span>
+            </button>
+          </div>
+
           {canSortieRH && (
             <>
               <div className="mt-5 pt-4 border-t border-[#E5DDDC]">
@@ -1321,6 +1415,14 @@ function SalariePopup({
           />
         )}
       </AnimatePresence>
+
+      {profilOmayaOpen && (
+        <ChoisirProfilOmayaModal
+          idSalarie={salarie.id_salarie}
+          onClose={() => setProfilOmayaOpen(false)}
+          onDone={() => setProfilOmayaOpen(false)}
+        />
+      )}
     </motion.div>
   )
 }
@@ -1490,6 +1592,132 @@ function OrgaEditModal(p: OrgaEditModalProps) {
           <button onClick={p.onClose}
                   className="flex-1 px-3 py-2 rounded border border-[#A68D8A] text-[#A68D8A] hover:bg-[#EFE9E7] text-sm">
             Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// --- FlagRow (bascule inline dans SalariePopup) --------------------------
+
+function FlagRow(
+  { label, icon, color, checked, loading, onToggle }:
+    {
+      label: string; icon: React.ReactNode; color: string
+      checked: boolean; loading: boolean; onToggle: () => void
+    },
+) {
+  return (
+    <label className="flex items-center gap-2.5 py-1.5 cursor-pointer">
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center ${color}`}>
+        {icon}
+      </div>
+      <input type="checkbox" checked={checked} disabled={loading}
+             onChange={onToggle}
+             className="accent-[#4E1D17] w-4 h-4" />
+      <span className={`text-sm ${checked ? 'text-[#4E1D17] font-medium' : 'text-[#A68D8A]'}`}>
+        {label}
+      </span>
+      {loading && <Loader2 className="w-3 h-3 animate-spin text-[#A68D8A] ml-auto" />}
+    </label>
+  )
+}
+
+
+// --- Modal Choisir Profil Omaya -----------------------------------------
+
+function ChoisirProfilOmayaModal(
+  { idSalarie, onClose, onDone }:
+    {
+      idSalarie: string
+      onClose: () => void
+      onDone: () => void
+    },
+) {
+  const [profils, setProfils] = useState<string[]>([])
+  const [choix, setChoix] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/adm/fiche-salarie/droit-acces/profils', {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then((j) => setProfils(Array.isArray(j.items) ? j.items : []))
+      .catch(() => setProfils([]))
+  }, [])
+
+  const attribuer = async () => {
+    if (!choix) { showToast('Sélectionner un profil.', 'info'); return }
+    if (!await showConfirm({
+      title: 'Attribuer ce profil ?',
+      message: `Vous êtes sur le point d'attribuer le profil "${choix}". Continuer ?`,
+      confirmLabel: 'Attribuer',
+    })) return
+    setSaving(true)
+    try {
+      const r = await fetch(
+        `/api/adm/fiche-salarie/${idSalarie}/droit-acces/profil`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${getToken()}`,
+          },
+          body: JSON.stringify({ categorie: choix }),
+        },
+      )
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        throw new Error((j as { detail?: string })?.detail || String(r.status))
+      }
+      const j = (await r.json()) as { nb_inserted: number; nb_updated: number }
+      showToast(
+        `Profil appliqué : ${j.nb_inserted} ajouté(s), ${j.nb_updated} mis à jour.`,
+        'success',
+      )
+      onDone()
+    } catch (e) {
+      showToast(`Échec : ${(e as Error).message}`, 'error')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"
+         onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-[#4E1D17]">
+            Attribuer un profil Omaya
+          </h3>
+          <button onClick={onClose}
+                  className="p-1 rounded-md hover:bg-[#EFE9E7] text-[#A68D8A]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-[#4E1D17]">Profil :</span>
+          <select value={choix}
+                  onChange={(e) => setChoix(e.target.value)}
+                  className="flex-1 px-2 py-1.5 border rounded text-sm bg-white border-[#E5DDDC] text-[#4E1D17]">
+            <option value="">—</option>
+            {profils.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={attribuer}
+            disabled={saving || !choix}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded border border-[#17494E] text-[#17494E] hover:bg-[#EFE9E7] disabled:opacity-40">
+            {saving
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Check className="w-4 h-4" />}
+            Choisir ce profil
           </button>
         </div>
       </div>
