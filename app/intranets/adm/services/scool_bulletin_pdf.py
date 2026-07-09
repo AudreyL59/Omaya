@@ -228,13 +228,27 @@ table.notes td.right { text-align: right; }
   margin: 0 0 4px 0; font-size: 9pt; color: #8B7355;
   text-transform: uppercase;
 }
-.signatures {
-  display: flex; justify-content: space-around; align-items: flex-end;
-  margin-top: 20px; padding-top: 10px; border-top: 1px solid #E5E0D5;
+.signature-cachet {
+  margin-top: 20px; padding-top: 10px;
+  border-top: 1px solid #E5E0D5;
+  text-align: center;
 }
-.signatures .box { text-align: center; }
-.signatures .box img { max-height: 60px; }
-.signatures .box .lib { font-size: 8pt; color: #8B7355; margin-top: 4px; }
+.signature-cachet .stack {
+  position: relative; display: inline-block;
+  width: 300px; height: 130px;
+}
+.signature-cachet .cachet {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%; object-fit: contain;
+}
+.signature-cachet .signature {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%; object-fit: contain;
+  z-index: 2;
+}
+.signature-cachet .lib {
+  font-size: 8pt; color: #8B7355; margin-top: 4px;
+}
 """
 
 
@@ -334,15 +348,12 @@ def _render_html(b: BulletinDetail) -> str:
     </div>
   </div>
 
-  <div class="signatures">
-    <div class="box">
-      {'<img src="' + cachet_b64 + '" />' if cachet_b64 else ''}
-      <div class="lib">Cachet</div>
+  <div class="signature-cachet">
+    <div class="stack">
+      {'<img class="cachet" src="' + cachet_b64 + '" />' if cachet_b64 else ''}
+      {'<img class="signature" src="' + signature_b64 + '" />' if signature_b64 else ''}
     </div>
-    <div class="box">
-      {'<img src="' + signature_b64 + '" />' if signature_b64 else ''}
-      <div class="lib">Signature</div>
-    </div>
+    <div class="lib">Signature et cachet</div>
   </div>
 </body></html>"""
 
