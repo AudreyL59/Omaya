@@ -14,13 +14,16 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import RechercheCVPage from '@shared/recrutement/RechercheCVPage'
 import CVFicheModal from '@shared/recrutement/CVFicheModal'
-import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { getStoredUser } from '@/api'
 
 const API_BASE = '/api/vendeur'
 
 export default function CvthequePage() {
-  useDocumentTitle('CVthèque')
+  useEffect(() => {
+    const prev = document.title
+    document.title = 'CVthèque · Omaya'
+    return () => { document.title = prev }
+  }, [])
   const user = getStoredUser()
   const myUserId = user ? String(user.id_salarie) : ''
   // Cf. WinDev :
