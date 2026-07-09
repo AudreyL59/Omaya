@@ -88,6 +88,10 @@ def _compose_signature_cachet(
         from PIL import Image  # noqa: PLC0415
         import io as _io  # noqa: PLC0415
     except ImportError:
+        logger.warning(
+            "Pillow non installe : impossible de composer signature+cachet. "
+            "pip install Pillow",
+        )
         return b""
     # Cachet en fond
     if not cachet_bytes:
