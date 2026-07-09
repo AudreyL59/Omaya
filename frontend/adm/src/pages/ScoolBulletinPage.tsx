@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Save, FileText, ArrowLeft, Loader2, RefreshCw, Calculator,
-  ClipboardCheck, X,
+  ClipboardCheck,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import { showToast } from '@shared/ui/dialog'
@@ -55,10 +55,6 @@ interface NoteCalculee {
   type_note: string; lib_note: string
   palier_calc: number; note: number
 }
-
-const shortDate = (iso: string): string =>
-  !iso || iso.length < 10 ? ''
-    : `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
 
 // Assigne chaque type_note calcule au champ correspondant du bulletin
 const _TYPE_TO_FIELD: Record<string, keyof Bulletin> = {
