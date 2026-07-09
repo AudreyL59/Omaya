@@ -170,7 +170,7 @@ def create_orga(p: OrgaCreatePayload, op_id: int) -> str:
     new_id = _new_id()
     rh = get_pg_connection("rh")
     try:
-        rh.execute(
+        rh.query(
             """INSERT INTO pgt_organigramme
                   (idorganigramme, id_parent, lib_orga,
                    id_type_niveau_orga, id_type_orga,
@@ -203,7 +203,7 @@ def update_orga(id_orga: str, p: OrgaUpdatePayload, op_id: int) -> bool:
         return False
     rh = get_pg_connection("rh")
     try:
-        rh.execute(
+        rh.query(
             """UPDATE pgt_organigramme
                   SET lib_orga = ?,
                       id_type_niveau_orga = COALESCE(NULLIF(?, 0),
@@ -272,7 +272,7 @@ def move_orga(id_orga: str, id_parent_new: str, op_id: int) -> dict:
         }
     rh = get_pg_connection("rh")
     try:
-        rh.execute(
+        rh.query(
             """UPDATE pgt_organigramme
                   SET id_parent = ?, modif_date = NOW(),
                       modif_op = ?, modif_elem = 'modif'
@@ -303,7 +303,7 @@ def _copy_one_orga(
         return 0
     new_id = _new_id()
     try:
-        rh.execute(
+        rh.query(
             """INSERT INTO pgt_organigramme
                   (idorganigramme, id_parent, lib_orga,
                    id_type_niveau_orga, id_type_orga,
@@ -436,7 +436,7 @@ def deplacer_salarie(p: DeplacerSalariePayload, op_id: int) -> dict:
             except Exception:
                 new_dd = None
         try:
-            rh.execute(
+            rh.query(
                 """UPDATE pgt_salarie_organigramme
                       SET date_fin = ?,
                           date_debut = COALESCE(?, date_debut),
@@ -456,7 +456,7 @@ def deplacer_salarie(p: DeplacerSalariePayload, op_id: int) -> dict:
     # 3) Insert le nouveau rattachement
     try:
         new_id = _new_id()
-        rh.execute(
+        rh.query(
             """INSERT INTO pgt_salarie_organigramme
                   (id_salarie_organigramme, id_salarie, idorganigramme,
                    date_debut, date_fin, aff_actif, id_ste,
@@ -503,7 +503,7 @@ def delete_orga(id_orga: str, op_id: int) -> dict:
         # Ce check est best-effort ; si la table n'existe pas on continue
         logger.exception("delete_orga check salaries (ignore)")
     try:
-        rh.execute(
+        rh.query(
             """UPDATE pgt_organigramme
                   SET modif_date = NOW(), modif_op = ?, modif_elem = 'suppr'
                 WHERE idorganigramme = ?""",
