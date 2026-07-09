@@ -20,9 +20,12 @@ _ID_STE_BULLETIN = 306
 
 def _fmt_num(v, dec: int = 2) -> str:
     try:
-        return f"{float(v):,.{dec}f}".replace(",", " ").replace(".", ",")
+        formatted = f"{float(v):,.{dec}f}"
+        if dec > 0:
+            return formatted.replace(",", " ").replace(".", ",")
+        return formatted.replace(",", " ")
     except (TypeError, ValueError):
-        return "0,00"
+        return "0,00" if dec > 0 else "0"
 
 
 def _fmt_int(v) -> str:
@@ -214,6 +217,44 @@ def _load_infos_societe() -> dict:
     return dict(r or {})
 
 
+def _load_bareme_types(id_formation: str) -> list[dict]:
+    """Charge les types de notes du bareme d'une formation avec leur
+    coeff et position_bulletin (tri d'affichage cf. WinDev).
+    """
+    if not id_formation or id_formation == "0":
+        return []
+    db = get_pg_connection("scool")
+    try:
+        rows = db.query(
+            """SELECT type_note,
+                      MAX(coeff) AS coeff,
+                      MAX(position_bulletin) AS position_bulletin
+                 FROM scool.pgt_formation_bareme_note
+                WHERE id_formation = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                GROUP BY type_note
+                ORDER BY position_bulletin ASC, type_note ASC""",
+            (int(id_formation),),
+        ) or []
+    except Exception:
+        logger.exception("_load_bareme_types")
+        return []
+    return [dict(r) for r in rows]
+
+
+def _appreciation(note: float) -> str:
+    """Texte qualitatif selon la note sur 20."""
+    if note >= 16:
+        return "Très bien"
+    if note >= 14:
+        return "Bien"
+    if note >= 12:
+        return "Assez bien"
+    if note >= 10:
+        return "Passable"
+    return "Insuffisant"
+
+
 def _mention_lib(id_mention: str) -> str:
     if not id_mention:
         return ""
@@ -270,6 +311,9 @@ table.notes th {
 }
 table.notes td.center { text-align: center; }
 table.notes td.right { text-align: right; }
+table.notes tfoot tr.total td {
+  background: #F5F5F0; font-weight: bold; border-top: 2px solid #8B7355;
+}
 .badge-type {
   display: inline-block; padding: 3px 10px; border-radius: 12px;
   background: #17494E; color: white; font-size: 9pt; margin-left: 6px;
@@ -328,26 +372,99 @@ def _render_html(b: BulletinDetail) -> str:
     )
     mention_lib = _mention_lib(b.id_bulletin_mention)
 
-    notes_rows = [
-        ("Assiduité", b.note_assiduite, b.nb_jours_form - b.nb_jours_pres),
-        ("Objectif Ctt", b.note_ctt_hr, b.nb_ctt_hr),
-        ("Conquête", b.note_cqt, b.nb_cqt_hr),
-        ("Premium", b.note_prem, b.nb_prem_hr),
-        ("Mobile", b.note_mob, b.nb_mob_hr),
-        ("Cooptation", b.note_coopt, b.nb_coopt),
-        ("Objectif Décalé", b.note_obj_decale, b.objectif_decale),
-        ("Attitude Théorique", b.note_app_theo, "-"),
-        ("Attitude Pratique", b.note_app_pratique, "-"),
-    ]
+    # Mapping type_note -> (libelle, note, realise/palier)
+    # 'realise' = valeur brute atteinte par le stagiaire (nb contrats,
+    # % conquete, etc.)
+    obj_ctt = max(1, b.objectif_ctt)
+    obj_coopt = max(1, b.objectif_coopt)
+    pct_ctt = (b.nb_ctt_hr / obj_ctt) * 100
+    pct_cqt = (b.nb_cqt_hr / b.nb_ctt_hr * 100) if b.nb_ctt_hr > 0 else 0
+    pct_prem = (b.nb_prem_hr / b.nb_ctt_hr * 100) if b.nb_ctt_hr > 0 else 0
+    total_mob_ctt = b.nb_ctt_hr + b.nb_mob_hr
+    pct_mob = (b.nb_mob_hr / total_mob_ctt * 100) if total_mob_ctt > 0 else 0
+    pct_coopt = (b.nb_coopt / obj_coopt) * 100
+    nb_absences = b.nb_jours_form - b.nb_jours_pres
+
+    notes_by_type: dict[str, tuple[str, float, str]] = {
+        "NoteAPP_Théo": ("Attitude Théorique", b.note_app_theo, "-"),
+        "NoteAPPTheo": ("Attitude Théorique", b.note_app_theo, "-"),
+        "NoteAPPThéo": ("Attitude Théorique", b.note_app_theo, "-"),
+        "NoteAPP_Pratique": ("Attitude Pratique", b.note_app_pratique, "-"),
+        "NoteAPPPratique": ("Attitude Pratique", b.note_app_pratique, "-"),
+        "NoteAssiduite": ("Assiduité", b.note_assiduite,
+                          f"{nb_absences} abs."),
+        "NoteCttHR": ("Objectif Ctt", b.note_ctt_hr,
+                      f"{_fmt_num(pct_ctt, 0)}%"),
+        "NoteCQT": ("Conquête", b.note_cqt,
+                    f"{_fmt_num(pct_cqt, 0)}%"),
+        "NotePREM": ("Premium", b.note_prem,
+                     f"{_fmt_num(pct_prem, 0)}%"),
+        "NoteMOB": ("Mobile", b.note_mob,
+                    f"{_fmt_num(pct_mob, 0)}%"),
+        "NoteCoopt": ("Cooptation", b.note_coopt,
+                      f"{_fmt_num(pct_coopt, 0)}%"),
+        "NoteObjDécalé": (
+            "Objectif Décalé", b.note_obj_decale,
+            "Atteint" if b.objectif_decale else "Non atteint",
+        ),
+        "NoteObjDécalé": (
+            "Objectif Décalé", b.note_obj_decale,
+            "Atteint" if b.objectif_decale else "Non atteint",
+        ),
+        "NoteObjDecale": (
+            "Objectif Décalé", b.note_obj_decale,
+            "Atteint" if b.objectif_decale else "Non atteint",
+        ),
+    }
+
+    # Charge les types de notes du bareme de la formation (avec coeff)
+    types_bareme = _load_bareme_types(b.id_formation)
+    if not types_bareme:
+        # Fallback : liste par defaut avec coeff = 1
+        types_bareme = [
+            {"type_note": k, "coeff": 1, "position_bulletin": i}
+            for i, k in enumerate([
+                "NoteAPP_Théo", "NoteAPP_Pratique", "NoteAssiduite",
+                "NoteCttHR", "NoteCQT", "NotePREM", "NoteMOB",
+                "NoteObjDécalé", "NoteCoopt",
+            ], start=1)
+        ]
+
+    lignes_data: list[tuple[str, int, float, float, str]] = []
+    for t in types_bareme:
+        type_note = (t.get("type_note") or "").strip()
+        coeff = int(t.get("coeff") or 1)
+        lookup = notes_by_type.get(type_note)
+        if not lookup:
+            continue
+        lib, note, realise = lookup
+        note_ponderee = note * coeff
+        lignes_data.append((lib, coeff, note, note_ponderee, realise))
+
+    total_coeff = sum(c for _, c, _, _, _ in lignes_data)
+    total_ponderee = sum(np for _, _, _, np, _ in lignes_data)
+    moy_generale = (total_ponderee / total_coeff) if total_coeff else 0
 
     lignes_html = "".join(
         f"""<tr>
               <td>{escape(lib)}</td>
-              <td class="center">{val if isinstance(val, str) else _fmt_int(val)}</td>
+              <td class="center">{coeff}</td>
               <td class="right">{_fmt_num(note)}</td>
+              <td class="right">{_fmt_num(note_ponderee)}</td>
+              <td class="center">{escape(realise)}</td>
+              <td>{escape(_appreciation(note))}</td>
             </tr>"""
-        for lib, note, val in notes_rows
+        for lib, coeff, note, note_ponderee, realise in lignes_data
     )
+
+    total_html = f"""<tr class="total">
+        <td>TOTAL</td>
+        <td class="center">{total_coeff}</td>
+        <td></td>
+        <td class="right">{_fmt_num(total_ponderee)}</td>
+        <td></td>
+        <td class="right"><b>Moy. {_fmt_num(moy_generale)}/20</b></td>
+      </tr>"""
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>{_CSS}</style></head>
@@ -394,11 +511,15 @@ def _render_html(b: BulletinDetail) -> str:
     <thead>
       <tr>
         <th>Item</th>
-        <th>Chiffre</th>
+        <th>Coeff</th>
         <th>Note</th>
+        <th>Note pondérée</th>
+        <th>Réalisé</th>
+        <th>Appréciation</th>
       </tr>
     </thead>
     <tbody>{lignes_html}</tbody>
+    <tfoot>{total_html}</tfoot>
   </table>
 
   <div class="zone-formateur">
