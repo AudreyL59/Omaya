@@ -18,6 +18,7 @@ from app.intranets.vendeur.routers.clusters import router as clusters_router
 from app.intranets.vendeur.routers.tickets import router as tickets_router
 from app.intranets.vendeur.routers.process import router as process_router
 from app.intranets.vendeur.routers.tickets_call import router as tickets_call_router
+from app.intranets.vendeur.routers.tickets_call_suivi import router as tickets_call_suivi_router
 from app.intranets.vendeur.routers.dialogues import router as dialogues_router
 
 router = APIRouter(
@@ -48,4 +49,7 @@ router.include_router(get_tickets_router("DroitAccèsVend"))
 router.include_router(tickets_router)
 router.include_router(process_router)
 router.include_router(tickets_call_router)
+# Nouvelle page 'Tickets Call Suivi' (fusion Fibre + Energie avec
+# filtrage orga, cf. droit ProdRezo)
+router.include_router(tickets_call_suivi_router)
 router.include_router(dialogues_router)
