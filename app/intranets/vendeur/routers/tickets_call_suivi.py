@@ -65,3 +65,28 @@ def get_traites(
             jour=jour,
         ),
     }
+
+
+@router.get("/dashboard/fibre")
+def get_dashboard_fibre(
+    jour: str | None = None,
+    user: UserToken = Depends(get_current_user),
+):
+    """Dashboard Fibre : 4 stats + agences internes + Power/Fox.
+    Cf. compute_stats de call/fibre/tickets.py.
+    """
+    _require_droit(user, "TicketCall")
+    return svc.dashboard_fibre(user.droits or [], jour=jour)
+
+
+@router.get("/dashboard/energie")
+def get_dashboard_energie(
+    jour: str | None = None,
+    user: UserToken = Depends(get_current_user),
+):
+    """Dashboard Energie : partenaires globaux + zones
+    (agences internes / multicom / power) avec detail par_partenaire.
+    Cf. compute_stats_energie de call/energie/tickets.py.
+    """
+    _require_droit(user, "TicketCall")
+    return svc.dashboard_energie(user.droits or [], jour=jour)

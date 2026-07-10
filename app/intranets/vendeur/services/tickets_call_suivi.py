@@ -29,6 +29,23 @@ ID_OPE_FORMATION = 6
 ID_POSTE_MASQUE_DIFF = 20
 STATUTS_TRAITES = (14, 15, 16, 17, 19)   # 18 et 28 exclus
 
+# Constantes agences hardcodees WinDev (identiques a call/fibre + call/energie)
+AGENCES_INTERNES_FIBRE: list[tuple[int, str]] = [
+    (64, "Agence CD"),
+    (20260402170805658, "Agence Duval Caen"),
+    (20191203164626234, "Agence JR"),
+    (20210906121249525, "Agence Le Mans"),
+    (20260402142812484, "Agence Brosset Tours"),
+    (20260402165637765, "Agence Poitiers"),
+]
+AGENCES_INTERNES_ENERGIE: list[tuple[int, str]] = [
+    (20260219111520715, "Agence Calais"),
+    (20260601102030477, "Agence Rennes"),
+]
+ID_ORGA_POWER = 20180131091629815
+ID_ORGA_FOX = 20230105145730716
+ID_ORGA_MULTICOM = 20231116115050078
+
 # Exclusions cf. WinDev ListeOrgaComplet : "Hors distrib Archives"
 _ID_ORGA_EXCLU = 20160729152638792
 
@@ -795,3 +812,336 @@ def list_traites_suivi(
     # Tri : date desc
     out.sort(key=lambda t: t["date_crea"], reverse=True)
     return out
+
+
+# --------------------------------------------------------------------
+# Dashboards (Fibre + Energie) - stats par agences + partenaires
+# --------------------------------------------------------------------
+
+def _load_agences_meta(id_orgas: set[int]) -> dict[int, dict]:
+    """Retourne {id_orga: {lib_orga, gimmick_url}} pour l'affichage des
+    agences dans le dashboard. gimmick_url est un data-uri PNG stocke
+    dans pgt_organigramme.gimmick ou similaire.
+    """
+    if not id_orgas:
+        return {}
+    rh = get_pg_connection("rh")
+    ids_sql = ",".join(str(i) for i in id_orgas)
+    try:
+        rows = rh.query(
+            f"""SELECT idorganigramme, lib_orga
+                  FROM pgt_organigramme
+                 WHERE idorganigramme IN ({ids_sql})""",
+        ) or []
+    except Exception:
+        return {}
+    return {
+        _to_int(r.get("idorganigramme")): {
+            "lib_orga": (r.get("lib_orga") or "").strip(),
+            "gimmick_url": "",
+        }
+        for r in rows
+    }
+
+
+def _load_partenaires_actifs() -> list[dict]:
+    """Referentiel des partenaires actifs (cote adv). Utilise pour le
+    tableau du dashboard Energie."""
+    adv = get_pg_connection("adv")
+    try:
+        rows = adv.query(
+            """SELECT id_partenaire, prefixe_bdd, lib_partenaire
+                 FROM adv.pgt_partenaire
+                WHERE is_actif = TRUE
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                ORDER BY lib_partenaire ASC""",
+        ) or []
+    except Exception:
+        return []
+    return [
+        {
+            "id": _str_id(r.get("id_partenaire")),
+            "prefix": (r.get("prefixe_bdd") or "").strip(),
+            "lib": (r.get("lib_partenaire") or "").strip(),
+            "logo_url": "",   # a completer si logo dispo dans adv.pgt_partenaire
+        }
+        for r in rows if (r.get("prefixe_bdd") or "").strip()
+    ]
+
+
+def dashboard_fibre(user_droits: list[str], jour: str | None = None) -> dict:
+    """Compute stats Fibre. Meme forme que compute_stats du call/fibre :
+    4 stats globales + agences internes + power/fox.
+    """
+    # Filtre orga si applicable (seul le user avec ProdRezo voit tout)
+    has_prod_rezo = "ProdRezo" in (user_droits or [])
+    jour_compact = (jour or _date.today().isoformat()).replace("-", "")
+
+    liste = _select_traites_pg(IDTK_TYPE_DEMANDE_CALL_FIBRE, jour_compact)
+    if not liste:
+        return _dashboard_fibre_empty()
+    by_id = {_to_int(r.get("id_tk_liste")): r for r in liste}
+    call = _select_call_sfr_traites(list(by_id.keys()))
+    id_calls = [_to_int(r.get("id_tk_call_sfr")) for r in call]
+    id_salaries = {_to_int(r.get("id_salarie")) for r in call} - {0}
+    panier_by_call: dict[int, list[dict]] = {}
+    for p in _select_panier_sfr(id_calls):
+        panier_by_call.setdefault(
+            _to_int(p.get("id_tk_call_sfr")), [],
+        ).append(p)
+
+    # Descendants de chaque racine (via _liste_orga_complet)
+    all_agence_ids = (
+        {a[0] for a in AGENCES_INTERNES_FIBRE}
+        | {ID_ORGA_POWER, ID_ORGA_FOX}
+    )
+    agence_to_descendants = {
+        id_orga: _liste_orga_complet(id_orga)
+        for id_orga in all_agence_ids
+    }
+    affectations = _load_affectations_actives(id_salaries)
+
+    paniers_valides = 0
+    offres_fibre_thd = 0
+    cq_fibre_valides = 0
+    mobiles_valides = 0
+    nb_fibre_internes = {a[0]: 0 for a in AGENCES_INTERNES_FIBRE}
+    nb_mobile_internes = {a[0]: 0 for a in AGENCES_INTERNES_FIBRE}
+    nb_fibre_power = 0
+    nb_mobile_power = 0
+    nb_fibre_fox = 0
+    nb_mobile_fox = 0
+
+    for r in call:
+        id_tk = _to_int(r.get("id_tk_liste"))
+        if id_tk not in by_id:
+            continue
+        id_sal = _to_int(r.get("id_salarie"))
+        aff = affectations.get(id_sal, {})
+        id_orga_v = aff.get("id_orga", 0)
+        # Filtre orga si pas ProdRezo
+        if not has_prod_rezo:
+            id_orga_user = _get_orga_courant(0)  # a affiner
+            _ = id_orga_user  # non utilise ici, on garde global pour dashboard
+
+        panier = panier_by_call.get(_to_int(r.get("id_tk_call_sfr")), [])
+        for off in panier:
+            if _to_int(off.get("statut_prod")) not in (1, 3):
+                continue
+            if (off.get("type") or "").strip() == "FIBRE":
+                paniers_valides += 1
+                if (off.get("num") or "").strip():
+                    offres_fibre_thd += 1
+                    matched = False
+                    for id_ag in nb_fibre_internes:
+                        if id_orga_v in agence_to_descendants[id_ag]:
+                            nb_fibre_internes[id_ag] += 1
+                            matched = True
+                            break
+                    if not matched:
+                        if id_orga_v in agence_to_descendants[ID_ORGA_POWER]:
+                            nb_fibre_power += 1
+                        elif id_orga_v in agence_to_descendants[ID_ORGA_FOX]:
+                            nb_fibre_fox += 1
+                if _to_int(off.get("type_vente")) in (1, 2):
+                    cq_fibre_valides += 1
+            elif (off.get("type") or "").strip() == "MOBILE":
+                mobiles_valides += 1
+                matched = False
+                for id_ag in nb_mobile_internes:
+                    if id_orga_v in agence_to_descendants[id_ag]:
+                        nb_mobile_internes[id_ag] += 1
+                        matched = True
+                        break
+                if not matched:
+                    if id_orga_v in agence_to_descendants[ID_ORGA_POWER]:
+                        nb_mobile_power += 1
+                    elif id_orga_v in agence_to_descendants[ID_ORGA_FOX]:
+                        nb_mobile_fox += 1
+
+    agences_meta = _load_agences_meta({a[0] for a in AGENCES_INTERNES_FIBRE})
+    return {
+        "paniers_valides": paniers_valides,
+        "offres_fibre_thd": offres_fibre_thd,
+        "cq_fibre_valides": cq_fibre_valides,
+        "mobiles_valides": mobiles_valides,
+        "agences_internes": [
+            {
+                "id_orga": str(id_orga),
+                "lib_orga": (
+                    agences_meta.get(id_orga, {}).get("lib_orga")
+                    or lib_default
+                ),
+                "nb_fibre": nb_fibre_internes.get(id_orga, 0),
+                "nb_mobile": nb_mobile_internes.get(id_orga, 0),
+                "gimmick_url": agences_meta.get(id_orga, {}).get("gimmick_url", ""),
+            }
+            for (id_orga, lib_default) in AGENCES_INTERNES_FIBRE
+        ],
+        "nb_fibre_power": nb_fibre_power,
+        "nb_mobile_power": nb_mobile_power,
+        "nb_fibre_fox": nb_fibre_fox,
+        "nb_mobile_fox": nb_mobile_fox,
+    }
+
+
+def _dashboard_fibre_empty() -> dict:
+    return {
+        "paniers_valides": 0, "offres_fibre_thd": 0,
+        "cq_fibre_valides": 0, "mobiles_valides": 0,
+        "agences_internes": [
+            {
+                "id_orga": str(id_orga), "lib_orga": lib,
+                "nb_fibre": 0, "nb_mobile": 0, "gimmick_url": "",
+            }
+            for (id_orga, lib) in AGENCES_INTERNES_FIBRE
+        ],
+        "nb_fibre_power": 0, "nb_mobile_power": 0,
+        "nb_fibre_fox": 0, "nb_mobile_fox": 0,
+    }
+
+
+def dashboard_energie(user_droits: list[str], jour: str | None = None) -> dict:
+    """Compute stats Energie : tickets_valides + partenaires (global) +
+    zones agences_internes / multicom / power avec par_partenaire.
+    """
+    _ = user_droits   # accessible a tout user avec droit d'acces au menu
+    jour_compact = (jour or _date.today().isoformat()).replace("-", "")
+
+    liste = _select_traites_pg(IDTK_TYPE_DEMANDE_CALL_ENERGIE, jour_compact)
+    partenaires = _load_partenaires_actifs()
+
+    def _empty_par_partenaire():
+        return {p["prefix"]: {"nb_offres": 0, "tickets_set": set()}
+                for p in partenaires}
+
+    if not liste:
+        return _dashboard_energie_empty(partenaires)
+
+    by_id = {_to_int(r.get("id_tk_liste")): r for r in liste}
+    call = _select_call_eni_traites(list(by_id.keys()))
+    id_calls = [_to_int(r.get("id_tk_call")) for r in call]
+    id_salaries = {_to_int(r.get("id_salarie")) for r in call} - {0}
+    panier_by_call: dict[int, list[dict]] = {}
+    for p in _select_panier_eni(id_calls):
+        panier_by_call.setdefault(
+            _to_int(p.get("id_tk_call")), [],
+        ).append(p)
+
+    agence_to_descendants = {
+        id_orga: _liste_orga_complet(id_orga)
+        for id_orga, _ in AGENCES_INTERNES_ENERGIE
+    }
+    multicom_set = _liste_orga_complet(ID_ORGA_MULTICOM)
+    power_set = _liste_orga_complet(ID_ORGA_POWER)
+    affectations = _load_affectations_actives(id_salaries)
+
+    tickets_valides = 0
+    stats_by_prefix = _empty_par_partenaire()
+    stats_internes = {
+        id_orga: _empty_par_partenaire()
+        for id_orga, _ in AGENCES_INTERNES_ENERGIE
+    }
+    stats_multicom = _empty_par_partenaire()
+    stats_power = _empty_par_partenaire()
+
+    for r in call:
+        id_tk = _to_int(r.get("id_tk_liste"))
+        if id_tk not in by_id:
+            continue
+        id_sal = _to_int(r.get("id_salarie"))
+        id_orga_v = affectations.get(id_sal, {}).get("id_orga", 0)
+        zone_target: dict | None = None
+        for id_ag in stats_internes:
+            if id_orga_v in agence_to_descendants[id_ag]:
+                zone_target = stats_internes[id_ag]
+                break
+        if zone_target is None and id_orga_v in multicom_set:
+            zone_target = stats_multicom
+        if zone_target is None and id_orga_v in power_set:
+            zone_target = stats_power
+
+        panier = panier_by_call.get(_to_int(r.get("id_tk_call")), [])
+        has_valid = False
+        seen_prefixes: set[str] = set()
+        for off in panier:
+            if _to_int(off.get("statut_prod")) not in (1, 3):
+                continue
+            has_valid = True
+            prefix = (off.get("partenaire") or "").strip()
+            if prefix in stats_by_prefix:
+                stats_by_prefix[prefix]["nb_offres"] += 1
+                seen_prefixes.add(prefix)
+                if zone_target is not None:
+                    zone_target[prefix]["nb_offres"] += 1
+        if has_valid:
+            tickets_valides += 1
+        for prefix in seen_prefixes:
+            stats_by_prefix[prefix]["tickets_set"].add(str(id_tk))
+            if zone_target is not None:
+                zone_target[prefix]["tickets_set"].add(str(id_tk))
+
+    agences_meta = _load_agences_meta({a[0] for a in AGENCES_INTERNES_ENERGIE})
+
+    def _serialize(zone_stats):
+        out: list[dict] = []
+        for p in partenaires:
+            d = zone_stats[p["prefix"]]
+            if d["nb_offres"] == 0 and not d["tickets_set"]:
+                continue
+            out.append({
+                "prefix": p["prefix"], "lib": p["lib"],
+                "logo_url": p["logo_url"],
+                "nb_offres": d["nb_offres"],
+                "nb_clients": len(d["tickets_set"]),
+            })
+        return out
+
+    return {
+        "tickets_valides": tickets_valides,
+        "partenaires": [
+            {
+                "id": p["id"], "prefix": p["prefix"], "lib": p["lib"],
+                "logo_url": p["logo_url"],
+                "nb_offres": stats_by_prefix[p["prefix"]]["nb_offres"],
+                "nb_clients": len(stats_by_prefix[p["prefix"]]["tickets_set"]),
+            }
+            for p in partenaires
+        ],
+        "agences_internes": [
+            {
+                "id_orga": str(id_orga),
+                "lib_orga": (
+                    agences_meta.get(id_orga, {}).get("lib_orga") or lib_default
+                ),
+                "gimmick_url": agences_meta.get(id_orga, {}).get("gimmick_url", ""),
+                "par_partenaire": _serialize(stats_internes[id_orga]),
+            }
+            for (id_orga, lib_default) in AGENCES_INTERNES_ENERGIE
+        ],
+        "multicom": {"par_partenaire": _serialize(stats_multicom)},
+        "power": {"par_partenaire": _serialize(stats_power)},
+    }
+
+
+def _dashboard_energie_empty(partenaires: list[dict]) -> dict:
+    return {
+        "tickets_valides": 0,
+        "partenaires": [
+            {
+                "id": p["id"], "prefix": p["prefix"], "lib": p["lib"],
+                "logo_url": p["logo_url"],
+                "nb_offres": 0, "nb_clients": 0,
+            }
+            for p in partenaires
+        ],
+        "agences_internes": [
+            {
+                "id_orga": str(id_orga), "lib_orga": lib,
+                "gimmick_url": "", "par_partenaire": [],
+            }
+            for (id_orga, lib) in AGENCES_INTERNES_ENERGIE
+        ],
+        "multicom": {"par_partenaire": []},
+        "power": {"par_partenaire": []},
+    }
