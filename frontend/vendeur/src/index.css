@@ -19,9 +19,10 @@
   --color-omaya-success: #22c55e;
 
   /* --- Tokens de thème pour les composants partagés (frontend/shared/) ---
-     Vendeur : charte noir + bleu (cf. Sidebar bg-gray-950, boutons
-     bg-blue-600 utilises partout dans /vendeur/pages). ADM redefinit
-     ces mêmes noms avec sa charte marron/vert-fonce. */
+     Vendeur : charte noir + gris (cf. AgendaCialPage bg-gray-900 sur
+     tous les CTA, sidebar bg-gray-950). Le bleu et l'emerald sont des
+     accents ponctuels sur les stats, PAS la couleur primaire.
+     ADM redefinit ces memes noms avec sa charte marron/vert-fonce. */
   --color-c-page: #f9fafb;
   --color-c-surface: #ffffff;
   --color-c-surface-soft: #f9fafb;
@@ -37,10 +38,10 @@
   --color-c-ink-faint: #6b7280;       /* gray-500 */
   --color-c-ink-faint-2: #9ca3af;     /* gray-400 */
   --color-c-ink-icon: #d1d5db;
-  --color-c-brand: #2563eb;           /* blue-600 (accents/CTA) */
-  --color-c-brand-strong: #1d4ed8;    /* blue-700 (hover) */
-  --color-c-brand-soft: #eff6ff;      /* blue-50 (fond leger) */
-  --color-c-brand-line: #bfdbfe;      /* blue-200 (bordure douce) */
+  --color-c-brand: #111827;           /* gray-900 (CTA principaux) */
+  --color-c-brand-strong: #030712;    /* gray-950 (hover) */
+  --color-c-brand-soft: #f3f4f6;      /* gray-100 (fond neutre) */
+  --color-c-brand-line: #e5e7eb;      /* gray-200 (bordure douce) */
 }
 
 body {
