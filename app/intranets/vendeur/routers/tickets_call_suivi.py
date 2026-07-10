@@ -90,3 +90,47 @@ def get_dashboard_energie(
     """
     _require_droit(user, "TicketCall")
     return svc.dashboard_energie(user.droits or [], jour=jour)
+
+
+# --- Fiches ticket (portage PG) ------------------------------------------
+
+@router.get("/fiche-fibre/{id_ticket}")
+def get_fiche_fibre(
+    id_ticket: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Charge la fiche d'un ticket Call Fibre (portage PG de
+    /call/fibre/tickets/{id}/fiche)."""
+    _require_droit(user, "TicketCall")
+    from app.intranets.vendeur.services import (
+        tickets_call_fiche_fibre as fiche_svc,
+    )
+    id_user = int(user.id_salarie or 0)
+    try:
+        data = fiche_svc.load_fiche(int(id_ticket), current_user_id=id_user)
+    except Exception as e:
+        raise HTTPException(500, f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(404, data["error"])
+    return data
+
+
+@router.get("/fiche-energie/{id_ticket}")
+def get_fiche_energie(
+    id_ticket: str,
+    user: UserToken = Depends(get_current_user),
+):
+    """Charge la fiche d'un ticket Call Energie (portage PG de
+    /call/energie/tickets/{id}/fiche)."""
+    _require_droit(user, "TicketCall")
+    from app.intranets.vendeur.services import (
+        tickets_call_fiche_energie as fiche_svc,
+    )
+    id_user = int(user.id_salarie or 0)
+    try:
+        data = fiche_svc.load_fiche(int(id_ticket), current_user_id=id_user)
+    except Exception as e:
+        raise HTTPException(500, f"{type(e).__name__}: {e}")
+    if "error" in data:
+        raise HTTPException(404, data["error"])
+    return data
