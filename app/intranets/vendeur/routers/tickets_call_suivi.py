@@ -44,3 +44,24 @@ def get_en_cours(user: UserToken = Depends(get_current_user)):
             id_poste_user=0,
         ),
     }
+
+
+@router.get("/traites")
+def get_traites(
+    jour: str | None = None,
+    user: UserToken = Depends(get_current_user),
+):
+    """Liste unifiee des tickets Call traites (Fibre + Energie) pour un
+    jour donne (default = today), filtree par orga si pas ProdRezo.
+
+    jour : 'YYYY-MM-DD' ou 'YYYYMMDD'.
+    """
+    _require_droit(user, "TicketCall")
+    id_user = int(user.id_salarie or 0)
+    return {
+        "tickets_traites": svc.list_traites_suivi(
+            id_user=id_user,
+            user_droits=user.droits or [],
+            jour=jour,
+        ),
+    }
