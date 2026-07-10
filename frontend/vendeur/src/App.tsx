@@ -9,6 +9,7 @@ import CvthequePage from '@/pages/CvthequePage'
 import ConfRdvPage from '@/pages/PageExterne/ConfRdvPage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
 import ClustersPage from '@/pages/ClustersPage'
+import TicketsCallSuiviPage from '@/pages/TicketsCallSuiviPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import TicketsPage from '@shared/tickets/TicketsPage'
@@ -56,7 +57,7 @@ function App() {
           <Route path="clusters" element={<ClustersPage />} />
           <Route path="tickets" element={<TicketsPage apiBase={VENDEUR_API} getToken={getToken} />} />
           <Route path="process" element={<PlaceholderPage />} />
-          <Route path="tickets-call" element={<PlaceholderPage />} />
+          <Route path="tickets-call" element={<TicketsCallSuiviPage />} />
           <Route path="tickets-call/energie" element={<PlaceholderPage />} />
           <Route path="tickets-call/fibre" element={<PlaceholderPage />} />
           <Route path="dialogues" element={<PlaceholderPage />} />
