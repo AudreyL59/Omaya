@@ -27,8 +27,11 @@ const API_COMMON = '/api/vendeur/ticket-call'
 
 // --- Types --------------------------------------------------------------
 
+// IDs 8 octets (WinDev 'entier non signe 8 octets') passes en string
+// car JS Number perd la precision au-dela de 2^53 (17 chiffres).
+// Cf. memoire feedback_ids_8octets_string.
 interface Ticket {
-  IDTK_Liste: number
+  IDTK_Liste: string
   NomClient?: string
   PrenomClient?: string
   ClientPro?: boolean | number
@@ -62,7 +65,7 @@ interface TypeInstallOHM {
 }
 
 interface PanierItem {
-  IDtk_Call_Panier: number
+  IDtk_Call_Panier: string
   LibOffre?: string
   Part?: string
   NumBS?: string
@@ -102,7 +105,7 @@ export default function TicketCallEnergiePage() {
   // Init
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [partenaires, setPartenaires] = useState<Partenaire[]>([])
-  const [idTicketEnCours, setIdTicketEnCours] = useState(0)
+  const [idTicketEnCours, setIdTicketEnCours] = useState('')
 
   // Formulaire client
   const [civilite, setCivilite] = useState(1)  // 1=M, 2=Mme, 3=Melle
@@ -223,7 +226,7 @@ export default function TicketCallEnergiePage() {
   }, [call])
   useEffect(() => { void loadInit() }, [loadInit])
 
-  const loadPanier = useCallback(async (idTicket: number) => {
+  const loadPanier = useCallback(async (idTicket: string) => {
     const r = await call<PanierItem[]>('POST', `${API}/panier/${idTicket}`)
     if (Array.isArray(r)) setPanier(r)
   }, [call])
@@ -245,20 +248,20 @@ export default function TicketCallEnergiePage() {
     setVilleId(0); setVilleNom(''); setMobile1(''); setMail('')
     setClientPro(false); setRs(''); setSiret('')
     setPanier([]); setCinFiles([]); setKbisFiles([])
-    setCinOk(false); setKbisOk(false); setIdTicketEnCours(0)
+    setCinOk(false); setKbisOk(false); setIdTicketEnCours('')
   }
 
   // --- Actions Plan 1 : ouvrir / supprimer ticket ------------------
 
   const openTicket = async (t: Ticket) => {
-    setIdTicketEnCours(_toInt(t.IDTK_Liste))
+    setIdTicketEnCours(t.IDTK_Liste)
     setClientPro(_bool(t.ClientPro))
     setCinOk(_bool(t.PhotoOK))
     setKbisOk(_bool(t.KbisOK))
     if (_bool(t.ClientPro) && (!_bool(t.KbisOK) || !_bool(t.PhotoOK))) {
       setPlan(11)
     } else {
-      await loadPanier(_toInt(t.IDTK_Liste))
+      await loadPanier(t.IDTK_Liste)
       setPlan(3)
     }
   }
@@ -311,7 +314,7 @@ export default function TicketCallEnergiePage() {
       ClientRS: rs,
       ClientSiret: siret,
     }
-    const r = await call<{ nIdDemande: number; sInfoData?: string }>(
+    const r = await call<{ nIdDemande: string; sInfoData?: string }>(
       'POST', `${API}/nouveau-ticket`, payload,
     )
     setLoading(false)
@@ -446,18 +449,18 @@ export default function TicketCallEnergiePage() {
       const rprod = await call<Produit[]>('POST', `${API}/produits-actifs/VAL`)
       const list = Array.isArray(rprod) ? rprod : []
       for (const p of list) {
-        const r = await call<{ nIdDemande: number }>(
+        const r = await call<{ nIdDemande: string }>(
           'POST', `${API}/panier/produit/ajouter`, buildBaseProd(p.IDProduit, ''),
         )
         if (r?.nIdDemande) ok = true
       }
     } else if (typePart === 'OEN' && oenTypeOffre === 2) {
       // Dual : 2 POST successifs
-      const r1 = await call<{ nIdDemande: number }>(
+      const r1 = await call<{ nIdDemande: string }>(
         'POST', `${API}/panier/produit/ajouter`,
         buildBaseProd(selectedProdId, numBS),
       )
-      const r2 = await call<{ nIdDemande: number }>(
+      const r2 = await call<{ nIdDemande: string }>(
         'POST', `${API}/panier/produit/ajouter`,
         buildBaseProd(selectedProdDualId, numBSDual),
       )
@@ -466,7 +469,7 @@ export default function TicketCallEnergiePage() {
         setToast('2 contrats OEN ajoutes. Pense a joindre la clarification.')
       }
     } else if (selectedProdId) {
-      const r = await call<{ nIdDemande: number }>(
+      const r = await call<{ nIdDemande: string }>(
         'POST', `${API}/panier/produit/ajouter`,
         buildBaseProd(selectedProdId, numBS),
       )

@@ -245,7 +245,7 @@ def liste_clients_non_finalises(id_vend: int) -> list[dict]:
     for r in rows:
         id_tk = _to_int(r.get("id_tk_liste"))
         out.append({
-            "IDTK_Liste": id_tk,
+            "IDTK_Liste": _str_id(id_tk),
             "CiviliteClient": _to_int(r.get("civilite_client")),
             "NomClient": r.get("nom_client") or "",
             "NomMaritalClient": r.get("nom_marital_client") or "",
@@ -267,6 +267,14 @@ def liste_clients_non_finalises(id_vend: int) -> list[dict]:
             "ClientSiret": r.get("client_siret") or "",
         })
     return out
+
+
+def _str_id(v) -> str:
+    """IDs entiers 8 octets exposes en string (JS Number depasse 2^53).
+    Cf. memoire feedback_ids_8octets_string.
+    """
+    n = _to_int(v)
+    return str(n) if n else ""
 
 
 # --------------------------------------------------------------------
@@ -317,7 +325,7 @@ def contenu_panier_call(id_ticket: int) -> list[dict]:
             except Exception:
                 logger.exception("lib_produit lookup part=%s", part)
         out.append({
-            "IDtk_Call_Panier": _to_int(r.get("id_tk_call_panier")),
+            "IDtk_Call_Panier": _str_id(r.get("id_tk_call_panier")),
             "Part": lib_partenaires.get(part, part),
             "IDProduit": id_prod,
             "LibOffre": lib_offre,
@@ -405,7 +413,7 @@ def sfr_liste_clients_non_finalises(id_vend: int) -> list[dict]:
     for r in rows:
         id_tk = _to_int(r.get("id_tk_liste"))
         out.append({
-            "IDTK_Liste": id_tk,
+            "IDTK_Liste": _str_id(id_tk),
             "CiviliteClient": _to_int(r.get("civilite_client")),
             "NomClient": r.get("nom_client") or "",
             "NomMaritalClient": r.get("nom_marital_client") or "",
@@ -461,7 +469,7 @@ def sfr_liste_anomalie() -> list[dict]:
         return []
     return [
         {
-            "IDtk_CallSFR_Anomalie": _to_int(r.get("id_tk_call_sfr_type_anomalie")),
+            "IDtk_CallSFR_Anomalie": _str_id(r.get("id_tk_call_sfr_type_anomalie")),
             "LibTypeAnomalie": r.get("lib_type_anomalie") or "",
         }
         for r in rows
@@ -484,13 +492,16 @@ def sfr_contenu_panier(id_ticket: int) -> list[dict]:
     """
     db = get_pg_connection("ticket_bo")
     try:
+        # LEFT JOIN defensif : si l'offre a ete supprimee de
+        # pgt_sfr_offres_provad, la ligne de panier remonte quand meme
+        # (avec lib_offre vide) — evite un panier fantome.
         rows = db.query(
             """SELECT tp.id_tk_call_sfr_panier, tp.id_tk_call_sfr,
                       tp.id_tk_liste, tp.type, tp.id_offres_sfr,
                       tp.num_portabilite, tp.num,
                       o.lib_offre, o.prix_offre
                  FROM ticket_bo.pgt_tk_call_sfr_panier tp
-                 JOIN adv.pgt_sfr_offres_provad o
+                 LEFT JOIN adv.pgt_sfr_offres_provad o
                    ON o.id_offres_sfr = tp.id_offres_sfr
                 WHERE tp.id_tk_liste = ?
                   AND (tp.modif_elem IS NULL OR tp.modif_elem <> 'suppr')
@@ -502,9 +513,9 @@ def sfr_contenu_panier(id_ticket: int) -> list[dict]:
         return []
     return [
         {
-            "IDtk_CallSFR_Panier": _to_int(r.get("id_tk_call_sfr_panier")),
+            "IDtk_CallSFR_Panier": _str_id(r.get("id_tk_call_sfr_panier")),
             "Type": r.get("type") or "",
-            "IDOffres_SFR": _to_int(r.get("id_offres_sfr")),
+            "IDOffres_SFR": _str_id(r.get("id_offres_sfr")),
             "LibOffre": r.get("lib_offre") or "",
             "MontantOffre": float(r.get("prix_offre") or 0),
             "NumPortabilite": r.get("num_portabilite") or "",
@@ -576,7 +587,7 @@ def sfr_lister_offres(type_offre: str, avec_tv: bool) -> list[dict]:
             if has_tv != bool(avec_tv):
                 continue
         out.append({
-            "IDOffres_SFR": _to_int(r.get("id_offres_sfr")),
+            "IDOffres_SFR": _str_id(r.get("id_offres_sfr")),
             "Type": r.get("type") or "",
             "Lib_Offre": lib_offre,
             "DebitDown": r.get("debit_down") or "",
@@ -648,7 +659,7 @@ def sfr_ajouter_produit_panier(payload: dict) -> dict:
                 now, _to_int(payload.get("IDSalarie")),
             ),
         )
-        return {"nIdDemande": id_panier}
+        return {"nIdDemande": _str_id(id_panier)}
     except Exception as e:
         logger.exception("sfr_ajouter_produit_panier")
         return {"nIdDemande": 0, "sInfoData": str(e)}
@@ -997,7 +1008,7 @@ def sfr_crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
         logger.exception("sfr_crea_modif_tk_call: INSERT pgt_tk_liste")
         return {"nIdDemande": 0, "sInfoData": str(e)}
 
-    return {"nIdDemande": id_ticket, "sInfoData": info_blocage}
+    return {"nIdDemande": _str_id(id_ticket), "sInfoData": info_blocage}
 
 
 # --------------------------------------------------------------------
@@ -1214,7 +1225,7 @@ def ajouter_produit_panier_call(payload: dict) -> dict:
         )
         # OHM : insertion dans OHM_LeadsTypeIntall skipppee (table
         # absente du schema PG interne pour l'instant).
-        return {"nIdDemande": new_id}
+        return {"nIdDemande": _str_id(new_id)}
     except Exception as e:
         logger.exception("ajouter_produit_panier_call")
         return {"nIdDemande": 0, "sInfoData": str(e)}
@@ -1674,6 +1685,6 @@ def crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
         # partiellement cree existe.
         return {"nIdDemande": 0, "sInfoData": str(e)}
 
-    return {"nIdDemande": id_ticket, "sInfoData": info_blocage}
+    return {"nIdDemande": _str_id(id_ticket), "sInfoData": info_blocage}
 
 

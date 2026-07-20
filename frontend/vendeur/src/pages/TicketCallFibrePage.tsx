@@ -27,19 +27,23 @@ const API_COMMON = '/api/vendeur/ticket-call'
 
 // --- Types --------------------------------------------------------------
 
+// Les IDs 8 octets (WinDev 'entier non signe 8 octets') sont passes en
+// string car JS Number perd la precision au-dela de 2^53 (les IDs base
+// sur DateHeureSys() font ~17 chiffres). Cf. memoire
+// feedback_ids_8octets_string.
 interface Ticket {
-  IDTK_Liste: number
+  IDTK_Liste: string
   NomClient?: string; PrenomClient?: string
   ClientPro?: boolean | number; ClientRS?: string
   CP?: string; VILLE?: string
   PhotoOK?: boolean | number; KbisOK?: boolean | number
 }
 interface Anomalie {
-  IDtk_CallSFR_Anomalie: number
+  IDtk_CallSFR_Anomalie: string
   LibTypeAnomalie: string
 }
 interface Offre {
-  IDOffres_SFR: number
+  IDOffres_SFR: string
   Lib_Offre: string
   PrixOffre?: number | string
   Engagement?: string
@@ -50,7 +54,7 @@ interface Offre {
   Type?: string
 }
 interface PanierItem {
-  IDtk_CallSFR_Panier: number
+  IDtk_CallSFR_Panier: string
   LibOffre?: string
   Type?: string
   NumPortabilite?: string
@@ -99,7 +103,7 @@ export default function TicketCallFibrePage() {
   // Init
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [anomalies, setAnomalies] = useState<Anomalie[]>([])
-  const [idTicketEnCours, setIdTicketEnCours] = useState(0)
+  const [idTicketEnCours, setIdTicketEnCours] = useState('')
 
   // Formulaire client
   const [civilite, setCivilite] = useState(1)
@@ -131,7 +135,7 @@ export default function TicketCallFibrePage() {
 
   // Vente mobile
   const [venteMobile, setVenteMobile] = useState(1)  // 1=direct, 2=differee
-  const [selectedAnomalie, setSelectedAnomalie] = useState(0)
+  const [selectedAnomalie, setSelectedAnomalie] = useState('')
   const [infoCpltAnomalie, setInfoCpltAnomalie] = useState('')
 
   // Offres
@@ -141,7 +145,7 @@ export default function TicketCallFibrePage() {
   const [optChoisies, setOptChoisies] = useState('')
 
   // Portabilite + prise
-  const [idProdChoisi, setIdProdChoisi] = useState(0)
+  const [idProdChoisi, setIdProdChoisi] = useState('')
   const [typeProdChoisi, setTypeProdChoisi] = useState('')
   const [portabilite, setPortabilite] = useState(true)
   const [numPort, setNumPort] = useState('')
@@ -198,7 +202,7 @@ export default function TicketCallFibrePage() {
   }, [call])
   useEffect(() => { void loadInit() }, [loadInit])
 
-  const loadPanier = useCallback(async (idTk: number) => {
+  const loadPanier = useCallback(async (idTk: string) => {
     const r = await call<PanierItem[]>('POST', `${API}/panier/${idTk}`)
     if (Array.isArray(r)) setPanier(r)
   }, [call])
@@ -216,19 +220,19 @@ export default function TicketCallFibrePage() {
     setVilleId(0); setVilleNom(''); setMobile1(''); setMobile2(''); setMail('')
     setClientPro(false); setRs(''); setSiret('')
     setPanier([]); setCinFiles([]); setKbisFiles([])
-    setCinOk(false); setKbisOk(false); setIdTicketEnCours(0)
+    setCinOk(false); setKbisOk(false); setIdTicketEnCours('')
   }
 
   // --- Plan 1 : ouvrir / suppr ticket ----------------------------
 
   const openTicket = async (t: Ticket) => {
-    setIdTicketEnCours(_toInt(t.IDTK_Liste))
+    setIdTicketEnCours(t.IDTK_Liste)
     const isPro = _bool(t.ClientPro)
     setClientPro(isPro)
     setCinOk(_bool(t.PhotoOK)); setKbisOk(_bool(t.KbisOK))
     const docsOk = isPro ? _bool(t.KbisOK) : _bool(t.PhotoOK)
     if (docsOk) {
-      await loadPanier(_toInt(t.IDTK_Liste))
+      await loadPanier(t.IDTK_Liste)
       setPlan(4)
     } else {
       setPlan(3)
@@ -272,7 +276,7 @@ export default function TicketCallFibrePage() {
       TypeLogement: typeLogement, ClientPro: clientPro,
       ClientRS: rs, ClientSiret: siret,
     }
-    const r = await call<{ nIdDemande: number; sInfoData?: string }>(
+    const r = await call<{ nIdDemande: string; sInfoData?: string }>(
       'POST', `${API}/nouveau-ticket`, payload,
     )
     setLoading(false); setLoadingMsg('')
@@ -357,13 +361,13 @@ export default function TicketCallFibrePage() {
     if (v === 2) {
       await call('POST', `${API}/panier/anomalie-mobile/0`, {
         IDTK_Liste: idTicketEnCours,
-        IDtk_CallSFR_Anomalie: 0,
+        IDtk_CallSFR_Anomalie: '',
         InfoCplAnomalie: '',
       })
     }
   }
 
-  const changerAnomalie = async (id: number) => {
+  const changerAnomalie = async (id: string) => {
     setSelectedAnomalie(id)
     await call('POST', `${API}/panier/anomalie-mobile/1`, {
       IDTK_Liste: idTicketEnCours,
@@ -437,9 +441,9 @@ export default function TicketCallFibrePage() {
     setOffres(Array.isArray(r) ? r : [])
   }
 
-  const ajouterProduitDirect = async (idOffre: number, typeVente: number) => {
+  const ajouterProduitDirect = async (idOffre: string, typeVente: number) => {
     setLoading(true)
-    const r = await call<{ nIdDemande: number }>(
+    const r = await call<{ nIdDemande: string }>(
       'POST', `${API}/panier/produit/ajouter`, {
         IDTK_Liste: idTicketEnCours,
         IDOffres_SFR: idOffre,
@@ -468,7 +472,7 @@ export default function TicketCallFibrePage() {
       setToast('Lettre de résiliation manquante'); return
     }
     setLoading(true)
-    const r = await call<{ nIdDemande: number }>(
+    const r = await call<{ nIdDemande: string }>(
       'POST', `${API}/panier/produit/ajouter`, {
         IDTK_Liste: idTicketEnCours,
         IDOffres_SFR: idProdChoisi,
@@ -855,9 +859,9 @@ function PlanPanier(p: any) {
               <label className="block">
                 <span className="block text-xs text-c-ink-soft mb-0.5">Motif d'anomalie</span>
                 <select value={p.selectedAnomalie}
-                  onChange={(e) => p.setSelectedAnomalie(Number(e.target.value))}
+                  onChange={(e) => p.setSelectedAnomalie(e.target.value)}
                   className="w-full border border-c-line rounded px-2 py-1.5 text-sm bg-white">
-                  <option value={0}>Choisir…</option>
+                  <option value="">Choisir…</option>
                   {p.anomalies.map((a: Anomalie) => (
                     <option key={a.IDtk_CallSFR_Anomalie} value={a.IDtk_CallSFR_Anomalie}>
                       {a.LibTypeAnomalie}
@@ -865,7 +869,7 @@ function PlanPanier(p: any) {
                   ))}
                 </select>
               </label>
-              {p.selectedAnomalie === 100 && (
+              {p.selectedAnomalie === '100' && (
                 <Field label="Précisez" value={p.infoCpltAnomalie} onChange={p.setInfoCpltAnomalie} />
               )}
             </>
