@@ -48,6 +48,7 @@ function waitUntilVisible(): Promise<void> {
 interface TicketRow {
   id: string
   partenaire: string
+  partenaire_lib?: string
   date_crea: string
   nom_client: string
   cp: string
@@ -440,12 +441,13 @@ function TicketsTable({
               </td>
             )}
             <td className="py-1 px-2">
-              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${
                 r.partenaire === 'SFR'
                   ? 'bg-orange-100 text-orange-700'
                   : 'bg-emerald-100 text-emerald-700'
-              }`}>
-                {r.partenaire}
+              }`}
+                    title={r.partenaire}>
+                {r.partenaire_lib || r.partenaire}
               </span>
             </td>
             <td className="py-1 px-2 tabular-nums whitespace-nowrap">

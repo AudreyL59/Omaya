@@ -410,6 +410,7 @@ def list_en_cours_suivi(
     salaries = _load_salaries(all_ids_sal)
     affectations = _load_affectations_actives(id_salaries)
     statuts = _load_statuts()
+    partenaires_lib = _partenaires_prefix_to_lib()
 
     # 5) Filtre orga si pas ProdRezo + formatage final
     out: list[dict] = []
@@ -443,6 +444,9 @@ def list_en_cours_suivi(
         out.append({
             "id": row["id"],
             "partenaire": row["partenaire"],
+            "partenaire_lib": partenaires_lib.get(
+                (row["partenaire"] or "").upper(), row["partenaire"],
+            ),
             "date_crea": row["date_crea"],
             "nom_client": _format_nom_client(
                 row["civilite"], row["nom"], row["nom_marital"], row["prenom"],
@@ -659,6 +663,7 @@ def list_traites_suivi(
     salaries = _load_salaries(id_salaries)
     affectations = _load_affectations_actives(id_salaries)
     offre_libs = _load_offres_sfr_ref() if call_sfr else {}
+    partenaires_lib = _partenaires_prefix_to_lib()
 
     # 5) Construction Fibre
     out: list[dict] = []
@@ -712,6 +717,7 @@ def list_traites_suivi(
         out.append({
             "id": _str_id(id_tk),
             "partenaire": "SFR",
+            "partenaire_lib": partenaires_lib.get("SFR", "SFR"),
             "date_crea": _iso(tk.get("date_crea")),
             "nom_client": _format_nom_client(
                 _to_int(r.get("civilite_client")),
@@ -790,6 +796,9 @@ def list_traites_suivi(
         out.append({
             "id": _str_id(id_tk),
             "partenaire": partenaire_dominant,
+            "partenaire_lib": partenaires_lib.get(
+                partenaire_dominant.upper(), partenaire_dominant,
+            ),
             "date_crea": _iso(tk.get("date_crea")),
             "nom_client": _format_nom_client(
                 _to_int(r.get("civilite_client")),
@@ -850,6 +859,48 @@ def _load_agences_meta(id_orgas: set[int]) -> dict[int, dict]:
         }
         for r in rows
     }
+
+
+# Cache prefix->lib (5min) pour l'affichage des noms de partenaires
+# dans les tableaux 'en cours' + 'traites'.
+_PARTENAIRES_LIB_CACHE: dict = {"val": None, "at": 0.0}
+_PARTENAIRES_LIB_TTL = 300.0
+
+
+def _partenaires_prefix_to_lib() -> dict[str, str]:
+    """{prefix (uppercase): lib_partenaire} depuis adv.pgt_partenaire.
+
+    Cache module 5 min. Le prefix 'SFR' n'existe pas toujours dans la
+    table (les tickets Fibre sont hardcodes) — le caller fallback sur
+    le prefix si absent.
+    """
+    import time as _time
+    now = _time.monotonic()
+    if (_PARTENAIRES_LIB_CACHE["val"] is not None
+            and now - _PARTENAIRES_LIB_CACHE["at"] < _PARTENAIRES_LIB_TTL):
+        return _PARTENAIRES_LIB_CACHE["val"]
+    db = get_pg_connection("adv")
+    try:
+        rows = db.query(
+            """SELECT prefixe_bdd, lib_partenaire
+                 FROM adv.pgt_partenaire
+                WHERE (modif_elem IS NULL
+                       OR modif_elem NOT LIKE '%suppr%')""",
+        ) or []
+    except Exception:
+        rows = []
+    out = {}
+    for r in rows:
+        p = (r.get("prefixe_bdd") or "").strip().upper()
+        lib = (r.get("lib_partenaire") or "").strip()
+        if p and lib:
+            out[p] = lib
+    # Fallback specifique pour SFR (Fibre) qui n'est pas toujours dans
+    # la table adv.pgt_partenaire.
+    out.setdefault("SFR", "SFR")
+    _PARTENAIRES_LIB_CACHE["val"] = out
+    _PARTENAIRES_LIB_CACHE["at"] = now
+    return out
 
 
 def _load_partenaires_actifs() -> list[dict]:
