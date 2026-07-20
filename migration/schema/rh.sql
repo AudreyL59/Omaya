@@ -233,7 +233,7 @@ CREATE TABLE rh.pgt_salarie (
     datecrea           timestamp,  -- Datecrea
     photo              bytea,  -- Photo
     login              text,  -- LOGIN
-    mdp_crypte         varchar(50),  -- MDPCrypte
+    mdp_crypte         bytea,  -- MDPCrypte
     id_utilisateur     integer,  -- IDUtilisateur
     active_log         boolean,  -- ActiveLog
     modif_date         timestamp,  -- ModifDate

@@ -31,21 +31,36 @@ CREATE INDEX ix_pgt_agenda_commercial_date_debut ON adv.pgt_agenda_commercial (d
 CREATE INDEX ix_pgt_agenda_commercial_id_tk_liste ON adv.pgt_agenda_commercial (id_tk_liste);
 CREATE INDEX ix_pgt_agenda_commercial_modif_date ON adv.pgt_agenda_commercial (modif_date);
 
-CREATE TABLE adv.pgt_agenda_commercial_origine (
+CREATE TABLE adv.pgt_agenda_commercial_categorie (
+    id_agenda_commercial_categorie_auto  bigint,  -- IDAgendaCommercial_CatégorieAuto
+    id_agenda_commercial_categorie       integer NOT NULL,  -- IDAgendaCommercial_Catégorie
+    lib_categorie                        text,  -- Lib_Catégorie
+    couleur                              integer,  -- Couleur
+    id_cv_statut                         bigint,  -- IdCvStatut
+    modif_date                           timestamp,  -- ModifDate
+    modif_op                             bigint,  -- ModifOP
+    modif_elem                           varchar(5),  -- ModifELEM
+    CONSTRAINT pk_pgt_agenda_commercial_categorie PRIMARY KEY (id_agenda_commercial_categorie),
+    CONSTRAINT uq_pgt_agenda_commercial_categorie_auto UNIQUE (id_agenda_commercial_categorie_auto)
+);
+CREATE INDEX ix_pgt_agenda_commercial_categorie_id_cv_statut ON adv.pgt_agenda_commercial_categorie (id_cv_statut);
+CREATE INDEX ix_pgt_agenda_commercial_categorie_modif_date ON adv.pgt_agenda_commercial_categorie (modif_date);
+
+CREATE TABLE adv.pgt_agendacommercial_origine (
     id_agenda_commercial_origine_auto  bigint,  -- IDAgendaCommercial_OrigineAuto
     id_agenda_commercial_origine       integer NOT NULL,  -- IDAgendaCommercial_Origine
-    lib_origine                        text,  -- Lib_Origine
+    lib_origine                        varchar(50),  -- Lib_Origine
     modif_date                         timestamp,  -- ModifDate
     modif_elem                         varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_agenda_commercial_origine PRIMARY KEY (id_agenda_commercial_origine),
-    CONSTRAINT uq_pgt_agenda_commercial_origine_auto UNIQUE (id_agenda_commercial_origine_auto)
+    CONSTRAINT pk_pgt_agendacommercial_origine PRIMARY KEY (id_agenda_commercial_origine),
+    CONSTRAINT uq_pgt_agendacommercial_origine_auto UNIQUE (id_agenda_commercial_origine_auto)
 );
-CREATE INDEX ix_pgt_agenda_commercial_origine_modif_date ON adv.pgt_agenda_commercial_origine (modif_date);
+CREATE INDEX ix_pgt_agendacommercial_origine_modif_date ON adv.pgt_agendacommercial_origine (modif_date);
 
 CREATE TABLE adv.pgt_agenda_commercial_source (
     id_agenda_commercial_source_auto  bigint,  -- IDAgendaCommercial_SourceAuto
     id_agenda_commercial_source       integer NOT NULL,  -- IDAgendaCommercial_Source
-    lib_source                        text,  -- Lib_Source
+    lib_source                        varchar(50),  -- Lib_Source
     ope_call                          boolean,  -- OpéCall
     ope_fdv                           boolean,  -- OpéFDV
     modif_date                        timestamp,  -- ModifDate
@@ -64,36 +79,22 @@ CREATE TABLE adv.pgt_bareme_point (
     type_bareme           integer,  -- TypeBarème
     palier_deb            double precision,  -- PalierDeb
     palier_fin            double precision,  -- PalierFin
-    nb_points             real,  -- nbPoints
+    nb_points             double precision,  -- nbPoints
     date_debut            date,  -- DateDEBUT
     is_actif              boolean,  -- IsActif
     date_fin              date,  -- DateFIN
     modif_date            timestamp,  -- ModifDate
     modif_op              bigint,  -- ModifOp
     modif_elem            varchar(5),  -- ModifElem
-    ca                    numeric(15, 2),  -- CA (Monétaire)
+    ca                    numeric(19,4),  -- CA
     CONSTRAINT pk_pgt_bareme_point PRIMARY KEY (id_bareme_point_auto)
 );
 CREATE INDEX ix_pgt_bareme_point_id_partenaire ON adv.pgt_bareme_point (id_partenaire);
 CREATE INDEX ix_pgt_bareme_point_famille ON adv.pgt_bareme_point (famille);
 CREATE INDEX ix_pgt_bareme_point_sous_fam ON adv.pgt_bareme_point (sous_fam);
 CREATE INDEX ix_pgt_bareme_point_date_debut ON adv.pgt_bareme_point (date_debut);
+CREATE INDEX ix_pgt_bareme_point_date_fin ON adv.pgt_bareme_point (date_fin);
 CREATE INDEX ix_pgt_bareme_point_modif_date ON adv.pgt_bareme_point (modif_date);
-
-CREATE TABLE adv.pgt_agenda_commercial_categorie (
-    id_agenda_commercial_categorie_auto  bigint,  -- IDAgendaCommercial_CatégorieAuto
-    id_agenda_commercial_categorie       integer NOT NULL,  -- IDAgendaCommercial_Catégorie
-    lib_categorie                        text,  -- Lib_Catégorie
-    couleur                              integer,  -- Couleur
-    id_cv_statut                         bigint,  -- IdCvStatut
-    modif_date                           timestamp,  -- ModifDate
-    modif_op                             bigint,  -- ModifOP
-    modif_elem                           varchar(5),  -- ModifELEM
-    CONSTRAINT pk_pgt_agenda_commercial_categorie PRIMARY KEY (id_agenda_commercial_categorie),
-    CONSTRAINT uq_pgt_agenda_commercial_categorie_auto UNIQUE (id_agenda_commercial_categorie_auto)
-);
-CREATE INDEX ix_pgt_agenda_commercial_categorie_id_cv_statut ON adv.pgt_agenda_commercial_categorie (id_cv_statut);
-CREATE INDEX ix_pgt_agenda_commercial_categorie_modif_date ON adv.pgt_agenda_commercial_categorie (modif_date);
 
 CREATE TABLE adv.pgt_client (
     id_client_auto  bigint,  -- IDclientAuto

@@ -94,8 +94,7 @@ CREATE TABLE divers.pgt_commande_facture (
     id_commande               bigint,  -- IDCommande
     date_ajout                timestamp,  -- DateAjout
     montant_ttc               numeric(19,4),  -- MontantTTC
-    nom_fic                   varchar(255),  -- nom_Fic (etendu : noms longs)
-    contenu                   bytea,  -- Contenu binaire du fichier (pdf/jpg/...)
+    nom_fic                   varchar(25),  -- nom_Fic
     modif_date                timestamp,  -- ModifDate
     modif_op                  bigint,  -- ModifOP
     modif_elem                varchar(5),  -- ModifELEM
@@ -628,6 +627,27 @@ CREATE TABLE divers.pgt_podium_type (
     CONSTRAINT pk_pgt_podium_type PRIMARY KEY (id_podium_type)
 );
 CREATE INDEX ix_pgt_podium_type_modif_date ON divers.pgt_podium_type (modif_date);
+
+CREATE TABLE divers.pgt_podium_type_part (
+    id_podium_type_part  bigint NOT NULL,  -- IDPodiumTypePart
+    id_podium_type       bigint,  -- IDPodiumType
+    famille              varchar(10),  -- Famille
+    sous_fam             varchar(10),  -- SousFAM
+    prefixe_bdd          varchar(5),  -- PréfixeBDD
+    type_prod            varchar(10),  -- TypeProd
+    option_vente         text,  -- OptionVente
+    jour_cial_deb        smallint,  -- JourCialDeb
+    jour_cial_fin        smallint,  -- JourCialFin
+    modif_date           timestamp,  -- ModifDate
+    modif_elem           varchar(5),  -- ModifElem
+    modif_op             bigint,  -- ModifOp
+    CONSTRAINT pk_pgt_podium_type_part PRIMARY KEY (id_podium_type_part)
+);
+CREATE INDEX ix_pgt_podium_type_part_id_podium_type ON divers.pgt_podium_type_part (id_podium_type);
+CREATE INDEX ix_pgt_podium_type_part_famille ON divers.pgt_podium_type_part (famille);
+CREATE INDEX ix_pgt_podium_type_part_sous_fam ON divers.pgt_podium_type_part (sous_fam);
+CREATE INDEX ix_pgt_podium_type_part_prefixe_bdd ON divers.pgt_podium_type_part (prefixe_bdd);
+CREATE INDEX ix_pgt_podium_type_part_modif_date ON divers.pgt_podium_type_part (modif_date);
 
 CREATE TABLE divers.pgt_podium_type_part_option (
     id_podium_type_part_option  bigint,  -- IDPodiumTypePartOption

@@ -2,50 +2,50 @@ CREATE SCHEMA IF NOT EXISTS ticket_bo;
 
 
 CREATE TABLE ticket_bo.pgt_tk_call (
+    id_tk_call_auto           bigint,  -- IDtk_CallAuto
     id_tk_call                bigint NOT NULL,  -- IDtk_Call
     id_tk_liste               bigint,  -- IDTK_Liste
     id_salarie                bigint,  -- IDSalarie
-    nom_client                text,  -- NomClient
-    prenom_client             text,  -- PrenomClient
-    nom_marital_client        text,  -- NomMaritalClient
+    id_client                 bigint,  -- IDclient
     civilite_client           smallint,  -- CivilitéClient
+    nom_client                text,  -- NomClient
+    nom_marital_client        text,  -- NomMaritalClient
+    prenom_client             text,  -- PrenomClient
     date_naiss                date,  -- DATENAISS
     dep_naiss                 smallint,  -- DEPNAISS
     adresse1                  text,  -- ADRESSE1
     adresse2                  text,  -- ADRESSE2
     cp                        varchar(5),  -- CP
     ville                     text,  -- VILLE
-    mobile1                   varchar(10),  -- Mobile1
     adr_mail                  text,  -- adrMail
+    mobile1                   varchar(10),  -- Mobile1
     type_logement             smallint,  -- TypeLogement
-    modif_date                timestamp,  -- ModifDate
-    modif_op                  bigint,  -- ModifOP
-    modif_elem                varchar(5),  -- ModifELEM
-    appel_en_cours            boolean,  -- AppelEnCours
-    date_h_appel              timestamp,  -- DateH_Appel
-    motif_annulation          text,  -- MotifAnnulation
-    ope_appel                 bigint,  -- OpéAppel
-    ref_appel                 text,  -- RefAppel
-    date_deb_prise_en_charge  timestamp,  -- DateDeb_PriseEnCharge
-    date_fin_prise_en_charge  timestamp,  -- DateFin_PriseEnCharge
-    id_tk_call_auto           bigint,  -- IDtk_CallAuto
-    intervention_vend         boolean,  -- InterventionVend
-    info_vente                text,  -- InfoVente
-    id_client                 bigint,  -- IDclient
-    code_valid                varchar(6),  -- CodeValid
-    opt_rappel                boolean,  -- Opt_Rappel
-    opt_partenaire            boolean,  -- Opt_Partenaire
     client_pro                boolean,  -- ClientPro
     client_rs                 varchar(50),  -- ClientRS
     client_siret              varchar(50),  -- ClientSiret
+    appel_en_cours            boolean,  -- AppelEnCours
+    date_h_appel              timestamp,  -- DateH_Appel
+    ope_appel                 bigint,  -- OpéAppel
+    ref_appel                 text,  -- RefAppel
+    motif_annulation          text,  -- MotifAnnulation
+    date_deb_prise_en_charge  timestamp,  -- DateDeb_PriseEnCharge
+    date_fin_prise_en_charge  timestamp,  -- DateFin_PriseEnCharge
+    intervention_vend         boolean,  -- InterventionVend
+    info_vente                text,  -- InfoVente
+    code_valid                varchar(6),  -- CodeValid
+    opt_rappel                boolean,  -- Opt_Rappel
+    opt_partenaire            boolean,  -- Opt_Partenaire
+    modif_op                  bigint,  -- ModifOP
+    modif_date                timestamp,  -- ModifDate
+    modif_elem                varchar(5),  -- ModifELEM
     CONSTRAINT pk_pgt_tk_call PRIMARY KEY (id_tk_call),
     CONSTRAINT uq_pgt_tk_call_auto UNIQUE (id_tk_call_auto)
 );
 CREATE INDEX ix_pgt_tk_call_id_tk_liste ON ticket_bo.pgt_tk_call (id_tk_liste);
 CREATE INDEX ix_pgt_tk_call_id_salarie ON ticket_bo.pgt_tk_call (id_salarie);
-CREATE INDEX ix_pgt_tk_call_modif_date ON ticket_bo.pgt_tk_call (modif_date);
-CREATE INDEX ix_pgt_tk_call_appel_en_cours ON ticket_bo.pgt_tk_call (appel_en_cours);
 CREATE INDEX ix_pgt_tk_call_id_client ON ticket_bo.pgt_tk_call (id_client);
+CREATE INDEX ix_pgt_tk_call_appel_en_cours ON ticket_bo.pgt_tk_call (appel_en_cours);
+CREATE INDEX ix_pgt_tk_call_modif_date ON ticket_bo.pgt_tk_call (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_panier (
     id_tk_call_panier           bigint NOT NULL,  -- IDTK_Call_Panier
@@ -96,48 +96,60 @@ CREATE INDEX ix_pgt_tk_call_panier_num_bs ON ticket_bo.pgt_tk_call_panier (num_b
 CREATE INDEX ix_pgt_tk_call_panier_modif_date ON ticket_bo.pgt_tk_call_panier (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr (
-    id_tk_call_sfr            bigint NOT NULL,  -- IDtk_CallSFR
-    id_tk_liste               bigint,  -- IDTK_Liste
-    id_salarie                bigint,  -- IDSalarie
-    nom_client                text,  -- NomClient
-    prenom_client             text,  -- PrenomClient
-    nom_marital_client        text,  -- NomMaritalClient
-    civilite_client           smallint,  -- CivilitéClient
-    date_naiss                date,  -- DATENAISS
-    dep_naiss                 smallint,  -- DEPNAISS
-    adresse1                  text,  -- ADRESSE1
-    adresse2                  text,  -- ADRESSE2
-    cp                        varchar(5),  -- CP
-    ville                     text,  -- VILLE
-    mobile1                   varchar(10),  -- Mobile1
-    adr_mail                  text,  -- adrMail
-    type_logement             smallint,  -- TypeLogement
-    modif_date                timestamp,  -- ModifDate
-    modif_op                  bigint,  -- ModifOP
-    modif_elem                varchar(5),  -- ModifELEM
-    appel_en_cours            boolean,  -- AppelEnCours
-    date_h_appel              timestamp,  -- DateH_Appel
-    motif_annulation          text,  -- MotifAnnulation
-    ope_appel                 bigint,  -- OpéAppel
-    ref_appel                 text,  -- RefAppel
-    date_deb_prise_en_charge  timestamp,  -- DateDeb_PriseEnCharge
-    date_fin_prise_en_charge  timestamp,  -- DateFin_PriseEnCharge
-    id_tk_call_sfr_auto       bigint,  -- IDtk_CallSFRAuto
-    intervention_vend         boolean,  -- InterventionVend
-    info_vente                text,  -- InfoVente
-    code_valid                varchar(6),  -- CodeValid
-    opt_rappel                boolean,  -- Opt_Rappel
-    opt_partenaire            boolean,  -- Opt_Partenaire
-    client_pro                boolean,  -- ClientPro
-    client_rs                 varchar(50),  -- ClientRS
-    client_siret              varchar(50),  -- ClientSiret
+    id_tk_call_sfr_auto           bigint,  -- IDtk_CallSFRAuto
+    id_tk_call_sfr                bigint NOT NULL,  -- IDtk_CallSFR
+    id_tk_liste                   bigint,  -- IDTK_Liste
+    id_offres_sfr                 bigint,  -- IDOffres_SFR
+    id_salarie                    bigint,  -- IDSalarie
+    civilite_client               smallint,  -- CivilitéClient
+    nom_client                    text,  -- NomClient
+    nom_marital_client            text,  -- NomMaritalClient
+    prenom_client                 text,  -- PrenomClient
+    date_naiss                    date,  -- DATENAISS
+    dep_naiss                     smallint,  -- DEPNAISS
+    adresse1                      text,  -- ADRESSE1
+    adresse2                      text,  -- ADRESSE2
+    cp                            varchar(5),  -- CP
+    ville                         text,  -- VILLE
+    adr_mail                      text,  -- adrMail
+    mobile1                       varchar(10),  -- Mobile1
+    mobile2                       varchar(10),  -- Mobile2
+    type_logement                 smallint,  -- TypeLogement
+    client_pro                    boolean,  -- ClientPro
+    client_rs                     varchar(50),  -- ClientRS
+    client_siret                  varchar(50),  -- ClientSiret
+    test_eligibilite              bytea,  -- TestEligibilité
+    appel_en_cours                boolean,  -- AppelEnCours
+    date_h_appel                  timestamp,  -- DateH_Appel
+    ope_appel                     bigint,  -- OpéAppel
+    ref_appel                     text,  -- RefAppel
+    motif_annulation              text,  -- MotifAnnulation
+    date_deb_prise_en_charge      timestamp,  -- DateDeb_PriseEnCharge
+    date_fin_prise_en_charge      timestamp,  -- DateFin_PriseEnCharge
+    info_vente                    text,  -- InfoVente
+    mob_propo_vend                boolean,  -- MobPropoVend
+    intervention_vend             boolean,  -- InterventionVend
+    code_valid                    varchar(6),  -- CodeValid
+    opt_rappel                    boolean,  -- Opt_Rappel
+    opt_partenaire                boolean,  -- Opt_Partenaire
+    anomalie_mobile               boolean,  -- AnomalieMobile
+    id_tk_call_sfr_type_anomalie  bigint,  -- IDTK_CallSFR_TypeAnomalie
+    id_tk_liste_ref_anomalie      bigint,  -- IDTK_ListeRefAnomalie
+    info_cplt_anomalie            text,  -- InfoCpltAnomalie
+    ticket_diff                   boolean,  -- TicketDiff
+    kbis                          varchar(50),  -- KBIS
+    modif_date                    timestamp,  -- ModifDate
+    modif_op                      bigint,  -- ModifOP
+    modif_elem                    varchar(5),  -- ModifELEM
     CONSTRAINT pk_pgt_tk_call_sfr PRIMARY KEY (id_tk_call_sfr),
     CONSTRAINT uq_pgt_tk_call_sfr_auto UNIQUE (id_tk_call_sfr_auto)
 );
 CREATE INDEX ix_pgt_tk_call_sfr_id_tk_liste ON ticket_bo.pgt_tk_call_sfr (id_tk_liste);
+CREATE INDEX ix_pgt_tk_call_sfr_id_offres_sfr ON ticket_bo.pgt_tk_call_sfr (id_offres_sfr);
 CREATE INDEX ix_pgt_tk_call_sfr_id_salarie ON ticket_bo.pgt_tk_call_sfr (id_salarie);
-CREATE INDEX ix_pgt_tk_call_sfr_modif_date ON ticket_bo.pgt_tk_call_sfr (modif_date);
 CREATE INDEX ix_pgt_tk_call_sfr_appel_en_cours ON ticket_bo.pgt_tk_call_sfr (appel_en_cours);
+CREATE INDEX ix_pgt_tk_call_sfr_id_tk_call_sfr_type_anomalie ON ticket_bo.pgt_tk_call_sfr (id_tk_call_sfr_type_anomalie);
+CREATE INDEX ix_pgt_tk_call_sfr_modif_date ON ticket_bo.pgt_tk_call_sfr (modif_date);
 
 CREATE TABLE ticket_bo.pgt_tk_call_sfr_panier (
     id_tk_call_sfr              bigint,  -- IDtk_CallSFR
