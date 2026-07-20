@@ -19,6 +19,7 @@ import { getToken } from '@/api'
 import PhotoInputMulti from '@/components/PhotoInputMulti'
 import { generateImagesPdf } from '@/lib/pdfSpecimen'
 import { uploadFichier } from '@/lib/uploadFichier'
+import { showConfirm } from '@shared/ui/dialog'
 
 
 const API = '/api/vendeur/ticket-call-energie'
@@ -263,7 +264,13 @@ export default function TicketCallEnergiePage() {
   }
 
   const supprimerTicket = async (t: Ticket) => {
-    if (!confirm(`Supprimer le ticket de ${t.NomClient || ''} ?`)) return
+    const ok = await showConfirm({
+      title: 'Supprimer le ticket',
+      message: `Supprimer le ticket de ${t.NomClient || ''} ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    })
+    if (!ok) return
     setLoading(true)
     await call('POST', `${API}/supprimer-ticket`, { IDTK_Liste: t.IDTK_Liste })
     setTickets(tickets.filter(x => x.IDTK_Liste !== t.IDTK_Liste))
@@ -517,7 +524,13 @@ export default function TicketCallEnergiePage() {
   // --- Plan 3 : suppr produit + valider panier --------------------
 
   const supprimerProduit = async (item: PanierItem) => {
-    if (!confirm(`Supprimer ${item.LibOffre} ?`)) return
+    const ok = await showConfirm({
+      title: 'Supprimer le produit',
+      message: `Supprimer ${item.LibOffre} du panier ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    })
+    if (!ok) return
     setLoading(true)
     await call('POST', `${API}/panier/produit/supprimer`,
                 { IDtk_Call_Panier: item.IDtk_Call_Panier })
@@ -536,7 +549,12 @@ export default function TicketCallEnergiePage() {
 
   const validerPanier = async () => {
     if (codeSaisi !== codeTest) { setToast('Code incorrect'); return }
-    if (!confirm('Confirmer la validation du panier (irrevocable) ?')) return
+    const ok = await showConfirm({
+      title: 'Valider le panier',
+      message: 'Cette action est irréversible. Confirmer la validation ?',
+      confirmLabel: 'Valider',
+    })
+    if (!ok) return
     setLoading(true)
     await call('POST', `${API}/validation`, { IDTK_Liste: idTicketEnCours })
     setLoading(false)

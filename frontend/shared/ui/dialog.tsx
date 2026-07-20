@@ -2,6 +2,7 @@
 // Vendeur). Remplace window.alert / window.confirm par :
 //   - showToast(message, variant?)  → notification coin écran (auto-dismiss)
 //   - showConfirm({ message, ... }) → Promise<boolean> (modale centrée)
+//   - showChoice({ options })       → Promise<string | null> (N boutons + annuler)
 //
 // Monter <DialogHost /> UNE fois dans la page (cf. TicketsPage). Rendu via
 // un portail sur document.body. Les couleurs de marque sont lues au runtime
@@ -41,10 +42,26 @@ interface PromptReq {
   resolve: (v: string | null) => void
 }
 
+interface ChoiceOption {
+  label: string
+  value: string
+  variant?: 'brand' | 'danger' | 'neutral'
+}
+
+interface ChoiceReq {
+  id: number
+  title?: string
+  message: string
+  options: ChoiceOption[]
+  cancelLabel?: string
+  resolve: (v: string | null) => void
+}
+
 // --- store singleton (pub/sub) ---
 let _toasts: Toast[] = []
 let _confirm: ConfirmReq | null = null
 let _prompt: PromptReq | null = null
+let _choice: ChoiceReq | null = null
 const _listeners = new Set<() => void>()
 let _seq = 1
 
@@ -109,6 +126,25 @@ function _closePrompt(value: string | null) {
   p?.resolve(value)
 }
 
+export function showChoice(opts: {
+  title?: string
+  message: string
+  options: ChoiceOption[]
+  cancelLabel?: string
+}): Promise<string | null> {
+  return new Promise((resolve) => {
+    _choice = { id: _seq++, resolve, ...opts }
+    _emit()
+  })
+}
+
+function _closeChoice(value: string | null) {
+  const c = _choice
+  _choice = null
+  _emit()
+  c?.resolve(value)
+}
+
 function _brandColor(): string {
   if (typeof document === 'undefined') return '#17494E'
   const v = getComputedStyle(document.documentElement)
@@ -122,6 +158,7 @@ export function DialogHost() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [confirm, setConfirm] = useState<ConfirmReq | null>(null)
   const [prompt, setPrompt] = useState<PromptReq | null>(null)
+  const [choice, setChoice] = useState<ChoiceReq | null>(null)
   const [promptValue, setPromptValue] = useState('')
   const [promptError, setPromptError] = useState('')
 
@@ -135,6 +172,7 @@ export function DialogHost() {
         setPromptError('')
       }
       setPrompt(_prompt)
+      setChoice(_choice)
     }
     _listeners.add(sync)
     sync()
@@ -455,6 +493,113 @@ export function DialogHost() {
               >
                 {prompt.confirmLabel || 'Valider'}
               </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modale choix (N boutons + annuler) */}
+      {choice && (
+        <>
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2147483646,
+              background: 'rgba(0,0,0,.4)',
+            }}
+            onClick={() => _closeChoice(null)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              position: 'fixed',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 2147483647,
+              width: 'min(92vw, 30rem)',
+              background: '#fff',
+              borderRadius: 16,
+              boxShadow: '0 20px 50px rgba(0,0,0,.25)',
+              border: '1px solid #e5e7eb',
+              padding: 20,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <span style={{ flexShrink: 0, marginTop: 2, color: brand }}>
+                <Info className="w-6 h-6" />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {choice.title && (
+                  <h3
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#1e293b',
+                      marginBottom: 4,
+                    }}
+                  >
+                    {choice.title}
+                  </h3>
+                )}
+                <p
+                  style={{
+                    fontSize: 14,
+                    color: '#475569',
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  {choice.message}
+                </p>
+              </div>
+            </div>
+            <div
+              style={{
+                marginTop: 16,
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                onClick={() => _closeChoice(null)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #cbd5e1',
+                  fontSize: 14,
+                  background: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                {choice.cancelLabel || 'Annuler'}
+              </button>
+              {choice.options.map((o) => {
+                const bg = o.variant === 'danger' ? '#dc2626'
+                  : o.variant === 'neutral' ? '#475569'
+                  : brand
+                return (
+                  <button
+                    key={o.value}
+                    onClick={() => _closeChoice(o.value)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: bg,
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
         </>

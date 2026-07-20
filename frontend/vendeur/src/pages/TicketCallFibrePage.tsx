@@ -19,6 +19,7 @@ import { getToken } from '@/api'
 import PhotoInputMulti from '@/components/PhotoInputMulti'
 import { generateImagesPdf } from '@/lib/pdfSpecimen'
 import { uploadFichier } from '@/lib/uploadFichier'
+import { showChoice, showConfirm } from '@shared/ui/dialog'
 
 
 const API = '/api/vendeur/ticket-call-fibre'
@@ -235,7 +236,13 @@ export default function TicketCallFibrePage() {
   }
 
   const supprimerTicket = async (t: Ticket) => {
-    if (!confirm(`Supprimer le ticket de ${t.NomClient || ''} ?`)) return
+    const ok = await showConfirm({
+      title: 'Supprimer le ticket',
+      message: `Supprimer le ticket de ${t.NomClient || ''} ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    })
+    if (!ok) return
     setLoading(true)
     await call('POST', `${API}/supprimer-ticket`, { IDTK_Liste: t.IDTK_Liste })
     setTickets(tickets.filter(x => x.IDTK_Liste !== t.IDTK_Liste))
@@ -331,7 +338,13 @@ export default function TicketCallFibrePage() {
   }
 
   const supprimerProduit = async (item: PanierItem) => {
-    if (!confirm(`Supprimer ${item.LibOffre} ?`)) return
+    const ok = await showConfirm({
+      title: 'Supprimer le produit',
+      message: `Supprimer ${item.LibOffre} du panier ?`,
+      confirmLabel: 'Supprimer',
+      variant: 'danger',
+    })
+    if (!ok) return
     setLoading(true)
     await call('POST', `${API}/panier/produit/supprimer`,
                 { IDtk_CallSFR_Panier: item.IDtk_CallSFR_Panier })
@@ -370,7 +383,12 @@ export default function TicketCallFibrePage() {
 
   const validerPanier = async () => {
     if (codeSaisi !== codeTest) { setToast('Code incorrect'); return }
-    if (!confirm('Confirmer la validation du panier ?')) return
+    const ok = await showConfirm({
+      title: 'Valider le panier',
+      message: 'Cette action est irréversible. Confirmer la validation ?',
+      confirmLabel: 'Valider',
+    })
+    if (!ok) return
     setLoading(true)
     await call('POST', `${API}/validation`, { IDTK_Liste: idTicketEnCours })
     setLoading(false)
@@ -384,14 +402,25 @@ export default function TicketCallFibrePage() {
   const isFibreType = (t: string) => t === 'FIBRE' || t === 'FIB PRO'
 
   const choisirOffre = async (o: Offre) => {
-    if (!confirm(`Ajouter l'offre ${o.Lib_Offre} au panier ?`)) return
+    const okOffre = await showConfirm({
+      title: 'Ajouter l\'offre au panier',
+      message: `Ajouter l'offre ${o.Lib_Offre} au panier ?`,
+      confirmLabel: 'Ajouter',
+    })
+    if (!okOffre) return
     setIdProdChoisi(o.IDOffres_SFR); setTypeProdChoisi(typeOffre)
     if (isFibreType(typeOffre)) {
-      // dialog Conquete / Migration
-      const migration = confirm(
-        'Type de vente :\nOK = MIGRATION (skip portabilite)\nAnnuler = CONQUETE (continuer portabilite)',
-      )
-      if (migration) {
+      // Choix Conquete / Migration
+      const kind = await showChoice({
+        title: 'Type de vente',
+        message: 'Choisis le type de vente pour cette offre Fibre :',
+        options: [
+          { label: 'Conquête', value: 'conquete', variant: 'brand' },
+          { label: 'Migration', value: 'migration', variant: 'neutral' },
+        ],
+      })
+      if (!kind) return
+      if (kind === 'migration') {
         await ajouterProduitDirect(o.IDOffres_SFR, 3)  // TypeVente=3
         return
       }
