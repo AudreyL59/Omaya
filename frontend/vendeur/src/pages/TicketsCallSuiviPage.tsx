@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Loader2, RefreshCw, Search, Calendar as CalIcon,
+  Package, Users,
 } from 'lucide-react'
 import { getToken } from '@/api'
 import FicheTicketModalFibre from '@/components/FicheTicketModalFibre'
@@ -599,7 +600,19 @@ function AgenceCardFibre({ agence }: {
 function ZoneCard({ title, rows }: { title: string; rows: DashPartRow[] }) {
   return (
     <div className="bg-white border border-c-line-soft rounded-lg p-3">
-      <div className="text-xs font-semibold text-c-ink mb-2">{title}</div>
+      <div className="flex items-baseline justify-between mb-1">
+        <div className="text-xs font-semibold text-c-ink">{title}</div>
+        {rows.length > 0 && (
+          <div className="flex items-center gap-4 text-[10px] uppercase tracking-wide text-c-ink-faint">
+            <span className="flex items-center gap-1" title="Nombre d'offres validées">
+              <Package className="w-3 h-3" /> Offres
+            </span>
+            <span className="flex items-center gap-1" title="Nombre de clients distincts">
+              <Users className="w-3 h-3" /> Clients
+            </span>
+          </div>
+        )}
+      </div>
       {rows.length === 0 ? (
         <div className="text-[10px] italic text-c-ink-faint">Aucune offre</div>
       ) : (
@@ -607,8 +620,9 @@ function ZoneCard({ title, rows }: { title: string; rows: DashPartRow[] }) {
           {rows.map((r) => (
             <div key={r.prefix} className="flex justify-between text-xs">
               <span>{r.lib}</span>
-              <span className="tabular-nums text-c-ink-faint">
-                {r.nb_offres} · {r.nb_clients}
+              <span className="flex items-center gap-4 tabular-nums text-c-ink-faint">
+                <span className="w-8 text-right">{r.nb_offres}</span>
+                <span className="w-8 text-right">{r.nb_clients}</span>
               </span>
             </div>
           ))}
