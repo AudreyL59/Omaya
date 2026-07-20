@@ -123,7 +123,7 @@ export default function TicketCallFibrePage() {
 
   // Panier + validation code
   const [panier, setPanier] = useState<PanierItem[]>([])
-  const [codeGenere, setCodeGenere] = useState('')
+  const [, setCodeGenere] = useState('')
   const [codeSaisi, setCodeSaisi] = useState('')
   const [codeTest, setCodeTest] = useState('')
   const [showCodeInput, setShowCodeInput] = useState(false)
@@ -528,9 +528,9 @@ export default function TicketCallFibrePage() {
         typeLogement={typeLogement} setTypeLogement={setTypeLogement}
         adresse1={adresse1} setAdresse1={setAdresse1}
         adresse2={adresse2} setAdresse2={setAdresse2}
-        cp={cp} setCp={(v) => { setCp(v); searchVilles(v) }}
+        cp={cp} setCp={(v: string) => { setCp(v); searchVilles(v) }}
         villes={villes} villeId={villeId}
-        setVille={(id, nom) => { setVilleId(id); setVilleNom(nom) }}
+        setVille={(id: number, nom: string) => { setVilleId(id); setVilleNom(nom) }}
         mobile1={mobile1} setMobile1={setMobile1}
         mobile2={mobile2} setMobile2={setMobile2}
         mail={mail} setMail={setMail}

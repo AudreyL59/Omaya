@@ -11,7 +11,7 @@
  *
  * Cf. docs/tickets_call_screens_analysis.md pour la spec detaillee.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowLeft, Check, Loader2, Plus, Send, Trash2, ChevronRight,
 } from 'lucide-react'
@@ -76,11 +76,6 @@ const _toInt = (v: any, d = 0) => {
   const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
   return Number.isFinite(n) ? n : d
 }
-const fmtDateFR = (iso: string) => {
-  if (!iso) return ''
-  const [y, m, d] = iso.split('-')
-  return d && m && y ? `${d}/${m}/${y}` : iso
-}
 const fmtDateApi = (fr: string): string => {
   // 'dd/MM/yyyy' -> 'yyyyMMdd'
   const m = fr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
@@ -130,7 +125,7 @@ export default function TicketCallEnergiePage() {
 
   // Panier + validation code
   const [panier, setPanier] = useState<PanierItem[]>([])
-  const [codeGenere, setCodeGenere] = useState('')
+  const [, setCodeGenere] = useState('')
   const [codeSaisi, setCodeSaisi] = useState('')
   const [codeTest, setCodeTest] = useState('')
   const [showCodeInput, setShowCodeInput] = useState(false)
@@ -598,9 +593,9 @@ export default function TicketCallEnergiePage() {
         typeLogement={typeLogement} setTypeLogement={setTypeLogement}
         adresse1={adresse1} setAdresse1={setAdresse1}
         adresse2={adresse2} setAdresse2={setAdresse2}
-        cp={cp} setCp={(v) => { setCp(v); searchVilles(v) }}
+        cp={cp} setCp={(v: string) => { setCp(v); searchVilles(v) }}
         villes={villes} villeId={villeId}
-        setVille={(id, nom) => { setVilleId(id); setVilleNom(nom) }}
+        setVille={(id: number, nom: string) => { setVilleId(id); setVilleNom(nom) }}
         mobile1={mobile1} setMobile1={setMobile1}
         mail={mail} setMail={setMail}
         clientPro={clientPro} setClientPro={setClientPro}
@@ -650,10 +645,10 @@ export default function TicketCallEnergiePage() {
 
       {plan === 7 && <PlanOHMInstall
         typesInstall={typesInstall}
-        setChauffage={(i, v) => {
+        setChauffage={(i: number, v: boolean) => {
           const t = [...typesInstall]; t[i] = { ...t[i], _chauffage: v }; setTypesInstall(t)
         }}
-        setEauChaude={(i, v) => {
+        setEauChaude={(i: number, v: boolean) => {
           const t = [...typesInstall]; t[i] = { ...t[i], _eauChaude: v }; setTypesInstall(t)
         }}
         autreInstall={autreInstall} setAutreInstall={setAutreInstall}
