@@ -10,6 +10,8 @@ import ConfRdvPage from '@/pages/PageExterne/ConfRdvPage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
 import ClustersPage from '@/pages/ClustersPage'
 import TicketsCallSuiviPage from '@/pages/TicketsCallSuiviPage'
+import TicketCallEnergiePage from '@/pages/TicketCallEnergiePage'
+import TicketCallFibrePage from '@/pages/TicketCallFibrePage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import TicketsPage from '@shared/tickets/TicketsPage'
@@ -58,8 +60,8 @@ function App() {
           <Route path="tickets" element={<TicketsPage apiBase={VENDEUR_API} getToken={getToken} />} />
           <Route path="process" element={<PlaceholderPage />} />
           <Route path="tickets-call" element={<TicketsCallSuiviPage />} />
-          <Route path="tickets-call/energie" element={<PlaceholderPage />} />
-          <Route path="tickets-call/fibre" element={<PlaceholderPage />} />
+          <Route path="tickets-call/energie" element={<TicketCallEnergiePage />} />
+          <Route path="tickets-call/fibre" element={<TicketCallFibrePage />} />
           <Route path="dialogues" element={<PlaceholderPage />} />
         </Route>
 
