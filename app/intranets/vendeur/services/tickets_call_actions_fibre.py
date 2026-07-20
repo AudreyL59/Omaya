@@ -82,11 +82,15 @@ def _get_gsm_vendeur(id_vendeur: int) -> str:
 # --- Save --------------------------------------------------------------
 
 def save_vente_infos(id_tk_liste: int, payload: dict) -> dict:
-    """UPDATE pgt_tk_call_sfr : infos client + vente + anomalie."""
+    """UPDATE pgt_tk_call_sfr : infos client + vente.
+
+    Note : mob_propo_vend + anomalie_mobile + id_tk_call_sfr_type_anomalie
+    + info_cplt_anomalie absents du schema PG interne (existent cote HFSQL
+    OVH), ces champs du payload sont ignores silencieusement.
+    """
     db = get_pg_connection("ticket_bo")
     c = payload.get("client", {}) or {}
     v = payload.get("vente", {}) or {}
-    a = payload.get("anomalie", {}) or {}
     now = _sql_now_wd()
     db.query(
         """UPDATE ticket_bo.pgt_tk_call_sfr SET
@@ -94,9 +98,7 @@ def save_vente_infos(id_tk_liste: int, payload: dict) -> dict:
               prenom_client = ?, date_naiss = ?, dep_naiss = ?,
               type_logement = ?, adresse1 = ?, adresse2 = ?, cp = ?,
               ville = ?, adr_mail = ?, info_vente = ?, ref_appel = ?,
-              intervention_vend = ?, mob_propo_vend = ?,
-              anomalie_mobile = ?, id_tk_call_sfr_type_anomalie = ?,
-              info_cplt_anomalie = ?, modif_date = ?
+              intervention_vend = ?, modif_date = ?
             WHERE id_tk_liste = ?
               AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
         (
@@ -115,10 +117,6 @@ def save_vente_infos(id_tk_liste: int, payload: dict) -> dict:
             (v.get("info_vente") or ""),
             (v.get("ref_appel") or ""),
             1 if _bool(v.get("intervention_vendeur")) else 2,
-            1 if _bool(v.get("mobile_propose_vendeur")) else 2,
-            _bool(a.get("active")),
-            _to_int(a.get("id_type")),
-            (a.get("info_cplt") or ""),
             now,
             int(id_tk_liste),
         ),

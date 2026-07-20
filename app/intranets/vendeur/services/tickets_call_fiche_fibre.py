@@ -100,7 +100,12 @@ _OFFRES_REF_TTL = 600.0
 
 
 def _load_motifs_anomalie() -> list[dict]:
-    """Referentiel pgt_tk_call_sfr_type_anomalie (cache 10min)."""
+    """Referentiel pgt_tk_call_sfr_type_anomalie (cache 10min).
+
+    Note : la table n'est pas encore repliquee dans le schema PG interne
+    (existe cote HFSQL OVH). On retourne [] tant qu'elle n'existe pas —
+    la fiche cote frontend affichera un select vide pour l'anomalie.
+    """
     global _TYPE_ANOMALIE_CACHE, _TYPE_ANOMALIE_AT
     now = _time.monotonic()
     if (_TYPE_ANOMALIE_CACHE is not None
@@ -116,8 +121,8 @@ def _load_motifs_anomalie() -> list[dict]:
                 ORDER BY id_tk_call_sfr_type_anomalie ASC""",
         ) or []
     except Exception:
-        logger.exception("_load_motifs_anomalie")
-        return []
+        # Table absente en PG interne — silencieux, cache la liste vide
+        rows = []
     out = [
         {
             "id": _to_int(r.get("id_tk_call_sfr_type_anomalie")),
@@ -178,17 +183,20 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         )
         f_call = pool.submit(
             db_bo.query_one,
+            # Note : mobile2, mob_propo_vend, anomalie_mobile,
+            # id_tk_call_sfr_type_anomalie, info_cplt_anomalie existent
+            # cote HFSQL OVH mais pas encore dans le schema PG interne.
+            # On expose des valeurs par defaut cote API.
             """SELECT id_tk_call_sfr, id_tk_liste, id_salarie,
                       civilite_client, nom_client, nom_marital_client,
                       prenom_client, date_naiss, dep_naiss, type_logement,
                       adresse1, adresse2, cp, ville,
-                      adr_mail, mobile1, mobile2,
+                      adr_mail, mobile1,
                       appel_en_cours, date_h_appel, ope_appel, ref_appel,
                       motif_annulation, date_deb_prise_en_charge,
                       date_fin_prise_en_charge,
-                      intervention_vend, mob_propo_vend, info_vente,
-                      anomalie_mobile, id_tk_call_sfr_type_anomalie,
-                      info_cplt_anomalie, opt_rappel, opt_partenaire,
+                      intervention_vend, info_vente,
+                      opt_rappel, opt_partenaire,
                       client_pro, client_rs, client_siret
                  FROM ticket_bo.pgt_tk_call_sfr
                 WHERE id_tk_liste = ?
@@ -216,9 +224,8 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
 
     is_my_call = appel_en_cours and ope_appel_id == current_user_id
     mobile1_raw = (tc.get("mobile1") or "").strip()
-    mobile2_raw = (tc.get("mobile2") or "").strip()
     mobile1 = mobile1_raw if is_my_call else _mask_phone(mobile1_raw)
-    mobile2 = mobile2_raw if is_my_call else _mask_phone(mobile2_raw)
+    mobile2 = ""  # colonne mobile2 absente du schema PG interne
 
     # Vague 2 : Salarie + Salarie_Coordonnees + Panier en parallele
     nom_vend = ""
@@ -357,13 +364,16 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         "vente": {
             "ref_appel": (tc.get("ref_appel") or "").strip(),
             "intervention_vendeur": _bool(tc.get("intervention_vend")),
-            "mobile_propose_vendeur": _bool(tc.get("mob_propo_vend")),
+            # mob_propo_vend absent du schema PG interne (defaut False)
+            "mobile_propose_vendeur": False,
             "info_vente": (tc.get("info_vente") or "").strip(),
         },
+        # anomalie_mobile + id_tk_call_sfr_type_anomalie + info_cplt_anomalie
+        # absents du schema PG interne (defaut False/0/"")
         "anomalie": {
-            "active": _bool(tc.get("anomalie_mobile")),
-            "id_type": _to_int(tc.get("id_tk_call_sfr_type_anomalie")),
-            "info_cplt": (tc.get("info_cplt_anomalie") or "").strip(),
+            "active": False,
+            "id_type": 0,
+            "info_cplt": "",
         },
         "panier": panier,
         "nb_prod_total": nb_prod_total,
