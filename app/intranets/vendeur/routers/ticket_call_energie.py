@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
+from app.intranets.vendeur.services import ticket_call_procs as procs
 from app.intranets.vendeur.services.ws_client import (
     WSError, get, post, encode_path_segment as _enc,
 )
@@ -51,16 +52,22 @@ def list_clients_non_finalises(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ClientsNonFinalises/{usersCial}
-    -> Liste des tickets non finalises du commercial."""
+    -> Liste des tickets non finalises du commercial.
+
+    Phase 3 : porte en PG cf. procs.liste_clients_non_finalises().
+    """
     _require(user, "TkCALL")
-    return _proxy(post, f"/Call/ClientsNonFinalises/{_users_cial(user)}")
+    return procs.liste_clients_non_finalises(int(user.id_salarie or 0))
 
 
 @router.post("/partenaires")
 def list_partenaires(user: UserToken = Depends(get_current_user)):
-    """POST /PartCall -> Liste des partenaires (Nom, Bdd, Logo)."""
+    """POST /PartCall -> Liste des partenaires (Nom, Bdd, Logo, Couleur).
+
+    Phase 3 : porte en PG cf. procs.list_part_call().
+    """
     _require(user, "TkCALL")
-    return _proxy(post, "/PartCall")
+    return procs.list_part_call()
 
 
 # --- Panier d'un ticket --------------------------------------------------
@@ -71,9 +78,12 @@ def get_panier(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ClientsNonFinalises/Panier/{id_ticket}
-    -> Liste des produits du panier."""
+    -> Liste des produits du panier.
+
+    Phase 3 : porte en PG cf. procs.contenu_panier_call().
+    """
     _require(user, "TkCALL")
-    return _proxy(post, f"/Call/ClientsNonFinalises/Panier/{_enc(id_ticket)}")
+    return procs.contenu_panier_call(int(id_ticket))
 
 
 # --- Ticket : suppression / creation --------------------------------------
@@ -84,13 +94,14 @@ def supprimer_ticket(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ClientsNonFinalises/Suppr/{usersCial}
-    Body : {IDTK_Liste}."""
+    Body : {IDTK_Liste}.
+
+    Phase 3 : porte en PG cf. procs.supprimer_ticket_call().
+    NOTE : le .txt WinDev fourni est vide — implementation deduite
+    (UPDATE modif_elem = 'suppr').
+    """
     _require(user, "TkCALL")
-    return _proxy(
-        post,
-        f"/Call/ClientsNonFinalises/Suppr/{_users_cial(user)}",
-        payload=payload,
-    )
+    return procs.supprimer_ticket_call(int(payload.get("IDTK_Liste") or 0))
 
 
 @router.post("/nouveau-ticket")
@@ -119,9 +130,12 @@ def produits_actifs(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ProduitActifs/{part} (part = OEN/ENI/STR/VAL/PRO/OHM).
-    -> Liste des produits actifs du partenaire."""
+    -> Liste des produits actifs du partenaire.
+
+    Phase 3 : porte en PG cf. procs.liste_produit_actif_by_part().
+    """
     _require(user, "TkCALL")
-    return _proxy(post, f"/Call/ProduitActifs/{_enc(part)}")
+    return procs.liste_produit_actif_by_part(part)
 
 
 # --- OHM ------------------------------------------------------------------
@@ -130,9 +144,12 @@ def produits_actifs(
 def ohm_liste_type_install(
     user: UserToken = Depends(get_current_user),
 ):
-    """GET /Call/OHM/ListeTypeInstall -> Liste des types d'installation OHM."""
+    """GET /Call/OHM/ListeTypeInstall -> Liste des types d'installation OHM.
+
+    Phase 3 : porte en PG (hardcode 4 types) cf. procs.ohm_liste_type_install().
+    """
     _require(user, "TkCALL")
-    return _proxy(get, "/Call/OHM/ListeTypeInstall")
+    return procs.ohm_liste_type_install()
 
 
 # --- Panier : ajout / suppression de produit ------------------------------
@@ -143,13 +160,12 @@ def ajouter_produit(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ClientsNonFinalises/Panier/Produit/Ajout
-    Body : produit (~30 champs)."""
+    Body : produit (~30 champs).
+
+    Phase 3 : porte en PG cf. procs.ajouter_produit_panier_call().
+    """
     _require(user, "TkCALL")
-    return _proxy(
-        post,
-        "/Call/ClientsNonFinalises/Panier/Produit/Ajout",
-        payload=payload,
-    )
+    return procs.ajouter_produit_panier_call(payload)
 
 
 @router.post("/panier/produit/supprimer")
@@ -158,12 +174,13 @@ def supprimer_produit(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ClientsNonFinalises/Panier/Produit/Suppr
-    Body : {IDtk_Call_Panier}."""
+    Body : {IDtk_Call_Panier}.
+
+    Phase 3 : porte en PG cf. procs.supprimer_produit_panier_call().
+    """
     _require(user, "TkCALL")
-    return _proxy(
-        post,
-        "/Call/ClientsNonFinalises/Panier/Produit/Suppr",
-        payload=payload,
+    return procs.supprimer_produit_panier_call(
+        int(payload.get("IDtk_Call_Panier") or 0),
     )
 
 
@@ -176,12 +193,14 @@ def envoi_lien(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ClientsNonFinalises/EnvoiLien/{code}
-    Body : {IDTK_Liste}. Envoie le SMS + lien au client."""
+    Body : {IDTK_Liste}. Envoie le SMS + lien + mail au client.
+
+    Phase 3 : porte en PG cf. procs.envoi_lien_client_call().
+    """
     _require(user, "TkCALL")
-    return _proxy(
-        post,
-        f"/Call/ClientsNonFinalises/EnvoiLien/{_enc(code)}",
-        payload=payload,
+    return procs.envoi_lien_client_call(
+        int(payload.get("IDTK_Liste") or 0),
+        str(code),
     )
 
 
@@ -191,12 +210,14 @@ def validation(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/ClientsNonFinalises/Validation/{usersCial}
-    Body : {IDTK_Liste}. Cloture le ticket."""
+    Body : {IDTK_Liste}. Cloture le ticket (statut a traiter = 1).
+
+    Phase 3 : porte en PG cf. procs.validation_tk_call().
+    """
     _require(user, "TkCALL")
-    return _proxy(
-        post,
-        f"/Call/ClientsNonFinalises/Validation/{_users_cial(user)}",
-        payload=payload,
+    return procs.validation_tk_call(
+        int(payload.get("IDTK_Liste") or 0),
+        int(user.id_salarie or 0),
     )
 
 
@@ -209,9 +230,9 @@ def verif_photo(
     user: UserToken = Depends(get_current_user),
 ):
     """GET /Call/ClientsNonFinalises/VerifPhoto/{id_ticket}/{type}
-    type = PieceIdentite | KBIS | Justif."""
+    type = PieceIdentite | KBIS | Justif.
+
+    Phase 3 : porte en PG cf. procs.verif_photo() (HEAD HTTP DocOmaya).
+    """
     _require(user, "TkCALL")
-    return _proxy(
-        get,
-        f"/Call/ClientsNonFinalises/VerifPhoto/{_enc(id_ticket)}/{_enc(type_doc)}",
-    )
+    return procs.verif_photo(int(id_ticket), type_doc)
