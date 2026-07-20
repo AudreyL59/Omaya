@@ -326,24 +326,29 @@ def contenu_panier_call(id_ticket: int) -> list[dict]:
 # WS : POST /Call/ClientsNonFinalises/Suppr/{idVend}
 # --------------------------------------------------------------------
 
-def supprimer_ticket_call(id_tk_liste: int) -> dict:
+def supprimer_ticket_call(id_tk_liste: int, id_vendeur: int) -> dict:
     """WS `POST /Call/ClientsNonFinalises/Suppr/{idVend}`.
 
-    NOTE : le .txt Suppr fourni est vide. Portage deduit : suppression
-    logique du ticket via modif_elem = 'suppr' (pattern standard WinDev
-    plutot que DELETE physique). A confirmer avec le user si le code
-    WinDev est different.
+    Portage WinDev SupprClientNonFinalise :
+      UPDATE TK_Liste SET ModifDate=now, ModifOP=idVend, ModifELEM='suppr'
+       WHERE IDTK_Liste = ?
+
+    Suppression LOGIQUE (pas de DELETE physique). Le ticket disparaitra
+    de la liste des non-finalises car liste_clients_non_finalises filtre
+    sur `modif_elem NOT LIKE '%suppr%'`.
     """
     db_tk = get_pg_connection("ticket")
     now = _now_wd()
     try:
         db_tk.query(
             """UPDATE ticket.pgt_tk_liste
-                  SET modif_elem = 'suppr', modif_date = ?
+                  SET modif_elem = 'suppr',
+                      modif_date = ?,
+                      modif_op = ?
                 WHERE id_tk_liste = ?""",
-            (now, int(id_tk_liste)),
+            (now, int(id_vendeur), int(id_tk_liste)),
         )
-        return {"nIdDemande": id_tk_liste}
+        return {"nIdDemande": 0}   # WinDev renvoie 0 en cas de succes
     except Exception as e:
         logger.exception("supprimer_ticket_call")
         return {"nIdDemande": 0, "sInfoData": str(e)}
@@ -956,16 +961,3 @@ def crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
     return {"nIdDemande": id_ticket, "sInfoData": info_blocage}
 
 
-# --------------------------------------------------------------------
-# ATTENTION Suppr (Call-ClientsNonFinalises-Suppr.txt) :
-# --------------------------------------------------------------------
-# Le .txt fourni par le user contient en realite la proc SupprProduitPanier
-# (identique a Call-...-Panier-Produit-Suppr.txt) : elle supprime une
-# ligne de panier, pas un ticket. Or l'endpoint /Suppr est appele cote
-# Flutter avec body {IDTK_Liste} pour supprimer un TICKET entier (swipe
-# dans la liste des paniers en cours).
-#
-# La proc supprimer_ticket_call ci-dessus reste donc en implementation
-# DEDUITE (UPDATE modif_elem = 'suppr' sur pgt_tk_liste). A confirmer
-# avec le user si l'intention est autre (par ex. DELETE physique + cascade
-# panier).

@@ -97,11 +97,14 @@ def supprimer_ticket(
     Body : {IDTK_Liste}.
 
     Phase 3 : porte en PG cf. procs.supprimer_ticket_call().
-    NOTE : le .txt WinDev fourni est vide — implementation deduite
-    (UPDATE modif_elem = 'suppr').
+    Suppression LOGIQUE : UPDATE modif_elem='suppr' + modif_op + modif_date
+    (cf. WinDev SupprClientNonFinalise).
     """
     _require(user, "TkCALL")
-    return procs.supprimer_ticket_call(int(payload.get("IDTK_Liste") or 0))
+    return procs.supprimer_ticket_call(
+        int(payload.get("IDTK_Liste") or 0),
+        int(user.id_salarie or 0),
+    )
 
 
 @router.post("/nouveau-ticket")
