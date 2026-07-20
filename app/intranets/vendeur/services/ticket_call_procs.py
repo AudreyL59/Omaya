@@ -371,10 +371,6 @@ def sfr_liste_clients_non_finalises(id_vend: int) -> list[dict]:
          AND TK_CallSFR.IDSalarie = idVend
 
     PhotoOK / KbisOK : HEAD HTTP DocOmaya (identique cote Energie).
-
-    NOTE : la colonne mobile2 est demandee par la proc WinDev mais
-    ABSENTE du schema PG interne — on retourne '' (voir aussi
-    tickets_call_fiche_fibre.py).
     """
     db_tk = get_pg_connection("ticket")
     db_bo = get_pg_connection("ticket_bo")
@@ -384,7 +380,7 @@ def sfr_liste_clients_non_finalises(id_vend: int) -> list[dict]:
                       tc.civilite_client, tc.nom_client, tc.nom_marital_client,
                       tc.prenom_client, tc.date_naiss, tc.dep_naiss,
                       tc.adresse1, tc.adresse2, tc.cp, tc.ville, tc.adr_mail,
-                      tc.mobile1, tc.code_valid, tc.type_logement,
+                      tc.mobile1, tc.mobile2, tc.code_valid, tc.type_logement,
                       tc.client_pro, tc.client_rs, tc.client_siret
                  FROM ticket_bo.pgt_tk_call_sfr tc
                  INNER JOIN ticket.pgt_tk_liste tl
@@ -418,7 +414,7 @@ def sfr_liste_clients_non_finalises(id_vend: int) -> list[dict]:
             "VILLE": r.get("ville") or "",
             "adrMail": r.get("adr_mail") or "",
             "Mobile1": r.get("mobile1") or "",
-            "Mobile2": "",  # colonne absente schema PG interne
+            "Mobile2": r.get("mobile2") or "",
             "TypeLogement": _to_int(r.get("type_logement")),
             "Code": r.get("code_valid") or "",
             "PhotoOK": _doc_exists(id_tk, "PieceIdentite"),
@@ -793,10 +789,6 @@ def sfr_crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
       CALL Energie')
     - type_demande = 20 (Fibre)
 
-    NOTE : plusieurs colonnes de la structure WinDev STTKCallSFR sont
-    ABSENTES du schema PG interne (mobile2, ticket_diff, anomalie_
-    mobile, id_tk_call_sfr_type_anomalie, info_cplt_anomalie,
-    mob_propo_vend). Elles sont ignorees silencieusement.
     """
     from datetime import date as _date
     db_bo = get_pg_connection("ticket_bo")
@@ -935,17 +927,25 @@ def sfr_crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
                   id_tk_call_sfr, id_tk_liste, id_salarie,
                   civilite_client, nom_client, nom_marital_client,
                   prenom_client, date_naiss, dep_naiss,
-                  adresse1, adresse2, cp, ville, adr_mail, mobile1,
+                  adresse1, adresse2, cp, ville, adr_mail,
+                  mobile1, mobile2,
                   type_logement, client_pro, client_rs, client_siret,
-                  intervention_vend, info_vente, code_valid,
-                  opt_rappel, opt_partenaire, motif_annulation,
+                  intervention_vend, mob_propo_vend, info_vente,
+                  code_valid, opt_rappel, opt_partenaire,
+                  anomalie_mobile, id_tk_call_sfr_type_anomalie,
+                  id_tk_liste_ref_anomalie, info_cplt_anomalie,
+                  ticket_diff, motif_annulation,
                   modif_op, modif_date, modif_elem
               ) VALUES (
                   ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                  ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?,
+                  ?, ?,
                   ?, ?, ?, ?,
-                  FALSE, '', '',
                   FALSE, FALSE, '',
+                  '', FALSE, FALSE,
+                  FALSE, 0,
+                  0, '',
+                  FALSE, '',
                   ?, ?, 'new'
               )""",
             (
@@ -961,7 +961,7 @@ def sfr_crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
                 payload.get("CP") or "",
                 payload.get("VILLE") or "",
                 payload.get("adrMail") or "",
-                mobile1,
+                mobile1, mobile2,
                 _to_int(payload.get("TypeLogement")),
                 _bool(payload.get("ClientPro")),
                 payload.get("ClientRS") or "",
@@ -1019,12 +1019,6 @@ def sfr_vente_mobile_diff(
 
     Le param `type` (0 = init bascule vente differee, 1 = update motif)
     va dans la colonne `anomalie_mobile` (semantique 'flag actif').
-
-    NOTE : les 3 colonnes anomalie_mobile + id_tk_call_sfr_type_anomalie
-    + info_cplt_anomalie sont ABSENTES du schema PG interne (existent
-    cote HFSQL OVH). Tant qu'elles ne sont pas repliquees via
-    SymmetricDS, l'UPDATE echoue en SQL error -> retour sInfoData
-    explicatif au frontend.
     """
     db = get_pg_connection("ticket_bo")
     now = _now_wd()
@@ -1039,7 +1033,7 @@ def sfr_vente_mobile_diff(
                       modif_elem = 'modif'
                 WHERE id_tk_liste = ?""",
             (
-                int(type_val),
+                _bool(type_val),
                 int(id_tk_call_sfr_anomalie),
                 info_cplt_anomalie or "",
                 now,
@@ -1050,14 +1044,7 @@ def sfr_vente_mobile_diff(
         return {"nIdDemande": 0}
     except Exception as e:
         logger.exception("sfr_vente_mobile_diff")
-        msg = str(e)
-        if "n'existe pas" in msg or "does not exist" in msg:
-            msg = (
-                "Colonnes anomalie_mobile / id_tk_call_sfr_type_anomalie / "
-                "info_cplt_anomalie absentes du schema PG interne. "
-                "A repliquer via SymmetricDS depuis HFSQL OVH."
-            )
-        return {"nIdDemande": 0, "sInfoData": msg}
+        return {"nIdDemande": 0, "sInfoData": str(e)}
 
 
 def _envoyer_alert_sfr(alert_html: str) -> None:
