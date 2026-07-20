@@ -9,14 +9,18 @@
  * indique quel ticket ouvrir au double-clic (SFR -> fiche Fibre,
  * sinon -> fiche Energie).
  *
- * MVP (etape 4a) : refresh manuel/periodique 15s, dashboards a onglets,
- * modal fiche = placeholder (etape 4b).
+ * Etape 4b : le double-clic ouvre soit FicheTicketModalFibre (SFR) soit
+ * FicheTicketModalEnergie (autre partenaire). Les endpoints d'ecriture
+ * (verrou / save / actions) ne sont pas encore tous portes cote Vendeur
+ * (etape 4b-5+), la lecture fonctionne.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Loader2, RefreshCw, Search, Calendar as CalIcon,
 } from 'lucide-react'
 import { getToken } from '@/api'
+import FicheTicketModalFibre from '@/components/FicheTicketModalFibre'
+import FicheTicketModalEnergie from '@/components/FicheTicketModalEnergie'
 
 const API_BASE = '/api/vendeur/tickets-call/suivi'
 const REFRESH_MS = 15_000
@@ -157,15 +161,18 @@ export default function TicketsCallSuiviPage() {
     return () => clearInterval(id)
   }, [refreshAll])
 
+  const [openedFiche, setOpenedFiche] = useState<{
+    id: string; kind: 'fibre' | 'energie'
+  } | null>(null)
+
   const openFiche = (row: TicketRow) => {
-    const kind = row.partenaire === 'SFR' ? 'Fibre' : 'Énergie'
-    // Placeholder : etape 4b duppliquera les 2 FicheTicketModal.
-    // eslint-disable-next-line no-alert
-    alert(
-      `Fiche ticket ${kind} #${row.id}\n${row.nom_client}\n\n`
-      + 'Modal en cours de duplication (étape 4b).',
-    )
+    setOpenedFiche({
+      id: row.id,
+      kind: row.partenaire === 'SFR' ? 'fibre' : 'energie',
+    })
   }
+  const closeFiche = () => setOpenedFiche(null)
+  const afterFicheAction = () => { void refreshAll() }
 
   const filtrer = (rows: TicketRow[]) => {
     if (!filtre.trim()) return rows
@@ -255,6 +262,22 @@ export default function TicketsCallSuiviPage() {
           variant="traites"
         />
       </SectionCard>
+
+      {/* Modals fiche - un seul monte a la fois selon le partenaire */}
+      {openedFiche?.kind === 'fibre' && (
+        <FicheTicketModalFibre
+          idTicket={openedFiche.id}
+          onClose={closeFiche}
+          onAfterAction={afterFicheAction}
+        />
+      )}
+      {openedFiche?.kind === 'energie' && (
+        <FicheTicketModalEnergie
+          idTicket={openedFiche.id}
+          onClose={closeFiche}
+          onAfterAction={afterFicheAction}
+        />
+      )}
     </div>
   )
 }
