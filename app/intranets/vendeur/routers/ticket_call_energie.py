@@ -110,16 +110,15 @@ def nouveau_ticket(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /Call/NouveauTK/{usersCial}
-    Body : infos client (civilite, nom, prenom, ...)."""
+    Body : infos client (civilite, nom, prenom, ...).
+
+    Phase 3 : porte en PG cf. procs.crea_modif_tk_call().
+    Validations metier : anti-doublon tel client, anti-tel salarie
+    (blocage si son propre num), blocage si age > 75 ans. Mail alerte
+    envoye a bo+admin en cas d'anomalie.
+    """
     _require(user, "TkCALL")
-    # Le WS peut mettre jusqu'a ~1 min a repondre pour la creation
-    # (cf. kCreateReceiveTimeout cote Flutter).
-    return _proxy(
-        post,
-        f"/Call/NouveauTK/{_users_cial(user)}",
-        payload=payload,
-        timeout=90.0,
-    )
+    return procs.crea_modif_tk_call(payload, int(user.id_salarie or 0))
 
 
 # --- Produits actifs d'un partenaire --------------------------------------

@@ -662,3 +662,310 @@ def verif_photo(id_tk_liste: int, nom_photo: str) -> dict:
     """
     exists = _doc_exists(int(id_tk_liste), nom_photo)
     return {"nIdDemande": id_tk_liste if exists else 0}
+
+
+# --------------------------------------------------------------------
+# WS : POST /Call/NouveauTK/{idVend}   (AjoutTicketCall)
+# --------------------------------------------------------------------
+
+def _format_num_tel(tel: str) -> str:
+    """FormateNumTel WinDev : garde les chiffres. Preserve les +."""
+    if not tel:
+        return ""
+    return "".join(c for c in tel if c.isdigit() or c == "+")
+
+
+def _affectation_terrain_vendeur(id_salarie: int) -> str:
+    """Renvoie le libelle de l'orga d'affectation du vendeur (ou '')."""
+    if not id_salarie:
+        return ""
+    db = get_pg_connection("rh")
+    try:
+        r = db.query_one(
+            """SELECT o.lib_orga
+                 FROM pgt_salarie_organigramme so
+                 LEFT JOIN pgt_organigramme o
+                   ON o.idorganigramme = so.idorganigramme
+                WHERE so.id_salarie = ?
+                  AND COALESCE(so.aff_actif, FALSE) = TRUE
+                  AND (so.modif_elem IS NULL
+                       OR so.modif_elem NOT LIKE '%suppr%')
+                ORDER BY so.date_debut DESC
+                LIMIT 1""",
+            (int(id_salarie),),
+        )
+    except Exception:
+        return ""
+    return (r or {}).get("lib_orga") or ""
+
+
+def _envoyer_alert_call(alert_html: str) -> None:
+    """Envoi le mail 'ALERT CALL Energie' aux destinataires standards."""
+    from app.shared.notifications.mail import envoi_mail
+    try:
+        envoi_mail(
+            sujet="ALERT CALL Energie",
+            html=(
+                "<font face='arial' style='font-size:10pt;'><p>Bonjour,</p>"
+                f"{alert_html}"
+                "<p>Cdt<br/>Service INTRANET</p></font>"
+            ),
+            destinataires=["bo@exosphere.fr", "a.loudieux@exosphere.fr"],
+            cci=["intranet@omaya.fr"],
+            expediteur="intranet@omaya.fr",
+        )
+    except Exception:
+        logger.exception("_envoyer_alert_call")
+
+
+def crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
+    """WS `POST /Call/NouveauTK/{idVend}` (CreaModifTKCall + AjoutTicketCall).
+
+    Portage :
+      1. Genere un nouvel idTicket (WinDev idEntierDateHeureSys).
+      2. Verifie si le mobile1/mobile2 existe deja en base
+         (pgt_tk_call_sfr.mobile1|mobile2) -> mail d'alerte.
+      3. Verifie si le mobile est celui d'un salarie
+         (pgt_salarie_coordonnees.tel_mob) -> mail + eventuel BLOCAGE
+         si c'est le propre num du vendeur.
+      4. Verifie l'age du client via DATENAISS -> BLOCAGE si > 75 ans.
+      5. INSERT pgt_tk_call + pgt_tk_liste (statut=28, type=22).
+      6. Retour : {nIdDemande: idTicket, sInfoData: InfoBlocage}.
+
+    NOTE : les helpers WinDev creaLogIntranet + FormateNumTel + Age +
+    envoiMail sont adaptes ou skippes selon disponibilite.
+    """
+    from datetime import date as _date
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    db_rh = get_pg_connection("rh")
+
+    id_ticket = _new_id_wd()
+    nom_client = (payload.get("NomClient") or "").strip()
+    prenom_client = (payload.get("PrenomClient") or "").strip()
+    mobile1_raw = (payload.get("Mobile1") or "").strip()
+    mobile2_raw = (payload.get("Mobile2") or "").strip()
+    mobile1 = _format_num_tel(mobile1_raw)
+    mobile2 = _format_num_tel(mobile2_raw)
+
+    # Recup nom vendeur (pour les alertes mail)
+    nom_vend = ""
+    try:
+        r = db_rh.query_one(
+            "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ?",
+            (int(id_vend),),
+        )
+        if r:
+            nom_vend = (
+                (r.get("nom") or "").strip() + " "
+                + (r.get("prenom") or "").strip().capitalize()
+            ).strip()
+    except Exception:
+        logger.exception("crea_modif_tk_call: nom_vend lookup")
+
+    alert_mail = ""
+    info_blocage = ""
+    test_blocage = False
+
+    # 1. Anti-doublon mobile client (SELECT sur pgt_tk_call_sfr)
+    def _has_client_with_mobile(mob: str) -> dict | None:
+        if not mob:
+            return None
+        try:
+            return db_bo.query_one(
+                """SELECT nom_client, prenom_client,
+                          adresse1, cp, ville
+                     FROM ticket_bo.pgt_tk_call_sfr
+                    WHERE mobile1 = ?""",
+                (mob,),
+            )
+        except Exception:
+            return None
+
+    for mob in (mobile1, mobile2):
+        if not mob:
+            continue
+        r_dup = _has_client_with_mobile(mob)
+        if r_dup:
+            aff = _affectation_terrain_vendeur(id_vend)
+            nom_clt1 = (
+                (r_dup.get("nom_client") or "") + " "
+                + (r_dup.get("prenom_client") or "").capitalize()
+            ).strip()
+            adr_clt1 = " ".join([
+                r_dup.get("adresse1") or "",
+                r_dup.get("cp") or "",
+                r_dup.get("ville") or "",
+            ]).strip()
+            nom_clt2 = f"{nom_client} {prenom_client.capitalize()}".strip()
+            adr_clt2 = f"{payload.get('ADRESSE1') or ''} {payload.get('CP') or ''} {payload.get('VILLE') or ''}".strip()
+            alert_mail += (
+                f"<p>Attention, {nom_vend} ({aff}) fait un ticket CALL avec "
+                f"un numéro de tél client déjà utilisé.</p>"
+                f"<p>Info Client en base : {nom_clt1} {adr_clt1}</p>"
+                f"<p>Info Client en cours : {nom_clt2} {adr_clt2}</p>"
+            )
+            break
+
+    # 2. Anti-doublon tel salarie (SELECT sur pgt_salarie_coordonnees)
+    def _has_salarie_with_mobile(mob: str) -> dict | None:
+        if not mob:
+            return None
+        try:
+            return db_rh.query_one(
+                """SELECT s.id_salarie, s.nom, s.prenom
+                     FROM rh.pgt_salarie_coordonnees sc
+                     JOIN rh.pgt_salarie s ON s.id_salarie = sc.id_salarie
+                    WHERE sc.tel_mob = ?""",
+                (mob,),
+            )
+        except Exception:
+            return None
+
+    for mob in (mobile1, mobile2):
+        if not mob:
+            continue
+        r_sal = _has_salarie_with_mobile(mob)
+        if r_sal:
+            aff = _affectation_terrain_vendeur(id_vend)
+            if _to_int(r_sal.get("id_salarie")) == int(id_vend):
+                alert_mail += (
+                    f"<p>Attention, {nom_vend} ({aff}) fait un ticket CALL "
+                    f"avec son propre numéro de tél.</p>"
+                )
+                info_blocage = "REFUS TICKET : Il est INTERDIT d'utiliser son numéro de téléphone !"
+                test_blocage = True
+            else:
+                nom_v = (
+                    (r_sal.get("nom") or "") + " "
+                    + (r_sal.get("prenom") or "").capitalize()
+                ).strip()
+                aff_v = _affectation_terrain_vendeur(_to_int(r_sal.get("id_salarie")))
+                alert_mail += (
+                    f"<p>Attention, {nom_vend} ({aff}) fait un ticket CALL "
+                    f"avec le numéro de tél de {nom_v} ({aff_v}).</p>"
+                )
+            break
+
+    # 3. Age > 75 ans -> BLOCAGE
+    dnaiss_raw = (payload.get("DATENAISS") or "").strip()
+    if dnaiss_raw and len(dnaiss_raw) >= 8:
+        try:
+            # Format compact YYYYMMDD (fournit par le frontend via fmtDateApi)
+            dt = _date(
+                int(dnaiss_raw[0:4]),
+                int(dnaiss_raw[4:6]),
+                int(dnaiss_raw[6:8]),
+            )
+            today = _date.today()
+            age = today.year - dt.year - (
+                (today.month, today.day) < (dt.month, dt.day)
+            )
+            if age > 75:
+                test_blocage = True
+                info_blocage = (
+                    "REFUS TICKET : Il est INTERDIT de faire signer une "
+                    "personne de plus de 75 ans !"
+                )
+                aff = _affectation_terrain_vendeur(id_vend)
+                nom_clt2 = f"{nom_client} {prenom_client.capitalize()}".strip()
+                adr_clt2 = f"{payload.get('ADRESSE1') or ''} {payload.get('CP') or ''} {payload.get('VILLE') or ''}".strip()
+                dnaiss_fr = f"{dnaiss_raw[6:8]}/{dnaiss_raw[4:6]}/{dnaiss_raw[0:4]}"
+                alert_mail += (
+                    f"<p>Attention, {nom_vend} ({aff}) fait un ticket CALL "
+                    f"avec à une personne de plus de 75 ans.</p>"
+                    f"<p>Info Client : {nom_clt2}</p>"
+                    f"<p>Adresse : {adr_clt2}</p>"
+                    f"<p>Date naiss : {dnaiss_fr}</p>"
+                )
+        except (ValueError, TypeError):
+            pass
+
+    # Envoi mail d'alerte s'il y en a un
+    if alert_mail:
+        _envoyer_alert_call(alert_mail)
+
+    # 5. INSERT pgt_tk_call + pgt_tk_liste
+    now = _now_wd()
+    try:
+        db_bo.query(
+            """INSERT INTO ticket_bo.pgt_tk_call (
+                  id_tk_call, id_tk_liste, id_salarie, id_client,
+                  civilite_client, nom_client, nom_marital_client,
+                  prenom_client, date_naiss, dep_naiss,
+                  adresse1, adresse2, cp, ville, adr_mail, mobile1,
+                  type_logement, client_pro, client_rs, client_siret,
+                  appel_en_cours, opt_rappel, opt_partenaire,
+                  motif_annulation, modif_op, modif_date, modif_elem
+              ) VALUES (
+                  ?, ?, ?, 0,
+                  ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?,
+                  FALSE, FALSE, FALSE,
+                  '', ?, ?, 'new'
+              )""",
+            (
+                id_ticket, id_ticket, int(id_vend),
+                _to_int(payload.get("CiviliteClient")),
+                nom_client,
+                payload.get("NomMaritalClient") or "",
+                prenom_client,
+                dnaiss_raw or None,
+                _to_int(payload.get("DEPNAISS")),
+                payload.get("ADRESSE1") or "",
+                payload.get("ADRESSE2") or "",
+                payload.get("CP") or "",
+                payload.get("VILLE") or "",
+                payload.get("adrMail") or "",
+                mobile1,
+                _to_int(payload.get("TypeLogement")),
+                _bool(payload.get("ClientPro")),
+                payload.get("ClientRS") or "",
+                payload.get("ClientSiret") or "",
+                int(id_vend),
+                now,
+            ),
+        )
+    except Exception as e:
+        logger.exception("crea_modif_tk_call: INSERT pgt_tk_call")
+        return {"nIdDemande": 0, "sInfoData": str(e)}
+
+    try:
+        db_tk.query(
+            """INSERT INTO ticket.pgt_tk_liste (
+                  id_tk_liste, date_crea, op_crea, op_dest, service,
+                  id_tk_type_demande, id_tk_statut, cloturee,
+                  modif_date, modif_op, modif_elem
+              ) VALUES (
+                  ?, ?, ?, ?, 'BO', ?, ?, FALSE,
+                  ?, ?, 'new'
+              )""",
+            (
+                id_ticket, datetime.now(), int(id_vend), int(id_vend),
+                IDTK_TYPE_DEMANDE_CALL_ENERGIE, IDTK_STATUT_EN_COURS,
+                datetime.now(), int(id_vend),
+            ),
+        )
+    except Exception as e:
+        logger.exception("crea_modif_tk_call: INSERT pgt_tk_liste")
+        # Le tk_call est deja cree — on retourne l'erreur mais l'id
+        # partiellement cree existe.
+        return {"nIdDemande": 0, "sInfoData": str(e)}
+
+    return {"nIdDemande": id_ticket, "sInfoData": info_blocage}
+
+
+# --------------------------------------------------------------------
+# ATTENTION Suppr (Call-ClientsNonFinalises-Suppr.txt) :
+# --------------------------------------------------------------------
+# Le .txt fourni par le user contient en realite la proc SupprProduitPanier
+# (identique a Call-...-Panier-Produit-Suppr.txt) : elle supprime une
+# ligne de panier, pas un ticket. Or l'endpoint /Suppr est appele cote
+# Flutter avec body {IDTK_Liste} pour supprimer un TICKET entier (swipe
+# dans la liste des paniers en cours).
+#
+# La proc supprimer_ticket_call ci-dessus reste donc en implementation
+# DEDUITE (UPDATE modif_elem = 'suppr' sur pgt_tk_liste). A confirmer
+# avec le user si l'intention est autre (par ex. DELETE physique + cascade
+# panier).
