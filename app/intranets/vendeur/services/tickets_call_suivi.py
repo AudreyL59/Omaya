@@ -251,21 +251,22 @@ def _select_en_cours_pg(id_type_demande: int) -> list[dict]:
     plus par le cache SuiviTicketCall car PG a des index perf).
     """
     db_tk = get_pg_connection("ticket")
-    today_compact = _date.today().strftime("%Y%m%d")
+    today_iso = _date.today().isoformat()
     try:
         return db_tk.query(
-            """SELECT id_tk_liste, datecrea, op_crea, id_tk_statut,
+            """SELECT id_tk_liste, date_crea, op_crea, id_tk_statut,
                       cloturee, modif_elem
                  FROM ticket.pgt_tk_liste
                 WHERE id_tk_type_demande = ?
-                  AND LEFT(datecrea, 8) = ?
+                  AND date_crea >= ?::date
+                  AND date_crea < (?::date + INTERVAL '1 day')
                   AND COALESCE(cloturee, FALSE) = FALSE
                   AND (modif_elem IS NULL
                        OR modif_elem NOT LIKE '%suppr%')
                   AND COALESCE(id_tk_statut, 0) NOT IN (18, 28)
                   AND (COALESCE(id_tk_statut, 0) < 14
                        OR id_tk_statut = 34)""",
-            (int(id_type_demande), today_compact),
+            (int(id_type_demande), today_iso, today_iso),
         ) or []
     except Exception:
         logger.exception("_select_en_cours_pg id_type=%s", id_type_demande)
@@ -377,7 +378,7 @@ def list_en_cours_suivi(
         return {
             "id": _str_id(row_liste.get("id_tk_liste")),
             "partenaire": partenaire,
-            "date_crea": _iso(row_liste.get("datecrea")),
+            "date_crea": _iso(row_liste.get("date_crea")),
             "id_salarie": _str_id(id_sal),
             "_id_salarie_int": id_sal,
             "civilite": _to_int(row_call.get("civilite_client")),
@@ -491,20 +492,27 @@ def _load_offres_sfr_ref() -> dict[int, str]:
 def _select_traites_pg(
     id_type_demande: int, jour_compact: str,
 ) -> list[dict]:
-    """Tickets clotures/traites du jour cf. WinDev list_tickets_traites."""
+    """Tickets clotures/traites du jour cf. WinDev list_tickets_traites.
+
+    jour_compact : 'YYYYMMDD' (converti en ISO 'YYYY-MM-DD' pour PG).
+    """
     statuts_sql = ",".join(str(s) for s in STATUTS_TRAITES)
     db_tk = get_pg_connection("ticket")
+    # date_crea est un TIMESTAMP en PG -> convertir jour_compact en ISO
+    j = jour_compact
+    jour_iso = f"{j[0:4]}-{j[4:6]}-{j[6:8]}" if len(j) == 8 else j
     try:
         return db_tk.query(
-            f"""SELECT id_tk_liste, datecrea, id_tk_statut
+            f"""SELECT id_tk_liste, date_crea, id_tk_statut
                   FROM ticket.pgt_tk_liste
                  WHERE id_tk_type_demande = ?
                    AND (modif_elem IS NULL
                         OR modif_elem NOT LIKE '%suppr%')
                    AND id_tk_statut IN ({statuts_sql})
-                   AND LEFT(datecrea, 8) = ?
-                 ORDER BY datecrea ASC""",
-            (int(id_type_demande), jour_compact),
+                   AND date_crea >= ?::date
+                   AND date_crea < (?::date + INTERVAL '1 day')
+                 ORDER BY date_crea ASC""",
+            (int(id_type_demande), jour_iso, jour_iso),
         ) or []
     except Exception:
         logger.exception("_select_traites_pg id_type=%s", id_type_demande)
@@ -695,7 +703,7 @@ def list_traites_suivi(
             # Delai prise num >= 1h apres creation
             dt_saisie = _parse_dt(off.get("num_date_saisie"))
             if dt_saisie:
-                dt_crea = _parse_dt(tk.get("datecrea"))
+                dt_crea = _parse_dt(tk.get("date_crea"))
                 if dt_crea and (dt_saisie - dt_crea).total_seconds() >= 3600:
                     delai_depasse = True
 
@@ -704,7 +712,7 @@ def list_traites_suivi(
         out.append({
             "id": _str_id(id_tk),
             "partenaire": "SFR",
-            "date_crea": _iso(tk.get("datecrea")),
+            "date_crea": _iso(tk.get("date_crea")),
             "nom_client": _format_nom_client(
                 _to_int(r.get("civilite_client")),
                 r.get("nom_client") or "",
@@ -767,7 +775,7 @@ def list_traites_suivi(
                     lib_statut = "Tk Call - Num BS renseigné"
             dt_saisie = _parse_dt(off.get("num_date_saisie"))
             if dt_saisie:
-                dt_crea = _parse_dt(tk.get("datecrea"))
+                dt_crea = _parse_dt(tk.get("date_crea"))
                 if dt_crea and (dt_saisie - dt_crea).total_seconds() >= 3600:
                     delai_depasse = True
 
@@ -782,7 +790,7 @@ def list_traites_suivi(
         out.append({
             "id": _str_id(id_tk),
             "partenaire": partenaire_dominant,
-            "date_crea": _iso(tk.get("datecrea")),
+            "date_crea": _iso(tk.get("date_crea")),
             "nom_client": _format_nom_client(
                 _to_int(r.get("civilite_client")),
                 r.get("nom_client") or "",

@@ -85,7 +85,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
     with ThreadPoolExecutor(max_workers=2) as pool:
         f_liste = pool.submit(
             db_ticket.query_one,
-            """SELECT id_tk_liste, datecrea, id_tk_statut, op_crea,
+            """SELECT id_tk_liste, date_crea, id_tk_statut, op_crea,
                       cloturee, date_cloture
                  FROM ticket.pgt_tk_liste
                 WHERE id_tk_liste = ?""",
