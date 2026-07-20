@@ -155,14 +155,11 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
         ) if need_ope else None
         f_panier = pool.submit(
             db_bo.query,
-            # Note : opt_maintenance existe cote HFSQL OVH mais pas dans
-            # le schema PG interne (pas encore repliquee via SymmetricDS).
-            # On expose False par defaut cote API.
             """SELECT id_tk_call_panier, id_produit, partenaire,
                       opt_energie_verte_elec, opt_reforestation,
                       opt_energie_verte_gaz, opt_mail, opt_mandat,
                       format_numerique, opt_accept_com_parte,
-                      opt_consent_consult_distri,
+                      opt_consent_consult_distri, opt_maintenance,
                       opt_e_communication, opt_e_facture,
                       opt_optin_commercial, date_entree, observations,
                       motif_annulation, statut_prod, num_bs,
@@ -206,7 +203,7 @@ def load_fiche(id_tk_liste: int, current_user_id: int = 0) -> dict:
             "opt_mail": _bool(p.get("opt_mail")),
             "opt_mandat": _bool(p.get("opt_mandat")),
             "format_numerique": _bool(p.get("format_numerique")),
-            "opt_maintenance": False,  # colonne absente du schema PG interne
+            "opt_maintenance": _bool(p.get("opt_maintenance")),
             "opt_accept_com_parte": _bool(p.get("opt_accept_com_parte")),
             "opt_consent_consult_distri": _bool(
                 p.get("opt_consent_consult_distri"),

@@ -51,20 +51,23 @@ CREATE TABLE ticket_bo.pgt_tk_call_panier (
     id_tk_call_panier           bigint NOT NULL,  -- IDTK_Call_Panier
     id_tk_call                  bigint,  -- IDtk_Call
     id_tk_liste                 bigint,  -- IDTK_Liste
-    id_produit                  integer,  -- IDproduit
-    opt_mail                    boolean,  -- OPT_Mail
     partenaire                  varchar(5),  -- Partenaire
+    id_produit                  integer,  -- IDproduit
     num_bs                      text,  -- NumBS
     opt_energie_verte_elec      boolean,  -- OPT_EnergieVerteElec
-    opt_energie_verte_gaz       boolean,  -- OPT_EnergieVerteGaz
     opt_reforestation           boolean,  -- OPT_Reforestation
+    opt_energie_verte_gaz       boolean,  -- OPT_EnergieVerteGaz
+    opt_mail                    boolean,  -- OPT_Mail
+    opt_e_facture               boolean,  -- OPT_eFacture
+    opt_e_communication         boolean,  -- OPT_eCommunication
+    opt_optin_commercial        boolean,  -- OPT_optinCommercial
     opt_mandat                  boolean,  -- Opt_Mandat
+    opt_consent_consult_distri  boolean,  -- OPT_ConsentConsultDistri
+    opt_accept_com_parte        boolean,  -- OPT_AcceptComParte
+    opt_maintenance             boolean,  -- Opt_Maintenance
     format_numerique            boolean,  -- FormatNumérique
     motif_annulation            text,  -- MotifAnnulation
     statut_prod                 smallint,  -- StatutProd
-    modif_date                  timestamp,  -- ModifDate
-    modif_elem                  varchar(5),  -- ModifElem
-    modif_op                    bigint,  -- ModifOp
     nb_pers_foyer               smallint,  -- NBPersFoyer
     sit_pro                     text,  -- SitPro
     rfr                         numeric(19,4),  -- RFR
@@ -81,12 +84,10 @@ CREATE TABLE ticket_bo.pgt_tk_call_panier (
     chauffage_alternantif       smallint,  -- ChauffageAlternantif
     type_chauff_alter           text,  -- TypeChauffAlter
     observations                text,  -- Observations
-    opt_consent_consult_distri  boolean,  -- OPT_ConsentConsultDistri
-    opt_accept_com_parte        boolean,  -- OPT_AcceptComParte
     num_date_saisie             timestamp,  -- Num_DateSaisie
-    opt_e_communication         boolean,  -- OPT_eCommunication
-    opt_e_facture               boolean,  -- OPT_eFacture
-    opt_optin_commercial        boolean,  -- OPT_optinCommercial
+    modif_date                  timestamp,  -- ModifDate
+    modif_op                    bigint,  -- ModifOp
+    modif_elem                  varchar(5),  -- ModifElem
     CONSTRAINT pk_pgt_tk_call_panier PRIMARY KEY (id_tk_call_panier)
 );
 CREATE INDEX ix_pgt_tk_call_panier_id_tk_call ON ticket_bo.pgt_tk_call_panier (id_tk_call);
