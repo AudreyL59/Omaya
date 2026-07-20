@@ -18,6 +18,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.core.config import WEBREST_BASE_URL
+from app.intranets.vendeur.services import ticket_call_procs as procs
 from app.intranets.vendeur.services.ws_client import (
     WSError, get, post, encode_path_segment as _enc,
 )
@@ -51,16 +52,22 @@ def _proxy(fn, *args, **kwargs):
 def list_clients_non_finalises(
     user: UserToken = Depends(get_current_user),
 ):
-    """POST /CallSFR/ClientsNonFinalises/{usersCial}."""
+    """POST /CallSFR/ClientsNonFinalises/{usersCial}.
+
+    Phase 3 : PG cf. procs.sfr_liste_clients_non_finalises().
+    """
     _require(user, "BS_SFR")
-    return _proxy(post, f"/CallSFR/ClientsNonFinalises/{_users_cial(user)}")
+    return procs.sfr_liste_clients_non_finalises(int(user.id_salarie or 0))
 
 
 @router.get("/anomalies")
 def anomalie_liste(user: UserToken = Depends(get_current_user)):
-    """GET /CallSFR/AnomalieListe -> Liste des motifs d'anomalie mobile."""
+    """GET /CallSFR/AnomalieListe -> Liste des motifs d'anomalie mobile.
+
+    Phase 3 : PG cf. procs.sfr_liste_anomalie().
+    """
     _require(user, "BS_SFR")
-    return _proxy(get, "/CallSFR/AnomalieListe")
+    return procs.sfr_liste_anomalie()
 
 
 # --- Panier d'un ticket --------------------------------------------------
@@ -70,9 +77,12 @@ def get_panier(
     id_ticket: str,
     user: UserToken = Depends(get_current_user),
 ):
-    """POST /CallSFR/ClientsNonFinalises/Panier/{id_ticket}."""
+    """POST /CallSFR/ClientsNonFinalises/Panier/{id_ticket}.
+
+    Phase 3 : PG cf. procs.sfr_contenu_panier().
+    """
     _require(user, "BS_SFR")
-    return _proxy(post, f"/CallSFR/ClientsNonFinalises/Panier/{_enc(id_ticket)}")
+    return procs.sfr_contenu_panier(int(id_ticket))
 
 
 # --- Ticket : suppression / creation -------------------------------------
@@ -83,12 +93,14 @@ def supprimer_ticket(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /CallSFR/ClientsNonFinalises/Suppr/{usersCial}
-    Body : {IDTK_Liste}."""
+    Body : {IDTK_Liste}.
+
+    Phase 3 : PG cf. procs.sfr_supprimer_ticket() (identique Energie).
+    """
     _require(user, "BS_SFR")
-    return _proxy(
-        post,
-        f"/CallSFR/ClientsNonFinalises/Suppr/{_users_cial(user)}",
-        payload=payload,
+    return procs.sfr_supprimer_ticket(
+        int(payload.get("IDTK_Liste") or 0),
+        int(user.id_salarie or 0),
     )
 
 
@@ -98,14 +110,14 @@ def nouveau_ticket(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /CallSFR/NouveauTK/{usersCial}
-    Body : infos client (avec Mobile2)."""
+    Body : infos client (avec Mobile2).
+
+    Phase 3 : PG cf. procs.sfr_crea_modif_tk_call().
+    Anti-doublon tel client/salarie + blocage >75 ans + mail ALERT
+    CALL SFR (cf. WinDev AjoutTicketCallSFR).
+    """
     _require(user, "BS_SFR")
-    return _proxy(
-        post,
-        f"/CallSFR/NouveauTK/{_users_cial(user)}",
-        payload=payload,
-        timeout=90.0,
-    )
+    return procs.sfr_crea_modif_tk_call(payload, int(user.id_salarie or 0))
 
 
 # --- Offres SFR ----------------------------------------------------------
@@ -117,9 +129,12 @@ def lister_offres(
     user: UserToken = Depends(get_current_user),
 ):
     """GET /SFR/ListerOffres/{type}/{avecTV}
-    type = FIBRE | MOBILE | FIB PRO | MOB PRO, avecTV = 0|1."""
+    type = FIBRE | MOBILE | FIB PRO | MOB PRO, avecTV = 0|1.
+
+    Phase 3 : PG cf. procs.sfr_lister_offres().
+    """
     _require(user, "BS_SFR")
-    return _proxy(get, f"/SFR/ListerOffres/{_enc(type_offre)}/{_enc(avec_tv)}")
+    return procs.sfr_lister_offres(type_offre, avec_tv in ("1", "true", "True"))
 
 
 # --- Panier : ajout / suppression / anomalie -----------------------------
@@ -129,13 +144,12 @@ def ajouter_produit(
     payload: dict = Body(default_factory=dict),
     user: UserToken = Depends(get_current_user),
 ):
-    """POST /CallSFR/ClientsNonFinalises/Panier/Produit/Ajout."""
+    """POST /CallSFR/ClientsNonFinalises/Panier/Produit/Ajout.
+
+    Phase 3 : PG cf. procs.sfr_ajouter_produit_panier().
+    """
     _require(user, "BS_SFR")
-    return _proxy(
-        post,
-        "/CallSFR/ClientsNonFinalises/Panier/Produit/Ajout",
-        payload=payload,
-    )
+    return procs.sfr_ajouter_produit_panier(payload)
 
 
 @router.post("/panier/produit/supprimer")
@@ -144,12 +158,15 @@ def supprimer_produit(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /CallSFR/ClientsNonFinalises/Panier/Produit/Suppr
-    Body : {IDtk_CallSFR_Panier}."""
+    Body : {IDtk_CallSFR_Panier}.
+
+    Phase 3 : PG cf. procs.sfr_supprimer_produit_panier().
+    Suppression LOGIQUE (modif_elem='suppr'), diverge du panier Energie
+    qui fait un DELETE physique.
+    """
     _require(user, "BS_SFR")
-    return _proxy(
-        post,
-        "/CallSFR/ClientsNonFinalises/Panier/Produit/Suppr",
-        payload=payload,
+    return procs.sfr_supprimer_produit_panier(
+        int(payload.get("IDtk_CallSFR_Panier") or 0),
     )
 
 
@@ -161,7 +178,12 @@ def anomalie_mobile(
 ):
     """POST /CallSFR/ClientsNonFinalises/AnomalieMobile/{usersCial}/{idInd}
     idInd = 0 (init bascule differee) | 1 (changement motif)
-    Body : {IDTK_Liste, IDtk_CallSFR_Anomalie, InfoCplAnomalie}."""
+    Body : {IDTK_Liste, IDtk_CallSFR_Anomalie, InfoCplAnomalie}.
+
+    Phase 3 : reste en PROXY. Le .txt WinDev fourni est en realite un
+    copy-paste de SupprClientNonFinalise (mauvais fichier). Attente de
+    la vraie proc pour porter en PG.
+    """
     _require(user, "BS_SFR")
     return _proxy(
         post,
@@ -179,12 +201,14 @@ def envoi_lien(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /CallSFR/ClientsNonFinalises/EnvoiLien/{code}
-    Body : {IDTK_Liste}."""
+    Body : {IDTK_Liste}.
+
+    Phase 3 : PG cf. procs.sfr_envoi_lien_client() (SMS + mail).
+    """
     _require(user, "BS_SFR")
-    return _proxy(
-        post,
-        f"/CallSFR/ClientsNonFinalises/EnvoiLien/{_enc(code)}",
-        payload=payload,
+    return procs.sfr_envoi_lien_client(
+        int(payload.get("IDTK_Liste") or 0),
+        str(code),
     )
 
 
@@ -194,12 +218,16 @@ def validation(
     user: UserToken = Depends(get_current_user),
 ):
     """POST /CallSFR/ClientsNonFinalises/Validation/{usersCial}
-    Body : {IDTK_Liste}."""
+    Body : {IDTK_Liste}.
+
+    Phase 3 : PG cf. procs.sfr_validation_tk_call() (statut=1 +
+    date_crea + modif). Conversion PieceIdentite.png -> CIN.jpg
+    (WinDev) skip cote Python (acces FS distant).
+    """
     _require(user, "BS_SFR")
-    return _proxy(
-        post,
-        f"/CallSFR/ClientsNonFinalises/Validation/{_users_cial(user)}",
-        payload=payload,
+    return procs.sfr_validation_tk_call(
+        int(payload.get("IDTK_Liste") or 0),
+        int(user.id_salarie or 0),
     )
 
 
@@ -212,12 +240,12 @@ def verif_photo(
     user: UserToken = Depends(get_current_user),
 ):
     """GET /CallSFR/ClientsNonFinalises/VerifPhoto/{id_ticket}/{type}
-    type = PieceIdentite | KBIS."""
+    type = PieceIdentite | KBIS.
+
+    Phase 3 : PG cf. procs.sfr_verif_photo() (HEAD HTTP DocOmaya).
+    """
     _require(user, "BS_SFR")
-    return _proxy(
-        get,
-        f"/CallSFR/ClientsNonFinalises/VerifPhoto/{_enc(id_ticket)}/{_enc(type_doc)}",
-    )
+    return procs.sfr_verif_photo(int(id_ticket), type_doc)
 
 
 # --- Verif presence lettre de resiliation sur DocOmaya -------------------
