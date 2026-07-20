@@ -402,6 +402,9 @@ function TicketsTable({
     <table className="text-xs w-full">
       <thead className="bg-c-surface-soft text-c-ink-soft">
         <tr>
+          {variant === 'encours' && (
+            <th className="py-1.5 px-2 text-left">Appel</th>
+          )}
           <th className="py-1.5 px-2 text-left">Partenaire</th>
           <th className="py-1.5 px-2 text-left">Date</th>
           <th className="py-1.5 px-2 text-left">Client</th>
@@ -410,9 +413,6 @@ function TicketsTable({
           <th className="py-1.5 px-2 text-left">Vendeur</th>
           <th className="py-1.5 px-2 text-left">Agence</th>
           <th className="py-1.5 px-2 text-left">Statut</th>
-          {variant === 'encours' && (
-            <th className="py-1.5 px-2 text-left">Appel</th>
-          )}
           {variant === 'traites' && (
             <>
               <th className="py-1.5 px-2 text-right">Nb offres</th>
@@ -430,6 +430,14 @@ function TicketsTable({
           <tr key={r.id}
               onDoubleClick={() => onDoubleClick(r)}
               className="border-b border-c-line-soft hover:bg-c-surface-soft cursor-pointer">
+            {variant === 'encours' && (
+              <td className="py-1 px-2 text-xs text-c-ink-faint whitespace-nowrap">
+                {r.appel_en_cours ? `📞 ${r.ope_appel_nom || ''}` : ''}
+                {r.ticket_diff && (
+                  <span className="ml-1 text-red-600 font-bold">DIFF</span>
+                )}
+              </td>
+            )}
             <td className="py-1 px-2">
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                 r.partenaire === 'SFR'
@@ -458,14 +466,6 @@ function TicketsTable({
                 {r.lib_statut}
               </span>
             </td>
-            {variant === 'encours' && (
-              <td className="py-1 px-2 text-xs text-c-ink-faint">
-                {r.appel_en_cours ? `📞 ${r.ope_appel_nom || ''}` : ''}
-                {r.ticket_diff && (
-                  <span className="ml-1 text-red-600 font-bold">DIFF</span>
-                )}
-              </td>
-            )}
             {variant === 'traites' && (
               <>
                 <td className="py-1 px-2 text-right tabular-nums">

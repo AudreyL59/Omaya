@@ -73,7 +73,9 @@ _OFFRE_FIELDS = [
     ("statut_prod", "statut_prod", lambda v: _to_int(v)),
     ("num_bs", "num_bs", lambda v: (v or "")),
     ("opt_mandat", "opt_mandat", lambda v: _bool(v)),
-    ("opt_maintenance", "opt_maintenance", lambda v: _bool(v)),
+    # opt_maintenance : colonne absente du schema PG interne (existe cote
+    # HFSQL OVH), on l'ignore silencieusement dans les save.
+    # ("opt_maintenance", "opt_maintenance", lambda v: _bool(v)),
     ("format_numerique", "format_numerique", lambda v: _bool(v)),
     ("opt_accept_com_parte", "opt_accept_com_parte", lambda v: _bool(v)),
     ("opt_consent_consult_distri", "opt_consent_consult_distri", lambda v: _bool(v)),
