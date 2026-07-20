@@ -24,8 +24,13 @@ logger = logging.getLogger(__name__)
 
 # --- Helpers -------------------------------------------------------------
 
-def _sql_now_wd() -> str:
-    return datetime.now().strftime("%Y%m%d%H%M%S")
+def _sql_now_wd() -> datetime:
+    """WinDev DateHeureSys() cote PG : retourne un `datetime` (le driver
+    PG le convertit en timestamp). Le format compact WinDev
+    'YYYYMMDDHHMMSS' est refuse par PG sur les colonnes timestamp.
+    Cf. memoire feedback_pg_dates_iso.
+    """
+    return datetime.now()
 
 
 def _dates_to_compact(s: str | None) -> str:

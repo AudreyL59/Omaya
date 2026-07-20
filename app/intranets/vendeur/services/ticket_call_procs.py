@@ -85,9 +85,13 @@ def _to_int(v: Any, default: int = 0) -> int:
         return default
 
 
-def _now_wd() -> str:
-    """DateHeureSys() de WinDev : 'YYYYMMDDHHMMSSMMM'."""
-    return datetime.now().strftime("%Y%m%d%H%M%S000")
+def _now_wd() -> datetime:
+    """DateHeureSys() de WinDev, cote PG : retourne un objet `datetime`
+    (le driver PG le convertit en timestamp natif). Cf. memoire
+    feedback_pg_dates_iso : PG refuse le format compact WinDev sur
+    colonnes timestamp.
+    """
+    return datetime.now()
 
 
 def _new_id_wd() -> int:
