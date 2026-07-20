@@ -61,6 +61,12 @@ CTTW_SIGN_URL_FALLBACK = os.getenv(
     "CTTW_SIGN_URL_FALLBACK", "https://sos.rest.omaya.fr/sign"
 )
 
+# Base URL des WebService WinDev (WebRest_Omayapp) utilises par les
+# ecrans Ticket Call Energie + Fibre (proxy Phase 2, cf.
+# docs/tickets_call_screens_analysis.md).
+# Bascule progressive vers PG au fur et a mesure (Phase 3).
+WEBREST_BASE_URL = os.getenv("WEBREST_BASE_URL", "https://rest.omaya.fr")
+
 # Emails de service
 MAIL_SUPPORT = os.getenv("MAIL_SUPPORT", "intranet@omaya.fr")
 MAIL_TECH = os.getenv("MAIL_TECH", "a.loudieux@exosphere.fr")
