@@ -14,7 +14,7 @@
  * (verrou / save / actions) ne sont pas encore tous portes cote Vendeur
  * (etape 4b-5+), la lecture fonctionne.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Loader2, RefreshCw, Search, Calendar as CalIcon,
 } from 'lucide-react'
@@ -23,7 +23,24 @@ import FicheTicketModalFibre from '@/components/FicheTicketModalFibre'
 import FicheTicketModalEnergie from '@/components/FicheTicketModalEnergie'
 
 const API_BASE = '/api/vendeur/tickets-call/suivi'
-const REFRESH_MS = 15_000
+// Refresh secondaire (traites + dashboards) : les changements de statut
+// coulent aussi via /live pour les en-cours, mais on rafraichit periodique-
+// ment le bas pour couvrir les mises a jour de dashboards.
+const REFRESH_MS = 30_000
+
+// Onglet en arriere-plan : suspendre le long-poll pour liberer la connexion HTTP.
+function waitUntilVisible(): Promise<void> {
+  if (typeof document === 'undefined' || !document.hidden) return Promise.resolve()
+  return new Promise((resolve) => {
+    const onVis = () => {
+      if (!document.hidden) {
+        document.removeEventListener('visibilitychange', onVis)
+        resolve()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+  })
+}
 
 // --- Types partages -------------------------------------------------------
 
@@ -154,12 +171,60 @@ export default function TicketsCallSuiviPage() {
     setLastRefresh(new Date().toLocaleTimeString('fr-FR'))
   }, [fetchEnCours, fetchTraites, fetchDashboard, jour])
 
-  // Load initial + refresh périodique
+  const refreshBas = useCallback(async () => {
+    await Promise.all([
+      fetchTraites(jour),
+      fetchDashboard('fibre', jour),
+      fetchDashboard('energie', jour),
+    ])
+    setLastRefresh(new Date().toLocaleTimeString('fr-FR'))
+  }, [fetchTraites, fetchDashboard, jour])
+
+  // Load initial
   useEffect(() => { void refreshAll() }, [refreshAll])
+  // Refresh periodique du bas (traites + dashboards)
   useEffect(() => {
-    const id = setInterval(() => { void refreshAll() }, REFRESH_MS)
+    const id = setInterval(() => { void refreshBas() }, REFRESH_MS)
     return () => clearInterval(id)
-  }, [refreshAll])
+  }, [refreshBas])
+
+  // Long polling sur les en-cours : detecte instantanement les nouveaux
+  // tickets + les changements de statut + les prises/lachers de verrou.
+  const lastModifRef = useRef('')
+  const stoppedRef = useRef(false)
+  useEffect(() => {
+    stoppedRef.current = false
+    ;(async () => {
+      while (!stoppedRef.current) {
+        if (document.hidden) {
+          await waitUntilVisible()
+          if (stoppedRef.current) break
+        }
+        try {
+          const since = encodeURIComponent(lastModifRef.current)
+          const r = await fetch(`${API_BASE}/live?since=${since}`, { headers: auth })
+          if (!r.ok) { await new Promise((res) => setTimeout(res, 5000)); continue }
+          const body = await r.json()
+          if (body.changed && body.page) {
+            if (!stoppedRef.current) {
+              setEnCours(Array.isArray(body.page) ? body.page : [])
+              lastModifRef.current = body.last_modif || ''
+              setLastRefresh(new Date().toLocaleTimeString('fr-FR'))
+              // Un changement peut aussi affecter le bas (statut = 14/15/28)
+              // -> re-fetch les traites/dashboards en tache de fond.
+              void refreshBas()
+            }
+          } else {
+            lastModifRef.current = body.last_modif || lastModifRef.current
+          }
+        } catch {
+          await new Promise((res) => setTimeout(res, 3000))
+        }
+      }
+    })()
+    return () => { stoppedRef.current = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [openedFiche, setOpenedFiche] = useState<{
     id: string; kind: 'fibre' | 'energie'

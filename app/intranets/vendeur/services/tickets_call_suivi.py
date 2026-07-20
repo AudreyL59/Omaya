@@ -1124,6 +1124,81 @@ def dashboard_energie(user_droits: list[str], jour: str | None = None) -> dict:
     }
 
 
+# --------------------------------------------------------------------
+# Live polling (long-polling MAX(modif_date))
+# --------------------------------------------------------------------
+# Cf. memoire project_call_polling_cutover : au cutover PG on remplacera
+# ce long polling par LISTEN/NOTIFY + WebSockets. Pour le MVP on garde
+# la meme strategie que HFSQL mais en PG (les tables ont des index).
+
+_LIVE_TTL = 1.0
+_LIVE_CACHE: dict = {"val": "", "at": 0.0}
+
+
+def get_last_modif_call_suivi() -> str:
+    """Token de change-detection : max(modif_date) sur pgt_tk_liste (types
+    20 + 22) + pgt_tk_call_sfr + pgt_tk_call sur les 7 derniers jours.
+
+    Cote PG, le verrou (appel_en_cours + date_h_appel) est dans
+    pgt_tk_call_sfr/pgt_tk_call : tracked directement par modif_date,
+    plus besoin d'un hash separe.
+    """
+    from datetime import datetime as _dt, timedelta
+    cutoff = (_dt.now() - timedelta(days=7)).strftime("%Y%m%d000000000")
+    db_ticket = get_pg_connection("ticket")
+    db_bo = get_pg_connection("ticket_bo")
+    m1 = m2 = m3 = ""
+    try:
+        r = db_ticket.query_one(
+            """SELECT MAX(modif_date) AS m FROM ticket.pgt_tk_liste
+                WHERE id_tk_type_demande IN (?, ?)
+                  AND modif_date > ?""",
+            (IDTK_TYPE_DEMANDE_CALL_FIBRE,
+             IDTK_TYPE_DEMANDE_CALL_ENERGIE, cutoff),
+        )
+        m1 = str((r or {}).get("m") or "")
+    except Exception:
+        pass
+    try:
+        r = db_bo.query_one(
+            """SELECT MAX(modif_date) AS m FROM ticket_bo.pgt_tk_call_sfr
+                WHERE modif_date > ?""",
+            (cutoff,),
+        )
+        m2 = str((r or {}).get("m") or "")
+    except Exception:
+        pass
+    try:
+        r = db_bo.query_one(
+            """SELECT MAX(modif_date) AS m FROM ticket_bo.pgt_tk_call
+                WHERE modif_date > ?""",
+            (cutoff,),
+        )
+        m3 = str((r or {}).get("m") or "")
+    except Exception:
+        pass
+    return max(m1, m2, m3)
+
+
+def get_last_modif_cached() -> str:
+    """Version mutualisee (cache process 1s) pour eviter le N-fois-par-seconde
+    quand N pollers sont connectes simultanement."""
+    import time as _time
+    import threading
+    now = _time.monotonic()
+    if _LIVE_CACHE["val"] and now - _LIVE_CACHE["at"] < _LIVE_TTL:
+        return _LIVE_CACHE["val"]
+    lock = _LIVE_CACHE.setdefault("_lock", threading.Lock())
+    with lock:
+        now = _time.monotonic()
+        if _LIVE_CACHE["val"] and now - _LIVE_CACHE["at"] < _LIVE_TTL:
+            return _LIVE_CACHE["val"]
+        val = get_last_modif_call_suivi()
+        _LIVE_CACHE["val"] = val
+        _LIVE_CACHE["at"] = _time.monotonic()
+        return val
+
+
 def _dashboard_energie_empty(partenaires: list[dict]) -> dict:
     return {
         "tickets_valides": 0,
