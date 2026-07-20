@@ -996,6 +996,70 @@ def sfr_crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
     return {"nIdDemande": id_ticket, "sInfoData": info_blocage}
 
 
+# --------------------------------------------------------------------
+# WS : POST /CallSFR/ClientsNonFinalises/AnomalieMobile/{idVend}/{type}
+# --------------------------------------------------------------------
+
+def sfr_vente_mobile_diff(
+    id_tk_liste: int,
+    id_tk_call_sfr_anomalie: int,
+    info_cplt_anomalie: str,
+    id_vendeur: int,
+    type_val: int,
+) -> dict:
+    """WS `POST /CallSFR/.../AnomalieMobile/{idVend}/{type}`.
+
+    Portage WinDev VenteMobileDiff_ClientNonFinalise :
+      UPDATE TK_CallSFR
+         SET AnomalieMobile = type,
+             IDTK_CallSFR_TypeAnomalie = idAnomalie,
+             InfoCpltAnomalie = infoCplt,
+             ModifDate = now, ModifOP = idVend, ModifELEM = 'modif'
+       WHERE IDTK_Liste = ?
+
+    Le param `type` (0 = init bascule vente differee, 1 = update motif)
+    va dans la colonne `anomalie_mobile` (semantique 'flag actif').
+
+    NOTE : les 3 colonnes anomalie_mobile + id_tk_call_sfr_type_anomalie
+    + info_cplt_anomalie sont ABSENTES du schema PG interne (existent
+    cote HFSQL OVH). Tant qu'elles ne sont pas repliquees via
+    SymmetricDS, l'UPDATE echoue en SQL error -> retour sInfoData
+    explicatif au frontend.
+    """
+    db = get_pg_connection("ticket_bo")
+    now = _now_wd()
+    try:
+        db.query(
+            """UPDATE ticket_bo.pgt_tk_call_sfr
+                  SET anomalie_mobile = ?,
+                      id_tk_call_sfr_type_anomalie = ?,
+                      info_cplt_anomalie = ?,
+                      modif_date = ?,
+                      modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (
+                int(type_val),
+                int(id_tk_call_sfr_anomalie),
+                info_cplt_anomalie or "",
+                now,
+                int(id_vendeur),
+                int(id_tk_liste),
+            ),
+        )
+        return {"nIdDemande": 0}
+    except Exception as e:
+        logger.exception("sfr_vente_mobile_diff")
+        msg = str(e)
+        if "n'existe pas" in msg or "does not exist" in msg:
+            msg = (
+                "Colonnes anomalie_mobile / id_tk_call_sfr_type_anomalie / "
+                "info_cplt_anomalie absentes du schema PG interne. "
+                "A repliquer via SymmetricDS depuis HFSQL OVH."
+            )
+        return {"nIdDemande": 0, "sInfoData": msg}
+
+
 def _envoyer_alert_sfr(alert_html: str) -> None:
     """Mail 'ALERT CALL SFR' (idem alert Energie mais sujet different)."""
     from app.shared.notifications.mail import envoi_mail

@@ -180,15 +180,20 @@ def anomalie_mobile(
     idInd = 0 (init bascule differee) | 1 (changement motif)
     Body : {IDTK_Liste, IDtk_CallSFR_Anomalie, InfoCplAnomalie}.
 
-    Phase 3 : reste en PROXY. Le .txt WinDev fourni est en realite un
-    copy-paste de SupprClientNonFinalise (mauvais fichier). Attente de
-    la vraie proc pour porter en PG.
+    Phase 3 : PG cf. procs.sfr_vente_mobile_diff().
+    NOTE : les colonnes anomalie_mobile + id_tk_call_sfr_type_anomalie
+    + info_cplt_anomalie ne sont pas encore dans le schema PG interne.
+    L'UPDATE retournera sInfoData explicatif en cas d'echec — la
+    fonctionnalite sera pleinement operationnelle des replication
+    SymmetricDS de ces colonnes.
     """
     _require(user, "BS_SFR")
-    return _proxy(
-        post,
-        f"/CallSFR/ClientsNonFinalises/AnomalieMobile/{_users_cial(user)}/{_enc(id_ind)}",
-        payload=payload,
+    return procs.sfr_vente_mobile_diff(
+        int(payload.get("IDTK_Liste") or 0),
+        int(payload.get("IDtk_CallSFR_Anomalie") or 0),
+        payload.get("InfoCplAnomalie") or "",
+        int(user.id_salarie or 0),
+        int(id_ind or 0),
     )
 
 
