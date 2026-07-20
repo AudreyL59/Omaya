@@ -1857,7 +1857,7 @@ def _import_journalier_eni(
         _addon_up = _cell(ws, i, cols["addon"]).upper()
         opt_maint = ("PCK_HOME_P" in _addon_up) or ("HSV_PACK_PM" in _addon_up)
         opt_mail = "MAIL" in _cell(ws, i, cols["opt_mail"]).upper()
-        mandat_rib = "/20" in _cell(ws, i, cols["mandat_rib"])
+        mandat_rib = "OUI" in _cell(ws, i, cols["mandat_rib"]).upper()
         note_g = _parse_int(_cell(ws, i, cols["note_globale"]))
         note_s5 = note_g / 2 if note_g else 0
         info_note = _cell(ws, i, cols["info_notation"])
