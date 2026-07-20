@@ -600,19 +600,31 @@ function AgenceCardFibre({ agence }: {
 
 
 function ZoneCard({ title, rows }: { title: string; rows: DashPartRow[] }) {
+  // Grid a 3 colonnes : partenaire (auto) + offres (fixed) + clients (fixed).
+  // Le header et chaque ligne partagent exactement la meme grille -> les
+  // chiffres tombent pile sous leurs en-tetes.
   return (
     <div className="bg-white border border-c-line-soft rounded-lg p-3">
-      <div className="flex items-baseline justify-between mb-1">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-baseline mb-1">
         <div className="text-xs font-semibold text-c-ink">{title}</div>
-        {rows.length > 0 && (
-          <div className="flex items-center gap-4 text-[10px] uppercase tracking-wide text-c-ink-faint">
-            <span className="flex items-center gap-1" title="Nombre d'offres validées">
+        {rows.length > 0 ? (
+          <>
+            <span
+              className="w-14 justify-end flex items-center gap-1 text-[10px] uppercase tracking-wide text-c-ink-faint"
+              title="Nombre d'offres validées">
               <Package className="w-3 h-3" /> Offres
             </span>
-            <span className="flex items-center gap-1" title="Nombre de clients distincts">
+            <span
+              className="w-14 justify-end flex items-center gap-1 text-[10px] uppercase tracking-wide text-c-ink-faint"
+              title="Nombre de clients distincts">
               <Users className="w-3 h-3" /> Clients
             </span>
-          </div>
+          </>
+        ) : (
+          <>
+            <span />
+            <span />
+          </>
         )}
       </div>
       {rows.length === 0 ? (
@@ -620,11 +632,14 @@ function ZoneCard({ title, rows }: { title: string; rows: DashPartRow[] }) {
       ) : (
         <div className="space-y-0.5">
           {rows.map((r) => (
-            <div key={r.prefix} className="flex justify-between text-xs">
+            <div key={r.prefix}
+                 className="grid grid-cols-[1fr_auto_auto] gap-x-4 text-xs">
               <span>{r.lib}</span>
-              <span className="flex items-center gap-4 tabular-nums text-c-ink-faint">
-                <span className="w-8 text-right">{r.nb_offres}</span>
-                <span className="w-8 text-right">{r.nb_clients}</span>
+              <span className="w-14 text-right tabular-nums text-c-ink-faint">
+                {r.nb_offres}
+              </span>
+              <span className="w-14 text-right tabular-nums text-c-ink-faint">
+                {r.nb_clients}
               </span>
             </div>
           ))}
