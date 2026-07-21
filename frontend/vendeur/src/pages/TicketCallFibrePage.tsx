@@ -683,6 +683,32 @@ function Field({ label, value, onChange, type = 'text', className = '' }: {
   )
 }
 
+// DateField : calendrier natif du navigateur. L'etat reste au format
+// 'jj/mm/aaaa' (compat fmtDateApi), la conversion vers 'yyyy-mm-dd'
+// requis par <input type="date"> se fait a l'affichage / on change.
+function DateField({ label, value, onChange, className = '' }: {
+  label: string; value: string
+  onChange: (v: string) => void
+  className?: string
+}) {
+  const frToIso = (fr: string) => {
+    const m = fr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : ''
+  }
+  const isoToFr = (iso: string) => {
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+  }
+  return (
+    <label className={`block ${className}`}>
+      <span className="block text-xs text-c-ink-soft mb-0.5">{label}</span>
+      <input type="date" value={frToIso(value)}
+             onChange={(e) => onChange(isoToFr(e.target.value))}
+             className="w-full border border-c-line rounded px-2 py-1.5 text-sm bg-white focus:border-c-brand focus:ring-1 focus:ring-c-brand focus:outline-none" />
+    </label>
+  )
+}
+
 
 function PlanTickets({ tickets, onOpen, onSuppr, onNew }: any) {
   return (
@@ -730,7 +756,7 @@ function PlanClient(p: any) {
         <Field label="Prénom" value={p.prenom} onChange={p.setPrenom} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Field label="Date naissance (jj/mm/aaaa)" value={p.dnaiss} onChange={p.setDnaiss} />
+        <DateField label="Date naissance" value={p.dnaiss} onChange={p.setDnaiss} />
         <Field label="Département naissance" value={p.depNaiss} onChange={p.setDepNaiss} />
       </div>
       <div>
