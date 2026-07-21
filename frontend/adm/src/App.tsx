@@ -77,6 +77,8 @@ import SfrExtractionEtpPage from '@/pages/SfrExtractionEtpPage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
+import DialoguesPage from '@shared/dialogues/DialoguesPage'
+import { getToken, getStoredUser } from '@/api'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { DialogHost } from '@shared/ui/dialog'
@@ -182,6 +184,12 @@ function App() {
           <Route path="production" element={<ProductionPage apiBase={ADM_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={ADM_API} />} />
           <Route path="tickets" element={<AdmTicketsPage />} />
+          <Route path="dialogues" element={
+            <DialoguesPage
+              apiBase={ADM_API}
+              getToken={getToken}
+              userCial={String(getStoredUser()?.id_salarie ?? '')} />
+          } />
           {/* Fallback : toute route inconnue dans le shell auth → Placeholder */}
           <Route path="*" element={<PlaceholderPage />} />
         </Route>

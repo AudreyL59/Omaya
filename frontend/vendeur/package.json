@@ -14,6 +14,7 @@
     "@types/leaflet": "^1.9.21",
     "@xyflow/react": "^12.10.2",
     "dagre": "^0.8.5",
+    "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.38.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.8.0",

@@ -15,8 +15,9 @@ import TicketCallFibrePage from '@/pages/TicketCallFibrePage'
 import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import TicketsPage from '@shared/tickets/TicketsPage'
+import DialoguesPage from '@shared/dialogues/DialoguesPage'
 import { DialogHost } from '@shared/ui/dialog'
-import { getToken } from '@/api'
+import { getToken, getStoredUser } from '@/api'
 
 const VENDEUR_API = '/api/vendeur'
 import PlaceholderPage from '@/pages/PlaceholderPage'
@@ -62,7 +63,12 @@ function App() {
           <Route path="tickets-call" element={<TicketsCallSuiviPage />} />
           <Route path="tickets-call/energie" element={<TicketCallEnergiePage />} />
           <Route path="tickets-call/fibre" element={<TicketCallFibrePage />} />
-          <Route path="dialogues" element={<PlaceholderPage />} />
+          <Route path="dialogues" element={
+            <DialoguesPage
+              apiBase={VENDEUR_API}
+              getToken={getToken}
+              userCial={String(getStoredUser()?.id_salarie ?? '')} />
+          } />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" replace />} />

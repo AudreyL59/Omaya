@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Depends
-from fastapi.responses import Response
+import os
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, Response
 
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
@@ -115,5 +116,54 @@ def get_dialogues_router(intranet_key: str) -> APIRouter:
     def post_enr_pj(payload: DialoguePJPayload = Body(...),
                      _user: UserToken = Depends(get_current_user)):
         return pj_svc.enregistrer_pj(payload)
+
+    # -- Upload / download PJ ---------------------------------------------
+
+    @router.post("/upload-fichier/{id_dialogue}")
+    async def upload_fichier(id_dialogue: str,
+                              file: UploadFile = File(...),
+                              _user: UserToken = Depends(get_current_user)):
+        """Ecrit le fichier dans {DOCS_BASE_PATH}/DocConv/{id_dialogue}/{filename}.
+        Cree le dossier si besoin. Ne cree PAS l'entree pgt_dialoguepj :
+        l'appel /enregistre-pj (ou /enregistre-pjmsg) suivra.
+        """
+        try:
+            id_d = int(id_dialogue)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "id_dialogue invalide")
+        if not id_d:
+            raise HTTPException(400, "id_dialogue = 0")
+        filename = (file.filename or "").strip() or "upload.bin"
+        # Interdit tout chemin relatif (path traversal)
+        filename = os.path.basename(filename)
+        base = os.environ.get("DOCS_BASE_PATH", r"D:\OMAYA")
+        target_dir = os.path.join(base, "DocConv", str(id_d))
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+        except Exception as e:
+            raise HTTPException(500, f"mkdir failed: {e}")
+        target_path = os.path.join(target_dir, filename)
+        try:
+            data = await file.read()
+            with open(target_path, "wb") as f:
+                f.write(data)
+        except Exception as e:
+            raise HTTPException(500, f"write failed: {e}")
+        return {"fileName": filename, "fileSize": len(data), "ResEnvoi": True}
+
+    @router.get("/fichier/{id_dialogue}/{nom_fic}")
+    def download_fichier(id_dialogue: str, nom_fic: str,
+                          _user: UserToken = Depends(get_current_user)):
+        """Sert un fichier depuis DocConv/{id_dialogue}/{nom_fic}."""
+        try:
+            id_d = int(id_dialogue)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "id_dialogue invalide")
+        nom_fic = os.path.basename(nom_fic or "")
+        base = os.environ.get("DOCS_BASE_PATH", r"D:\OMAYA")
+        path = os.path.join(base, "DocConv", str(id_d), nom_fic)
+        if not os.path.exists(path):
+            raise HTTPException(404, "fichier introuvable")
+        return FileResponse(path, filename=nom_fic)
 
     return router
