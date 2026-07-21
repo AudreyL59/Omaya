@@ -362,10 +362,6 @@ CREATE TABLE ulease.pgt_vehicule_marque (
 CREATE INDEX ix_pgt_vehicule_marque_nom ON ulease.pgt_vehicule_marque (nom);
 CREATE INDEX ix_pgt_vehicule_marque_modif_date ON ulease.pgt_vehicule_marque (modif_date);
 
--- ulease.pgt_vehicule_pv : obsolete (remplacee par pgt_vehicule_amende).
--- Retiree du mapping et de la sync ; drop en base via
--- migration/patches/drop_pgt_vehicule_pv.sql (a appliquer manuellement).
-
 CREATE TABLE ulease.pgt_vehicule_releve (
     id_vehicule_releve                   bigint NOT NULL,  -- IDvehiculeReleve
     id_vehicule                          bigint,  -- IDvehicule

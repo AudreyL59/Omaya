@@ -30,6 +30,23 @@ from pathlib import Path
 #  Exceptions de nommage : ALL-CAPS composes que la regle ne sait pas couper.
 #  A enrichir au fur et a mesure (le rapport signale les candidats).
 # ----------------------------------------------------------------------------
+# Tables HFSQL a NE PAS generer (obsoletes, remplacees, ou hors perimetre).
+# Cle : (schema_lower, hfsql_table_lower).
+EXCLUDED_TABLES: set[tuple[str, str]] = {
+    ("ulease", "vehicule_pv"),  # remplacee par vehicule_amende (2026-07-21)
+}
+
+# Overrides du nom logique HFSQL. Le fichier XLSX peut etre nomme
+# "Table communes_france.xlsx" alors que le vrai nom dans l'analyse
+# WinDev est "CommunesFrance" — l'indirection {sTable + '.' + col} du
+# sync engine est case-sensitive au runtime. Cle : (schema_lower,
+# hfsql_from_xlsx_lower) -> nom logique correct.
+# Cela corrige AUSSI le pg_table derive (to_snake du nom corrige).
+HFSQL_NAME_OVERRIDES: dict[tuple[str, str], str] = {
+    ("divers", "communes_france"): "CommunesFrance",
+    ("adv", "agendacommercial_origine"): "AgendaCommercial_Origine",
+}
+
 OVERRIDES: dict[str, str] = {
     # Composes ALL-CAPS coupes manuellement (revue 2026-05-27).
     # Les abreviations trop ambigues restent collees (DNAISS->dnaiss, LNAISS->lnaiss).
@@ -333,6 +350,12 @@ def main() -> None:
         blocks = [f"CREATE SCHEMA IF NOT EXISTS {schema};\n"]
         for f in files:
             hf_table = table_name_from_file(f)
+            key = (schema.lower(), hf_table.lower())
+            if key in EXCLUDED_TABLES:
+                report.append(f"[skip] {schema}.{hf_table} (EXCLUDED_TABLES)")
+                continue
+            if key in HFSQL_NAME_OVERRIDES:
+                hf_table = HFSQL_NAME_OVERRIDES[key]
             cols = read_descriptor(f)
             if not cols:
                 report.append(f"[vide] {f.name}")

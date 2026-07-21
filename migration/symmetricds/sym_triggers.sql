@@ -300,6 +300,18 @@ INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_dialoguemsg', 'divers', 'pgt_dialoguemsg', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_dialoguemsg', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
 
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_dialoguepj', 'divers', 'pgt_dialoguepj', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_dialoguepj', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_dialogues', 'divers', 'pgt_dialogues', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_dialogues', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_dialoguestatut', 'divers', 'pgt_dialoguestatut', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_dialoguestatut', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
+INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_dialoguetheme', 'divers', 'pgt_dialoguetheme', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
+INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_dialoguetheme', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
+
 INSERT INTO sym_trigger (trigger_id, source_schema_name, source_table_name, channel_id, sync_on_insert, sync_on_update, sync_on_delete, last_update_time, create_time) VALUES ('divers_pgt_emoticone', 'divers', 'pgt_emoticone', 'erp_data', 1, 1, 1, current_timestamp, current_timestamp) ON CONFLICT (trigger_id) DO NOTHING;
 INSERT INTO sym_trigger_router (trigger_id, router_id, initial_load_order, last_update_time, create_time) VALUES ('divers_pgt_emoticone', 'erp2erp', 100, current_timestamp, current_timestamp) ON CONFLICT (trigger_id, router_id) DO NOTHING;
 
