@@ -18,6 +18,7 @@ export default defineConfig({
       'framer-motion',
       'lucide-react',
       'react-easy-crop',
+      'emoji-picker-react',
     ],
   },
   server: {
