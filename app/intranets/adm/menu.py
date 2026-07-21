@@ -42,7 +42,7 @@ def _droit(user: UserToken, code: str | None) -> bool:
 _CODED_ITEMS: set[str] = {"agenda_rec", "stats_rh", "organigramme", "suivi_production", "registre_rh", "dpae", "ctt_travail", "parc_auto", "ulease_docs", "ulease_recherche", "formations_iag", "mutuelle", "params_rh", "recherche_cv", "recherche_cv_kw", "lieu_rdv", "saisie_cv", "prevision_rec", "cv_presaisis", "villes_favori", "gestion_recruteurs", "params_cvtheque", "import_contrats", "import_masse", "import_colonnes", "import_notations", "suivi_factures", "suivi_sfr", "suivi_energie", "rech_ville", "ctt_courtage", "suivi_distributeurs", "suivi_docs_distrib", "exo_cash", "module_paies", "fiches_salaire", "export_tr", "tableaux_divers", "podiums",
                               "calcul_points", "tableau_salarie", "sms_perf",
                               "formations_liste", "planning_scool"}
-_CODED_HEADER: set[str] = {"organigramme", "tickets", "search", "societes"}
+_CODED_HEADER: set[str] = {"organigramme", "tickets", "search", "societes", "dialogues"}
 
 # User de référence pour qui les items non codés restent visibles (en grisé)
 _PROGRESS_USER_ID = 6
@@ -54,9 +54,10 @@ def get_menu(user: UserToken = Depends(get_current_user)):
 
     # Barre d'icônes en header (boutons WinDev BTN_Orga / BTN_Scanner / BTN_ExoNews / BTN_Entité)
     header_actions_raw = [
-        {"key": "search",       "label": "Recherche",     "route": "/recherche",     "icon": "search",   "droit": None},
-        {"key": "organigramme", "label": "Organigramme",  "route": "/organigramme",  "icon": "network",  "droit": "Menu_Salariés"},
-        {"key": "tickets",      "label": "Tickets",       "route": "/tickets",       "icon": "ticket",   "droit": None},
+        {"key": "search",       "label": "Recherche",     "route": "/recherche",     "icon": "search",         "droit": None},
+        {"key": "organigramme", "label": "Organigramme",  "route": "/organigramme",  "icon": "network",        "droit": "Menu_Salariés"},
+        {"key": "tickets",      "label": "Tickets",       "route": "/tickets",       "icon": "ticket",         "droit": None},
+        {"key": "dialogues",    "label": "Dialogues",     "route": "/dialogues",     "icon": "message-square", "droit": None},
         {"key": "scanner",      "label": "Scanner",       "route": "/scanner",       "icon": "scan",     "droit": "Menu_Salariés"},
         {"key": "exo_news",     "label": "Exo News",      "route": "/exo-news",      "icon": "newspaper","droit": "Menu_COMM"},
         {"key": "societes",     "label": "Sociétés",      "route": "/societes",      "icon": "building", "droit": "Societe"},
