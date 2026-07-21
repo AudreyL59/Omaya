@@ -56,6 +56,7 @@ interface Offre {
 interface PanierItem {
   IDtk_CallSFR_Panier: string
   LibOffre?: string
+  MontantOffre?: number
   Type?: string
   NumPortabilite?: string
 }
@@ -68,6 +69,12 @@ const _bool = (v: any) => v === true || v === 1 || v === '1' || v === 'true'
 const _toInt = (v: any, d = 0) => {
   const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
   return Number.isFinite(n) ? n : d
+}
+const fmtEUR = (v: any) => {
+  const n = typeof v === 'string' ? parseFloat(v) : Number(v)
+  return Number.isFinite(n)
+    ? n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
+    : ''
 }
 const fmtDateApi = (fr: string) => {
   const m = fr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
@@ -830,13 +837,16 @@ function PlanPanier(p: any) {
       {p.panier.map((it: PanierItem) => (
         <div key={it.IDtk_CallSFR_Panier} onClick={() => p.onSuppr(it)}
           className="bg-white border border-c-line-soft rounded p-3 flex items-center gap-3 hover:bg-c-brand-soft cursor-pointer">
-          <div className="flex-1">
-            <div className="text-sm font-medium">{it.LibOffre}</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate">{it.LibOffre}</div>
             <div className="text-xs text-c-ink-soft">
               {it.Type} {it.NumPortabilite && `— portabilité ${it.NumPortabilite}`}
             </div>
           </div>
-          <Trash2 className="w-4 h-4 text-red-600" />
+          <div className="text-sm font-semibold tabular-nums whitespace-nowrap">
+            {fmtEUR(it.MontantOffre)}
+          </div>
+          <Trash2 className="w-4 h-4 text-red-600 shrink-0" />
         </div>
       ))}
       <div className="flex gap-2 flex-wrap">
