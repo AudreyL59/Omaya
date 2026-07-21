@@ -16,6 +16,7 @@ from datetime import datetime
 
 from app.core.database.pg import get_pg_connection
 from app.shared.dialogues.schemas.dialogues import DialoguePJ, DialoguePJPayload
+from app.shared.dialogues.services._helpers import pj_url
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ def enregistrer_pj(payload: DialoguePJPayload) -> DialoguePJ:
         IDPJ=str(id_pj),
         IDDialogue=_str_id(id_dialogue),
         NomFic=nom_fic,
+        Url=pj_url(id_dialogue, nom_fic),
         DateHeureCreation=now.strftime("%Y-%m-%d %H:%M:%S"),
         Expediteur=_str_id(expediteur),
     )

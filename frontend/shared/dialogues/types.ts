@@ -37,6 +37,10 @@ export interface DialoguePJ {
   IDPJ: string
   IDDialogue: string
   NomFic: string
+  // URL publique complete construite cote backend (DOCS_URL + /DocConv/{id}/{nom}).
+  // Vide si le backend n'a pas DOCS_URL configure -> frontend retombera
+  // sur son endpoint fallback authentifie.
+  Url: string
   DateHeureCreation: string
   Expediteur: string
   NomExp: string

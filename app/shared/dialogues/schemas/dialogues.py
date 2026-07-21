@@ -71,11 +71,18 @@ class DialogueHisto(BaseModel):
 
 
 class DialoguePJ(BaseModel):
-    """Portage ST_DialoguePJ : pièce jointe."""
+    """Portage ST_DialoguePJ : pièce jointe.
+
+    `Url` est renseigné cote backend a partir de DOCS_URL du .env :
+    ex. https://interne.omaya.fr/DocConv/{id_dialogue}/{nom_fic}.
+    Les fichiers sont exposes par IIS statiquement (pas d'auth), meme
+    pattern que l'app Flutter existante.
+    """
 
     IDPJ: str = ""
     IDDialogue: str = ""
     NomFic: str = ""
+    Url: str = ""
     DateHeureCreation: str = ""
     Expediteur: str = ""
     NomExp: str = ""

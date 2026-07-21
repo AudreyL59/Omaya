@@ -1,11 +1,15 @@
 // Rendu inline des pieces jointes dans les bulles de message.
-// - Images : miniature cliquable -> modal fullscreen
-// - Audio  : lecteur natif
-// - Videos : miniature avec bouton play -> modal fullscreen (video native)
-// - Autres : icone typee par extension + telechargement authentifie
 //
-// Toutes les URLs sont protegees par Bearer token : on fetch en blob puis
-// createObjectURL, sinon <img>/<audio>/<video> se prennent un 401.
+// Les fichiers sont exposes en HTTP statique par IIS a l'URL
+// DOCS_URL/DocConv/{idDialogue}/{nomFic} (backend renseigne pj.Url).
+// Pas d'auth Bearer necessaire : <img>/<audio>/<video> chargent
+// directement l'URL.
+//
+// Types de rendu :
+// - Image : miniature cliquable -> modal fullscreen
+// - Audio : lecteur natif
+// - Video : miniature avec bouton play -> modal fullscreen
+// - Autres : icone typee par extension + telechargement
 
 import { useEffect, useState } from 'react'
 import {
@@ -13,11 +17,15 @@ import {
   FileText, FileVideo, Play, X,
 } from 'lucide-react'
 
-import { AuthImage } from '../ui/AuthImage'
 import { fichierUrl } from './api'
 import type { DialoguePJ } from './types'
 
 type Ctx = { apiBase: string; getToken: () => string | null }
+
+// URL a utiliser : celle du backend (statique) si presente, sinon
+// endpoint authentifie de fallback.
+const resolveUrl = (pj: DialoguePJ, ctx: Ctx, idDialogue: string) =>
+  pj.Url || fichierUrl(ctx, idDialogue, pj.NomFic)
 
 // ---------------------------------------------------------------------------
 //  Type de fichier + icone
@@ -57,44 +65,11 @@ const iconFor = (k: Kind) => {
 }
 
 // ---------------------------------------------------------------------------
-//  Hook : fetch blob authentifie -> object URL
-// ---------------------------------------------------------------------------
-
-function useAuthBlob(url: string, getToken: () => string | null) {
-  const [blobUrl, setBlobUrl] = useState<string>('')
-  const [error, setError] = useState(false)
-  useEffect(() => {
-    let cancelled = false
-    let current = ''
-    setError(false); setBlobUrl('')
-    void (async () => {
-      try {
-        const r = await fetch(url, {
-          headers: { Authorization: `Bearer ${getToken()}` },
-        })
-        if (!r.ok) throw new Error(String(r.status))
-        const b = await r.blob()
-        if (cancelled) return
-        current = URL.createObjectURL(b)
-        setBlobUrl(current)
-      } catch {
-        if (!cancelled) setError(true)
-      }
-    })()
-    return () => {
-      cancelled = true
-      if (current) URL.revokeObjectURL(current)
-    }
-  }, [url, getToken])
-  return { blobUrl, error }
-}
-
-// ---------------------------------------------------------------------------
 //  Modal fullscreen (image / video)
 // ---------------------------------------------------------------------------
 
-function PreviewModal({ blobUrl, filename, kind, onClose }: {
-  blobUrl: string; filename: string; kind: 'image' | 'video'; onClose: () => void
+function PreviewModal({ url, filename, kind, onClose }: {
+  url: string; filename: string; kind: 'image' | 'video'; onClose: () => void
 }) {
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -108,15 +83,15 @@ function PreviewModal({ blobUrl, filename, kind, onClose }: {
         className="absolute top-4 right-4 text-white hover:bg-white/10 rounded p-2">
         <X className="w-6 h-6" />
       </button>
-      <div className="absolute top-4 left-4 text-white text-sm bg-black/40 px-3 py-1 rounded">
+      <div className="absolute top-4 left-4 text-white text-sm bg-black/40 px-3 py-1 rounded max-w-[70%] truncate">
         {filename}
       </div>
       {kind === 'image' ? (
-        <img src={blobUrl} alt={filename}
+        <img src={url} alt={filename}
           className="max-w-full max-h-full object-contain"
           onClick={e => e.stopPropagation()} />
       ) : (
-        <video src={blobUrl} controls autoPlay
+        <video src={url} controls autoPlay
           className="max-w-full max-h-full"
           onClick={e => e.stopPropagation()} />
       )}
@@ -125,67 +100,46 @@ function PreviewModal({ blobUrl, filename, kind, onClose }: {
 }
 
 // ---------------------------------------------------------------------------
-//  Vignette image (avec fallback carte-icone si fetch echoue)
+//  Vignette image
 // ---------------------------------------------------------------------------
 
-function ImageThumb({ url, filename, getToken, onOpen }: {
-  url: string; filename: string
-  getToken: () => string | null
-  onOpen: () => void
+function ImageThumb({ url, filename, onOpen }: {
+  url: string; filename: string; onOpen: () => void
 }) {
-  const { blobUrl, error } = useAuthBlob(url, getToken)
-  // Chargement en cours
-  if (!blobUrl && !error) {
-    return (
-      <div className="inline-flex items-center gap-2 px-2 py-1 text-xs bg-white border border-c-line-soft rounded">
-        <FileImage className="w-4 h-4 text-blue-600" />
-        <span className="text-c-ink-soft">Chargement…</span>
-      </div>
-    )
-  }
-  // Vignette OK
-  if (blobUrl) {
+  const [error, setError] = useState(false)
+  if (error) {
     return (
       <button onClick={onOpen}
-        className="block max-w-full text-left group relative">
-        <img src={blobUrl} alt={filename}
-          className="max-h-48 rounded border border-c-line-soft cursor-zoom-in
-                     group-hover:brightness-95 transition" />
+        className="inline-flex items-center gap-2 px-2 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 max-w-full">
+        <FileImage className="w-5 h-5 text-blue-600 shrink-0" />
+        <div className="min-w-0 text-left">
+          <div className="truncate max-w-[240px] font-medium" title={filename}>{filename}</div>
+          <div className="text-[10px] text-c-ink-soft">Image · introuvable</div>
+        </div>
       </button>
     )
   }
-  // Erreur fetch : carte cliquable qui tente quand meme d'ouvrir le modal
   return (
-    <button onClick={onOpen}
-      className="inline-flex items-center gap-2 px-2 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 max-w-full">
-      <FileImage className="w-5 h-5 text-blue-600 shrink-0" />
-      <div className="min-w-0 text-left">
-        <div className="truncate max-w-[240px] font-medium" title={filename}>{filename}</div>
-        <div className="text-[10px] text-c-ink-soft">Image · introuvable sur le serveur</div>
-      </div>
+    <button onClick={onOpen} className="block max-w-full text-left group">
+      <img src={url} alt={filename} onError={() => setError(true)}
+        className="max-h-48 rounded border border-c-line-soft cursor-zoom-in
+                   group-hover:brightness-95 transition" />
     </button>
   )
 }
 
 // ---------------------------------------------------------------------------
-//  Vignette video (poster derriere un play button)
+//  Vignette video
 // ---------------------------------------------------------------------------
 
-function VideoThumb({ url, getToken, onOpen }: {
-  url: string; getToken: () => string | null; onOpen: () => void
+function VideoThumb({ url, filename, onOpen }: {
+  url: string; filename: string; onOpen: () => void
 }) {
-  const { blobUrl } = useAuthBlob(url, getToken)
   return (
     <button onClick={onOpen}
       className="relative group max-w-full block rounded overflow-hidden border border-c-line-soft bg-gray-900">
-      {blobUrl ? (
-        <video src={blobUrl} preload="metadata"
-          className="max-h-48 w-auto max-w-full block" />
-      ) : (
-        <div className="h-32 w-56 flex items-center justify-center text-white/50">
-          Chargement…
-        </div>
-      )}
+      <video src={url} preload="metadata" title={filename}
+        className="max-h-48 w-auto max-w-full block" />
       <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/40 transition">
         <Play className="w-12 h-12 text-white drop-shadow-lg" fill="currentColor" />
       </div>
@@ -194,38 +148,18 @@ function VideoThumb({ url, getToken, onOpen }: {
 }
 
 // ---------------------------------------------------------------------------
-//  Lien telechargement authentifie
+//  Lien telechargement
 // ---------------------------------------------------------------------------
 
-function DownloadLink({ url, filename, kind, getToken }: {
+function DownloadLink({ url, filename, kind }: {
   url: string; filename: string; kind: Kind
-  getToken: () => string | null
 }) {
-  const [busy, setBusy] = useState(false)
-  const download = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    if (busy) return
-    setBusy(true)
-    try {
-      const r = await fetch(url, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      })
-      if (!r.ok) throw new Error(String(r.status))
-      const blob = await r.blob()
-      const objUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = objUrl; a.download = filename
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(objUrl), 1000)
-    } catch { /* ignore */ }
-    setBusy(false)
-  }
   return (
-    <a href="#" onClick={download}
+    <a href={url} download={filename} target="_blank" rel="noreferrer"
       className="inline-flex items-center gap-1.5 px-2 py-1 text-xs bg-white border border-c-line rounded hover:bg-gray-50 max-w-full">
       {iconFor(kind)}
       <span className="truncate max-w-[240px]" title={filename}>{filename}</span>
-      <Download className={`w-3 h-3 text-c-ink-soft ${busy ? 'animate-pulse' : ''}`} />
+      <Download className="w-3 h-3 text-c-ink-soft" />
     </a>
   )
 }
@@ -237,58 +171,39 @@ function DownloadLink({ url, filename, kind, getToken }: {
 export function PjInline({ pj, ctx, idDialogue }: {
   pj: DialoguePJ; ctx: Ctx; idDialogue: string
 }) {
-  const url = fichierUrl(ctx, idDialogue, pj.NomFic)
+  const url = resolveUrl(pj, ctx, idDialogue)
   const kind = kindOf(pj.NomFic)
   const [preview, setPreview] = useState<null | 'image' | 'video'>(null)
-  const audio = useAuthBlob(kind === 'audio' ? url : '', ctx.getToken)
-  const modalBlob = useAuthBlob(preview ? url : '', ctx.getToken)
 
   if (kind === 'image') {
     return (
       <>
         <ImageThumb url={url} filename={pj.NomFic}
-          getToken={ctx.getToken}
           onOpen={() => setPreview('image')} />
         {preview === 'image' && (
-          modalBlob.blobUrl ? (
-            <PreviewModal blobUrl={modalBlob.blobUrl} filename={pj.NomFic}
-              kind="image" onClose={() => setPreview(null)} />
-          ) : modalBlob.error ? (
-            <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
-              onClick={() => setPreview(null)}>
-              <div className="bg-white rounded p-4 max-w-sm text-sm text-center">
-                <p className="mb-2">Impossible de charger l'image.</p>
-                <p className="text-xs text-c-ink-soft break-all">{pj.NomFic}</p>
-                <button onClick={() => setPreview(null)}
-                  className="mt-3 px-3 py-1 bg-gray-900 text-white rounded text-xs">Fermer</button>
-              </div>
-            </div>
-          ) : null
+          <PreviewModal url={url} filename={pj.NomFic}
+            kind="image" onClose={() => setPreview(null)} />
         )}
       </>
     )
   }
 
   if (kind === 'audio') {
-    return audio.blobUrl
-      ? <audio controls src={audio.blobUrl} className="max-w-full h-8" />
-      : <span className="text-xs text-c-ink-faint">Chargement audio…</span>
+    return <audio controls src={url} className="max-w-full h-8" />
   }
 
   if (kind === 'video') {
     return (
       <>
-        <VideoThumb url={url} getToken={ctx.getToken}
+        <VideoThumb url={url} filename={pj.NomFic}
           onOpen={() => setPreview('video')} />
-        {preview === 'video' && modalBlob.blobUrl && (
-          <PreviewModal blobUrl={modalBlob.blobUrl} filename={pj.NomFic}
+        {preview === 'video' && (
+          <PreviewModal url={url} filename={pj.NomFic}
             kind="video" onClose={() => setPreview(null)} />
         )}
       </>
     )
   }
 
-  // Autre : icone + telechargement
-  return <DownloadLink url={url} filename={pj.NomFic} kind={kind}
-                       getToken={ctx.getToken} />
+  return <DownloadLink url={url} filename={pj.NomFic} kind={kind} />
 }

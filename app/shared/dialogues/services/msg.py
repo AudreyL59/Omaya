@@ -11,6 +11,7 @@ from app.shared.dialogues.schemas.dialogues import (
     DialogueMsg, DialogueMsgPayload, DialoguePJ,
     MsgModifPayload, MsgSupprPayload,
 )
+from app.shared.dialogues.services._helpers import pj_url
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +140,10 @@ def envoyer_msg(payload: DialogueMsgPayload) -> DialogueMsg:
         Expediteur=_str_id(expediteur),
         NomExp=_nom_expediteur(expediteur),
         MsgSuppr=False,
-        mesPJs=[DialoguePJ(**p.model_dump()) for p in (payload.mesPJs or [])],
+        mesPJs=[DialoguePJ(
+            **{**p.model_dump(),
+               "Url": pj_url(id_dialogue, p.NomFic)},
+        ) for p in (payload.mesPJs or [])],
     )
     if (payload.Contenu or "").upper() == "JSON":
         msg.Contenu = quote(payload.ContenuUni or "", safe="")

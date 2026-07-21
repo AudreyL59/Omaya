@@ -27,6 +27,7 @@ from app.core.database.pg import get_pg_connection
 from app.shared.dialogues.schemas.dialogues import (
     Dialogue, DialogueDest, DialogueHisto, DialogueMsg, DialoguePJ,
 )
+from app.shared.dialogues.services._helpers import pj_url
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +324,7 @@ def _load_pjs(id_dialogue: int, cache_sal: dict) -> list[DialoguePJ]:
             IDPJ=_str_id(r.get("id_dialogue_pj")),
             IDDialogue=_str_id(r.get("id_dialogues")),
             NomFic=r.get("nom_fic") or "",
+            Url=pj_url(r.get("id_dialogues"), r.get("nom_fic") or ""),
             DateHeureCreation=_iso_datetime(r.get("date_heure_creation")),
             Expediteur=_str_id(expediteur) if expediteur else "",
             NomExp=nom_exp,
