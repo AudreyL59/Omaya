@@ -46,16 +46,16 @@ CREATE TABLE adv.pgt_agenda_commercial_categorie (
 CREATE INDEX ix_pgt_agenda_commercial_categorie_id_cv_statut ON adv.pgt_agenda_commercial_categorie (id_cv_statut);
 CREATE INDEX ix_pgt_agenda_commercial_categorie_modif_date ON adv.pgt_agenda_commercial_categorie (modif_date);
 
-CREATE TABLE adv.pgt_agendacommercial_origine (
+CREATE TABLE adv.pgt_agenda_commercial_origine (
     id_agenda_commercial_origine_auto  bigint,  -- IDAgendaCommercial_OrigineAuto
     id_agenda_commercial_origine       integer NOT NULL,  -- IDAgendaCommercial_Origine
     lib_origine                        varchar(50),  -- Lib_Origine
     modif_date                         timestamp,  -- ModifDate
     modif_elem                         varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_agendacommercial_origine PRIMARY KEY (id_agenda_commercial_origine),
-    CONSTRAINT uq_pgt_agendacommercial_origine_auto UNIQUE (id_agenda_commercial_origine_auto)
+    CONSTRAINT pk_pgt_agenda_commercial_origine PRIMARY KEY (id_agenda_commercial_origine),
+    CONSTRAINT uq_pgt_agenda_commercial_origine_auto UNIQUE (id_agenda_commercial_origine_auto)
 );
-CREATE INDEX ix_pgt_agendacommercial_origine_modif_date ON adv.pgt_agendacommercial_origine (modif_date);
+CREATE INDEX ix_pgt_agenda_commercial_origine_modif_date ON adv.pgt_agenda_commercial_origine (modif_date);
 
 CREATE TABLE adv.pgt_agenda_commercial_source (
     id_agenda_commercial_source_auto  bigint,  -- IDAgendaCommercial_SourceAuto

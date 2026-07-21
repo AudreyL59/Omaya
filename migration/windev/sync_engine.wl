@@ -280,7 +280,16 @@ PROCEDURE INTERNE SyncOneTable(LOCAL sSchema is string, LOCAL sTableHF is string
 
     // Apres sync : compare le nb d'enregistrements HFSQL vs PG.
     // Si ecart, log un WARN (la table est sous-/sur-syncronisee).
-    CheckCountMismatch(sSchema, sTableHF, sTablePG)
+    nDiff is int = CheckCountMismatch(sSchema, sTableHF, sTablePG)
+    si nDiff > 0 alors
+        Interrupteur1 = 1
+        if bHasModifDate then
+            SyncIncremental(sSchema, sTableHF, sTablePG, tabCols, sColPK_HF, sColPK_PG)
+        else
+            SyncFullReload(sSchema, sTableHF, sTablePG, tabCols, sColPK_HF, sColPK_PG)
+        end
+    fin
+    Interrupteur1 = 0
 END
 
 
@@ -289,29 +298,34 @@ END
 // Compte les enregistrements des 2 cotes et log un WARN si difference.
 // Ne fait rien si HFSQL ou PG inaccessibles (le log d'erreur principal aura
 // deja signale).
-PROCEDURE INTERNE CheckCountMismatch(LOCAL sSchema, sTableHF, sTablePG is string)
-    WHEN EXCEPTION IN
-        nHF is int = SafeNbEnr(sTableHF)
-        nPG is int = -1
+procédure interne CheckCountMismatch(local sSchema, sTableHF, sTablePG is string)
+    nDiff is int
+    when exception in
+        nHF		is int		= SafeNbEnr(sTableHF)
+        nPG		is int		= -1
 
-        sSQL is string = "SELECT COUNT(*) AS n FROM " + sSchema + "." + sTablePG
+        sSQL	is string	= "SELECT COUNT(*) AS n FROM " + sSchema + "." + sTablePG
         HExecuteSQLQuery("reqCount", MaConnexionPG, hQueryWithoutCorrection, sSQL)
         HReadFirst("reqCount")
-        IF NOT HOut("reqCount") THEN
+        if not HOut("reqCount") then
             nPG = {"reqCount.n"}
-        END
+        end
 
-        IF nPG >= 0 AND nHF <> nPG THEN
-            nDiff is int = nHF - nPG
+        if nPG >= 0 and nHF <> nPG then
+            nDiff = nHF - nPG
             LogAction("[WARN] " + sSchema + "." + sTableHF + ...
-                      " : HFSQL=" + nHF + " vs PG=" + nPG + ...
-                      " (diff=" + nDiff + ")")
-        END
-    DO
+            " : HFSQL=" + nHF + " vs PG=" + nPG + ...
+            " (diff=" + nDiff + ")")
+
+
+        end
+
+    do
         LogAction("[WARN] CheckCount " + sSchema + "." + sTableHF + ...
-                  " : " + ExceptionInfo())
-    END
-END
+        " : " + ExceptionInfo())
+    end
+    renvoyer nDiff
+end
 
 // -- Strategie incrementale (292 tables avec modif_date) ----------------------
 
@@ -319,7 +333,7 @@ PROCEDURE INTERNE SyncIncremental(LOCAL sSchema, sTableHF, sTablePG is string, .
                          LOCAL tabCols is array of STColMap, ...
                          LOCAL sColPK_HF, sColPK_PG is string)
     dtCurseur is DateTime = GetLastModif(sSchema, sTableHF)
-    dtCurseur..Jour -= 7
+    si Interrupteur1 alors dtCurseur = "20180101000000000"
     dtMax is DateTime = dtCurseur
     nRows is int = 0
     nPos  is int = 0
@@ -538,6 +552,57 @@ PROCEDURE INTERNE SafeForceNullOuSentinelle(LOCAL sFilePG, sColPG is string)
 END
 
 // =============================================================================
+//  AFFECTATION STRING TOLERANTE (UUID 256b, binaire, memos)
+// =============================================================================
+// Une rubrique HFSQL de type "UUID sur 256 bits" (ex.
+// divers.UUID_connexion.IDUUID_connexion) NE SE CONVERTIT PAS
+// implicitement vers une chaine Unicode via l'indirection {fic.rub}.
+// WinDev leve : "Un element de type 'UUID sur 256 bits' ne peut pas
+// etre converti vers le type 'chaine Unicode'".
+//
+// On tente l'affectation directe, puis en fallback on force le passage
+// par UUIDVersChaine() qui gere le type nativement. En dernier recours
+// on met une chaine vide pour ne pas bloquer toute la ligne.
+
+// NOTE WLangage : interdit d'imbriquer WHEN EXCEPTION IN dans un DO.
+// On chaine donc les fallbacks via des procs dediees (meme pattern que
+// TryAssignDate -> SafeForceNullOuSentinelle).
+//   TryAssignString -> SafeAssignStringHexa -> SafeAssignStringVide
+//
+// Cas typique : rubrique HFSQL "UUID sur 256 bits" affectee a une colonne
+// PG varchar. WinDev refuse la conversion implicite ("Un element de type
+// 'UUID sur 256 bits' ne peut pas etre converti vers le type 'chaine
+// Unicode'"). Un UUID 256b est fondamentalement un buffer de 32 octets,
+// BufferVersHexa() en produit une representation hexadecimale de 64 car.
+PROCEDURE INTERNE TryAssignString(LOCAL sFilePG, sColPG, sFileHF, sColHF is string)
+    WHEN EXCEPTION IN
+        // Voie normale (marche pour tous les types texte usuels)
+        {sFilePG + "." + sColPG} = {sFileHF + "." + sColHF}
+    DO
+        // Cas UUID/binaire/incompat : passe la main a la proc de fallback
+        SafeAssignStringHexa(sFilePG, sColPG, sFileHF, sColHF)
+    END
+END
+
+// Fallback 1 : buffer -> hexadecimal (UUID 256b, buffers binaires).
+PROCEDURE INTERNE SafeAssignStringHexa(LOCAL sFilePG, sColPG, sFileHF, sColHF is string)
+    WHEN EXCEPTION IN
+        {sFilePG + "." + sColPG} = BufferVersHexa({sFileHF + "." + sColHF})
+    DO
+        SafeAssignStringVide(sFilePG, sColPG)
+    END
+END
+
+// Fallback 2 : chaine vide (dernier recours, la ligne passe quand meme).
+PROCEDURE INTERNE SafeAssignStringVide(LOCAL sFilePG, sColPG is string)
+    WHEN EXCEPTION IN
+        {sFilePG + "." + sColPG} = ""
+    DO
+        // Meme "" echoue -> on abandonne, HAdd/HModify signalera.
+    END
+END
+
+// =============================================================================
 //  UPSERT D'UNE LIGNE (copie record-a-record par indirection)
 // =============================================================================
 
@@ -565,6 +630,12 @@ PROCEDURE INTERNE UpsertRow(LOCAL sTablePG is string, ...
                 // Delegue a une proc dediee : isole le WHEN EXCEPTION pour ne
                 // pas faire planter toute la ligne sur une date pourrie.
                 TryAssignDate(sTablePG, col.pg_column, sTableHF, col.hfsql_column)
+            ELSE IF Gauche(col.pg_type, 7) = "varchar" ...
+                 OR Gauche(col.pg_type, 4) = "char" ...
+                 OR col.pg_type = "text" THEN
+                // Cible string PG : peut recevoir une rubrique HFSQL UUID 256b
+                // qui ne se convertit PAS implicitement -> exception. Delegue.
+                TryAssignString(sTablePG, col.pg_column, sTableHF, col.hfsql_column)
             ELSE
                 {sTablePG + "." + col.pg_column} = {sTableHF + "." + col.hfsql_column}
             END

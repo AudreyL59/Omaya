@@ -362,34 +362,9 @@ CREATE TABLE ulease.pgt_vehicule_marque (
 CREATE INDEX ix_pgt_vehicule_marque_nom ON ulease.pgt_vehicule_marque (nom);
 CREATE INDEX ix_pgt_vehicule_marque_modif_date ON ulease.pgt_vehicule_marque (modif_date);
 
-CREATE TABLE ulease.pgt_vehicule_pv (
-    id_vehicule_pv_auto                bigint,  -- IDvehiculePVAuto
-    id_vehicule_pv                     bigint NOT NULL,  -- IDvehiculePV
-    id_vehicule                        bigint,  -- IDvehicule
-    vehicule_pv_date                   timestamp,  -- vehiculePV_DATE
-    id_vehicule_pc                     bigint,  -- IDvehiculePC
-    montant                            numeric(19,4),  -- Montant
-    comment                            text,  -- Comment
-    paye_employeur                     boolean,  -- payeEmployeur
-    paye_employeur_date                date,  -- payeEmployeur_DATE
-    prel_salarie                       boolean,  -- prelSalarie
-    prel_salarie_date                  varchar(50),  -- prelSalarie_DATE
-    num_pv                             varchar(50),  -- numPV
-    frais                              numeric(19,4),  -- frais
-    nb_pts                             integer,  -- nbPts
-    optim_cle_comp_vehic_i_dveh_vehic  varchar(21),  -- OptimCleComp_vehic_IDveh_vehic
-    modif_op                           bigint,  -- ModifOp
-    modif_date                         timestamp,  -- ModifDate
-    modif_elem                         varchar(5),  -- ModifElem
-    CONSTRAINT pk_pgt_vehicule_pv PRIMARY KEY (id_vehicule_pv),
-    CONSTRAINT uq_pgt_vehicule_pv_auto UNIQUE (id_vehicule_pv_auto)
-);
-CREATE INDEX ix_pgt_vehicule_pv_id_vehicule ON ulease.pgt_vehicule_pv (id_vehicule);
-CREATE INDEX ix_pgt_vehicule_pv_vehicule_pv_date ON ulease.pgt_vehicule_pv (vehicule_pv_date);
-CREATE INDEX ix_pgt_vehicule_pv_id_vehicule_pc ON ulease.pgt_vehicule_pv (id_vehicule_pc);
-CREATE INDEX ix_pgt_vehicule_pv_paye_employeur ON ulease.pgt_vehicule_pv (paye_employeur);
-CREATE INDEX ix_pgt_vehicule_pv_prel_salarie ON ulease.pgt_vehicule_pv (prel_salarie);
-CREATE INDEX ix_pgt_vehicule_pv_modif_date ON ulease.pgt_vehicule_pv (modif_date);
+-- ulease.pgt_vehicule_pv : obsolete (remplacee par pgt_vehicule_amende).
+-- Retiree du mapping et de la sync ; drop en base via
+-- migration/patches/drop_pgt_vehicule_pv.sql (a appliquer manuellement).
 
 CREATE TABLE ulease.pgt_vehicule_releve (
     id_vehicule_releve                   bigint NOT NULL,  -- IDvehiculeReleve
