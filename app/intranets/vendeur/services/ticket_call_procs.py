@@ -490,38 +490,58 @@ def sfr_contenu_panier(id_ticket: int) -> list[dict]:
          AND tp.ModifELEM <> 'suppr'
        ORDER BY tp.TYPE ASC, o.Lib_Offre ASC
     """
-    db = get_pg_connection("ticket_bo")
+    db_bo = get_pg_connection("ticket_bo")
+    db_adv = get_pg_connection("adv")
     try:
-        # LEFT JOIN defensif : si l'offre a ete supprimee de
-        # pgt_sfr_offres_provad, la ligne de panier remonte quand meme
-        # (avec lib_offre vide) — evite un panier fantome.
-        rows = db.query(
-            """SELECT tp.id_tk_call_sfr_panier, tp.id_tk_call_sfr,
-                      tp.id_tk_liste, tp.type, tp.id_offres_sfr,
-                      tp.num_portabilite, tp.num,
-                      o.lib_offre, o.prix_offre
-                 FROM ticket_bo.pgt_tk_call_sfr_panier tp
-                 LEFT JOIN adv.pgt_sfr_offres_provad o
-                   ON o.id_offres_sfr = tp.id_offres_sfr
-                WHERE tp.id_tk_liste = ?
-                  AND (tp.modif_elem IS NULL OR tp.modif_elem <> 'suppr')
-                ORDER BY tp.type ASC, o.lib_offre ASC""",
+        rows = db_bo.query(
+            """SELECT id_tk_call_sfr_panier, id_tk_call_sfr,
+                      id_tk_liste, type, id_offres_sfr,
+                      num_portabilite, num
+                 FROM ticket_bo.pgt_tk_call_sfr_panier
+                WHERE id_tk_liste = ?
+                  AND (modif_elem IS NULL OR modif_elem <> 'suppr')
+                ORDER BY type ASC""",
             (int(id_ticket),),
         ) or []
     except Exception:
-        logger.exception("sfr_contenu_panier")
+        logger.exception("sfr_contenu_panier: panier")
         return []
-    return [
-        {
+    if not rows:
+        return []
+    # 2e requete sur la connexion 'adv' : evite le JOIN cross-schema
+    # (le driver PG renvoyait NULL sur les colonnes de la table jointe
+    # meme quand elle etait qualifiee 'adv.xxx' depuis la connexion
+    # ticket_bo — pb de search_path ou de permissions selon les envs).
+    ids_offres = sorted({_to_int(r.get("id_offres_sfr")) for r in rows
+                         if _to_int(r.get("id_offres_sfr"))})
+    offres_map: dict[int, dict] = {}
+    if ids_offres:
+        ids_sql = ",".join(str(i) for i in ids_offres)
+        try:
+            offres_rows = db_adv.query(
+                f"""SELECT id_offres_sfr, lib_offre, prix_offre
+                     FROM adv.pgt_sfr_offres_provad
+                    WHERE id_offres_sfr IN ({ids_sql})""",
+            ) or []
+            for o in offres_rows:
+                offres_map[_to_int(o.get("id_offres_sfr"))] = o
+        except Exception:
+            logger.exception("sfr_contenu_panier: offres")
+    # Merge + tri final par type puis lib
+    out = []
+    for r in rows:
+        id_off = _to_int(r.get("id_offres_sfr"))
+        o = offres_map.get(id_off) or {}
+        out.append({
             "IDtk_CallSFR_Panier": _str_id(r.get("id_tk_call_sfr_panier")),
             "Type": r.get("type") or "",
-            "IDOffres_SFR": _str_id(r.get("id_offres_sfr")),
-            "LibOffre": r.get("lib_offre") or "",
-            "MontantOffre": float(r.get("prix_offre") or 0),
+            "IDOffres_SFR": _str_id(id_off),
+            "LibOffre": o.get("lib_offre") or "",
+            "MontantOffre": float(o.get("prix_offre") or 0),
             "NumPortabilite": r.get("num_portabilite") or "",
-        }
-        for r in rows
-    ]
+        })
+    out.sort(key=lambda x: (x["Type"], x["LibOffre"]))
+    return out
 
 
 # --------------------------------------------------------------------
