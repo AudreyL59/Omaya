@@ -14,7 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, CheckCheck, Paperclip, Plus, Search, Send, Smile, Trash2,
 } from 'lucide-react'
-import EmojiPicker, { EmojiClickData } from 'emoji-picker-react'
+import EmojiPicker from 'emoji-picker-react'
+import type { EmojiClickData } from 'emoji-picker-react'
 
 import { showConfirm, showToast } from '../ui/dialog'
 import {
