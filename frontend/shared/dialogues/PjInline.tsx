@@ -125,6 +125,49 @@ function PreviewModal({ blobUrl, filename, kind, onClose }: {
 }
 
 // ---------------------------------------------------------------------------
+//  Vignette image (avec fallback carte-icone si fetch echoue)
+// ---------------------------------------------------------------------------
+
+function ImageThumb({ url, filename, getToken, onOpen }: {
+  url: string; filename: string
+  getToken: () => string | null
+  onOpen: () => void
+}) {
+  const { blobUrl, error } = useAuthBlob(url, getToken)
+  // Chargement en cours
+  if (!blobUrl && !error) {
+    return (
+      <div className="inline-flex items-center gap-2 px-2 py-1 text-xs bg-white border border-c-line-soft rounded">
+        <FileImage className="w-4 h-4 text-blue-600" />
+        <span className="text-c-ink-soft">Chargement…</span>
+      </div>
+    )
+  }
+  // Vignette OK
+  if (blobUrl) {
+    return (
+      <button onClick={onOpen}
+        className="block max-w-full text-left group relative">
+        <img src={blobUrl} alt={filename}
+          className="max-h-48 rounded border border-c-line-soft cursor-zoom-in
+                     group-hover:brightness-95 transition" />
+      </button>
+    )
+  }
+  // Erreur fetch : carte cliquable qui tente quand meme d'ouvrir le modal
+  return (
+    <button onClick={onOpen}
+      className="inline-flex items-center gap-2 px-2 py-1.5 text-xs bg-blue-50 border border-blue-200 rounded hover:bg-blue-100 max-w-full">
+      <FileImage className="w-5 h-5 text-blue-600 shrink-0" />
+      <div className="min-w-0 text-left">
+        <div className="truncate max-w-[240px] font-medium" title={filename}>{filename}</div>
+        <div className="text-[10px] text-c-ink-soft">Image · introuvable sur le serveur</div>
+      </div>
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
 //  Vignette video (poster derriere un play button)
 // ---------------------------------------------------------------------------
 
@@ -203,15 +246,24 @@ export function PjInline({ pj, ctx, idDialogue }: {
   if (kind === 'image') {
     return (
       <>
-        <button onClick={() => setPreview('image')}
-          className="block max-w-full text-left">
-          <AuthImage src={url} alt={pj.NomFic} getToken={ctx.getToken}
-            className="max-h-48 rounded border border-c-line-soft cursor-zoom-in"
-            fallback={<span className="text-xs text-c-ink-faint">{pj.NomFic}</span>} />
-        </button>
-        {preview === 'image' && modalBlob.blobUrl && (
-          <PreviewModal blobUrl={modalBlob.blobUrl} filename={pj.NomFic}
-            kind="image" onClose={() => setPreview(null)} />
+        <ImageThumb url={url} filename={pj.NomFic}
+          getToken={ctx.getToken}
+          onOpen={() => setPreview('image')} />
+        {preview === 'image' && (
+          modalBlob.blobUrl ? (
+            <PreviewModal blobUrl={modalBlob.blobUrl} filename={pj.NomFic}
+              kind="image" onClose={() => setPreview(null)} />
+          ) : modalBlob.error ? (
+            <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
+              onClick={() => setPreview(null)}>
+              <div className="bg-white rounded p-4 max-w-sm text-sm text-center">
+                <p className="mb-2">Impossible de charger l'image.</p>
+                <p className="text-xs text-c-ink-soft break-all">{pj.NomFic}</p>
+                <button onClick={() => setPreview(null)}
+                  className="mt-3 px-3 py-1 bg-gray-900 text-white rounded text-xs">Fermer</button>
+              </div>
+            </div>
+          ) : null
         )}
       </>
     )
