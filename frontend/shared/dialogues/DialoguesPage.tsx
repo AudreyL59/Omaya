@@ -12,19 +12,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, CheckCheck, Paperclip, Plus, Search, Send, Smile, Trash2,
+  ArrowLeft, CheckCheck, Lock, Paperclip, Plus, Search, Send, Smile, Trash2,
 } from 'lucide-react'
 import EmojiPicker from 'emoji-picker-react'
 import type { EmojiClickData } from 'emoji-picker-react'
 
 import { showConfirm, showToast } from '../ui/dialog'
 import {
-  deleteMessage, fetchListeJson, marquerLu, registerPJ,
+  deleteMessage, fetchListeJson, fetchStatuts, marquerLu, registerPJ,
   sendMessage, uploadFichier,
 } from './api'
 import { PjInline } from './PjInline'
 import type {
-  Dialogue, DialogueMsg, DialoguePageProps, DialoguePJ,
+  Dialogue, DialogueMsg, DialoguePageProps, DialoguePJ, DialogueStatut,
 } from './types'
 
 const decodeContent = (m: DialogueMsg): string => {
@@ -50,6 +50,17 @@ const fmtDateHeure = (raw: string): string => {
          `${mois[dt.getMonth()]} ${dt.getFullYear()}, ${h}:${mi}`
 }
 
+// WinDev stocke les couleurs en integer format COLORREF (R + G*256 + B*65536).
+// Conversion vers CSS hex #RRGGBB. 0 = pas de couleur -> default gris.
+const wdColorToCss = (n: number): string => {
+  if (!n) return '#9ca3af'  // gray-400
+  const r = n & 0xff
+  const g = (n >> 8) & 0xff
+  const b = (n >> 16) & 0xff
+  const h = (v: number) => v.toString(16).padStart(2, '0')
+  return `#${h(r)}${h(g)}${h(b)}`
+}
+
 const dateHeureSys = (): string => {
   const n = new Date()
   const pad = (v: number, w = 2) => v.toString().padStart(w, '0')
@@ -69,6 +80,7 @@ export default function DialoguesPage(props: DialoguePageProps) {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<0 | 1>(0)  // 0=actifs, 1=clos
   const [dialogues, setDialogues] = useState<Dialogue[]>([])
+  const [statuts, setStatuts] = useState<DialogueStatut[]>([])
   const [idOuvert, setIdOuvert] = useState<string>('')
   const [msgTexte, setMsgTexte] = useState('')
   const [pjs, setPjs] = useState<DialoguePJ[]>([])  // PJs attachees pour ce message
@@ -94,6 +106,17 @@ export default function DialoguesPage(props: DialoguePageProps) {
   }, [ctx, tab, userCial])
 
   useEffect(() => { chargerListe() }, [chargerListe])
+
+  // Charge le referentiel des statuts une fois au montage
+  useEffect(() => {
+    void fetchStatuts(ctx).then(r => { if (Array.isArray(r)) setStatuts(r) })
+  }, [ctx])
+
+  const couleurParStatut = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const s of statuts) m.set(s.IdStatut, wdColorToCss(s.CouleurStatut))
+    return m
+  }, [statuts])
 
   // Polling notif : toutes les 30s, recharge la liste et affiche une
   // Notification API browser si un nouveau MsgNonLu apparait.
@@ -295,15 +318,21 @@ export default function DialoguesPage(props: DialoguePageProps) {
           {dialoguesAffiches.map(d => {
             const lastMsg = d.Echanges?.slice(-1)[0]
             const preview = lastMsg ? decodeContent(lastMsg).slice(0, 60) : ''
+            const couleur = couleurParStatut.get(d.IdStatut) || '#9ca3af'
             return (
               <button key={d.IDDialogue} onClick={() => ouvrir(d)}
-                className={`w-full text-left px-3 py-2 border-b border-c-line-soft hover:bg-c-brand-soft ${
-                  idOuvert === d.IDDialogue ? 'bg-c-brand-soft' : ''}`}>
+                className={`w-full text-left px-3 py-2 border-b border-c-line-soft hover:bg-c-brand-soft relative ${
+                  idOuvert === d.IDDialogue ? 'bg-c-brand-soft' : ''}`}
+                style={{ borderLeft: `4px solid ${couleur}` }}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className={`text-sm truncate ${
+                    <div className={`text-sm truncate flex items-center gap-1 ${
                       d.MsgNonLu ? 'font-bold text-c-brand' : 'font-medium'}`}>
-                      {d.Sujet || '(sans sujet)'}
+                      {d.IsPrive && (
+                        <Lock className="w-3 h-3 shrink-0 text-c-ink-soft"
+                              aria-label="Dialogue privé" />
+                      )}
+                      <span className="truncate">{d.Sujet || '(sans sujet)'}</span>
                     </div>
                     <div className="text-xs text-c-ink-soft truncate">{preview}</div>
                     <div className="text-[10px] text-c-ink-faint mt-0.5">
