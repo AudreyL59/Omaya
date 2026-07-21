@@ -421,6 +421,7 @@ export default function TicketCallEnergiePage() {
   const buildBaseProd = (idProduit: number, numBSVal: string): any => ({
     IDSalarie: 0,  // rempli cote serveur via usersCial
     IDTK_Liste: idTicketEnCours,
+    Part: typePart,  // OEN|ENI|STR|VAL|PRO|OHM (necessaire pour la resolution lib_offre)
     IDProduit: idProduit,
     NumBS: numBSVal,
     RefClient: refClient,
