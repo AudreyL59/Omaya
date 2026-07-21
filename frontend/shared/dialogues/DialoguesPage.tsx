@@ -19,20 +19,13 @@ import type { EmojiClickData } from 'emoji-picker-react'
 
 import { showConfirm, showToast } from '../ui/dialog'
 import {
-  deleteMessage, fetchListeJson, fichierUrl, marquerLu, registerPJ,
+  deleteMessage, fetchListeJson, marquerLu, registerPJ,
   sendMessage, uploadFichier,
 } from './api'
+import { PjInline } from './PjInline'
 import type {
   Dialogue, DialogueMsg, DialoguePageProps, DialoguePJ,
 } from './types'
-
-const IMG_EXT = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
-const AUDIO_EXT = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.webm']
-
-const isImage = (name: string) =>
-  IMG_EXT.some(e => name.toLowerCase().endsWith(e))
-const isAudio = (name: string) =>
-  AUDIO_EXT.some(e => name.toLowerCase().endsWith(e))
 
 const decodeContent = (m: DialogueMsg): string => {
   if (m.MsgSuppr) return m.Contenu || m.ContenuUni || ''
@@ -452,31 +445,3 @@ export default function DialoguesPage(props: DialoguePageProps) {
   )
 }
 
-// ---------------------------------------------------------------------------
-//  PJ inline (image / audio / lien)
-// ---------------------------------------------------------------------------
-
-function PjInline({ pj, ctx, idDialogue }: {
-  pj: DialoguePJ
-  ctx: { apiBase: string; getToken: () => string | null }
-  idDialogue: string
-}) {
-  const url = fichierUrl(ctx, idDialogue, pj.NomFic)
-  if (isImage(pj.NomFic)) {
-    return (
-      <a href={url} target="_blank" rel="noreferrer">
-        <img src={url} alt={pj.NomFic}
-          className="max-w-full max-h-48 rounded border border-c-line-soft" />
-      </a>
-    )
-  }
-  if (isAudio(pj.NomFic)) {
-    return <audio controls src={url} className="max-w-full h-8" />
-  }
-  return (
-    <a href={url} target="_blank" rel="noreferrer"
-      className="inline-flex items-center gap-1 text-xs text-blue-700 hover:underline">
-      <Paperclip className="w-3 h-3" />{pj.NomFic}
-    </a>
-  )
-}
