@@ -22,7 +22,7 @@ from app.intranets.vendeur.routers.tickets_call_suivi import router as tickets_c
 from app.intranets.vendeur.routers.ticket_call_energie import router as ticket_call_energie_router
 from app.intranets.vendeur.routers.ticket_call_fibre import router as ticket_call_fibre_router
 from app.intranets.vendeur.routers.ticket_call_ws_common import router as ticket_call_ws_common_router
-from app.intranets.vendeur.routers.dialogues import router as dialogues_router
+from app.shared.dialogues.router import get_dialogues_router
 
 router = APIRouter(
     prefix="/vendeur",
@@ -60,4 +60,4 @@ router.include_router(tickets_call_suivi_router)
 router.include_router(ticket_call_energie_router)
 router.include_router(ticket_call_fibre_router)
 router.include_router(ticket_call_ws_common_router)
-router.include_router(dialogues_router)
+router.include_router(get_dialogues_router("vendeur"))

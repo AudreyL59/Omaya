@@ -50,6 +50,7 @@ from app.intranets.adm.routers.scool_stagiaire_fiche import router as scool_stag
 from app.shared.production.router import router as production_router
 from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
+from app.shared.dialogues.router import get_dialogues_router
 
 router = APIRouter(
     prefix="/adm",
@@ -108,6 +109,8 @@ router.include_router(production_router)
 router.include_router(get_recherche_cv_router("adm"))
 # Module tickets shared : filtre par DroitAccès pour ADM
 router.include_router(get_tickets_router("DroitAccès"))
+# Module dialogues shared (chat + workflow ticket)
+router.include_router(get_dialogues_router("adm"))
 
 
 @router.get("/ping")
