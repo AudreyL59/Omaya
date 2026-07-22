@@ -4,7 +4,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Tldraw, type Editor, getSnapshot, loadSnapshot } from 'tldraw'
-import { getAssetUrlsByImport } from '@tldraw/assets/imports.vite'
+// Alias Vite (resolve.alias 'tldraw-assets-vite') pointe vers
+// node_modules/@tldraw/assets/imports.vite.js du projet courant.
+// Rolldown refuse le sous-import '@tldraw/assets/imports.vite' car le
+// package n'a pas de champ "exports" declare — on contourne via alias.
+// @ts-expect-error alias resolu au build par Vite
+import { getAssetUrlsByImport } from 'tldraw-assets-vite'
 import 'tldraw/tldraw.css'
 import { Save, X } from 'lucide-react'
 
