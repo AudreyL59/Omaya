@@ -226,7 +226,8 @@ def fichiers_demande(id_tk_liste: int) -> list[dict]:
     db = get_pg_connection("ticket_bo")
     try:
         rows = db.query(
-            """SELECT id_tk_demandecodevendeur_fichier, nom_fichier, lien_fichier
+            """SELECT id_tk_demande_code_vendeur_fichier AS id_fic,
+                      nom_fichier, lien_fichier
                  FROM ticket_bo.pgt_tk_demandecodevendeur_fichier
                 WHERE id_tk_liste = ?
                   AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
@@ -241,7 +242,7 @@ def fichiers_demande(id_tk_liste: int) -> list[dict]:
         lien = (r.get("lien_fichier") or "").strip()
         url = f"{base}/PhotoDPAE/{lien}" if base and lien else ""
         out.append({
-            "IDFichier": _str_id(r.get("id_tk_demandecodevendeur_fichier")),
+            "IDFichier": _str_id(r.get("id_fic")),
             "NomFichier": r.get("nom_fichier") or "",
             "LienFichier": lien,
             "Url": url,
