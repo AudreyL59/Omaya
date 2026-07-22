@@ -9,7 +9,7 @@ from app.intranets.vendeur.routers.agenda_recrutement import router as agenda_re
 from app.intranets.vendeur.routers.agenda_cial import router as agenda_cial_router
 from app.intranets.vendeur.routers.cvtheque import router as cvtheque_router
 from app.intranets.vendeur.routers.organigramme import router as organigramme_router
-from app.intranets.vendeur.routers.gestion_ohm import router as gestion_ohm_router
+from app.intranets.vendeur.routers.gestion_code_ohm import router as gestion_ohm_router
 from app.intranets.vendeur.routers.scool import router as scool_router
 from app.intranets.vendeur.routers.scool_suivi import router as scool_suivi_router
 from app.shared.production.router import router as production_router
