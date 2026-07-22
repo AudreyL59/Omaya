@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Download, FileText, Lock, Pencil, Plus, Save, Search,
+  Download, FileText, Lock, Network, Pencil, Plus, Save, Search,
   ShieldCheck, Tag, Trash2, Upload, X,
 } from 'lucide-react'
 
@@ -18,6 +18,8 @@ import {
   fetchProfils, fetchServices, fetchSocietes, fichierUrl, saveDroit,
   saveProcess, uploadFichier,
 } from './api'
+import DiagrammeEditor from './DiagrammeEditor'
+import SalarieAutocomplete from './SalarieAutocomplete'
 import type {
   Process, ProcessDroit, ProcessFichierMeta, ProcessListItem,
   ProcessPageProps, ProfilItem, SocieteItem,
@@ -67,6 +69,7 @@ export default function ProcessPage(props: ProcessPageProps) {
   const [selectedId, setSelectedId] = useState<string>('')
   const [editing, setEditing] = useState(false)
   const [showDroits, setShowDroits] = useState(false)
+  const [showDiag, setShowDiag] = useState(false)
 
   // Form fields
   const [titre, setTitre] = useState('')
@@ -309,11 +312,23 @@ export default function ProcessPage(props: ProcessPageProps) {
                   onUpload={uploadPJ} onDelete={supprimerPJ} />
               )}
 
-              {/* Diagramme (V2 — juste un placeholder pour l'instant) */}
-              {selected && !editing && selected.HasDiagramme && (
-                <div className="text-xs italic text-c-ink-soft bg-c-surface-soft border border-c-line-soft rounded p-2">
-                  Ce process contient un diagramme WinDev (édition à venir en V2)
-                </div>
+              {/* Diagramme (V2) */}
+              {selected && !editing && (
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-semibold">Diagramme</h3>
+                    <button onClick={() => setShowDiag(true)}
+                      className="flex items-center gap-1 px-2 py-1 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110">
+                      <Network className="w-3.5 h-3.5" />
+                      {canEdit ? 'Ouvrir / Éditer' : 'Ouvrir'}
+                    </button>
+                  </div>
+                  {!selected.HasDiagramme && (
+                    <div className="text-xs italic text-c-ink-faint py-2">
+                      Aucun diagramme{canEdit && ' — clique sur "Ouvrir / Éditer" pour en créer un'}
+                    </div>
+                  )}
+                </section>
               )}
             </div>
           </>
@@ -325,6 +340,18 @@ export default function ProcessPage(props: ProcessPageProps) {
         <DroitsModal selected={selected} ctx={ctx}
           onClose={() => setShowDroits(false)}
           onChanged={async () => {
+            const p = await fetchOne(ctx, selected.IDProcess)
+            if (p) setSelected(p)
+          }} />
+      )}
+
+      {/* Editeur/viewer de diagramme */}
+      {showDiag && selected && (
+        <DiagrammeEditor ctx={ctx} idProcess={selected.IDProcess}
+          readonly={!canEdit}
+          onClose={async () => {
+            setShowDiag(false)
+            // recharge le detail pour rafraichir HasDiagramme
             const p = await fetchOne(ctx, selected.IDProcess)
             if (p) setSelected(p)
           }} />
@@ -500,6 +527,7 @@ function DroitsModal({ selected, ctx, onClose, onChanged }: {
   const [profils, setProfils] = useState<ProfilItem[]>([])
   const [societes, setSocietes] = useState<SocieteItem[]>([])
   const [newSalarie, setNewSalarie] = useState('')  // id_salarie ou vide
+  const [newSalarieLib, setNewSalarieLib] = useState('')
   const [newProfil, setNewProfil] = useState('')
   const [newSte, setNewSte] = useState('')  // '' = toutes
 
@@ -529,7 +557,8 @@ function DroitsModal({ selected, ctx, onClose, onChanged }: {
       DroitActif: true,
     })
     if (!r?.IDProcessDroit) { showToast('Échec', 'error'); return }
-    setNewSalarie(''); setNewProfil(''); setNewSte('')
+    setNewSalarie(''); setNewSalarieLib('')
+    setNewProfil(''); setNewSte('')
     await onChanged()
   }
 
@@ -573,14 +602,15 @@ function DroitsModal({ selected, ctx, onClose, onChanged }: {
                   ))}
                 </select>
               </label>
-              <label className="block">
-                <span className="block text-xs text-c-ink-soft mb-0.5">Salarié (ID)</span>
-                <input value={newSalarie} onChange={e => {
-                  setNewSalarie(e.target.value); if (e.target.value) setNewProfil('')
-                }}
-                  placeholder="id_salarie"
-                  className="w-full border border-c-line rounded px-2 py-1.5 text-sm bg-white" />
-              </label>
+              <div className="block">
+                <span className="block text-xs text-c-ink-soft mb-0.5">Salarié</span>
+                <SalarieAutocomplete ctx={ctx}
+                  value={newSalarie} valueLib={newSalarieLib}
+                  onChange={(id, lib) => {
+                    setNewSalarie(id); setNewSalarieLib(lib)
+                    if (id) setNewProfil('')
+                  }} />
+              </div>
               <label className="block">
                 <span className="block text-xs text-c-ink-soft mb-0.5">Société</span>
                 <select value={newSte} onChange={e => setNewSte(e.target.value)}

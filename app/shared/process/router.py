@@ -23,9 +23,11 @@ from app.shared.process.schemas.process import (
 )
 from app.shared.process.services import (
     crud as crud_svc,
+    diagramme as diag_svc,
     droits as droits_svc,
     fichiers as fichiers_svc,
     list_service as list_svc,
+    salaries as salaries_svc,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,36 @@ def get_process_router(intranet_key: str, can_edit: bool) -> APIRouter:
     @router.get("/societes", response_model=list[dict])
     def get_societes(_user: UserToken = Depends(get_current_user)):
         return list_svc.liste_societes()
+
+    @router.get("/salaries-search", response_model=list[dict])
+    def get_salaries_search(q: str = Query("", min_length=0),
+                             _user: UserToken = Depends(get_current_user)):
+        return salaries_svc.search_salaries(q)
+
+    @router.get("/{id_process}/diagramme")
+    def get_diagramme(id_process: str,
+                       _user: UserToken = Depends(get_current_user)):
+        try:
+            id_p = int(id_process)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "id_process invalide")
+        return {"json": diag_svc.get_diagramme(id_p) or ""}
+
+    @router.put("/{id_process}/diagramme")
+    def put_diagramme(id_process: str, payload: dict = Body(...),
+                       user: UserToken = Depends(get_current_user)):
+        _require_edit()
+        try:
+            id_p = int(id_process)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "id_process invalide")
+        js = payload.get("json") if isinstance(payload, dict) else None
+        if not isinstance(js, str):
+            js = ""
+        ok = diag_svc.save_diagramme(id_p, js, int(user.id_salarie))
+        if not ok:
+            raise HTTPException(500, "echec sauvegarde diagramme")
+        return {"ok": True}
 
     @router.get("/{id_process}", response_model=Process)
     def get_one(id_process: str,

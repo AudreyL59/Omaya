@@ -62,6 +62,13 @@ export interface SocieteItem {
   Lib: string
 }
 
+export interface SalarieHit {
+  ID: string
+  Nom: string
+  Prenom: string
+  Lib: string
+}
+
 export interface ProcessPageProps {
   apiBase: string       // '/api/vendeur' | '/api/adm'
   getToken: () => string | null

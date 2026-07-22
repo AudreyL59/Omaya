@@ -21,6 +21,7 @@ export default defineConfig({
       'lucide-react',
       'react-easy-crop',
       'emoji-picker-react',
+      'tldraw',
     ],
   },
   server: {

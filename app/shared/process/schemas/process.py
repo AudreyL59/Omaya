@@ -70,7 +70,8 @@ class Process(BaseModel):
     NomOpeModif: str = ""
     Fichiers: list[ProcessFichierMeta] = Field(default_factory=list)
     Droits: list[ProcessDroit] = Field(default_factory=list)
-    HasDiagramme: bool = False  # true si diagramme bytea non-null
+    HasDiagramme: bool = False    # true si diagramme (bytea WinDev) ou
+                                   # diagramme_json (tldraw) est renseigné
 
 
 class ProcessListItem(BaseModel):

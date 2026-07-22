@@ -45,7 +45,10 @@ def get_process(id_process: int) -> Process | None:
         row = db.query_one(
             """SELECT id_process, titre, service, mots_cles,
                       date_crea, derniere_modif, ope_crea, ope_modif,
-                      (diagramme IS NOT NULL AND length(diagramme) > 0) AS has_diag
+                      (
+                          (diagramme IS NOT NULL AND length(diagramme) > 0)
+                       OR (diagramme_json IS NOT NULL AND length(diagramme_json) > 0)
+                      ) AS has_diag
                  FROM divers.pgt_process
                 WHERE id_process = ?
                   AND (modif_elem IS NULL OR modif_elem <> 'suppr')

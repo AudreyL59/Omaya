@@ -1,7 +1,7 @@
 // Client HTTP du module Process.
 
 import type {
-  Process, ProcessListItem, ProfilItem, SocieteItem,
+  Process, ProcessListItem, ProfilItem, SalarieHit, SocieteItem,
 } from './types'
 
 interface Ctx {
@@ -50,6 +50,16 @@ export const fetchSocietes = (ctx: Ctx) =>
 
 export const fichierUrl = (ctx: Ctx, idFichier: string) =>
   `${ctx.apiBase}/process/fichier/${idFichier}`
+
+export const searchSalaries = (ctx: Ctx, q: string) =>
+  req<SalarieHit[]>(
+    ctx, 'GET', `/salaries-search?q=${encodeURIComponent(q)}`)
+
+export const fetchDiagramme = (ctx: Ctx, idProcess: string) =>
+  req<{ json: string }>(ctx, 'GET', `/${idProcess}/diagramme`)
+
+export const saveDiagramme = (ctx: Ctx, idProcess: string, json: string) =>
+  req<{ ok: boolean }>(ctx, 'PUT', `/${idProcess}/diagramme`, { json })
 
 // -- Ecriture (ADM) ------------------------------------------------------
 
