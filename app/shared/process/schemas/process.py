@@ -29,6 +29,8 @@ class ProcessFichierMeta(BaseModel):
     DerniereModif: str = ""
     OpeCrea: str = ""
     NomOpeCrea: str = ""
+    OpeModif: str = ""
+    NomOpeModif: str = ""
 
 
 class ProcessDroit(BaseModel):
@@ -136,6 +138,8 @@ class ProcessDiagrammeMeta(BaseModel):
     DerniereModif: str = ""
     OpeCrea: str = ""
     NomOpeCrea: str = ""
+    OpeModif: str = ""
+    NomOpeModif: str = ""
 
 
 class ProcessDiagramme(BaseModel):

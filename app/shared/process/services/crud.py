@@ -82,7 +82,7 @@ def _load_fichiers(id_process: int) -> list[ProcessFichierMeta]:
     try:
         rows = db.query(
             """SELECT id_process_fichier, titre, extension, taille_fic,
-                      date_crea, derniere_modif, ope_crea
+                      date_crea, derniere_modif, ope_crea, ope_modif
                  FROM divers.pgt_process_fichier
                 WHERE id_process = ?
                   AND (lower(extension) <> '.excalidraw' OR extension IS NULL)
@@ -94,6 +94,7 @@ def _load_fichiers(id_process: int) -> list[ProcessFichierMeta]:
         logger.exception("_load_fichiers id=%s", id_process)
         return []
     op_ids = {int(r.get("ope_crea") or 0) for r in rows}
+    op_ids |= {int(r.get("ope_modif") or 0) for r in rows}
     op_ids.discard(0)
     op_noms = {i: nom_salarie(i) for i in op_ids}
     return [
@@ -106,6 +107,8 @@ def _load_fichiers(id_process: int) -> list[ProcessFichierMeta]:
             DerniereModif=_iso_datetime(r.get("derniere_modif")),
             OpeCrea=_str_id(r.get("ope_crea") or 0) if r.get("ope_crea") else "",
             NomOpeCrea=op_noms.get(int(r.get("ope_crea") or 0), ""),
+            OpeModif=_str_id(r.get("ope_modif") or 0) if r.get("ope_modif") else "",
+            NomOpeModif=op_noms.get(int(r.get("ope_modif") or 0), ""),
         )
         for r in rows
     ]

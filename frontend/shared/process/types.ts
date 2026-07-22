@@ -22,6 +22,8 @@ export interface ProcessFichierMeta {
   DerniereModif: string
   OpeCrea: string
   NomOpeCrea: string
+  OpeModif: string
+  NomOpeModif: string
 }
 
 export interface ProcessDroit {
@@ -58,6 +60,8 @@ export interface ProcessDiagrammeMeta {
   DerniereModif: string
   OpeCrea: string
   NomOpeCrea: string
+  OpeModif: string
+  NomOpeModif: string
 }
 
 export interface ProcessDiagramme {

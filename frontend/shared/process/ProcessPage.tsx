@@ -38,6 +38,33 @@ const fmtDateFR = (raw: string): string => {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : raw
 }
 
+// Ligne meta compacte : "Créé par X le date · Modifié par Y le date".
+// Si le modificateur est identique au createur, on omet 'par Y'.
+// Si la date de modif = date de crea (ou vide), on omet toute la 2e partie.
+const metaLine = (meta: {
+  DateCrea?: string; DerniereModif?: string
+  NomOpeCrea?: string; NomOpeModif?: string
+}): string => {
+  const parts: string[] = []
+  if (meta.NomOpeCrea || meta.DateCrea) {
+    let s = 'Créé'
+    if (meta.NomOpeCrea) s += ` par ${meta.NomOpeCrea}`
+    if (meta.DateCrea) s += ` le ${fmtDateFR(meta.DateCrea)}`
+    parts.push(s)
+  }
+  const hasModif = meta.DerniereModif
+    && meta.DerniereModif.slice(0, 10) !== (meta.DateCrea || '').slice(0, 10)
+  if (hasModif) {
+    let s = 'Modifié'
+    if (meta.NomOpeModif && meta.NomOpeModif !== meta.NomOpeCrea) {
+      s += ` par ${meta.NomOpeModif}`
+    }
+    s += ` le ${fmtDateFR(meta.DerniereModif!)}`
+    parts.push(s)
+  }
+  return parts.join(' · ')
+}
+
 // Format storage : mots séparés par RC (\n) — convention WinDev. Tolérance
 // en parsing pour virgule et point-virgule (saisie legacy). Dedupe case
 // insensitive, ordre préservé.
@@ -492,7 +519,8 @@ function FichiersList({ selected, ctx, canEdit, onUpload, onDelete }: {
             <div className="flex-1 min-w-0">
               <div className="text-sm truncate">{f.Titre}{f.Extension}</div>
               <div className="text-[10px] text-c-ink-faint">
-                {fmtSize(f.TailleFic)} · {f.NomOpeCrea}
+                {fmtSize(f.TailleFic)}
+                {metaLine(f) && ` · ${metaLine(f)}`}
               </div>
             </div>
             <a href={fichierUrl(ctx, f.IDProcessFichier) + `?token=${encodeURIComponent(ctx.getToken() || '')}`}
@@ -568,8 +596,7 @@ function DiagrammesList({ selected, canEdit, onOpen, onNouveau, onDelete }: {
               className="flex-1 min-w-0 text-left hover:underline">
               <div className="text-sm truncate">{d.Titre || '(sans titre)'}</div>
               <div className="text-[10px] text-c-ink-faint">
-                {d.NomOpeCrea}
-                {d.DerniereModif && ` · maj ${fmtDateFR(d.DerniereModif)}`}
+                {metaLine(d)}
               </div>
             </button>
             {canEdit && (

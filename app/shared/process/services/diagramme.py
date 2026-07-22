@@ -37,7 +37,7 @@ def liste_diagrammes(id_process: int) -> list[ProcessDiagrammeMeta]:
     try:
         rows = db.query(
             """SELECT id_process_fichier, titre, date_crea, derniere_modif,
-                      ope_crea
+                      ope_crea, ope_modif
                  FROM divers.pgt_process_fichier
                 WHERE id_process = ?
                   AND lower(extension) = ?
@@ -49,6 +49,7 @@ def liste_diagrammes(id_process: int) -> list[ProcessDiagrammeMeta]:
         logger.exception("liste_diagrammes id_process=%s", id_process)
         return []
     op_ids = {int(r.get("ope_crea") or 0) for r in rows}
+    op_ids |= {int(r.get("ope_modif") or 0) for r in rows}
     op_ids.discard(0)
     op_noms = {i: nom_salarie(i) for i in op_ids}
     return [
@@ -59,6 +60,8 @@ def liste_diagrammes(id_process: int) -> list[ProcessDiagrammeMeta]:
             DerniereModif=_iso_datetime(r.get("derniere_modif")),
             OpeCrea=_str_id(r.get("ope_crea") or 0) if r.get("ope_crea") else "",
             NomOpeCrea=op_noms.get(int(r.get("ope_crea") or 0), ""),
+            OpeModif=_str_id(r.get("ope_modif") or 0) if r.get("ope_modif") else "",
+            NomOpeModif=op_noms.get(int(r.get("ope_modif") or 0), ""),
         )
         for r in rows
     ]
