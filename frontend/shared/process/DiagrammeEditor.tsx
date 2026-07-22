@@ -2,7 +2,7 @@
 // dans ProcessPage. Storage : JSON serialise du store tldraw (backend
 // stocke dans pgt_process.diagramme_json).
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { Tldraw, type Editor, getSnapshot, loadSnapshot } from 'tldraw'
 // Alias Vite (resolve.alias 'tldraw-assets-vite') pointe vers
 // node_modules/@tldraw/assets/imports.vite.js du projet courant.
@@ -18,6 +18,19 @@ import { fetchDiagramme, saveDiagramme } from './api'
 
 type Ctx = { apiBase: string; getToken: () => string | null }
 
+// Composant tldraw fige : monte une fois et ne rerend JAMAIS, meme si
+// le parent rerender. Sans ca, chaque event du store declenchait un
+// setState quelque part -> React demontait le canvas -> ecran blanc.
+const StableTldraw = memo(function StableTldraw({
+  onMount, assetUrls,
+}: {
+  onMount: (editor: Editor) => void
+  assetUrls: object
+}) {
+  return <Tldraw onMount={onMount} assetUrls={assetUrls} />
+}, () => true)  // <-- always return true (equal) -> jamais de rerender
+
+
 export default function DiagrammeEditor({
   ctx, idProcess, readonly, onClose,
 }: {
@@ -26,22 +39,22 @@ export default function DiagrammeEditor({
   readonly: boolean
   onClose: () => void
 }) {
-  // Editor tldraw stocke en ref (pas en state) pour eviter les
-  // re-renders qui demontent le canvas apres l'action utilisateur.
+  // Editor + dirty flag en ref pour ne PAS declencher de rerender.
   const editorRef = useRef<Editor | null>(null)
-  // Dirty flag idem : ref pour tracker cote save, on ne rerender pas
-  // pour ca (le badge 'modifie' est mis a jour via forceUpdate ci-dessous).
   const dirtyRef = useRef(false)
+
+  // Ces states peuvent rerender le parent (Tldraw reste stable grace
+  // au memo).
   const [saving, setSaving] = useState(false)
-  const [dirtyTick, setDirtyTick] = useState(0)  // force UI refresh du badge
+  const [dirtyTick, setDirtyTick] = useState(0)
 
   // Assets tldraw servis en local (bundle) — evite le CDN unpkg.
-  // Memoise pour ne pas re-generer les URLs a chaque render.
   const assetUrls = useMemo(() => getAssetUrlsByImport(), [])
 
-  const handleMount = (editor: Editor) => {
+  // Callback mount memoise pour rester la meme reference toute la vie
+  // du composant (au cas ou React aurait envie de dire "prop change").
+  const handleMount = useMemo(() => (editor: Editor) => {
     editorRef.current = editor
-    // Charge le snapshot existant
     void (async () => {
       const r = await fetchDiagramme(ctx, idProcess)
       const json = r?.json || ''
@@ -56,9 +69,9 @@ export default function DiagrammeEditor({
       if (readonly) {
         editor.updateInstanceState({ isReadonly: true })
       }
-      // Ecoute des changements user pour flag dirty (via ref, PAS de
-      // state qui rerender). On ne veut le badge visible qu'a la 1re
-      // modif, donc un tick suffit.
+      // Ecoute les modifs user : uniquement le 1er tick met le badge
+      // 'modifications non enregistrees' visible. Ensuite le ref reste
+      // a true, on ne re-render plus le parent inutilement.
       editor.store.listen(() => {
         if (!dirtyRef.current) {
           dirtyRef.current = true
@@ -66,7 +79,8 @@ export default function DiagrammeEditor({
         }
       }, { source: 'user', scope: 'document' })
     })()
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ESC = close (avec confirmation si dirty)
   useEffect(() => {
@@ -104,8 +118,7 @@ export default function DiagrammeEditor({
   }
 
   const dirty = dirtyRef.current
-  // dirtyTick sert uniquement à forcer le re-render du header
-  void dirtyTick
+  void dirtyTick  // dependance pour le render du header
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 95,
@@ -137,12 +150,9 @@ export default function DiagrammeEditor({
           <X className="w-4 h-4" />
         </button>
       </header>
-      {/* Tldraw doit avoir un container avec dimensions non-nulles.
-          On utilise position:absolute plutot que flex-1 pour eviter les
-          bugs de calcul de layout au re-render. */}
       <div style={{ position: 'relative', flex: 1 }}>
         <div style={{ position: 'absolute', inset: 0 }}>
-          <Tldraw onMount={handleMount} assetUrls={assetUrls} />
+          <StableTldraw onMount={handleMount} assetUrls={assetUrls} />
         </div>
       </div>
     </div>
