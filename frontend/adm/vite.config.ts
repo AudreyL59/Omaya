@@ -10,10 +10,6 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@shared': path.resolve(__dirname, '../shared'),
-      // @tldraw/assets n'a pas de champ "exports" dans son package.json,
-      // Rolldown refuse le sous-import direct. On alias vers le fichier.
-      'tldraw-assets-vite': path.resolve(
-        __dirname, 'node_modules/@tldraw/assets/imports.vite.js'),
     },
     dedupe: [
       'react',
@@ -23,7 +19,7 @@ export default defineConfig({
       'lucide-react',
       'react-easy-crop',
       'emoji-picker-react',
-      'tldraw',
+      '@excalidraw/excalidraw',
     ],
   },
   server: {
