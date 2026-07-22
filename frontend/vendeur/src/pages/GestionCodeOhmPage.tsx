@@ -8,8 +8,8 @@
 //      XLSX pour renseigner les codes en masse (bouton "Importer les
 //      code vendeurs" avec mapping colonnes A/B/C/D).
 
-import { useCallback, useEffect, useState } from 'react'
-import { Eye, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Download, Eye, Upload, X } from 'lucide-react'
 import { getToken } from '@/api'
 import { showConfirm, showToast } from '@shared/ui/dialog'
 
@@ -62,6 +62,58 @@ export default function GestionCodeOhmPage() {
   const [demandes, setDemandes] = useState<Demande[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Demande | null>(null)
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [showImport, setShowImport] = useState(false)
+  const [exporting, setExporting] = useState(false)
+
+  const toggleCheck = (id: string) => {
+    setChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const allChecked = useMemo(
+    () => demandes.length > 0 && demandes.every(d => checked.has(d.IDTK_Liste)),
+    [demandes, checked])
+  const toggleAll = () => {
+    if (allChecked) setChecked(new Set())
+    else setChecked(new Set(demandes.map(d => d.IDTK_Liste)))
+  }
+
+  const exporter = async () => {
+    if (checked.size === 0) {
+      showToast('Sélectionne au moins une ligne', 'info'); return
+    }
+    setExporting(true)
+    try {
+      const r = await fetch(`${API}/export-selection`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: Array.from(checked) }),
+      })
+      if (!r.ok) {
+        showToast('Échec export', 'error')
+      } else {
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        const stamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15)
+        a.href = url; a.download = `Demandes_Accreditations_${stamp}.zip`
+        document.body.appendChild(a); a.click(); a.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
+        setChecked(new Set())
+        void charger()
+        showToast('Export généré + statuts passés à "Envoyé"', 'success')
+      }
+    } catch {
+      showToast('Échec export', 'error')
+    }
+    setExporting(false)
+  }
 
   const charger = useCallback(async () => {
     setLoading(true)
@@ -94,12 +146,17 @@ export default function GestionCodeOhmPage() {
           Vendeurs sortis
         </button>
         <div className="flex-1" />
-        <button onClick={() => showToast('Export XLSX + ZIP — à venir (V2)', 'info')}
-          className="px-3 py-1.5 rounded bg-gray-900 text-white text-sm font-semibold hover:brightness-110">
-          Exporter la sélection
+        <button onClick={exporter} disabled={exporting || checked.size === 0}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-semibold ${
+            exporting || checked.size === 0
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-gray-900 text-white hover:brightness-110'}`}>
+          <Download className="w-4 h-4" />
+          Exporter la sélection{checked.size > 0 && ` (${checked.size})`}
         </button>
-        <button onClick={() => showToast('Import XLSX — à venir (V2)', 'info')}
-          className="px-3 py-1.5 rounded bg-orange-600 text-white text-sm font-semibold hover:brightness-110">
+        <button onClick={() => setShowImport(true)}
+          className="flex items-center gap-1 px-3 py-1.5 rounded bg-orange-600 text-white text-sm font-semibold hover:brightness-110">
+          <Upload className="w-4 h-4" />
           Importer les codes vendeurs
         </button>
       </div>
@@ -109,6 +166,10 @@ export default function GestionCodeOhmPage() {
         <table className="w-full text-sm">
           <thead className="bg-gray-900 text-white text-xs uppercase sticky top-0">
             <tr>
+              <th className="text-center px-2 py-2 w-8">
+                <input type="checkbox" checked={allChecked} onChange={toggleAll}
+                  className="accent-white" />
+              </th>
               <th className="text-left px-3 py-2">Statut</th>
               <th className="text-left px-3 py-2">Date demande</th>
               <th className="text-left px-3 py-2">Nom</th>
@@ -121,17 +182,23 @@ export default function GestionCodeOhmPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="text-center py-4 text-c-ink-soft">Chargement…</td></tr>
+              <tr><td colSpan={9} className="text-center py-4 text-c-ink-soft">Chargement…</td></tr>
             )}
             {!loading && demandes.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-4 italic text-c-ink-faint">
+              <tr><td colSpan={9} className="text-center py-4 italic text-c-ink-faint">
                 Aucune demande
               </td></tr>
             )}
             {demandes.map(d => (
               <tr key={d.IDTK_Liste}
                 onDoubleClick={() => setSelected(d)}
-                className="border-t border-c-line-soft hover:bg-c-surface-soft">
+                className={`border-t border-c-line-soft hover:bg-c-surface-soft ${
+                  checked.has(d.IDTK_Liste) ? 'bg-blue-50' : ''}`}>
+                <td className="text-center px-2 py-1.5">
+                  <input type="checkbox" checked={checked.has(d.IDTK_Liste)}
+                    onChange={() => toggleCheck(d.IDTK_Liste)}
+                    onClick={e => e.stopPropagation()} />
+                </td>
                 <td className="px-3 py-1.5">
                   <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded"
                     style={{ backgroundColor: couleurStatut(d.IDTKStatut) }}>
@@ -161,6 +228,11 @@ export default function GestionCodeOhmPage() {
         <ContenuTicketModal demande={selected}
           onClose={() => setSelected(null)}
           onSaved={() => { void charger() }} />
+      )}
+
+      {showImport && (
+        <ImportCodesModal onClose={() => setShowImport(false)}
+          onImported={() => { void charger() }} />
       )}
     </div>
   )
@@ -320,6 +392,120 @@ function ContenuTicketModal({ demande, onClose, onSaved }: {
                 className="w-full h-[500px]" />
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+//  Modal Import Codes (XLSX + mapping colonnes)
+// ---------------------------------------------------------------------------
+
+function ImportCodesModal({ onClose, onImported }: {
+  onClose: () => void
+  onImported: () => void
+}) {
+  const [file, setFile] = useState<File | null>(null)
+  const [colCode, setColCode] = useState('A')
+  const [colMdp, setColMdp] = useState('B')
+  const [colNom, setColNom] = useState('C')
+  const [colPrenom, setColPrenom] = useState('D')
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<null | { lignes_lues: number
+    maj_effectuees: number; mails_envoyes: number }>(null)
+
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => e.key === 'Escape' && !running && onClose()
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [onClose, running])
+
+  const importer = async () => {
+    if (!file || running) return
+    if (!/^[A-Z]$/.test(colCode.toUpperCase()) || !/^[A-Z]$/.test(colMdp.toUpperCase()) ||
+        !/^[A-Z]$/.test(colNom.toUpperCase()) || !/^[A-Z]$/.test(colPrenom.toUpperCase())) {
+      showToast('Colonnes doivent être des lettres A à Z', 'error'); return
+    }
+    setRunning(true); setResult(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file, file.name)
+      fd.append('col_code', colCode.toUpperCase())
+      fd.append('col_mdp', colMdp.toUpperCase())
+      fd.append('col_nom', colNom.toUpperCase())
+      fd.append('col_prenom', colPrenom.toUpperCase())
+      const r = await fetch(`${API}/import-codes`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: fd,
+      })
+      if (r.ok) {
+        const data = await r.json()
+        setResult(data)
+        onImported()
+        showToast(`Import OK : ${data.maj_effectuees} maj, ${data.mails_envoyes} mails`, 'success')
+      } else {
+        const err = await r.json().catch(() => ({}))
+        showToast(`Échec : ${err.detail || 'erreur'}`, 'error')
+      }
+    } catch {
+      showToast('Échec import', 'error')
+    }
+    setRunning(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-4"
+      onClick={() => !running && onClose()}>
+      <div onClick={e => e.stopPropagation()}
+        className="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-c-line-soft">
+          <h3 className="text-base font-semibold">Importation Base Excel</h3>
+          <button onClick={onClose} disabled={running}
+            className="p-1 rounded hover:bg-gray-100">
+            <X className="w-4 h-4" />
+          </button>
+        </header>
+        <div className="p-4 space-y-3">
+          <label className="block">
+            <span className="block text-xs text-c-ink-soft mb-1">Fichier Excel (.xlsx)</span>
+            <input type="file" accept=".xlsx,.xls"
+              onChange={e => setFile(e.target.files?.[0] || null)}
+              className="w-full text-sm border border-c-line rounded px-2 py-1.5 bg-white" />
+          </label>
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Identifiant', v: colCode, s: setColCode },
+              { label: 'MDP', v: colMdp, s: setColMdp },
+              { label: 'Nom', v: colNom, s: setColNom },
+              { label: 'Prénom', v: colPrenom, s: setColPrenom },
+            ].map(f => (
+              <label key={f.label} className="block">
+                <span className="block text-xs text-c-ink-soft mb-0.5">{f.label}</span>
+                <input value={f.v} maxLength={1}
+                  onChange={e => f.s(e.target.value.toUpperCase())}
+                  className="w-full border border-c-line rounded px-2 py-1.5 text-sm bg-white text-center font-mono uppercase" />
+              </label>
+            ))}
+          </div>
+          <p className="text-[10px] text-c-ink-soft italic">
+            Colonne Excel (A, B, C, D…). Ex : identifiant en col B → tape "B".
+          </p>
+          {result && (
+            <div className="bg-green-50 border border-green-200 rounded p-2 text-xs">
+              ✓ {result.lignes_lues} lignes lues,{' '}
+              <b>{result.maj_effectuees}</b> maj effectuées,{' '}
+              <b>{result.mails_envoyes}</b> mails envoyés
+            </div>
+          )}
+          <button onClick={importer} disabled={!file || running}
+            className={`w-full px-3 py-2 rounded text-sm font-semibold ${
+              !file || running
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-900 text-white hover:brightness-110'}`}>
+            {running ? 'Importation en cours…' : 'Importer le fichier'}
+          </button>
         </div>
       </div>
     </div>
