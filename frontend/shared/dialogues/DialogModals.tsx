@@ -22,6 +22,16 @@ const wdColor = (n: number): string => {
   return `#${h(r)}${h(g)}${h(b)}`
 }
 
+// Choix noir ou blanc pour le texte selon la luminance de la couleur
+// de fond — formule Rec. 709 simplifiee. Seuil 0.6 pour privilegier le
+// blanc sur les mi-tons (mieux lu que du noir sur bleu moyen).
+const readableFg = (n: number): string => {
+  if (!n) return '#ffffff'
+  const r = n & 0xff, g = (n >> 8) & 0xff, b = (n >> 16) & 0xff
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return lum > 0.6 ? '#111827' : '#ffffff'
+}
+
 const fmtFR = (raw: string): string => {
   if (!raw) return ''
   const clean = raw.replace(/[^0-9]/g, '')
@@ -152,9 +162,9 @@ export function TachesITModal({ ctx, idDialogue, onClose }: {
                 )}
               </div>
               <div className="text-right shrink-0 flex flex-col items-end gap-1">
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded"
-                  style={{ backgroundColor: wdColor(t.CouleurStatut) + '20',
-                           color: wdColor(t.CouleurStatut) }}>
+                <span className="text-[11px] font-semibold px-2 py-1 rounded whitespace-nowrap"
+                  style={{ backgroundColor: wdColor(t.CouleurStatut),
+                           color: readableFg(t.CouleurStatut) }}>
                   {t.LibStatut || 'Statut ?'}
                 </span>
                 {t.Terminee && (
