@@ -48,7 +48,26 @@ export interface Process {
   NomOpeModif: string
   Fichiers: ProcessFichierMeta[]
   Droits: ProcessDroit[]
-  HasDiagramme: boolean
+  Diagrammes: ProcessDiagrammeMeta[]
+}
+
+export interface ProcessDiagrammeMeta {
+  IDProcessDiagramme: string
+  Titre: string
+  DateCrea: string
+  DerniereModif: string
+  OpeCrea: string
+  NomOpeCrea: string
+}
+
+export interface ProcessDiagramme {
+  IDProcessDiagramme: string
+  IDProcess: string
+  Titre: string
+  ContenuJson: string
+  DateCrea: string
+  DerniereModif: string
+  OpeCrea: string
 }
 
 export interface ProfilItem {

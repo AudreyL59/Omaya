@@ -70,8 +70,7 @@ class Process(BaseModel):
     NomOpeModif: str = ""
     Fichiers: list[ProcessFichierMeta] = Field(default_factory=list)
     Droits: list[ProcessDroit] = Field(default_factory=list)
-    HasDiagramme: bool = False    # true si diagramme (bytea WinDev) ou
-                                   # diagramme_json (tldraw) est renseigné
+    Diagrammes: list["ProcessDiagrammeMeta"] = Field(default_factory=list)
 
 
 class ProcessListItem(BaseModel):
@@ -119,3 +118,47 @@ class ProfilItem(BaseModel):
     Code: str
     Lib: str = ""
     Ordre: int = 0
+
+
+# ---------------------------------------------------------------------------
+#  Diagrammes (N par process, stockes dans pgt_process_fichier
+#  avec extension .excalidraw — meme pattern que WinDev qui stocke les
+#  .wddiag comme des fichiers du process).
+# ---------------------------------------------------------------------------
+
+class ProcessDiagrammeMeta(BaseModel):
+    """Metadonnees d'un diagramme (sans le contenu JSON, pour la liste
+    dans le detail du process)."""
+
+    IDProcessDiagramme: str = ""
+    Titre: str = ""
+    DateCrea: str = ""
+    DerniereModif: str = ""
+    OpeCrea: str = ""
+    NomOpeCrea: str = ""
+
+
+class ProcessDiagramme(BaseModel):
+    """Diagramme complet (avec contenu JSON Excalidraw)."""
+
+    IDProcessDiagramme: str = ""
+    IDProcess: str = ""
+    Titre: str = ""
+    ContenuJson: str = ""
+    DateCrea: str = ""
+    DerniereModif: str = ""
+    OpeCrea: str = ""
+
+
+class ProcessDiagrammeSavePayload(BaseModel):
+    """Create (IDProcessDiagramme='0') ou update d'un diagramme."""
+
+    IDProcessDiagramme: str = "0"
+    IDProcess: str
+    Titre: str = ""
+    ContenuJson: str = ""
+
+
+# Resout la forward-ref dans Process.Diagrammes: list["ProcessDiagrammeMeta"]
+from pydantic import ConfigDict  # noqa: E402
+Process.model_rebuild()

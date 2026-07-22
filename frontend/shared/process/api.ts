@@ -1,7 +1,8 @@
 // Client HTTP du module Process.
 
 import type {
-  Process, ProcessListItem, ProfilItem, SalarieHit, SocieteItem,
+  Process, ProcessDiagramme, ProcessListItem, ProfilItem, SalarieHit,
+  SocieteItem,
 } from './types'
 
 interface Ctx {
@@ -55,11 +56,21 @@ export const searchSalaries = (ctx: Ctx, q: string) =>
   req<SalarieHit[]>(
     ctx, 'GET', `/salaries-search?q=${encodeURIComponent(q)}`)
 
-export const fetchDiagramme = (ctx: Ctx, idProcess: string) =>
-  req<{ json: string }>(ctx, 'GET', `/${idProcess}/diagramme`)
+// Diagrammes (N par process). Un diagramme = un fichier .excalidraw
+// stocke dans pgt_process_fichier.
+export const fetchDiagramme = (ctx: Ctx, idDiagramme: string) =>
+  req<ProcessDiagramme>(ctx, 'GET', `/diagramme/${idDiagramme}`)
 
-export const saveDiagramme = (ctx: Ctx, idProcess: string, json: string) =>
-  req<{ ok: boolean }>(ctx, 'PUT', `/${idProcess}/diagramme`, { json })
+export const saveDiagramme = (
+  ctx: Ctx,
+  payload: {
+    IDProcessDiagramme: string; IDProcess: string
+    Titre: string; ContenuJson: string
+  },
+) => req<{ IDProcessDiagramme: string }>(ctx, 'POST', '/diagramme/save', payload)
+
+export const deleteDiagramme = (ctx: Ctx, idDiagramme: string) =>
+  req<{ ok: boolean }>(ctx, 'DELETE', `/diagramme/${idDiagramme}`)
 
 // -- Ecriture (ADM) ------------------------------------------------------
 

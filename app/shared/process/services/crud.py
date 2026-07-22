@@ -44,11 +44,7 @@ def get_process(id_process: int) -> Process | None:
     try:
         row = db.query_one(
             """SELECT id_process, titre, service, mots_cles,
-                      date_crea, derniere_modif, ope_crea, ope_modif,
-                      (
-                          (diagramme IS NOT NULL AND length(diagramme) > 0)
-                       OR (diagramme_json IS NOT NULL AND length(diagramme_json) > 0)
-                      ) AS has_diag
+                      date_crea, derniere_modif, ope_crea, ope_modif
                  FROM divers.pgt_process
                 WHERE id_process = ?
                   AND (modif_elem IS NULL OR modif_elem <> 'suppr')
@@ -73,10 +69,11 @@ def get_process(id_process: int) -> Process | None:
         NomOpeCrea=nom_salarie(ope_crea),
         OpeModif=_str_id(ope_modif) if ope_modif else "",
         NomOpeModif=nom_salarie(ope_modif),
-        HasDiagramme=bool(row.get("has_diag")),
     )
     p.Fichiers = _load_fichiers(int(id_process))
     p.Droits = _load_droits(int(id_process))
+    from app.shared.process.services.diagramme import liste_diagrammes
+    p.Diagrammes = liste_diagrammes(int(id_process))
     return p
 
 
@@ -88,6 +85,7 @@ def _load_fichiers(id_process: int) -> list[ProcessFichierMeta]:
                       date_crea, derniere_modif, ope_crea
                  FROM divers.pgt_process_fichier
                 WHERE id_process = ?
+                  AND (lower(extension) <> '.excalidraw' OR extension IS NULL)
                   AND (modif_elem IS NULL OR modif_elem <> 'suppr')
                 ORDER BY COALESCE(derniere_modif, date_crea) DESC""",
             (id_process,),

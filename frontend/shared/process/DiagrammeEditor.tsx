@@ -1,10 +1,7 @@
-// Editeur/viewer de diagramme (Excalidraw), utilise en modal fullscreen
-// dans ProcessPage. Storage : JSON serialise du scene Excalidraw
-// (elements + appState + files) dans pgt_process.diagramme_json.
-//
-// Excalidraw est libre (MIT), pas de licence commerciale requise —
-// choix pragmatique apres avoir constate que tldraw v5 exige une
-// licence payante en prod.
+// Editeur/viewer d'UN diagramme (Excalidraw) d'un process.
+// Un diagramme = 1 fichier .excalidraw dans pgt_process_fichier (N par
+// process). Stockage : JSON serialise (elements + appState + files)
+// dans contenu_fichier bytea.
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -17,9 +14,6 @@ import { fetchDiagramme, saveDiagramme } from './api'
 
 type Ctx = { apiBase: string; getToken: () => string | null }
 
-// Type minimal pour l'API imperative Excalidraw. On utilise structural
-// typing pour rester tolerant aux petites variations d'API entre
-// versions du package.
 type ExcalidrawAPI = {
   getSceneElements: () => readonly unknown[]
   getAppState: () => Record<string, unknown>
@@ -28,22 +22,23 @@ type ExcalidrawAPI = {
 
 
 export default function DiagrammeEditor({
-  ctx, idProcess, readonly, onClose,
+  ctx, idProcess, idDiagramme, initialTitre, readonly, onClose, onSaved,
 }: {
   ctx: Ctx
   idProcess: string
+  idDiagramme: string   // '0' si nouveau diagramme
+  initialTitre: string  // pour un nouveau : titre par defaut ('Nouveau diagramme')
   readonly: boolean
   onClose: () => void
+  onSaved?: (idDiagramme: string) => void
 }) {
   const apiRef = useRef<ExcalidrawAPI | null>(null)
   const dirtyRef = useRef(false)
-  // Signature (id:version) des elements au dernier save. Sert a distinguer
-  // les vrais onChange (elements modifies par l'utilisateur) des onChange
-  // internes d'Excalidraw (viewport, recalibrage, etc.) qui suivent parfois
-  // le save et remettaient a tort dirty=true.
   const savedSigRef = useRef<string>('')
   const [saving, setSaving] = useState(false)
   const [dirtyTick, setDirtyTick] = useState(0)
+  const [titre, setTitre] = useState(initialTitre)
+  const [idDiaCur, setIdDiaCur] = useState(idDiagramme)
   const [initialData, setInitialData] = useState<null | {
     elements: unknown[]
     appState: Record<string, unknown>
@@ -51,14 +46,22 @@ export default function DiagrammeEditor({
   }>(null)
   const [loading, setLoading] = useState(true)
 
-  // Charge le JSON existant AVANT de monter Excalidraw. initialData
-  // n'est pas dynamique — le composant n'est monte qu'apres le fetch.
+  // Charge le JSON existant AVANT de monter Excalidraw.
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const r = await fetchDiagramme(ctx, idProcess)
+      // Nouveau diagramme (id = '0') : pas de fetch
+      if (!idDiagramme || idDiagramme === '0') {
+        if (!cancelled) {
+          setInitialData({ elements: [], appState: {}, files: {} })
+          setLoading(false)
+        }
+        return
+      }
+      const d = await fetchDiagramme(ctx, idDiagramme)
       if (cancelled) return
-      const json = r?.json || ''
+      if (d?.Titre) setTitre(d.Titre)
+      const json = d?.ContenuJson || ''
       if (json) {
         try {
           const data = JSON.parse(json)
@@ -66,8 +69,6 @@ export default function DiagrammeEditor({
             elements: data.elements || [],
             appState: {
               ...(data.appState || {}),
-              // Excalidraw exige que collaborators soit un Map, pas un
-              // objet plain — le JSON.parse le remet en obj, on reset.
               collaborators: new Map(),
             },
             files: data.files || {},
@@ -82,9 +83,8 @@ export default function DiagrammeEditor({
       setLoading(false)
     })()
     return () => { cancelled = true }
-  }, [ctx, idProcess])
+  }, [ctx, idDiagramme])
 
-  // Handler commun de fermeture : confirmation chartee si dirty.
   const tryClose = async () => {
     if (dirtyRef.current && !readonly) {
       const ok = await showConfirm({
@@ -98,7 +98,6 @@ export default function DiagrammeEditor({
     onClose()
   }
 
-  // ESC = fermeture (avec confirmation si dirty)
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
@@ -116,6 +115,7 @@ export default function DiagrammeEditor({
       return
     }
     if (saving) return
+    const t = (titre || '').trim() || 'Diagramme'
     setSaving(true)
     try {
       const appState = { ...api.getAppState() }
@@ -126,14 +126,23 @@ export default function DiagrammeEditor({
         files: api.getFiles(),
       }
       const jsonStr = JSON.stringify(payload)
-      const r = await saveDiagramme(ctx, idProcess, jsonStr)
-      if (r?.ok) {
+      const r = await saveDiagramme(ctx, {
+        IDProcessDiagramme: idDiaCur || '0',
+        IDProcess: idProcess,
+        Titre: t,
+        ContenuJson: jsonStr,
+      })
+      if (r?.IDProcessDiagramme) {
         savedSigRef.current = elementsSig(payload.elements)
         dirtyRef.current = false
-        setDirtyTick(t => t + 1)
+        setDirtyTick(x => x + 1)
+        // Si c'etait une creation, on bascule sur l'id retourne pour
+        // que les prochains save fassent un UPDATE et non un nouvel INSERT
+        if (idDiaCur === '0' || !idDiaCur) setIdDiaCur(r.IDProcessDiagramme)
+        onSaved?.(r.IDProcessDiagramme)
         showToast('Diagramme enregistré', 'success')
       } else {
-        showToast('Échec sauvegarde (backend a répondu ' + (r ? 'ok=false' : 'null/erreur HTTP') + ')', 'error')
+        showToast('Échec sauvegarde', 'error')
       }
     } catch (e) {
       console.warn('[Diagramme] save exception', e)
@@ -143,10 +152,9 @@ export default function DiagrammeEditor({
     }
   }
 
-  // Signature stable des elements Excalidraw : detecte les vraies
-  // modifs (add/remove/edit) via id + numero de version. Ignore les
-  // onChange 'a vide' (viewport, hover, etc.) qui n'ont pas touche
-  // aux elements du dessin.
+  const dirty = dirtyRef.current
+  void dirtyTick
+
   function elementsSig(elements: readonly unknown[]): string {
     return (elements || []).map(e => {
       const el = e as { id?: string; version?: number }
@@ -154,26 +162,31 @@ export default function DiagrammeEditor({
     }).join(',')
   }
 
-  const dirty = dirtyRef.current
-  void dirtyTick
-
   const content = (
     <div style={{ position: 'fixed', inset: 0, zIndex: 95,
                   display: 'flex', flexDirection: 'column',
                   background: '#fff' }}>
       <header className="bg-white border-b border-c-line-soft px-3 py-2 flex items-center gap-2 shrink-0">
-        <div className="flex-1 text-sm font-semibold">
-          Diagramme{readonly ? ' (lecture seule)' : ''}
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          {readonly ? (
+            <div className="text-sm font-semibold truncate">
+              {titre} <span className="text-xs italic text-c-ink-soft">(lecture seule)</span>
+            </div>
+          ) : (
+            <input value={titre} onChange={e => setTitre(e.target.value)}
+              placeholder="Titre du diagramme"
+              className="text-sm font-semibold border border-c-line rounded px-2 py-1 bg-white min-w-[240px]" />
+          )}
           {dirty && !readonly && (
-            <span className="ml-2 text-xs text-amber-600 italic">
+            <span className="text-xs text-amber-600 italic shrink-0">
               modifications non enregistrées
             </span>
           )}
         </div>
         {!readonly && (
-          <button onClick={save} disabled={saving || !dirty}
+          <button onClick={save} disabled={saving}
             className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-semibold ${
-              !dirty || saving
+              saving
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-c-brand text-white hover:brightness-110'}`}>
             <Save className="w-4 h-4" /> Enregistrer
@@ -197,13 +210,9 @@ export default function DiagrammeEditor({
             viewModeEnabled={readonly}
             excalidrawAPI={(api) => {
               apiRef.current = api as ExcalidrawAPI
-              // Signature initiale des elements charges (post-load)
               savedSigRef.current = elementsSig(api.getSceneElements())
             }}
             onChange={(elements) => {
-              // Ignore les onChange internes d'Excalidraw : on ne
-              // marque dirty QUE si la signature (id:version) des
-              // elements a change vs la derniere sauvegarde.
               const sig = elementsSig(elements)
               if (sig === savedSigRef.current) return
               if (!dirtyRef.current) {

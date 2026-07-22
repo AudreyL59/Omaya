@@ -18,8 +18,9 @@ from fastapi.responses import Response
 from app.core.auth.dependencies import get_current_user
 from app.core.auth.schemas import UserToken
 from app.shared.process.schemas.process import (
-    Process, ProcessDroitSavePayload, ProcessListItem, ProcessSavePayload,
-    ProfilItem,
+    Process, ProcessDiagramme, ProcessDiagrammeMeta,
+    ProcessDiagrammeSavePayload, ProcessDroitSavePayload, ProcessListItem,
+    ProcessSavePayload, ProfilItem,
 )
 from app.shared.process.services import (
     crud as crud_svc,
@@ -69,29 +70,53 @@ def get_process_router(intranet_key: str, can_edit: bool) -> APIRouter:
                              _user: UserToken = Depends(get_current_user)):
         return salaries_svc.search_salaries(q)
 
-    @router.get("/{id_process}/diagramme")
-    def get_diagramme(id_process: str,
+    # -- Diagrammes (N par process, stockes dans pgt_process_fichier
+    #    avec extension .excalidraw) ---------------------------------------
+
+    @router.get("/{id_process}/diagrammes",
+                 response_model=list[ProcessDiagrammeMeta])
+    def get_diagrammes(id_process: str,
+                        _user: UserToken = Depends(get_current_user)):
+        try:
+            id_p = int(id_process)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "id_process invalide")
+        return diag_svc.liste_diagrammes(id_p)
+
+    @router.get("/diagramme/{id_diagramme}", response_model=ProcessDiagramme)
+    def get_diagramme(id_diagramme: str,
                        _user: UserToken = Depends(get_current_user)):
         try:
-            id_p = int(id_process)
+            id_d = int(id_diagramme)
         except (TypeError, ValueError):
-            raise HTTPException(400, "id_process invalide")
-        return {"json": diag_svc.get_diagramme(id_p) or ""}
+            raise HTTPException(400, "id_diagramme invalide")
+        d = diag_svc.get_diagramme(id_d)
+        if not d:
+            raise HTTPException(404, "diagramme introuvable")
+        return d
 
-    @router.put("/{id_process}/diagramme")
-    def put_diagramme(id_process: str, payload: dict = Body(...),
-                       user: UserToken = Depends(get_current_user)):
+    @router.post("/diagramme/save", response_model=dict)
+    def post_save_diagramme(
+        payload: ProcessDiagrammeSavePayload = Body(...),
+        user: UserToken = Depends(get_current_user),
+    ):
+        _require_edit()
+        id_d = diag_svc.save_diagramme(payload, int(user.id_salarie))
+        if not id_d:
+            raise HTTPException(500, "echec sauvegarde diagramme")
+        return {"IDProcessDiagramme": id_d}
+
+    @router.delete("/diagramme/{id_diagramme}")
+    def delete_diagramme(id_diagramme: str,
+                          user: UserToken = Depends(get_current_user)):
         _require_edit()
         try:
-            id_p = int(id_process)
+            id_d = int(id_diagramme)
         except (TypeError, ValueError):
-            raise HTTPException(400, "id_process invalide")
-        js = payload.get("json") if isinstance(payload, dict) else None
-        if not isinstance(js, str):
-            js = ""
-        ok = diag_svc.save_diagramme(id_p, js, int(user.id_salarie))
+            raise HTTPException(400, "id_diagramme invalide")
+        ok = diag_svc.delete_diagramme(id_d, int(user.id_salarie))
         if not ok:
-            raise HTTPException(500, "echec sauvegarde diagramme")
+            raise HTTPException(500, "echec suppression diagramme")
         return {"ok": True}
 
     @router.get("/{id_process}", response_model=Process)

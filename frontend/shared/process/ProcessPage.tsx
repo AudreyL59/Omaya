@@ -14,15 +14,15 @@ import {
 
 import { showConfirm, showToast } from '../ui/dialog'
 import {
-  deleteDroit, deleteFichier, deleteProcess, fetchList, fetchOne,
-  fetchProfils, fetchServices, fetchSocietes, fichierUrl, saveDroit,
-  saveProcess, uploadFichier,
+  deleteDiagramme, deleteDroit, deleteFichier, deleteProcess, fetchList,
+  fetchOne, fetchProfils, fetchServices, fetchSocietes, fichierUrl,
+  saveDroit, saveProcess, uploadFichier,
 } from './api'
 import DiagrammeEditor from './DiagrammeEditor'
 import SalarieAutocomplete from './SalarieAutocomplete'
 import type {
-  Process, ProcessDroit, ProcessFichierMeta, ProcessListItem,
-  ProcessPageProps, ProfilItem, SocieteItem,
+  Process, ProcessDiagrammeMeta, ProcessDroit, ProcessFichierMeta,
+  ProcessListItem, ProcessPageProps, ProfilItem, SocieteItem,
 } from './types'
 
 const fmtSize = (n: number): string => {
@@ -69,7 +69,11 @@ export default function ProcessPage(props: ProcessPageProps) {
   const [selectedId, setSelectedId] = useState<string>('')
   const [editing, setEditing] = useState(false)
   const [showDroits, setShowDroits] = useState(false)
-  const [showDiag, setShowDiag] = useState(false)
+  // Diagramme ouvert : null = fermé, {id:'0', titre:'...'} = nouveau,
+  // sinon meta existante.
+  const [diagOpen, setDiagOpen] = useState<null | {
+    id: string; titre: string
+  }>(null)
 
   // Form fields
   const [titre, setTitre] = useState('')
@@ -312,23 +316,27 @@ export default function ProcessPage(props: ProcessPageProps) {
                   onUpload={uploadPJ} onDelete={supprimerPJ} />
               )}
 
-              {/* Diagramme (V2) */}
+              {/* Diagrammes (N par process) */}
               {selected && !editing && (
-                <section>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-semibold">Diagramme</h3>
-                    <button onClick={() => setShowDiag(true)}
-                      className="flex items-center gap-1 px-2 py-1 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110">
-                      <Network className="w-3.5 h-3.5" />
-                      {canEdit ? 'Ouvrir / Éditer' : 'Ouvrir'}
-                    </button>
-                  </div>
-                  {!selected.HasDiagramme && (
-                    <div className="text-xs italic text-c-ink-faint py-2">
-                      Aucun diagramme{canEdit && ' — clique sur "Ouvrir / Éditer" pour en créer un'}
-                    </div>
-                  )}
-                </section>
+                <DiagrammesList selected={selected} canEdit={canEdit}
+                  onOpen={(id, titre) => setDiagOpen({ id, titre })}
+                  onNouveau={() => setDiagOpen({
+                    id: '0', titre: `Diagramme ${(selected.Diagrammes?.length || 0) + 1}`,
+                  })}
+                  onDelete={async (id) => {
+                    const ok = await showConfirm({
+                      title: 'Supprimer ce diagramme ?',
+                      message: 'Action irréversible.',
+                      confirmLabel: 'Supprimer', variant: 'danger',
+                    })
+                    if (!ok) return
+                    const r = await deleteDiagramme(ctx, id)
+                    if (r?.ok) {
+                      const p = await fetchOne(ctx, selected.IDProcess)
+                      if (p) setSelected(p)
+                      showToast('Diagramme supprimé', 'success')
+                    }
+                  }} />
               )}
             </div>
           </>
@@ -346,12 +354,18 @@ export default function ProcessPage(props: ProcessPageProps) {
       )}
 
       {/* Editeur/viewer de diagramme */}
-      {showDiag && selected && (
-        <DiagrammeEditor ctx={ctx} idProcess={selected.IDProcess}
+      {diagOpen && selected && (
+        <DiagrammeEditor ctx={ctx}
+          idProcess={selected.IDProcess}
+          idDiagramme={diagOpen.id}
+          initialTitre={diagOpen.titre}
           readonly={!canEdit}
+          onSaved={async () => {
+            const p = await fetchOne(ctx, selected.IDProcess)
+            if (p) setSelected(p)
+          }}
           onClose={async () => {
-            setShowDiag(false)
-            // recharge le detail pour rafraichir HasDiagramme
+            setDiagOpen(null)
             const p = await fetchOne(ctx, selected.IDProcess)
             if (p) setSelected(p)
           }} />
@@ -511,6 +525,63 @@ function FichiersList({ selected, ctx, canEdit, onUpload, onDelete }: {
       </div>
       {/* satisfait TS pour fileRef non utilisé */}
       <input ref={r => fileRef[1](r)} hidden />
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+//  Liste des diagrammes du process
+// ---------------------------------------------------------------------------
+
+function DiagrammesList({ selected, canEdit, onOpen, onNouveau, onDelete }: {
+  selected: Process
+  canEdit: boolean
+  onOpen: (id: string, titre: string) => void
+  onNouveau: () => void
+  onDelete: (id: string) => void
+}) {
+  const items = selected.Diagrammes || []
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-semibold">
+          Diagrammes ({items.length})
+        </h3>
+        {canEdit && (
+          <button onClick={onNouveau}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110">
+            <Network className="w-3.5 h-3.5" /> Nouveau diagramme
+          </button>
+        )}
+      </div>
+      {items.length === 0 && (
+        <div className="text-xs italic text-c-ink-faint py-2">
+          Aucun diagramme{canEdit && ' — clique sur "Nouveau diagramme" pour en créer un'}
+        </div>
+      )}
+      <div className="space-y-1">
+        {items.map(d => (
+          <div key={d.IDProcessDiagramme}
+            className="flex items-center gap-2 px-2 py-1.5 border border-c-line-soft rounded bg-white">
+            <Network className="w-4 h-4 text-c-brand shrink-0" />
+            <button onClick={() => onOpen(d.IDProcessDiagramme, d.Titre)}
+              className="flex-1 min-w-0 text-left hover:underline">
+              <div className="text-sm truncate">{d.Titre || '(sans titre)'}</div>
+              <div className="text-[10px] text-c-ink-faint">
+                {d.NomOpeCrea}
+                {d.DerniereModif && ` · maj ${fmtDateFR(d.DerniereModif)}`}
+              </div>
+            </button>
+            {canEdit && (
+              <button onClick={() => onDelete(d.IDProcessDiagramme)}
+                className="p-1 rounded hover:bg-red-50 text-red-600"
+                title="Supprimer">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
