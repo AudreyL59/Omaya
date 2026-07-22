@@ -2,8 +2,9 @@
 // dans ProcessPage. Storage : JSON serialise du store tldraw (backend
 // stocke dans pgt_process.diagramme_json).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Tldraw, type Editor, getSnapshot, loadSnapshot } from 'tldraw'
+import { getAssetUrlsByImport } from '@tldraw/assets/urls'
 import 'tldraw/tldraw.css'
 import { Save, X } from 'lucide-react'
 
@@ -24,6 +25,10 @@ export default function DiagrammeEditor({
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Assets tldraw servis en local (bundle) plutot que depuis unpkg :
+  // evite le CDN externe (firewall d'entreprise) qui causait un ecran
+  // noir a la 1ere interaction. Memoise pour ne pas re-generer les URLs.
+  const assetUrls = useMemo(() => getAssetUrlsByImport(), [])
 
   // ESC = close (avec confirmation si dirty)
   useEffect(() => {
@@ -113,8 +118,8 @@ export default function DiagrammeEditor({
           <X className="w-4 h-4" />
         </button>
       </header>
-      <div className="flex-1 relative">
-        <Tldraw onMount={setEditor} />
+      <div className="flex-1 relative bg-white">
+        <Tldraw onMount={setEditor} assetUrls={assetUrls} />
       </div>
     </div>
   )
