@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Tldraw, type Editor, getSnapshot, loadSnapshot } from 'tldraw'
-import { getAssetUrlsByImport } from '@tldraw/assets/urls'
+import { getAssetUrlsByImport } from '@tldraw/assets/imports.vite'
 import 'tldraw/tldraw.css'
 import { Save, X } from 'lucide-react'
 
