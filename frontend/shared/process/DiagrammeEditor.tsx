@@ -37,6 +37,11 @@ export default function DiagrammeEditor({
 }) {
   const apiRef = useRef<ExcalidrawAPI | null>(null)
   const dirtyRef = useRef(false)
+  // Signature (id:version) des elements au dernier save. Sert a distinguer
+  // les vrais onChange (elements modifies par l'utilisateur) des onChange
+  // internes d'Excalidraw (viewport, recalibrage, etc.) qui suivent parfois
+  // le save et remettaient a tort dirty=true.
+  const savedSigRef = useRef<string>('')
   const [saving, setSaving] = useState(false)
   const [dirtyTick, setDirtyTick] = useState(0)
   const [initialData, setInitialData] = useState<null | {
@@ -93,7 +98,6 @@ export default function DiagrammeEditor({
 
   const save = async () => {
     const api = apiRef.current
-    console.log('[Diagramme] save clicked', { hasApi: !!api, saving, dirty: dirtyRef.current })
     if (!api) {
       showToast("API Excalidraw non initialisée", 'error')
       return
@@ -109,10 +113,9 @@ export default function DiagrammeEditor({
         files: api.getFiles(),
       }
       const jsonStr = JSON.stringify(payload)
-      console.log('[Diagramme] payload size', jsonStr.length, 'chars')
       const r = await saveDiagramme(ctx, idProcess, jsonStr)
-      console.log('[Diagramme] save response', r)
       if (r?.ok) {
+        savedSigRef.current = elementsSig(payload.elements)
         dirtyRef.current = false
         setDirtyTick(t => t + 1)
         showToast('Diagramme enregistré', 'success')
@@ -120,11 +123,22 @@ export default function DiagrammeEditor({
         showToast('Échec sauvegarde (backend a répondu ' + (r ? 'ok=false' : 'null/erreur HTTP') + ')', 'error')
       }
     } catch (e) {
-      console.error('[Diagramme] save exception', e)
+      console.warn('[Diagramme] save exception', e)
       showToast(`Échec: ${e instanceof Error ? e.message : String(e)}`, 'error')
     } finally {
       setSaving(false)
     }
+  }
+
+  // Signature stable des elements Excalidraw : detecte les vraies
+  // modifs (add/remove/edit) via id + numero de version. Ignore les
+  // onChange 'a vide' (viewport, hover, etc.) qui n'ont pas touche
+  // aux elements du dessin.
+  function elementsSig(elements: readonly unknown[]): string {
+    return (elements || []).map(e => {
+      const el = e as { id?: string; version?: number }
+      return `${el.id || '?'}:${el.version ?? 0}`
+    }).join(',')
   }
 
   const dirty = dirtyRef.current
@@ -172,12 +186,17 @@ export default function DiagrammeEditor({
             initialData={initialData as any}
             viewModeEnabled={readonly}
             excalidrawAPI={(api) => {
-              console.log('[Diagramme] excalidrawAPI ready', !!api)
               apiRef.current = api as ExcalidrawAPI
+              // Signature initiale des elements charges (post-load)
+              savedSigRef.current = elementsSig(api.getSceneElements())
             }}
-            onChange={() => {
+            onChange={(elements) => {
+              // Ignore les onChange internes d'Excalidraw : on ne
+              // marque dirty QUE si la signature (id:version) des
+              // elements a change vs la derniere sauvegarde.
+              const sig = elementsSig(elements)
+              if (sig === savedSigRef.current) return
               if (!dirtyRef.current) {
-                console.log('[Diagramme] 1st onChange -> dirty=true')
                 dirtyRef.current = true
                 setDirtyTick(t => t + 1)
               }
