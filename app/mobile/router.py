@@ -20,6 +20,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.mobile import auth as auth_router
+from app.mobile import dialogues as dialogues_router
 
 router = APIRouter(prefix="/WebRest_Omayapp", tags=["mobile"])
 
@@ -33,3 +34,4 @@ def ping():
 # Sous-routers par groupe fonctionnel — a completer au fur et a mesure
 # du portage des 192 endpoints du xlsx (34 groupes).
 router.include_router(auth_router.router)
+router.include_router(dialogues_router.router)
