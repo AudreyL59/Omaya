@@ -16,7 +16,7 @@ from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
 from app.intranets.vendeur.routers.clusters import router as clusters_router
 from app.intranets.vendeur.routers.tickets import router as tickets_router
-from app.intranets.vendeur.routers.process import router as process_router
+from app.shared.process.router import get_process_router
 from app.intranets.vendeur.routers.tickets_call import router as tickets_call_router
 from app.intranets.vendeur.routers.tickets_call_suivi import router as tickets_call_suivi_router
 from app.intranets.vendeur.routers.ticket_call_energie import router as ticket_call_energie_router
@@ -50,7 +50,7 @@ router.include_router(clusters_router)
 # Module tickets shared : filtre par DroitAccèsVend pour Vendeur
 router.include_router(get_tickets_router("DroitAccèsVend"))
 router.include_router(tickets_router)
-router.include_router(process_router)
+router.include_router(get_process_router("vendeur", can_edit=False))
 router.include_router(tickets_call_router)
 # Nouvelle page 'Tickets Call Suivi' (fusion Fibre + Energie avec
 # filtrage orga, cf. droit ProdRezo)

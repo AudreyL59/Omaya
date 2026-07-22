@@ -51,6 +51,7 @@ from app.shared.production.router import router as production_router
 from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
 from app.shared.dialogues.router import get_dialogues_router
+from app.shared.process.router import get_process_router
 
 router = APIRouter(
     prefix="/adm",
@@ -111,6 +112,8 @@ router.include_router(get_recherche_cv_router("adm"))
 router.include_router(get_tickets_router("DroitAccès"))
 # Module dialogues shared (chat + workflow ticket)
 router.include_router(get_dialogues_router("adm"))
+# Module process shared (bibliothèque procédures/tutos) : ADM = CRUD complet
+router.include_router(get_process_router("adm", can_edit=True))
 
 
 @router.get("/ping")

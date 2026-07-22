@@ -16,6 +16,7 @@ import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import TicketsPage from '@shared/tickets/TicketsPage'
 import DialoguesPage from '@shared/dialogues/DialoguesPage'
+import ProcessPage from '@shared/process/ProcessPage'
 import { DialogHost } from '@shared/ui/dialog'
 import { getToken, getStoredUser } from '@/api'
 
@@ -59,7 +60,9 @@ function App() {
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={VENDEUR_API} />} />
           <Route path="clusters" element={<ClustersPage />} />
           <Route path="tickets" element={<TicketsPage apiBase={VENDEUR_API} getToken={getToken} />} />
-          <Route path="process" element={<PlaceholderPage />} />
+          <Route path="process" element={
+            <ProcessPage apiBase={VENDEUR_API} getToken={getToken} canEdit={false} />
+          } />
           <Route path="tickets-call" element={<TicketsCallSuiviPage />} />
           <Route path="tickets-call/energie" element={<TicketCallEnergiePage />} />
           <Route path="tickets-call/fibre" element={<TicketCallFibrePage />} />

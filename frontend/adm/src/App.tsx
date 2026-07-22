@@ -78,6 +78,7 @@ import ProductionPage from '@shared/production/ProductionPage'
 import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import AdmTicketsPage from '@/pages/AdmTicketsPage'
 import DialoguesPage from '@shared/dialogues/DialoguesPage'
+import ProcessPage from '@shared/process/ProcessPage'
 import { getToken, getStoredUser } from '@/api'
 import Layout from '@/components/Layout'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -189,6 +190,9 @@ function App() {
               apiBase={ADM_API}
               getToken={getToken}
               userCial={String(getStoredUser()?.id_salarie ?? '')} />
+          } />
+          <Route path="process" element={
+            <ProcessPage apiBase={ADM_API} getToken={getToken} canEdit={true} />
           } />
           {/* Fallback : toute route inconnue dans le shell auth → Placeholder */}
           <Route path="*" element={<PlaceholderPage />} />
