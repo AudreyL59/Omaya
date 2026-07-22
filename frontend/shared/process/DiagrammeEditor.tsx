@@ -3,6 +3,7 @@
 // stocke dans pgt_process.diagramme_json).
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Tldraw, type Editor, getSnapshot, loadSnapshot } from 'tldraw'
 // Alias Vite (resolve.alias 'tldraw-assets-vite') pointe vers
 // node_modules/@tldraw/assets/imports.vite.js du projet courant.
@@ -120,7 +121,12 @@ export default function DiagrammeEditor({
   const dirty = dirtyRef.current
   void dirtyTick  // dependance pour le render du header
 
-  return (
+  // Rendu via un portal attache au body : sort DiagrammeEditor de la
+  // hierarchie du composant parent (ProcessPage). Toute la logique de
+  // rerender du parent (menu, notifs, useMenu, useAuth…) reste sans
+  // effet sur ce sous-arbre. Tldraw reste alors sur son propre canvas
+  // pendant toute la duree de vie du modal.
+  return createPortal((
     <div style={{ position: 'fixed', inset: 0, zIndex: 95,
                   display: 'flex', flexDirection: 'column',
                   background: '#fff' }}>
@@ -156,5 +162,5 @@ export default function DiagrammeEditor({
         </div>
       </div>
     </div>
-  )
+  ), document.body)
 }
