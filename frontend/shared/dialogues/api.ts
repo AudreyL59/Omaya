@@ -3,7 +3,7 @@
 
 import type {
   Dialogue, DialogueMsg, DialoguePJ, DialogueStatut, DialogueTheme,
-  SalarieDest,
+  SalarieDest, TacheIT,
 } from './types'
 
 interface Ctx {
@@ -83,6 +83,11 @@ export const deleteMessage = (ctx: Ctx, payload: unknown) =>
 
 export const registerPJ = (ctx: Ctx, payload: unknown) =>
   req<DialoguePJ>(ctx, 'POST', '/enregistre-pj', payload)
+
+// -- Suivi IT --------------------------------------------------------------
+
+export const fetchTachesIT = (ctx: Ctx, idDialogue: string) =>
+  req<TacheIT[]>(ctx, 'GET', `/${idDialogue}/taches-it`)
 
 // -- Upload / download PJ --------------------------------------------------
 

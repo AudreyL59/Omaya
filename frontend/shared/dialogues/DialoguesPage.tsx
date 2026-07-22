@@ -12,7 +12,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeft, CheckCheck, Lock, Paperclip, Plus, Search, Send, Smile, Trash2,
+  ArrowLeft, CheckCheck, ClipboardList, Files, Lock, Paperclip, Plus,
+  Search, Send, Smile, Trash2, X,
 } from 'lucide-react'
 import EmojiPicker from 'emoji-picker-react'
 import type { EmojiClickData } from 'emoji-picker-react'
@@ -23,6 +24,7 @@ import {
   sendMessage, uploadFichier,
 } from './api'
 import { PjInline } from './PjInline'
+import { PjListModal, TachesITModal } from './DialogModals'
 import type {
   Dialogue, DialogueMsg, DialoguePageProps, DialoguePJ, DialogueStatut,
 } from './types'
@@ -86,6 +88,12 @@ export default function DialoguesPage(props: DialoguePageProps) {
   const [pjs, setPjs] = useState<DialoguePJ[]>([])  // PJs attachees pour ce message
   const [showEmoji, setShowEmoji] = useState(false)
   const [search, setSearch] = useState('')
+  // Recherche IN-dialogue (surlignage des messages qui matchent)
+  const [showChatSearch, setShowChatSearch] = useState(false)
+  const [chatSearch, setChatSearch] = useState('')
+  // Modals annexes
+  const [showPjList, setShowPjList] = useState(false)
+  const [showTachesIT, setShowTachesIT] = useState(false)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollBottomRef = useRef<HTMLDivElement>(null)
@@ -161,6 +169,8 @@ export default function DialoguesPage(props: DialoguePageProps) {
     setMsgTexte('')
     setPjs([])
     setShowEmoji(false)
+    setShowChatSearch(false); setChatSearch('')
+    setShowPjList(false); setShowTachesIT(false)
     if (d.MsgNonLu) {
       await marquerLu(ctx, d.IDDialogue, userCial)
       // Optimistic : marque MsgNonLu=false dans la liste locale
@@ -360,30 +370,74 @@ export default function DialoguesPage(props: DialoguePageProps) {
         )}
         {dialogueOuvert && (
           <>
-            <header className="p-3 border-b border-c-line-soft flex items-center gap-2">
-              <button onClick={() => setIdOuvert('')}
-                className="lg:hidden p-1 hover:bg-gray-100 rounded">
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm truncate">
-                  {dialogueOuvert.Sujet || '(sans sujet)'}
+            <header className="border-b border-c-line-soft">
+              <div className="p-3 flex items-center gap-2">
+                <button onClick={() => setIdOuvert('')}
+                  className="lg:hidden p-1 hover:bg-gray-100 rounded">
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm truncate">
+                    {dialogueOuvert.Sujet || '(sans sujet)'}
+                  </div>
+                  <div className="text-xs text-c-ink-soft truncate">
+                    {dialogueOuvert.LibTheme} ·{' '}
+                    {dialogueOuvert.Dests?.map(x => x.LibDest).filter(Boolean).join(', ')}
+                  </div>
                 </div>
-                <div className="text-xs text-c-ink-soft truncate">
-                  {dialogueOuvert.LibTheme} ·{' '}
-                  {dialogueOuvert.Dests?.map(x => x.LibDest).filter(Boolean).join(', ')}
-                </div>
+                {/* Actions : recherche in-dialogue, PJ, tâches IT */}
+                <button onClick={() => setShowChatSearch(v => !v)}
+                  className={`p-2 rounded hover:bg-gray-100 ${
+                    showChatSearch ? 'bg-c-brand-soft text-c-brand' : 'text-c-ink-soft'}`}
+                  title="Rechercher dans ce dialogue">
+                  <Search className="w-4 h-4" />
+                </button>
+                <button onClick={() => setShowPjList(true)}
+                  className="relative p-2 rounded hover:bg-gray-100 text-c-ink-soft"
+                  title="Pièces jointes du dialogue">
+                  <Files className="w-4 h-4" />
+                  {dialogueOuvert.PJs?.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-c-brand text-white text-[10px] font-semibold flex items-center justify-center">
+                      {dialogueOuvert.PJs.length}
+                    </span>
+                  )}
+                </button>
+                <button onClick={() => setShowTachesIT(true)}
+                  className="p-2 rounded hover:bg-gray-100 text-c-ink-soft"
+                  title="Suivi IT">
+                  <ClipboardList className="w-4 h-4" />
+                </button>
               </div>
+              {showChatSearch && (
+                <div className="px-3 pb-2 flex items-center gap-2 bg-c-surface-soft">
+                  <Search className="w-3.5 h-3.5 text-c-ink-soft" />
+                  <input autoFocus value={chatSearch}
+                    onChange={e => setChatSearch(e.target.value)}
+                    placeholder="Rechercher dans les messages…"
+                    className="flex-1 text-sm border border-c-line rounded px-2 py-1 bg-white" />
+                  <button onClick={() => { setShowChatSearch(false); setChatSearch('') }}
+                    className="p-1 rounded hover:bg-gray-200">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </header>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
               {dialogueOuvert.Echanges?.map(m => {
                 const mine = m.Expediteur === userCial
+                const q = chatSearch.trim().toUpperCase()
+                const matches = q ? (
+                  decodeContent(m).toUpperCase().includes(q) ||
+                  (m.mesPJs || []).some(pj => (pj.NomFic || '').toUpperCase().includes(q))
+                ) : false
                 return (
                   <div key={m.IDMessage}
                     className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[75%] group relative ${
-                      mine ? 'bg-blue-100' : 'bg-white'} border border-c-line-soft rounded-lg p-2`}>
+                      mine ? 'bg-blue-100' : 'bg-white'} border ${
+                      matches ? 'border-yellow-400 ring-2 ring-yellow-300'
+                              : 'border-c-line-soft'} rounded-lg p-2`}>
                       {!mine && (
                         <div className="text-[10px] text-c-brand font-semibold mb-0.5">
                           {m.NomExp || `#${m.Expediteur}`}
@@ -470,6 +524,17 @@ export default function DialoguesPage(props: DialoguePageProps) {
           </>
         )}
       </main>
+
+      {/* Modals annexes */}
+      {showPjList && dialogueOuvert && (
+        <PjListModal pjs={dialogueOuvert.PJs || []}
+          ctx={ctx} idDialogue={dialogueOuvert.IDDialogue}
+          onClose={() => setShowPjList(false)} />
+      )}
+      {showTachesIT && dialogueOuvert && (
+        <TachesITModal ctx={ctx} idDialogue={dialogueOuvert.IDDialogue}
+          onClose={() => setShowTachesIT(false)} />
+      )}
     </div>
   )
 }

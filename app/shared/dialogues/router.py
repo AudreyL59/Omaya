@@ -22,7 +22,7 @@ from app.core.auth.schemas import UserToken
 from app.shared.dialogues.schemas.dialogues import (
     Dialogue, DialogueMsgPayload, DialoguePJPayload, DialogueSavePayload,
     DialogueStatut, DialogueTheme, MsgModifPayload, MsgSupprPayload,
-    ReponseTK, SalarieDest, DialogueMsg, DialoguePJ,
+    ReponseTK, SalarieDest, DialogueMsg, DialoguePJ, TacheIT,
 )
 from app.shared.dialogues.services import (
     destinataires as dest_svc,
@@ -32,6 +32,7 @@ from app.shared.dialogues.services import (
     msg as msg_svc,
     pj as pj_svc,
     statuts as statuts_svc,
+    taches_it as taches_it_svc,
     themes as themes_svc,
 )
 
@@ -116,6 +117,17 @@ def get_dialogues_router(intranet_key: str) -> APIRouter:
     def post_enr_pj(payload: DialoguePJPayload = Body(...),
                      _user: UserToken = Depends(get_current_user)):
         return pj_svc.enregistrer_pj(payload)
+
+    # -- Suivi IT : taches liees a un dialogue -----------------------------
+
+    @router.get("/{id_dialogue}/taches-it", response_model=list[TacheIT])
+    def get_taches_it(id_dialogue: str,
+                       _user: UserToken = Depends(get_current_user)):
+        try:
+            id_d = int(id_dialogue)
+        except (TypeError, ValueError):
+            return []
+        return taches_it_svc.liste_taches_it(id_d)
 
     # -- Upload / download PJ ---------------------------------------------
 

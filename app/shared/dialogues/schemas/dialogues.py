@@ -186,6 +186,27 @@ class MsgSupprPayload(BaseModel):
 #  Réponses simples
 # ---------------------------------------------------------------------------
 
+class TacheIT(BaseModel):
+    """Portage St_TacheIT (partie affichee dans l'onglet 'Suivi IT'
+    d'un dialogue). Regroupe la tache et son statut/type resolu."""
+
+    IDTacheIT: str = ""
+    IDDialogue: str = ""
+    Titre: str = ""
+    Contenu: str = ""
+    LibStatut: str = ""
+    CouleurStatut: int = 0         # WinDev COLORREF (R + G*256 + B*65536)
+    LibTache: str = ""             # libelle du type de tache
+    DateCrea: str = ""             # ISO
+    OpCrea: str = ""
+    NomOpCrea: str = ""            # 'NOM Prenom'
+    OpTraitement: str = ""
+    NomOpTraitement: str = ""
+    Terminee: bool = False
+    TermineeDate: str = ""
+    Version: str = ""
+
+
 class ReponseTK(BaseModel):
     """Portage STRéponseTK : réponse standard des procs d'écriture."""
 

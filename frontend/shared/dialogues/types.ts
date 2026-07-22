@@ -75,6 +75,24 @@ export interface Dialogue {
   Histo: DialogueHisto[]
 }
 
+export interface TacheIT {
+  IDTacheIT: string
+  IDDialogue: string
+  Titre: string
+  Contenu: string
+  LibStatut: string
+  CouleurStatut: number
+  LibTache: string
+  DateCrea: string
+  OpCrea: string
+  NomOpCrea: string
+  OpTraitement: string
+  NomOpTraitement: string
+  Terminee: boolean
+  TermineeDate: string
+  Version: string
+}
+
 export interface DialoguePageProps {
   apiBase: string             // ex: '/api/vendeur' ou '/api/adm'
   getToken: () => string | null
