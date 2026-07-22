@@ -23,6 +23,7 @@ from app.mobile import auth as auth_router
 from app.mobile import call as call_router
 from app.mobile import call_sfr as call_sfr_router
 from app.mobile import dialogues as dialogues_router
+from app.mobile import misc as misc_router
 
 router = APIRouter(prefix="/WebRest_Omayapp", tags=["mobile"])
 
@@ -39,3 +40,4 @@ router.include_router(auth_router.router)
 router.include_router(dialogues_router.router)
 router.include_router(call_router.router)
 router.include_router(call_sfr_router.router)
+router.include_router(misc_router.router)
