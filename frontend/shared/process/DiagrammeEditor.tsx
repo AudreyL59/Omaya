@@ -93,28 +93,35 @@ export default function DiagrammeEditor({
 
   const save = async () => {
     const api = apiRef.current
-    if (!api || saving) return
+    console.log('[Diagramme] save clicked', { hasApi: !!api, saving, dirty: dirtyRef.current })
+    if (!api) {
+      showToast("API Excalidraw non initialisée", 'error')
+      return
+    }
+    if (saving) return
     setSaving(true)
     try {
       const appState = { ...api.getAppState() }
-      // collaborators (Map) non serialisable en JSON standard
       delete (appState as Record<string, unknown>).collaborators
       const payload = {
         elements: api.getSceneElements(),
         appState,
         files: api.getFiles(),
       }
-      const r = await saveDiagramme(ctx, idProcess, JSON.stringify(payload))
+      const jsonStr = JSON.stringify(payload)
+      console.log('[Diagramme] payload size', jsonStr.length, 'chars')
+      const r = await saveDiagramme(ctx, idProcess, jsonStr)
+      console.log('[Diagramme] save response', r)
       if (r?.ok) {
         dirtyRef.current = false
         setDirtyTick(t => t + 1)
         showToast('Diagramme enregistré', 'success')
       } else {
-        showToast('Échec sauvegarde', 'error')
+        showToast('Échec sauvegarde (backend a répondu ' + (r ? 'ok=false' : 'null/erreur HTTP') + ')', 'error')
       }
     } catch (e) {
-      console.warn('save diagramme', e)
-      showToast('Échec sauvegarde', 'error')
+      console.error('[Diagramme] save exception', e)
+      showToast(`Échec: ${e instanceof Error ? e.message : String(e)}`, 'error')
     } finally {
       setSaving(false)
     }
@@ -164,9 +171,13 @@ export default function DiagrammeEditor({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             initialData={initialData as any}
             viewModeEnabled={readonly}
-            excalidrawAPI={(api) => { apiRef.current = api as ExcalidrawAPI }}
+            excalidrawAPI={(api) => {
+              console.log('[Diagramme] excalidrawAPI ready', !!api)
+              apiRef.current = api as ExcalidrawAPI
+            }}
             onChange={() => {
               if (!dirtyRef.current) {
+                console.log('[Diagramme] 1st onChange -> dirty=true')
                 dirtyRef.current = true
                 setDirtyTick(t => t + 1)
               }
