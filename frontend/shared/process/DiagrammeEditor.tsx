@@ -158,7 +158,10 @@ export default function DiagrammeEditor({
       </header>
       <div style={{ position: 'relative', flex: 1 }}>
         <div style={{ position: 'absolute', inset: 0 }}>
-          <StableTldraw onMount={handleMount} assetUrls={assetUrls} />
+          {/* assetUrls temporairement desactive pour tester : peut-etre
+              que le path Vite en prod (base /adm/) genere des URLs
+              cassees quand tldraw les demande en runtime. */}
+          <StableTldraw onMount={handleMount} assetUrls={undefined as any} />
         </div>
       </div>
     </div>
