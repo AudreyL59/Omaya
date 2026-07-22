@@ -20,6 +20,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.mobile import auth as auth_router
+from app.mobile import call as call_router
+from app.mobile import call_sfr as call_sfr_router
 from app.mobile import dialogues as dialogues_router
 
 router = APIRouter(prefix="/WebRest_Omayapp", tags=["mobile"])
@@ -35,3 +37,5 @@ def ping():
 # du portage des 192 endpoints du xlsx (34 groupes).
 router.include_router(auth_router.router)
 router.include_router(dialogues_router.router)
+router.include_router(call_router.router)
+router.include_router(call_sfr_router.router)
