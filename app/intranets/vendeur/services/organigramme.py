@@ -143,7 +143,9 @@ def get_organigramme(
             WHERE so.idorganigramme IN ({ids_sql})
               AND so.modif_elem <> 'suppr'
               AND so.date_debut::date <= ?::date
-              AND (so.date_fin IS NULL OR so.date_fin::date >= ?::date)
+              AND (so.date_fin IS NULL
+                   OR so.date_fin::date < '1901-01-01'  -- sentinelle sync HFSQL = pas de fin
+                   OR so.date_fin::date >= ?::date)
               AND se.en_activite = TRUE
               AND s.modif_elem <> 'suppr'
             ORDER BY se.resp_equipe DESC, se.resp_adjoint DESC, s.nom ASC, s.prenom ASC""",
@@ -212,7 +214,9 @@ def get_organigramme(
             WHERE modif_elem NOT LIKE '%suppr%'
               AND id_salarie IN ({ids_sal_sql})
               AND date_debut::date <= ?::date
-              AND (date_fin IS NULL OR date_fin::date >= ?::date)""",
+              AND (date_fin IS NULL
+                   OR date_fin::date < '1901-01-01'  -- sentinelle sync HFSQL = pas de fin
+                   OR date_fin::date >= ?::date)""",
             (today, today),
         )
         type_abs_ids = {_to_int(a.get("id_type_absence")) for a in abs_rows}
