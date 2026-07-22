@@ -13,9 +13,10 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter, Body, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from app.mobile.deps import mobile_auth
 from app.shared.dialogues.schemas.dialogues import (
     DialogueMsgPayload, DialoguePJPayload, DialogueSavePayload,
     MsgModifPayload, MsgSupprPayload,
@@ -33,7 +34,8 @@ from app.shared.dialogues.services import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["mobile-dialogues"])
+router = APIRouter(tags=["mobile-dialogues"],
+                    dependencies=[Depends(mobile_auth)])
 
 
 # ---------------------------------------------------------------------------
@@ -102,18 +104,15 @@ def post_enr_pj(payload: DialoguePJPayload = Body(...)):
 
 
 @router.post("/Dialogues/ModifMSG")
-def post_modif_msg(payload: MsgModifPayload = Body(...)):
-    # ope_modif = expediteur du msg pour le mobile (pas de token JWT
-    # utilise, on prend l'user via le champ paylaod si dispo, sinon 0).
-    # Ici on utilise l'IDMessage pour lookup — le service ecrit
-    # modif_op = user_id passe. Mobile : user_id via la logique WinDev
-    # est usersCial (implicite). En V1 : passer 0 (le service acceptera).
-    return msg_svc.modifier_msg(payload, 0)
+def post_modif_msg(payload: MsgModifPayload = Body(...),
+                    id_salarie: int = Depends(mobile_auth)):
+    return msg_svc.modifier_msg(payload, id_salarie)
 
 
 @router.post("/Dialogues/SupprMSG")
-def post_suppr_msg(payload: MsgSupprPayload = Body(...)):
-    return msg_svc.supprimer_msg(payload, 0)
+def post_suppr_msg(payload: MsgSupprPayload = Body(...),
+                    id_salarie: int = Depends(mobile_auth)):
+    return msg_svc.supprimer_msg(payload, id_salarie)
 
 
 # ---------------------------------------------------------------------------
