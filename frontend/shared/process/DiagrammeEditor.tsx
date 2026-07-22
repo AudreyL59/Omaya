@@ -12,7 +12,7 @@ import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { Save, X } from 'lucide-react'
 
-import { showToast } from '../ui/dialog'
+import { showConfirm, showToast } from '../ui/dialog'
 import { fetchDiagramme, saveDiagramme } from './api'
 
 type Ctx = { apiBase: string; getToken: () => string | null }
@@ -84,17 +84,30 @@ export default function DiagrammeEditor({
     return () => { cancelled = true }
   }, [ctx, idProcess])
 
-  // ESC = close (confirmation si dirty)
+  // Handler commun de fermeture : confirmation chartee si dirty.
+  const tryClose = async () => {
+    if (dirtyRef.current && !readonly) {
+      const ok = await showConfirm({
+        title: 'Fermer sans enregistrer ?',
+        message: 'Les modifications non sauvegardées seront perdues.',
+        confirmLabel: 'Fermer', cancelLabel: 'Annuler',
+        variant: 'danger',
+      })
+      if (!ok) return
+    }
+    onClose()
+  }
+
+  // ESC = fermeture (avec confirmation si dirty)
   useEffect(() => {
     const onEsc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (dirtyRef.current && !readonly
-          && !window.confirm('Fermer sans enregistrer ?')) return
-      onClose()
+      void tryClose()
     }
     window.addEventListener('keydown', onEsc)
     return () => window.removeEventListener('keydown', onEsc)
-  }, [onClose, readonly])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readonly])
 
   const save = async () => {
     const api = apiRef.current
@@ -166,11 +179,8 @@ export default function DiagrammeEditor({
             <Save className="w-4 h-4" /> Enregistrer
           </button>
         )}
-        <button onClick={() => {
-          if (dirtyRef.current && !readonly
-              && !window.confirm('Fermer sans enregistrer ?')) return
-          onClose()
-        }} className="p-2 rounded hover:bg-gray-100">
+        <button onClick={() => void tryClose()}
+          className="p-2 rounded hover:bg-gray-100">
           <X className="w-4 h-4" />
         </button>
       </header>
