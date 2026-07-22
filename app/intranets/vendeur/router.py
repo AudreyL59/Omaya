@@ -11,6 +11,7 @@ from app.intranets.vendeur.routers.cvtheque import router as cvtheque_router
 from app.intranets.vendeur.routers.organigramme import router as organigramme_router
 from app.intranets.vendeur.routers.gestion_ohm import router as gestion_ohm_router
 from app.intranets.vendeur.routers.scool import router as scool_router
+from app.intranets.vendeur.routers.scool_suivi import router as scool_suivi_router
 from app.shared.production.router import router as production_router
 from app.shared.recrutement.router import get_recherche_cv_router
 from app.shared.tickets.router import get_tickets_router
@@ -45,6 +46,7 @@ router.include_router(get_recherche_cv_router("vendeur"))
 router.include_router(organigramme_router)
 router.include_router(gestion_ohm_router)
 router.include_router(scool_router)
+router.include_router(scool_suivi_router)
 router.include_router(production_router)
 router.include_router(clusters_router)
 # Module tickets shared : filtre par DroitAccèsVend pour Vendeur

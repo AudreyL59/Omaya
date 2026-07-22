@@ -17,6 +17,7 @@ import ProductionDetailPage from '@shared/production/ProductionDetailPage'
 import TicketsPage from '@shared/tickets/TicketsPage'
 import DialoguesPage from '@shared/dialogues/DialoguesPage'
 import ProcessPage from '@shared/process/ProcessPage'
+import ScoolSuiviPage from '@/pages/ScoolSuiviPage'
 import { DialogHost } from '@shared/ui/dialog'
 import { getToken, getStoredUser } from '@/api'
 
@@ -55,7 +56,7 @@ function App() {
           <Route path="cvtheque" element={<CvthequePage />} />
           <Route path="organigramme" element={<OrganigrammePage />} />
           <Route path="gestion-ohm" element={<PlaceholderPage />} />
-          <Route path="scool" element={<PlaceholderPage />} />
+          <Route path="scool" element={<ScoolSuiviPage />} />
           <Route path="production" element={<ProductionPage apiBase={VENDEUR_API} />} />
           <Route path="production/jobs/:id" element={<ProductionDetailPage apiBase={VENDEUR_API} />} />
           <Route path="clusters" element={<ClustersPage />} />
