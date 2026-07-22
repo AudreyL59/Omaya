@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 
 from app.core.database.pg import get_pg_connection
@@ -14,6 +15,26 @@ from app.shared.process.services._helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_mots_cles(raw: str) -> str:
+    """Normalise la chaine de mots-cles : parse par RC/virgule/point-virgule,
+    trim, dedupe case-insensitive (ordre preserve), rejoin en RC.
+    Format de storage WinDev = un mot par ligne."""
+    if not raw:
+        return ""
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in re.split(r"[\n\r,;]+", raw):
+        s = t.strip()
+        if not s:
+            continue
+        k = s.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(s)
+    return "\n".join(out)
 
 
 def get_process(id_process: int) -> Process | None:
@@ -154,7 +175,8 @@ def save_process(payload: ProcessSavePayload, user_id: int) -> str:
                       modif_date, modif_op, modif_elem)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
                 (id_process, payload.Titre or "", (payload.Service or "").upper(),
-                 payload.MotsCles or "", now, now, int(user_id), int(user_id),
+                 _normalize_mots_cles(payload.MotsCles or ""),
+                 now, now, int(user_id), int(user_id),
                  now, int(user_id)),
             )
         except Exception:
@@ -169,8 +191,8 @@ def save_process(payload: ProcessSavePayload, user_id: int) -> str:
                           modif_date = ?, modif_op = ?, modif_elem = 'modif'
                     WHERE id_process = ?""",
                 (payload.Titre or "", (payload.Service or "").upper(),
-                 payload.MotsCles or "", now, int(user_id),
-                 now, int(user_id), id_process),
+                 _normalize_mots_cles(payload.MotsCles or ""),
+                 now, int(user_id), now, int(user_id), id_process),
             )
         except Exception:
             logger.exception("save_process: update")

@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Download, FileText, Lock, Pencil, Plus, Save, Search,
-  ShieldCheck, Trash2, Upload, X,
+  ShieldCheck, Tag, Trash2, Upload, X,
 } from 'lucide-react'
 
 import { showConfirm, showToast } from '../ui/dialog'
@@ -35,6 +35,24 @@ const fmtDateFR = (raw: string): string => {
   const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
   return m ? `${m[3]}/${m[2]}/${m[1]}` : raw
 }
+
+// Format storage : mots séparés par RC (\n) — convention WinDev. Tolérance
+// en parsing pour virgule et point-virgule (saisie legacy). Dedupe case
+// insensitive, ordre préservé.
+const parseMotsCles = (raw: string): string[] => {
+  if (!raw) return []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const t of raw.split(/[\n,;]+/)) {
+    const s = t.trim()
+    if (!s) continue
+    const k = s.toLowerCase()
+    if (seen.has(k)) continue
+    seen.add(k); out.push(s)
+  }
+  return out
+}
+const joinMotsCles = (tags: string[]): string => tags.join('\n')
 
 // ---------------------------------------------------------------------------
 
@@ -275,16 +293,13 @@ export default function ProcessPage(props: ProcessPageProps) {
                     {services.map(s => <option key={s} value={s} />)}
                   </datalist>
                 </label>
-                <label className="block">
+                <div className="block">
                   <span className="block text-xs text-c-ink-soft mb-0.5">Mots-clés</span>
-                  {editing ? (
-                    <input value={motsCles} onChange={e => setMotsCles(e.target.value)}
-                      placeholder="Sépare par virgule ou espace"
-                      className="w-full border border-c-line rounded px-2 py-1.5 text-sm bg-white" />
-                  ) : (
-                    <div className="text-sm py-1.5">{selected!.MotsCles || '—'}</div>
-                  )}
-                </label>
+                  <MotsClesChips
+                    value={editing ? motsCles : (selected?.MotsCles || '')}
+                    editable={editing}
+                    onChange={setMotsCles} />
+                </div>
               </div>
 
               {/* Fichiers */}
@@ -314,6 +329,82 @@ export default function ProcessPage(props: ProcessPageProps) {
             if (p) setSelected(p)
           }} />
       )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+//  Champ mots-clés en jetons (chips)
+// ---------------------------------------------------------------------------
+
+function MotsClesChips({ value, editable, onChange }: {
+  value: string
+  editable: boolean
+  onChange: (v: string) => void
+}) {
+  const tags = useMemo(() => parseMotsCles(value), [value])
+  const [input, setInput] = useState('')
+
+  const add = (raw: string) => {
+    const bits = parseMotsCles(raw)
+    if (!bits.length) return
+    const set = new Set(tags.map(t => t.toLowerCase()))
+    const merged = [...tags]
+    for (const b of bits) {
+      if (!set.has(b.toLowerCase())) { merged.push(b); set.add(b.toLowerCase()) }
+    }
+    onChange(joinMotsCles(merged))
+    setInput('')
+  }
+  const remove = (i: number) => {
+    const next = tags.filter((_, k) => k !== i)
+    onChange(joinMotsCles(next))
+  }
+
+  if (!editable) {
+    return tags.length === 0 ? (
+      <div className="text-sm py-1.5 text-c-ink-faint">—</div>
+    ) : (
+      <div className="flex flex-wrap gap-1 py-1">
+        {tags.map((t, i) => (
+          <span key={i}
+            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-c-brand-soft text-c-brand rounded">
+            <Tag className="w-3 h-3" />{t}
+          </span>
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="min-h-[38px] w-full border border-c-line rounded px-2 py-1 bg-white
+                    flex flex-wrap items-center gap-1 focus-within:border-c-brand
+                    focus-within:ring-1 focus-within:ring-c-brand">
+      {tags.map((t, i) => (
+        <span key={i}
+          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-c-brand-soft text-c-brand rounded">
+          {t}
+          <button type="button" onClick={() => remove(i)}
+            className="hover:text-red-600" aria-label={`Retirer ${t}`}>×</button>
+        </span>
+      ))}
+      <input value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
+            e.preventDefault(); add(input)
+          } else if (e.key === 'Backspace' && !input && tags.length) {
+            e.preventDefault(); remove(tags.length - 1)
+          }
+        }}
+        onPaste={e => {
+          const txt = e.clipboardData.getData('text')
+          if (/[\n,;]/.test(txt)) {
+            e.preventDefault(); add(input + ' ' + txt); return
+          }
+        }}
+        onBlur={() => { if (input) add(input) }}
+        placeholder={tags.length === 0 ? 'Ajoute un mot-clé (Entrée pour valider)…' : ''}
+        className="flex-1 min-w-[120px] text-sm border-0 bg-transparent outline-none py-0.5" />
     </div>
   )
 }
