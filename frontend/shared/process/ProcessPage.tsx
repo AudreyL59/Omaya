@@ -21,7 +21,7 @@ import {
 import DiagrammeEditor from './DiagrammeEditor'
 import SalarieAutocomplete from './SalarieAutocomplete'
 import type {
-  Process, ProcessDiagrammeMeta, ProcessDroit, ProcessFichierMeta,
+  Process, ProcessDroit, ProcessFichierMeta,
   ProcessListItem, ProcessPageProps, ProfilItem, SocieteItem,
 } from './types'
 
