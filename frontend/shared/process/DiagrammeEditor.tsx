@@ -2,7 +2,7 @@
 // dans ProcessPage. Storage : JSON serialise du store tldraw (backend
 // stocke dans pgt_process.diagramme_json).
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Tldraw, type Editor, getSnapshot, loadSnapshot } from 'tldraw'
 // Alias Vite (resolve.alias 'tldraw-assets-vite') pointe vers
 // node_modules/@tldraw/assets/imports.vite.js du projet courant.
@@ -26,29 +26,22 @@ export default function DiagrammeEditor({
   readonly: boolean
   onClose: () => void
 }) {
-  const [editor, setEditor] = useState<Editor | null>(null)
-  const [initialLoaded, setInitialLoaded] = useState(false)
-  const [dirty, setDirty] = useState(false)
+  // Editor tldraw stocke en ref (pas en state) pour eviter les
+  // re-renders qui demontent le canvas apres l'action utilisateur.
+  const editorRef = useRef<Editor | null>(null)
+  // Dirty flag idem : ref pour tracker cote save, on ne rerender pas
+  // pour ca (le badge 'modifie' est mis a jour via forceUpdate ci-dessous).
+  const dirtyRef = useRef(false)
   const [saving, setSaving] = useState(false)
-  // Assets tldraw servis en local (bundle) plutot que depuis unpkg :
-  // evite le CDN externe (firewall d'entreprise) qui causait un ecran
-  // noir a la 1ere interaction. Memoise pour ne pas re-generer les URLs.
+  const [dirtyTick, setDirtyTick] = useState(0)  // force UI refresh du badge
+
+  // Assets tldraw servis en local (bundle) — evite le CDN unpkg.
+  // Memoise pour ne pas re-generer les URLs a chaque render.
   const assetUrls = useMemo(() => getAssetUrlsByImport(), [])
 
-  // ESC = close (avec confirmation si dirty)
-  useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (dirty && !readonly && !window.confirm('Fermer sans enregistrer ?')) return
-      onClose()
-    }
-    window.addEventListener('keydown', onEsc)
-    return () => window.removeEventListener('keydown', onEsc)
-  }, [onClose, dirty, readonly])
-
-  // Chargement initial du snapshot depuis le backend
-  useEffect(() => {
-    if (!editor || initialLoaded) return
+  const handleMount = (editor: Editor) => {
+    editorRef.current = editor
+    // Charge le snapshot existant
     void (async () => {
       const r = await fetchDiagramme(ctx, idProcess)
       const json = r?.json || ''
@@ -63,19 +56,32 @@ export default function DiagrammeEditor({
       if (readonly) {
         editor.updateInstanceState({ isReadonly: true })
       }
-      setInitialLoaded(true)
-      // Ecoute des changements pour marquer dirty
-      const cleanup = editor.store.listen(
-        () => setDirty(true),
-        { source: 'user', scope: 'document' },
-      )
-      // On garde le cleanup dans le closure — inutile de le retourner
-      // car le composant se demonte au close.
-      void cleanup
+      // Ecoute des changements user pour flag dirty (via ref, PAS de
+      // state qui rerender). On ne veut le badge visible qu'a la 1re
+      // modif, donc un tick suffit.
+      editor.store.listen(() => {
+        if (!dirtyRef.current) {
+          dirtyRef.current = true
+          setDirtyTick(t => t + 1)
+        }
+      }, { source: 'user', scope: 'document' })
     })()
-  }, [editor, ctx, idProcess, readonly, initialLoaded])
+  }
+
+  // ESC = close (avec confirmation si dirty)
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (dirtyRef.current && !readonly
+          && !window.confirm('Fermer sans enregistrer ?')) return
+      onClose()
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [onClose, readonly])
 
   const save = async () => {
+    const editor = editorRef.current
     if (!editor || saving) return
     setSaving(true)
     try {
@@ -83,7 +89,8 @@ export default function DiagrammeEditor({
       const json = JSON.stringify(snap)
       const r = await saveDiagramme(ctx, idProcess, json)
       if (r?.ok) {
-        setDirty(false)
+        dirtyRef.current = false
+        setDirtyTick(t => t + 1)
         showToast('Diagramme enregistré', 'success')
       } else {
         showToast('Échec sauvegarde', 'error')
@@ -96,8 +103,14 @@ export default function DiagrammeEditor({
     }
   }
 
+  const dirty = dirtyRef.current
+  // dirtyTick sert uniquement à forcer le re-render du header
+  void dirtyTick
+
   return (
-    <div className="fixed inset-0 z-[95] bg-black/80 flex flex-col">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 95,
+                  display: 'flex', flexDirection: 'column',
+                  background: '#fff' }}>
       <header className="bg-white border-b border-c-line-soft px-3 py-2 flex items-center gap-2 shrink-0">
         <div className="flex-1 text-sm font-semibold">
           Diagramme{readonly ? ' (lecture seule)' : ''}
@@ -117,14 +130,20 @@ export default function DiagrammeEditor({
           </button>
         )}
         <button onClick={() => {
-          if (dirty && !readonly && !window.confirm('Fermer sans enregistrer ?')) return
+          if (dirtyRef.current && !readonly
+              && !window.confirm('Fermer sans enregistrer ?')) return
           onClose()
         }} className="p-2 rounded hover:bg-gray-100">
           <X className="w-4 h-4" />
         </button>
       </header>
-      <div className="flex-1 relative bg-white">
-        <Tldraw onMount={setEditor} assetUrls={assetUrls} />
+      {/* Tldraw doit avoir un container avec dimensions non-nulles.
+          On utilise position:absolute plutot que flex-1 pour eviter les
+          bugs de calcul de layout au re-render. */}
+      <div style={{ position: 'relative', flex: 1 }}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <Tldraw onMount={handleMount} assetUrls={assetUrls} />
+        </div>
       </div>
     </div>
   )
