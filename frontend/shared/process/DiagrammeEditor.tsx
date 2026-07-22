@@ -161,7 +161,8 @@ export default function DiagrammeEditor({
         )}
         {!loading && initialData && (
           <Excalidraw
-            initialData={initialData}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            initialData={initialData as any}
             viewModeEnabled={readonly}
             excalidrawAPI={(api) => { apiRef.current = api as ExcalidrawAPI }}
             onChange={() => {
