@@ -165,6 +165,7 @@ interface Props {
   idTicket: string | null
   onClose: () => void
   onAfterAction?: () => void
+  readonly?: boolean           // ouverte depuis les traites -> consultation (pas de boutons)
 }
 
 // ISO 'YYYY-MM-DD' -> 'DD/MM/YYYY' (format a copier). Vide si non parsable.
@@ -203,7 +204,7 @@ function CopyButton({ value, title }: { value: string; title?: string }) {
 
 // --- Component principal -------------------------------------------------
 
-export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: Props) {
+export default function FicheTicketModal({ idTicket, onClose, onAfterAction, readonly = false }: Props) {
   const [data, setData] = useState<FicheData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -648,10 +649,12 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 verrouLoading={verrouLoading}
                 onPrendreAppel={() => handlePrendreAppel(false)}
                 onLacherAppel={handleLacherAppel}
+                readonly={readonly}
               />
               <ColonneDroite
                 data={data}
                 offre={selectedOffre}
+                readonly={readonly}
                 onOffreChange={(patch) =>
                   selectedPanierId && patchOffre(selectedPanierId, patch)
                 }
@@ -925,6 +928,7 @@ function ColonneCentre({
   verrouLoading,
   onPrendreAppel,
   onLacherAppel,
+  readonly,
 }: {
   data: FicheData
   editOffres: Record<string, FicheOffre>
@@ -941,6 +945,7 @@ function ColonneCentre({
   verrouLoading: boolean
   onPrendreAppel: () => void
   onLacherAppel: () => void
+  readonly: boolean
 }) {
   const v = data.vendeur
   const offresList = data.panier.map((p) => editOffres[p.id] || p)
@@ -997,7 +1002,7 @@ function ColonneCentre({
             <div className="flex-1">
               <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
             </div>
-            {data.is_my_call ? (
+            {!readonly && (data.is_my_call ? (
               <button
                 onClick={onLacherAppel}
                 disabled={verrouLoading}
@@ -1017,7 +1022,7 @@ function ColonneCentre({
                 {verrouLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Phone className="w-3.5 h-3.5" />}
                 Démarrer l'appel
               </button>
-            )}
+            ))}
           </div>
         </div>
       </div>
@@ -1071,18 +1076,20 @@ function ColonneCentre({
             className="px-2 py-1 border border-c-line rounded text-xs bg-white focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 focus:outline-none"
           />
         </div>
-        <button
-          onClick={onSaveClient}
-          disabled={savingClient}
-          className="w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {savingClient && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          Enregistrer les infos Client
-        </button>
+        {!readonly && (
+          <button
+            onClick={onSaveClient}
+            disabled={savingClient}
+            className="w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {savingClient && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Enregistrer les infos Client
+          </button>
+        )}
       </div>
 
-      {/* Action sur la ligne selectionnee */}
-      {selectedOffre && (
+      {/* Action sur la ligne selectionnee (masque en consultation) */}
+      {!readonly && selectedOffre && (
         <button
           onClick={onAnnulLigne}
           disabled={!canAnnulerLigne}
@@ -1094,7 +1101,8 @@ function ColonneCentre({
         </button>
       )}
 
-      {/* Boutons d'action panier */}
+      {/* Boutons d'action panier (masques en consultation) */}
+      {!readonly && (
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <ActionButton label="Valider le panier" disabled={!canValider} variant="green" onClick={onAskValider} />
@@ -1102,6 +1110,7 @@ function ColonneCentre({
         </div>
         <ActionButton label="Renvoyer le panier pour complément" variant="orange" full onClick={onAskRenvoi} />
       </div>
+      )}
     </div>
   )
 }
@@ -1111,6 +1120,7 @@ function ColonneCentre({
 function ColonneDroite({
   data,
   offre,
+  readonly,
   onOffreChange,
   onSaveStatutAuto,
   onAskAnnulLigne,
@@ -1122,6 +1132,7 @@ function ColonneDroite({
 }: {
   data: FicheData
   offre: FicheOffre | null
+  readonly: boolean
   onOffreChange: (patch: Partial<FicheOffre>) => void
   onSaveStatutAuto: (newStatut: number) => void
   onAskAnnulLigne: () => void
@@ -1147,6 +1158,7 @@ function ColonneDroite({
       <PartenaireBlock
         data={data}
         offre={offre}
+        readonly={readonly}
         onOffreChange={onOffreChange}
         onSaveOffre={onSaveOffre}
         savingOffre={savingOffre}
@@ -1154,12 +1166,14 @@ function ColonneDroite({
         onOpenClarif={onOpenClarif}
       />
 
-      {/* Statut Vente (auto-save) - commun a tous les partenaires */}
+      {/* Statut Vente (auto-save) - commun a tous les partenaires.
+          En consultation : select desactive (pas d'auto-save). */}
       <div className="bg-white rounded-lg border border-c-line p-4 space-y-3 text-xs">
         <div className="space-y-0.5">
           <label className="text-c-ink-soft">Statut Vente</label>
           <select
             value={offre.statut_prod}
+            disabled={readonly}
             onChange={(e) => {
               let v = parseInt(e.target.value, 10)
               // Cas WinDev : statut = 2 (Annulee) -> ouvre la popup motif
@@ -1185,8 +1199,20 @@ function ColonneDroite({
         </div>
       </div>
 
-      {/* Bouton "Renvoyer pour fiche clarification" - OEN uniquement */}
-      {offre.partenaire.toUpperCase() === 'OEN' && (
+      {/* Consultation : motif d'annulation de la ligne (si annulee) */}
+      {readonly && offre.statut_prod === 2 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+          <div className="text-[11px] font-semibold text-red-700 mb-1">
+            Motif d'annulation de l'offre
+          </div>
+          <div className="text-xs text-c-ink whitespace-pre-wrap">
+            {offre.motif_annulation || '—'}
+          </div>
+        </div>
+      )}
+
+      {/* Bouton "Renvoyer pour fiche clarification" - OEN uniquement (masque en consultation) */}
+      {!readonly && offre.partenaire.toUpperCase() === 'OEN' && (
         <button
           onClick={onAskRenvoiClarif}
           className="w-full py-2 px-3 rounded bg-red-600 text-white text-xs font-semibold hover:brightness-110"
@@ -1202,6 +1228,7 @@ function ColonneDroite({
 function PartenaireBlock({
   data,
   offre,
+  readonly,
   onOffreChange,
   onSaveOffre,
   savingOffre,
@@ -1210,6 +1237,7 @@ function PartenaireBlock({
 }: {
   data: FicheData
   offre: FicheOffre
+  readonly: boolean
   onOffreChange: (patch: Partial<FicheOffre>) => void
   onSaveOffre: () => void
   savingOffre: boolean
@@ -1296,15 +1324,17 @@ function PartenaireBlock({
         </div>
       )}
 
-      {/* Bouton Enregistrer */}
-      <button
-        onClick={onSaveOffre}
-        disabled={savingOffre}
-        className="w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        {savingOffre && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-        Enregistrer
-      </button>
+      {/* Bouton Enregistrer (masque en consultation) */}
+      {!readonly && (
+        <button
+          onClick={onSaveOffre}
+          disabled={savingOffre}
+          className="w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {savingOffre && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          Enregistrer
+        </button>
+      )}
     </div>
   )
 }

@@ -229,13 +229,15 @@ export default function TicketsCallSuiviPage() {
   }, [])
 
   const [openedFiche, setOpenedFiche] = useState<{
-    id: string; kind: 'fibre' | 'energie'
+    id: string; kind: 'fibre' | 'energie'; readonly: boolean
   } | null>(null)
 
-  const openFiche = (row: TicketRow) => {
+  // readonly = fiche ouverte depuis le tableau des TRAITES (consultation seule)
+  const openFiche = (row: TicketRow, readonly: boolean) => {
     setOpenedFiche({
       id: row.id,
       kind: row.partenaire === 'SFR' ? 'fibre' : 'energie',
+      readonly,
     })
   }
   const closeFiche = () => setOpenedFiche(null)
@@ -312,7 +314,7 @@ export default function TicketsCallSuiviPage() {
       >
         <TicketsTable
           rows={enCoursF}
-          onDoubleClick={openFiche}
+          onDoubleClick={(row) => openFiche(row, false)}
           variant="encours"
         />
       </SectionCard>
@@ -325,7 +327,7 @@ export default function TicketsCallSuiviPage() {
       >
         <TicketsTable
           rows={traitesF}
-          onDoubleClick={openFiche}
+          onDoubleClick={(row) => openFiche(row, true)}
           variant="traites"
         />
       </SectionCard>
@@ -334,6 +336,7 @@ export default function TicketsCallSuiviPage() {
       {openedFiche?.kind === 'fibre' && (
         <FicheTicketModalFibre
           idTicket={openedFiche.id}
+          readonly={openedFiche.readonly}
           onClose={closeFiche}
           onAfterAction={afterFicheAction}
         />
@@ -341,6 +344,7 @@ export default function TicketsCallSuiviPage() {
       {openedFiche?.kind === 'energie' && (
         <FicheTicketModalEnergie
           idTicket={openedFiche.id}
+          readonly={openedFiche.readonly}
           onClose={closeFiche}
           onAfterAction={afterFicheAction}
         />
