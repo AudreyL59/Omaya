@@ -31,6 +31,7 @@ from app.mobile import feuille_pointe as feuille_pointe_router
 from app.mobile import misc as misc_router
 from app.mobile import rh as rh_router
 from app.mobile import salarie as salarie_router
+from app.mobile import sfr as sfr_router
 
 router = APIRouter(prefix="/WebRest_Omayapp", tags=["mobile"])
 
@@ -54,4 +55,5 @@ router.include_router(exocash_router.router)
 router.include_router(feuille_pointe_router.router)
 router.include_router(rh_router.router)
 router.include_router(salarie_router.router)
+router.include_router(sfr_router.router)
 router.include_router(misc_router.router)
