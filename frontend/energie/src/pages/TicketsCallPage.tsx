@@ -160,6 +160,12 @@ export default function TicketsCallPage() {
   const [selectedHautId, setSelectedHautId] = useState<string>('')
   const [selectedBasId, setSelectedBasId] = useState<string>('')
   const [ficheOpenId, setFicheOpenId] = useState<string | null>(null)
+  // readonly = fiche ouverte depuis le tableau des TRAITES (consultation seule)
+  const [ficheReadonly, setFicheReadonly] = useState(false)
+  const openFiche = (id: string, readonly: boolean) => {
+    setFicheReadonly(readonly)
+    setFicheOpenId(id)
+  }
 
   useEffect(() => {
     jourBasRef.current = jourBas
@@ -313,7 +319,7 @@ export default function TicketsCallPage() {
         right={
           <HautActions
             disabled={!selectedHautId}
-            onClick={() => selectedHautId && setFicheOpenId(selectedHautId)}
+            onClick={() => selectedHautId && openFiche(selectedHautId, false)}
           />
         }
       />
@@ -321,7 +327,7 @@ export default function TicketsCallPage() {
         rows={enCours.tickets_en_cours}
         selectedId={selectedHautId}
         onSelect={setSelectedHautId}
-        onOpenFiche={(id) => setFicheOpenId(id)}
+        onOpenFiche={(id) => openFiche(id, false)}
       />
 
       {/* Tableau du BAS : tickets traités du jour (placeholder pendant chargement) */}
@@ -335,7 +341,7 @@ export default function TicketsCallPage() {
             rows={traitesRows}
             loading={loadingTraites}
             ficheDisabled={!selectedBasId}
-            onOpenFiche={() => selectedBasId && setFicheOpenId(selectedBasId)}
+            onOpenFiche={() => selectedBasId && openFiche(selectedBasId, true)}
           />
         }
       />
@@ -350,12 +356,13 @@ export default function TicketsCallPage() {
           partenaires={partenaires}
           selectedId={selectedBasId}
           onSelect={setSelectedBasId}
-          onOpenFiche={(id) => setFicheOpenId(id)}
+          onOpenFiche={(id) => openFiche(id, true)}
         />
       )}
 
       <FicheTicketModal
         idTicket={ficheOpenId}
+        readonly={ficheReadonly}
         onClose={() => setFicheOpenId(null)}
         onAfterAction={async () => {
           // Apres action panier : refetch les 2 tableaux

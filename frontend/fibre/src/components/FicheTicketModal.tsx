@@ -1410,7 +1410,8 @@ function ColonneDroite({
                   label="Statut Vente"
                   value={offre.statut_prod}
                   options={data.statuts_vente.map((s) => ({ v: s.id, l: s.label }))}
-                  onChange={(v) => {
+                  // En consultation : pas d'onChange -> select desactive (pas d'auto-save)
+                  onChange={readonly ? undefined : (v) => {
                     // Cas WinDev : statut = 2 (Annulee) -> ouvre la popup motif
                     // d'annulation au lieu de sauver directement. Le statut sera
                     // bascule par l'action "Annul ligne panier" complete (motifs +
