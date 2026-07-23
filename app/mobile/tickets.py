@@ -1168,3 +1168,905 @@ def sosju_save(payload: dict = Body(...),
     except Exception as e:
         logger.exception("sosju_save insert")
         return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  Helpers Lot 3
+# ===========================================================================
+
+_TYPE_CONGE_TO_ABSENCE = {
+    "Maladie": 2,
+    "Congés payés": 4,
+    "Conges payés": 4,
+    "Congés sans solde": 5,
+    "Conges sans solde": 5,
+}
+
+
+def _absence_id_for(type_conge: str, existing: int) -> int:
+    if existing:
+        return existing
+    return _TYPE_CONGE_TO_ABSENCE.get((type_conge or "").strip(), 14)
+
+
+def _cloture_tk_liste(id_tk: int, id_op: int, id_statut: int = 4) -> None:
+    """Cloture un ticket (statut donne, cloturee=TRUE)."""
+    if not id_tk:
+        return
+    db = get_pg_connection("ticket")
+    now = datetime.now()
+    try:
+        db.query(
+            """UPDATE ticket.pgt_tk_liste
+                  SET cloturee = TRUE, date_cloture = ?, id_tk_statut = ?,
+                      modification = TRUE, op_modif = ?, id_modif = 0,
+                      type_modif = 'TKSTATUT', modif_date = ?, modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (now, id_statut, int(id_op), now, int(id_op), int(id_tk)),
+        )
+    except Exception:
+        logger.exception("_cloture_tk_liste id=%s", id_tk)
+
+
+# ===========================================================================
+#  CONGES
+# ===========================================================================
+
+@router.post("/Tickets/CONGES/Contenu")
+def conges_contenu(payload: dict = Body(...)):
+    """Portage DemandeCongés_Contenu."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {
+        "IDTK_DemandeConges": "0", "IDSalarie": 0,
+        "sTypeconge": "", "sPeriodeconge": "", "sdateDeb": "", "sdateFin": "",
+        "sMotif": "", "idResp": 0, "SignatureDemandeur": "",
+        "NomBeneficiaire": "", "PrenomBeneficiaire": "",
+        "PosteBeneficiaire": "", "LibOrgaBeneficiaire": "",
+        "infoSte": {"LOGO": ""},
+    }
+    if not id_tk:
+        return empty
+
+    db_trh = get_pg_connection("ticket_rh")
+    db_tk = get_pg_connection("ticket")
+    db_rh = get_pg_connection("rh")
+
+    try:
+        row = db_trh.query_one(
+            """SELECT id_tk_demande_conges, id_salarie, type_conges,
+                      periode_conges, date_debut, date_fin, motifs,
+                      signature_demandeur
+                 FROM ticket_rh.pgt_tk_demande_conges
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("conges_contenu id=%s", id_tk)
+        return empty
+
+    id_resp = 0
+    try:
+        tl = db_tk.query_one(
+            "SELECT op_dest FROM ticket.pgt_tk_liste WHERE id_tk_liste = ? LIMIT 1",
+            (id_tk,),
+        )
+        if tl:
+            id_resp = _to_int(tl.get("op_dest"))
+    except Exception:
+        pass
+
+    if not row:
+        return {**empty, "IDTK_DemandeConges": str(id_tk),
+                "idResp": id_resp, "IdResp2": id_resp}
+
+    id_sal = _to_int(row.get("id_salarie"))
+    nom, prenom = _identite_salarie(id_sal)
+
+    # Poste + affectation
+    lib_poste = ""
+    lib_orga = ""
+    id_ste = 0
+    try:
+        s = db_rh.query_one(
+            """SELECT se.id_ste, tp.lib_poste
+                 FROM rh.pgt_salarie_embauche se
+                 LEFT JOIN rh.pgt_type_poste tp ON tp.id_type_poste = se.id_type_poste
+                WHERE se.id_salarie = ? LIMIT 1""",
+            (id_sal,),
+        )
+        if s:
+            lib_poste = (s.get("lib_poste") or "").strip()
+            id_ste = _to_int(s.get("id_ste"))
+    except Exception:
+        pass
+
+    try:
+        aff = db_rh.query_one(
+            """SELECT o.lib_orga
+                 FROM rh.pgt_salarie_organigramme so
+                 JOIN rh.pgt_organigramme o
+                        ON o.idorganigramme = so.idorganigramme
+                WHERE so.id_salarie = ?
+                  AND COALESCE(so.aff_actif, FALSE) = TRUE
+                  AND (so.modif_elem IS NULL OR so.modif_elem NOT LIKE '%suppr%')
+                LIMIT 1""",
+            (id_sal,),
+        )
+        if aff:
+            lib_orga = (aff.get("lib_orga") or "").strip()
+    except Exception:
+        pass
+
+    # Logo societe
+    logo_b64 = ""
+    if id_ste:
+        try:
+            st = db_rh.query_one(
+                "SELECT logo FROM rh.pgt_societe WHERE id_ste = ? LIMIT 1",
+                (id_ste,),
+            )
+            if st:
+                logo_b64 = _bytea_to_b64(st.get("logo"))
+        except Exception:
+            pass
+
+    d_deb = row.get("date_debut")
+    d_fin = row.get("date_fin")
+    return {
+        "IDTK_DemandeConges": str(int(row.get("id_tk_demande_conges") or 0)),
+        "IDSalarie": id_sal,
+        "sTypeconge": (row.get("type_conges") or "").strip(),
+        "sPeriodeconge": (row.get("periode_conges") or "").strip(),
+        "sdateDeb": d_deb.isoformat() if hasattr(d_deb, "isoformat") else str(d_deb or ""),
+        "sdateFin": d_fin.isoformat() if hasattr(d_fin, "isoformat") else str(d_fin or ""),
+        "sMotif": row.get("motifs") or "",
+        "idResp": id_resp,
+        "SignatureDemandeur": _bytea_to_b64(row.get("signature_demandeur")),
+        "NomBeneficiaire": nom,
+        "PrenomBeneficiaire": prenom,
+        "PosteBeneficiaire": lib_poste,
+        "LibOrgaBeneficiaire": lib_orga,
+        "infoSte": {"LOGO": logo_b64},
+    }
+
+
+@router.post("/Tickets/CONGES/Save")
+def conges_save(payload: dict = Body(...),
+                id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeCongés_Save. Type demande=13, service=DR.
+    Le calcul auto du op_dest (resp) est simplifie V1 : on prend
+    idResp du payload si fourni, sinon fallback = idCial. TODO V2 :
+    logique RecupListeDaDr complete."""
+    id_dem = _to_int(payload.get("IDTK_DemandeConges"))
+    id_sal = _to_int(payload.get("IDSalarie"))
+    type_conge = payload.get("sTypeconge") or ""
+    periode = payload.get("sPeriodeconge") or ""
+    d_deb = payload.get("sdateDeb")
+    d_fin = payload.get("sdateFin")
+    motifs = payload.get("sMotif") or ""
+    sig_b64 = payload.get("SignatureDemandeur") or ""
+    id_type_abs = _to_int(payload.get("IDTypeAbsence"))
+    id_resp = _to_int(payload.get("idResp") or id_cial)
+
+    from app.mobile.agcial import _parse_jour
+    d_deb_p = _parse_jour(d_deb)
+    d_fin_p = _parse_jour(d_fin)
+
+    sig_bytes = None
+    if sig_b64:
+        try:
+            sig_bytes = base64.b64decode(sig_b64)
+        except Exception:
+            sig_bytes = None
+
+    import psycopg2
+    db = get_pg_connection("ticket_rh")
+    now = datetime.now()
+
+    id_type_abs = _absence_id_for(type_conge, id_type_abs)
+
+    if id_dem:
+        # Update
+        try:
+            row = db.query_one(
+                """SELECT id_tk_liste FROM ticket_rh.pgt_tk_demande_conges
+                    WHERE id_tk_demande_conges = ? LIMIT 1""",
+                (id_dem,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            args = [type_conge, id_type_abs, periode, d_deb_p, d_fin_p, motifs]
+            sql = """UPDATE ticket_rh.pgt_tk_demande_conges
+                        SET type_conges = ?, id_type_absence = ?,
+                            periode_conges = ?, date_debut = ?, date_fin = ?,
+                            motifs = ?"""
+            if sig_bytes is not None:
+                sql += ", signature_demandeur = ?"
+                args.append(psycopg2.Binary(sig_bytes))
+            sql += """, modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                      WHERE id_tk_demande_conges = ?"""
+            args.extend([now, id_cial, id_dem])
+            db.query(sql, tuple(args))
+            _touch_tk_liste(int(row.get("id_tk_liste") or 0), id_cial)
+            return {"nIdDemande": str(id_dem)}
+        except Exception as e:
+            logger.exception("conges_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    id_tk_liste = _create_ticket_liste("DR", 13, 1, id_cial, id_new)
+    if not id_tk_liste:
+        return {"nIdDemande": "0"}
+
+    # Override op_dest = idResp calcule
+    if id_resp and id_resp != id_cial:
+        try:
+            db_tk = get_pg_connection("ticket")
+            db_tk.query(
+                """UPDATE ticket.pgt_tk_liste SET op_dest = ?
+                    WHERE id_tk_liste = ?""",
+                (id_resp, id_tk_liste),
+            )
+        except Exception:
+            pass
+
+    try:
+        db.query(
+            """INSERT INTO ticket_rh.pgt_tk_demande_conges
+                 (id_tk_demande_conges_auto, id_tk_demande_conges,
+                  id_tk_liste, id_salarie, type_conges, id_type_absence,
+                  periode_conges, date_debut, date_fin, motifs,
+                  signature_demandeur, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+            (id_new, id_new, id_tk_liste, id_sal, type_conge, id_type_abs,
+             periode, d_deb_p, d_fin_p, motifs,
+             psycopg2.Binary(sig_bytes) if sig_bytes else None,
+             now, id_cial),
+        )
+        # TODO V2 : envoiSMS au resp + au demandeur (Perf-Exo, non porte)
+        return {"nIdDemande": str(id_new)}
+    except Exception as e:
+        logger.exception("conges_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+@router.post("/Tickets/CONGES/Validation")
+def conges_validation(payload: dict = Body(...),
+                        id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeCongés_Validation. Cloture ticket + INSERT
+    absence (calcul NBJ ouvrés + samedis simplifie).
+    TODO V2 : signature resp + generation PDF + FTP + envoi SMS."""
+    id_dem = _to_int(payload.get("IDTK_DemandeConges"))
+    sig_b64 = payload.get("SignatureDemandeur") or ""
+    if not id_dem:
+        return {"nIdDemande": "0"}
+
+    import psycopg2
+    db = get_pg_connection("ticket_rh")
+    dbrh = get_pg_connection("rh")
+    now = datetime.now()
+
+    try:
+        row = db.query_one(
+            """SELECT id_tk_liste, id_salarie, type_conges, id_type_absence,
+                      periode_conges, date_debut, date_fin
+                 FROM ticket_rh.pgt_tk_demande_conges
+                WHERE id_tk_demande_conges = ? LIMIT 1""",
+            (id_dem,),
+        )
+    except Exception:
+        logger.exception("conges_validation id=%s", id_dem)
+        return {"nIdDemande": "0"}
+    if not row:
+        return {"nIdDemande": "0"}
+
+    # Signature resp
+    if sig_b64:
+        try:
+            sig_bytes = base64.b64decode(sig_b64)
+            db.query(
+                """UPDATE ticket_rh.pgt_tk_demande_conges
+                      SET signature_resp = ?, modif_date = ?, modif_op = ?
+                    WHERE id_tk_demande_conges = ?""",
+                (psycopg2.Binary(sig_bytes), now, id_cial, id_dem),
+            )
+        except Exception:
+            logger.exception("conges_validation signature")
+
+    d_deb = row.get("date_debut")
+    d_fin = row.get("date_fin")
+    id_type_abs = _absence_id_for(row.get("type_conges"),
+                                    _to_int(row.get("id_type_absence")))
+
+    # INSERT absence
+    if d_deb and d_fin and isinstance(d_deb, date) and isinstance(d_fin, date):
+        # Calcul NBJ / NBJ_OUVRES / nb_samedi
+        nbj = (d_fin - d_deb).days + 1
+        nb_ouvres = 0
+        nb_samedi = 0
+        cur = d_deb
+        while cur <= d_fin:
+            wd = cur.weekday()  # 0=lundi..6=dimanche
+            if wd < 5:
+                nb_ouvres += 1
+            elif wd == 5:
+                nb_samedi += 1
+            cur = cur + timedelta(days=1)
+
+        # Periode fiscale (Juil-Juin)
+        if d_deb.month <= 6:
+            periode = f"{d_deb.year - 1}-{d_deb.year}"
+        else:
+            periode = f"{d_deb.year}-{d_deb.year + 1}"
+
+        id_new_abs = _new_id_wd()
+        try:
+            dbrh.query(
+                """INSERT INTO rh.pgt_absence
+                     (id_absence_auto, id_absence, id_salarie, id_type_absence,
+                      date_debut, date_fin, nbj, nbj_ouvres, nb_samedi, periode,
+                      modif_op, modif_date, modif_elem)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+                (id_new_abs, id_new_abs,
+                 _to_int(row.get("id_salarie")), id_type_abs,
+                 d_deb, d_fin, nbj, nb_ouvres, nb_samedi, periode,
+                 id_cial, now),
+            )
+        except Exception:
+            logger.exception("conges_validation absence")
+
+    _cloture_tk_liste(_to_int(row.get("id_tk_liste")), id_cial, id_statut=4)
+    return {"nIdDemande": str(id_dem)}
+
+
+@router.post("/Tickets/CONGES/Refus")
+def conges_refus(payload: dict = Body(...),
+                  id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeCongés_Refus. Cloture ticket statut 4.
+    TODO V2 : envoi SMS de refus."""
+    id_dem = _to_int(payload.get("IDTK_DemandeConges"))
+    if not id_dem:
+        return {"nIdDemande": "0"}
+    db = get_pg_connection("ticket_rh")
+    try:
+        row = db.query_one(
+            """SELECT id_tk_liste FROM ticket_rh.pgt_tk_demande_conges
+                WHERE id_tk_demande_conges = ? LIMIT 1""",
+            (id_dem,),
+        )
+    except Exception:
+        logger.exception("conges_refus id=%s", id_dem)
+        return {"nIdDemande": "0"}
+    if not row:
+        return {"nIdDemande": "0"}
+    _cloture_tk_liste(_to_int(row.get("id_tk_liste")), id_cial, id_statut=4)
+    return {"nIdDemande": str(id_dem)}
+
+
+@router.post("/Tickets/CONGES/Annulation")
+def conges_annulation(payload: dict = Body(...),
+                        id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeCongés_Annulation. Cloture ticket."""
+    id_dem = _to_int(payload.get("IDTK_DemandeConges"))
+    if not id_dem:
+        return {"nIdDemande": "0"}
+    db = get_pg_connection("ticket_rh")
+    try:
+        row = db.query_one(
+            """SELECT id_tk_liste FROM ticket_rh.pgt_tk_demande_conges
+                WHERE id_tk_demande_conges = ? LIMIT 1""",
+            (id_dem,),
+        )
+    except Exception:
+        logger.exception("conges_annulation id=%s", id_dem)
+        return {"nIdDemande": "0"}
+    # Le WinDev accepte aussi que sMonIddemande = idTk_liste directement
+    if not row:
+        _cloture_tk_liste(id_dem, id_cial, id_statut=4)
+        return {"nIdDemande": str(id_dem)}
+    _cloture_tk_liste(_to_int(row.get("id_tk_liste")), id_cial, id_statut=4)
+    return {"nIdDemande": str(id_dem)}
+
+
+# ===========================================================================
+#  EnvoiFacture
+# ===========================================================================
+
+@router.post("/Tickets/EnvoiFacture/Contenu")
+def envoi_facture_contenu(payload: dict = Body(...)):
+    """Portage DemandeFacture_Contenu."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {
+        "IDTK_DemandeFacturation": "0", "IDTK_Liste": "0",
+        "Montant": 0.0, "PreuveVirement": "", "FicFacture": "",
+        "Num": "", "DateAchat": "", "lib": "", "desc": "",
+    }
+    if not id_tk:
+        return empty
+    db = get_pg_connection("ticket_bo")
+    try:
+        row = db.query_one(
+            """SELECT id_tk_demande_facturation_distrib, id_tk_liste,
+                      montant, fic_preuve_virement, fic_facture,
+                      num_commande, date_achat, lib_facture, descriptif
+                 FROM ticket_bo.pgt_tk_demande_facturation
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("envoi_facture_contenu id=%s", id_tk)
+        return empty
+    if not row:
+        return empty
+    return {
+        "IDTK_DemandeFacturation": str(int(row.get("id_tk_demande_facturation_distrib") or 0)),
+        "IDTK_Liste": str(int(row.get("id_tk_liste") or 0)),
+        "Montant": float(row.get("montant") or 0),
+        "PreuveVirement": row.get("fic_preuve_virement") or "",
+        "FicFacture": row.get("fic_facture") or "",
+        "Num": row.get("num_commande") or "",
+        "DateAchat": _iso_dt(row.get("date_achat")),
+        "lib": row.get("lib_facture") or "",
+        "desc": row.get("descriptif") or "",
+    }
+
+
+@router.post("/Tickets/EnvoiFacture/Save")
+def envoi_facture_save(payload: dict = Body(...),
+                        id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeFacture_Save. Type demande=33, service=BO."""
+    id_tk = _to_int(payload.get("IDTK_Liste"))
+    lib = payload.get("lib") or ""
+    desc = payload.get("desc") or ""
+    montant = float(payload.get("Montant") or 0)
+    num = payload.get("Num") or ""
+    from app.mobile.agcial import _parse_jour
+    date_achat = _parse_jour(payload.get("DateAchat"))
+
+    db = get_pg_connection("ticket_bo")
+    now = datetime.now()
+
+    if id_tk:
+        try:
+            row = db.query_one(
+                """SELECT id_tk_demande_facturation_distrib
+                     FROM ticket_bo.pgt_tk_demande_facturation
+                    WHERE id_tk_liste = ? LIMIT 1""",
+                (id_tk,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            db.query(
+                """UPDATE ticket_bo.pgt_tk_demande_facturation
+                      SET lib_facture = ?, descriptif = ?, montant = ?,
+                          num_commande = ?, date_achat = ?,
+                          modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                (lib, desc, montant, num, date_achat, now, id_cial, id_tk),
+            )
+            _touch_tk_liste(id_tk, id_cial, id_cial)
+            return {"nIdDemande": str(id_tk)}
+        except Exception as e:
+            logger.exception("envoi_facture_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    id_tk_new = _create_ticket_liste("BO", 33, 1, id_cial, id_new)
+    if not id_tk_new:
+        return {"nIdDemande": "0"}
+    try:
+        db.query(
+            """INSERT INTO ticket_bo.pgt_tk_demande_facturation
+                 (id_tk_demande_facturation_distrib, id_tk_liste,
+                  lib_facture, descriptif, montant, num_commande, date_achat,
+                  fic_preuve_virement, fic_facture,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, 'new')""",
+            (id_new, id_tk_new, lib, desc, montant, num, date_achat,
+             now, id_cial),
+        )
+        return {"nIdDemande": str(id_tk_new)}
+    except Exception as e:
+        logger.exception("envoi_facture_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+@router.post("/Tickets/EnvoiFacture/SaveFacture")
+def envoi_facture_save_facture(payload: dict = Body(...),
+                                 id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeFacture_SaveFacture. Update fic_facture apres
+    upload. TODO V2 : le WinDev fait FTP OVH factures/ ou fDeplace ;
+    ici on stocke juste le nom fourni par le mobile."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    nom_fic = payload.get("NomFic") or ""
+    if not id_tk:
+        return {"nIdDemande": "0"}
+    db = get_pg_connection("ticket_bo")
+    now = datetime.now()
+    try:
+        db.query(
+            """UPDATE ticket_bo.pgt_tk_demande_facturation
+                  SET fic_facture = ?, modif_date = ?, modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (nom_fic, now, id_cial, id_tk),
+        )
+        _touch_tk_liste(id_tk, id_cial, id_cial)
+        return {"nIdDemande": str(id_tk)}
+    except Exception as e:
+        logger.exception("envoi_facture_save_facture id=%s", id_tk)
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  RESA
+# ===========================================================================
+
+@router.post("/Tickets/RESA/Contenu")
+def resa_contenu(payload: dict = Body(...)):
+    """Portage DemandeResa_Contenu."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    if not id_tk:
+        return {}
+    db = get_pg_connection("ticket_bo")
+    try:
+        row = db.query_one(
+            """SELECT dr.id_tk_demande_resa, dr.id_tk_liste,
+                      dr.id_tk_type_resa_ss_fam, dr.ville_dep, dr.ville_arr,
+                      dr.jour_dep, dr.jour_arr, dr.heure_dep, dr.heure_arr,
+                      dr.beneficiaire, dr.info_cplt, dr.liste_bene_supp,
+                      dr.ar, dr.jour_r_dep, dr.jour_r_arr,
+                      dr.heure_r_dep, dr.heure_r_arr,
+                      ssf.id_tk_type_resa, ssf.lib_type_resa_ss_fam,
+                      tr.lib_type_resa
+                 FROM ticket_bo.pgt_tk_demande_resa dr
+                 LEFT JOIN ticket_bo.pgt_tk_type_resa_ss_fam ssf
+                        ON ssf.id_tk_type_resa_ss_fam = dr.id_tk_type_resa_ss_fam
+                 LEFT JOIN ticket_bo.pgt_tk_type_resa tr
+                        ON tr.id_tk_type_resa = ssf.id_tk_type_resa
+                WHERE dr.id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("resa_contenu id=%s", id_tk)
+        return {}
+    if not row:
+        return {}
+    nom, prenom = _identite_salarie(_to_int(row.get("beneficiaire")))
+    return {
+        "AR": bool(row.get("ar")),
+        "Beneficiaire": _to_int(row.get("beneficiaire")),
+        "ListeBeneSupp": row.get("liste_bene_supp") or "",
+        "Heure_Arr": str(row.get("heure_arr") or ""),
+        "Heure_Dep": str(row.get("heure_dep") or ""),
+        "HeureR_Arr": str(row.get("heure_r_arr") or ""),
+        "HeureR_Dep": str(row.get("heure_r_dep") or ""),
+        "IDTK_DemandeResa": str(int(row.get("id_tk_demande_resa") or 0)),
+        "IDTK_Liste": str(int(row.get("id_tk_liste") or 0)),
+        "IDTK_TypeResa": _to_int(row.get("id_tk_type_resa")),
+        "IDTK_TypeResaSSFam": _to_int(row.get("id_tk_type_resa_ss_fam")),
+        "InfoCplt": row.get("info_cplt") or "",
+        "Jour_Arr": _iso_dt(row.get("jour_arr")),
+        "Jour_Dep": _iso_dt(row.get("jour_dep")),
+        "JourR_Arr": _iso_dt(row.get("jour_r_arr")),
+        "JourR_Dep": _iso_dt(row.get("jour_r_dep")),
+        "Lib_TypeResa": (row.get("lib_type_resa") or "").strip(),
+        "Lib_TypeResaSSFam": (row.get("lib_type_resa_ss_fam") or "").strip(),
+        "NomBeneficiaire": nom,
+        "PrenomBeneficiaire": prenom,
+        "Ville_Arr": row.get("ville_arr") or "",
+        "Ville_Dep": row.get("ville_dep") or "",
+        "ListePJ": [],  # TODO V2 : FTP DocTicket/{id}/ listing
+    }
+
+
+@router.post("/Tickets/RESA/Save")
+def resa_save(payload: dict = Body(...),
+              id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeResa_Save. Type demande=9, service=BO."""
+    id_tk_liste = _to_int(payload.get("IDTK_Liste"))
+    id_ssf = _to_int(payload.get("IDTK_TypeResaSSFam"))
+    v_dep = payload.get("Ville_Dep") or ""
+    v_arr = payload.get("Ville_Arr") or ""
+    from app.mobile.agcial import _parse_jour
+    j_dep = _parse_jour(payload.get("Jour_Dep"))
+    j_arr = _parse_jour(payload.get("Jour_Arr"))
+    jr_dep = _parse_jour(payload.get("JourR_Dep"))
+    jr_arr = _parse_jour(payload.get("JourR_Arr"))
+    h_dep = payload.get("Heure_Dep") or None
+    h_arr = payload.get("Heure_Arr") or None
+    hr_dep = payload.get("HeureR_Dep") or None
+    hr_arr = payload.get("HeureR_Arr") or None
+    id_benef = _to_int(payload.get("Beneficiaire"))
+    info_cplt = payload.get("InfoCplt") or ""
+    liste_supp = payload.get("ListeBeneSupp") or ""
+    ar = bool(payload.get("AR"))
+
+    db = get_pg_connection("ticket_bo")
+    now = datetime.now()
+
+    if id_tk_liste:
+        try:
+            row = db.query_one(
+                """SELECT id_tk_demande_resa FROM ticket_bo.pgt_tk_demande_resa
+                    WHERE id_tk_liste = ? LIMIT 1""",
+                (id_tk_liste,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            db.query(
+                """UPDATE ticket_bo.pgt_tk_demande_resa
+                      SET id_tk_type_resa_ss_fam = ?, ville_dep = ?, ville_arr = ?,
+                          jour_dep = ?, jour_arr = ?, heure_dep = ?, heure_arr = ?,
+                          beneficiaire = ?, info_cplt = ?, liste_bene_supp = ?,
+                          ar = ?, jour_r_dep = ?, jour_r_arr = ?,
+                          heure_r_dep = ?, heure_r_arr = ?,
+                          modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                (id_ssf, v_dep, v_arr, j_dep, j_arr, h_dep, h_arr,
+                 id_benef, info_cplt, liste_supp, ar,
+                 jr_dep, jr_arr, hr_dep, hr_arr,
+                 now, id_cial, id_tk_liste),
+            )
+            _touch_tk_liste(id_tk_liste, id_cial, id_benef)
+            return {"nIdDemande": str(id_tk_liste)}
+        except Exception as e:
+            logger.exception("resa_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    id_tk_new = _create_ticket_liste("BO", 9, 1, id_cial, id_new)
+    if not id_tk_new:
+        return {"nIdDemande": "0"}
+    try:
+        db.query(
+            """INSERT INTO ticket_bo.pgt_tk_demande_resa
+                 (id_tk_demande_resa_auto, id_tk_demande_resa, id_tk_liste,
+                  id_tk_type_resa_ss_fam, ville_dep, ville_arr,
+                  jour_dep, jour_arr, heure_dep, heure_arr,
+                  beneficiaire, info_cplt, liste_bene_supp, pj, ar,
+                  jour_r_dep, jour_r_arr, heure_r_dep, heure_r_arr,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?,
+                       ?, ?, ?, ?, ?, ?, 'new')""",
+            (id_new, id_new, id_tk_new, id_ssf, v_dep, v_arr,
+             j_dep, j_arr, h_dep, h_arr,
+             id_benef, info_cplt, liste_supp, ar,
+             jr_dep, jr_arr, hr_dep, hr_arr,
+             now, id_cial),
+        )
+        # TODO V2 : FTP_CreaRep("DocTicket/{id}") pour les PJ
+        return {"nIdDemande": str(id_tk_new)}
+    except Exception as e:
+        logger.exception("resa_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+@router.post("/Tickets/RESA/EnrPhoto")
+def resa_enr_photo(payload: dict = Body(...)):
+    """Portage DemandeResa_EnrPhoto. Enregistre une photo/PJ liee au
+    ticket sur le FTP OVH ou en local.
+
+    Payload STPhotoDPAE : { IDTK_Liste, nomPhoto, maphoto (base64) }
+    TODO V2 : envoi FTP OVH. Ici on ecrit uniquement en local si
+    D:\\OMAYA\\DocTicket\\{id}\\ existe.
+    """
+    id_tk = _to_int(payload.get("IDTK_Liste"))
+    nom = payload.get("nomPhoto") or ""
+    photo_b64 = payload.get("maphoto") or ""
+    if not id_tk or not nom or not photo_b64:
+        return {"nIdDemande": "0"}
+
+    try:
+        photo_bytes = base64.b64decode(photo_b64)
+    except Exception:
+        return {"nIdDemande": "0", "sInfoData": "Base64 invalide"}
+
+    import os
+    base_dir = os.path.join(r"D:\OMAYA\DocTicket", str(id_tk))
+    try:
+        os.makedirs(base_dir, exist_ok=True)
+        with open(os.path.join(base_dir, nom), "wb") as f:
+            f.write(photo_bytes)
+    except Exception:
+        logger.exception("resa_enr_photo write id=%s", id_tk)
+        return {"nIdDemande": "0"}
+    return {"nIdDemande": str(id_tk)}
+
+
+# ===========================================================================
+#  SortieRH
+# ===========================================================================
+
+@router.post("/Tickets/SortieRH/Save")
+def sortie_rh_save(payload: dict = Body(...),
+                     id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeSortieRH_Save. Type demande=12, service=RH.
+    Verif anti-doublon : meme (id_salarie, type_sortie) non-cloturé.
+    TODO V2 : upload PDF InfoCplt via FTP OVH."""
+    id_tk = _to_int(payload.get("IDTK_Liste"))
+    id_sal = _to_int(payload.get("IDSalarie"))
+    type_sortie = (payload.get("TypeSortie") or "").strip()
+    info_cplt = payload.get("InfoCplt") or ""
+
+    db_trh = get_pg_connection("ticket_rh")
+    db_tk = get_pg_connection("ticket")
+    now = datetime.now()
+
+    action = ""
+    if id_tk:
+        try:
+            row = db_trh.query_one(
+                """SELECT id_tk_demande_sortie_rh
+                     FROM ticket_rh.pgt_tk_demande_sortie_rh
+                    WHERE id_tk_demande_sortie_rh = ? LIMIT 1""",
+                (id_tk,),
+            )
+            if row:
+                action = "Modif"
+        except Exception:
+            pass
+
+    if not action:
+        # Verif anti-doublon
+        try:
+            dup = db_tk.query_one(
+                """SELECT tsr.id_tk_liste
+                     FROM ticket_rh.pgt_tk_demande_sortie_rh tsr
+                     JOIN ticket.pgt_tk_liste tl ON tl.id_tk_liste = tsr.id_tk_liste
+                    WHERE tsr.id_salarie = ?
+                      AND tsr.type_sortie = ?
+                      AND COALESCE(tl.cloturee, FALSE) = FALSE
+                    LIMIT 1""",
+                (id_sal, type_sortie),
+            )
+            if dup:
+                id_tk = _to_int(dup.get("id_tk_liste"))
+                action = "Modif"
+        except Exception:
+            logger.exception("sortie_rh_save dedup")
+
+    doc_sortie = False  # TODO V2 : upload FTP puis TRUE
+
+    if action == "Modif":
+        try:
+            db_trh.query(
+                """UPDATE ticket_rh.pgt_tk_demande_sortie_rh
+                      SET type_sortie = ?, doc_sortie = ?,
+                          modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_demande_sortie_rh = ?""",
+                (type_sortie, doc_sortie, now, id_cial, id_tk),
+            )
+            # Cherche id_tk_liste
+            row = db_trh.query_one(
+                """SELECT id_tk_liste FROM ticket_rh.pgt_tk_demande_sortie_rh
+                    WHERE id_tk_demande_sortie_rh = ? LIMIT 1""",
+                (id_tk,),
+            )
+            if row:
+                _touch_tk_liste(_to_int(row.get("id_tk_liste")), id_cial)
+            return {"nIdDemande": str(id_tk)}
+        except Exception as e:
+            logger.exception("sortie_rh_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    id_tk_new = _create_ticket_liste("RH", 12, 1, id_cial, id_new)
+    if not id_tk_new:
+        return {"nIdDemande": "0"}
+    try:
+        db_trh.query(
+            """INSERT INTO ticket_rh.pgt_tk_demande_sortie_rh
+                 (id_tk_demande_sortie_rh_auto, id_tk_demande_sortie_rh,
+                  id_tk_liste, id_salarie, type_sortie, doc_sortie,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+            (id_new, id_new, id_tk_new, id_sal, type_sortie, doc_sortie,
+             now, id_cial),
+        )
+        return {"nIdDemande": str(id_tk_new)}
+    except Exception as e:
+        logger.exception("sortie_rh_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  DocDistrib
+# ===========================================================================
+
+@router.post("/Tickets/DocDistrib/Contenu")
+def doc_distrib_contenu(payload: dict = Body(...)):
+    """Portage DemandeDocDistrib_Contenu. JOIN vers Doc_Distrib +
+    TypeDocDistributeur + societe pour libelles."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {"idDocDistrib": 0, "idTicket": 0, "datePrevue": "",
+             "libDoc": "", "libSte": ""}
+    if not id_tk:
+        return empty
+
+    db_bo = get_pg_connection("ticket_bo")
+    db_rh = get_pg_connection("rh")
+    try:
+        row = db_bo.query_one(
+            """SELECT id_doc_distrib
+                 FROM ticket_bo.pgt_tk_demande_doc_distrib
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("doc_distrib_contenu id=%s", id_tk)
+        return empty
+    if not row:
+        return empty
+
+    id_doc = _to_int(row.get("id_doc_distrib"))
+    date_prev = ""
+    lib_doc = ""
+    lib_ste = ""
+    try:
+        d = db_rh.query_one(
+            """SELECT dd.date_prevue, dd.id_ste, dd.id_type_doc_distributeur,
+                      td.lib_doc, ste.raison_sociale
+                 FROM rh.pgt_doc_distrib dd
+                 LEFT JOIN rh.pgt_type_doc_distributeur td
+                        ON td.id_type_doc_distributeur = dd.id_type_doc_distributeur
+                 LEFT JOIN rh.pgt_societe ste ON ste.id_ste = dd.id_ste
+                WHERE dd.id_doc_distrib = ? LIMIT 1""",
+            (id_doc,),
+        )
+        if d:
+            date_prev = _iso_dt(d.get("date_prevue"))
+            lib_doc = (d.get("lib_doc") or "").strip()
+            lib_ste = (d.get("raison_sociale") or "").strip()
+    except Exception:
+        logger.exception("doc_distrib_contenu doc id=%s", id_doc)
+
+    return {
+        "idDocDistrib": id_doc,
+        "idTicket": id_tk,
+        "datePrevue": date_prev,
+        "libDoc": lib_doc,
+        "libSte": lib_ste,
+    }
+
+
+@router.post("/Tickets/DocDistrib/Save")
+def doc_distrib_save(payload: dict = Body(...),
+                       id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeDocDistrib_Enr. Simplifie V1 : update
+    LienFichier (le nom du PDF fusionne) + passe le ticket a
+    statut 31. TODO V2 : fusion PDF + upload FTP + envoi mail
+    juristes."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    lib_doc = payload.get("libDoc") or ""
+    nom_fic = payload.get("nomFic") or f"{id_tk}_{lib_doc.replace(' ', '_')}.pdf"
+    if not id_tk:
+        return {"nIdDemande": "0"}
+
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    now = datetime.now()
+    try:
+        db_bo.query(
+            """UPDATE ticket_bo.pgt_tk_demande_doc_distrib
+                  SET lien_fichier = ?, modif_date = ?, modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (nom_fic, now, id_cial, id_tk),
+        )
+        db_tk.query(
+            """UPDATE ticket.pgt_tk_liste
+                  SET id_tk_statut = 31, modif_date = ?, modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (now, id_cial, id_tk),
+        )
+        return {"nIdDemande": str(id_tk)}
+    except Exception as e:
+        logger.exception("doc_distrib_save id=%s", id_tk)
+        return {"nIdDemande": "0", "sInfoData": str(e)}
