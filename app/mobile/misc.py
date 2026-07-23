@@ -72,11 +72,6 @@ def podium(_payload: dict = Body(default={})):
     raise HTTPException(501, "Podium non encore porte (TXT manquant)")
 
 
-@router.post("/TKDPAE/ListeBySalarie")
-def tkdpae_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKDPAE/ListeBySalarie non encore porte (TXT manquant)")
-
-
 # NotifPush
 @router.post("/NotifPush/EnrNotif")
 def notifpush_enr(_payload: dict = Body(default={})):
@@ -97,47 +92,6 @@ def signature_liste(_payload: dict = Body(default={})):
 @router.post("/Signature/MiseADispo/Signer")
 def signature_signer(_payload: dict = Body(default={})):
     raise HTTPException(501, "Signature/MiseADispo/Signer non encore porte (TXT manquant)")
-
-
-# TK* (4 groupes symetriques : TKAttEC, TKAvance, TKCong, TKFourniture)
-@router.post("/TKAttEC/Ajouter")
-def tkattec_ajouter(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKAttEC/Ajouter non encore porte (TXT manquant)")
-
-
-@router.post("/TKAttEC/ListeBySalarie")
-def tkattec_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKAttEC/ListeBySalarie non encore porte (TXT manquant)")
-
-
-@router.post("/TKAvance/Ajouter")
-def tkavance_ajouter(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKAvance/Ajouter non encore porte (TXT manquant)")
-
-
-@router.post("/TKAvance/ListeBySalarie")
-def tkavance_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKAvance/ListeBySalarie non encore porte (TXT manquant)")
-
-
-@router.post("/TKCong/Ajouter")
-def tkcong_ajouter(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKCong/Ajouter non encore porte (TXT manquant)")
-
-
-@router.post("/TKCong/ListeBySalarie")
-def tkcong_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKCong/ListeBySalarie non encore porte (TXT manquant)")
-
-
-@router.post("/TKFourniture/Ajouter")
-def tkfourn_ajouter(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKFourniture/Ajouter non encore porte (TXT manquant)")
-
-
-@router.post("/TKFourniture/ListeBySalarie")
-def tkfourn_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "TKFourniture/ListeBySalarie non encore porte (TXT manquant)")
 
 
 # SignPDF
