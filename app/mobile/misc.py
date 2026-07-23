@@ -310,28 +310,3 @@ def news_liste(_payload: dict = Body(default={})):
 @router.post("/Podium")
 def podium(_payload: dict = Body(default={})):
     raise HTTPException(501, "Podium non encore porte (TXT manquant)")
-
-
-@router.post("/Signature/MiseADispo/Liste")
-def signature_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "Signature/MiseADispo/Liste non encore porte (TXT vide)")
-
-
-@router.post("/Signature/MiseADispo/Signer")
-def signature_signer(_payload: dict = Body(default={})):
-    raise HTTPException(501, "Signature/MiseADispo/Signer non encore porte (TXT manquant)")
-
-
-@router.post("/SignPDF/Fichier")
-def signpdf_fichier(_payload: dict = Body(default={})):
-    raise HTTPException(501, "SignPDF/Fichier non encore porte (TXT manquant)")
-
-
-@router.post("/SignPDF/ListeBySalarie")
-def signpdf_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "SignPDF/ListeBySalarie non encore porte (TXT manquant)")
-
-
-@router.post("/SignPDF/Signer")
-def signpdf_signer(_payload: dict = Body(default={})):
-    raise HTTPException(501, "SignPDF/Signer non encore porte (TXT manquant)")
