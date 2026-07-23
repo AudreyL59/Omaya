@@ -298,12 +298,4 @@ def notifpush_liste(payload: dict = Body(...)):
     ]
 
 
-# ---------------------------------------------------------------------------
-#  Stubs 501 en attente
-# ---------------------------------------------------------------------------
-
-@router.post("/Podium")
-def podium(_payload: dict = Body(default={})):
-    """TODO : port complexe (~500 lignes WinDev - orga + coopt + qualite +
-    calculs par periode). Session dediee necessaire."""
-    raise HTTPException(501, "Podium non encore porte (complexite - session dediee)")
+# NB : /Podium est desormais porte dans app/mobile/podium.py
