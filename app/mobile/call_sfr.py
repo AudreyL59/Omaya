@@ -104,14 +104,17 @@ def sfr_panier_suppr(payload: dict = Body(...)):
 # ---------------------------------------------------------------------------
 
 @router.post("/CallSFR/DegroupagePanier")
-def sfr_degroupage(_payload: dict = Body(default={})):
-    """TODO : port a faire des que le TXT WinDev est fourni."""
-    raise HTTPException(501, "CallSFR/DegroupagePanier non encore porte")
+def sfr_degroupage(payload: dict = Body(...),
+                    id_salarie: int = Depends(mobile_auth)):
+    """Passe le ticket a statut 34 (Degroupage panier). Portage DegoupagePanier."""
+    id_tk = tc._to_int(payload.get("IDTK_Liste"))
+    return tc.sfr_degroupage_panier(id_tk, id_salarie)
 
 
-@router.post("/CallSFR/G")
-def sfr_g(_payload: dict = Body(default={})):
-    """TODO : port a faire des que le TXT WinDev est fourni.
-    Nom d'endpoint ambigu ('G' seul) — probablement une tronque dans
-    le xlsx. A verifier avec le TXT."""
-    raise HTTPException(501, "CallSFR/G non encore porte")
+@router.post("/CallSFR/GénérerTkMobDiff")
+def sfr_generer_tk_diff(payload: dict = Body(...),
+                          id_salarie: int = Depends(mobile_auth)):
+    """Cree un nouveau ticket SFR 'diff' avec les lignes mobile validees.
+    Portage GenererTicketDiff.
+    URL avec accent iso-WinDev (le xlsx tronquait a 'CallSFR/G')."""
+    return tc.sfr_generer_tk_mob_diff(payload, id_salarie)

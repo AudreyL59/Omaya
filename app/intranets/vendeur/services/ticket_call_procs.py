@@ -1708,3 +1708,362 @@ def crea_modif_tk_call(payload: dict, id_vend: int) -> dict:
     return {"nIdDemande": _str_id(id_ticket), "sInfoData": info_blocage}
 
 
+# ============================================================================
+#  WS mobile ajoutes (port iso-WinDev, non utilises par le web)
+# ============================================================================
+
+def call_ajout_num_bs(payload: dict, id_vend: int) -> dict:
+    """WS mobile POST /Call/AjoutNumBS. Portage AjouterNumBS WinDev.
+
+    Update le NumBS d'une ligne de panier + son statut_prod = 3. Si
+    c'etait le dernier produit non-facture du ticket, passe le ticket
+    a statut 17 (Num BS renseigné).
+
+    Payload : {IDtk_Call_Panier, NumBS, Part, IDTK_Liste}.
+    Retour : STRéponseTK {nIdDemande, sInfoData}.
+    """
+    id_panier = _to_int(payload.get("IDtk_Call_Panier"))
+    num_bs = (payload.get("NumBS") or "").strip()
+    if not id_panier or not num_bs:
+        return {"nIdDemande": 0, "sInfoData": "IDtk_Call_Panier ou NumBS manquant"}
+
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    now = _now_wd()
+
+    # 1. Update la ligne panier
+    try:
+        db_bo.query(
+            """UPDATE ticket_bo.pgt_tk_call_panier
+                  SET num_bs = ?, num_date_saisie = ?,
+                      statut_prod = 3,
+                      modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                WHERE id_tk_call_panier = ?""",
+            (num_bs, now, now, int(id_vend), id_panier),
+        )
+    except Exception as e:
+        logger.exception("call_ajout_num_bs: update panier")
+        return {"nIdDemande": 0, "sInfoData": str(e)}
+
+    # 2. Recupere l'id_tk_liste (via payload ou lookup)
+    id_tk_liste = _to_int(payload.get("IDTK_Liste"))
+    if not id_tk_liste:
+        try:
+            r = db_bo.query_one(
+                """SELECT id_tk_liste FROM ticket_bo.pgt_tk_call_panier
+                    WHERE id_tk_call_panier = ? LIMIT 1""",
+                (id_panier,),
+            )
+            id_tk_liste = _to_int((r or {}).get("id_tk_liste"))
+        except Exception:
+            id_tk_liste = 0
+
+    # 3. Si plus aucun produit non-facture -> passe le ticket a statut 17
+    if id_tk_liste:
+        try:
+            remaining = db_bo.query(
+                """SELECT id_tk_call_panier FROM ticket_bo.pgt_tk_call_panier
+                    WHERE id_tk_liste = ?
+                      AND statut_prod < 2
+                      AND (modif_elem IS NULL OR modif_elem <> 'suppr')""",
+                (id_tk_liste,),
+            ) or []
+            if not remaining:
+                db_tk.query(
+                    """UPDATE ticket.pgt_tk_liste
+                          SET id_tk_statut = 17, modif_date = ?, modif_op = ?,
+                              modif_elem = 'modif'
+                        WHERE id_tk_liste = ?""",
+                    (now, int(id_vend), id_tk_liste),
+                )
+        except Exception:
+            logger.exception("call_ajout_num_bs: update tk_liste")
+
+    return {"nIdDemande": _str_id(id_panier), "sInfoData": ""}
+
+
+def call_contenu_call(id_ticket: int) -> dict:
+    """WS mobile POST /Call/ContenuCall. Portage DonneInfoTkCall WinDev.
+
+    Retourne le detail d'un ticket Call + son panier (nom offre resolu
+    par partenaire).
+    """
+    if not id_ticket:
+        return {}
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+
+    try:
+        tk_call = db_bo.query_one(
+            """SELECT id_tk_call, civilite_client, nom_client, nom_marital_client,
+                      prenom_client, date_naiss, dep_naiss, adresse1, adresse2,
+                      cp, ville, adr_mail, mobile1, opt_partenaire, type_logement
+                 FROM ticket_bo.pgt_tk_call
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (int(id_ticket),),
+        )
+    except Exception:
+        logger.exception("call_contenu_call: select tk_call")
+        return {}
+    if not tk_call:
+        return {}
+
+    # Statut ticket
+    id_statut = 0
+    try:
+        r = db_tk.query_one(
+            "SELECT id_tk_statut FROM ticket.pgt_tk_liste WHERE id_tk_liste = ? LIMIT 1",
+            (int(id_ticket),),
+        )
+        id_statut = _to_int((r or {}).get("id_tk_statut"))
+    except Exception:
+        pass
+
+    type_log = _to_int(tk_call.get("type_logement"))
+    if type_log < 1:
+        type_log = 1
+        if (tk_call.get("adresse2") or "").strip():
+            type_log = 2
+
+    result = {
+        "IDTKStatut": id_statut,
+        "CiviliteClient": _to_int(tk_call.get("civilite_client")),
+        "NomClient": tk_call.get("nom_client") or "",
+        "NomMaritalClient": tk_call.get("nom_marital_client") or "",
+        "PrenomClient": tk_call.get("prenom_client") or "",
+        "DATENAISS": str(tk_call.get("date_naiss") or ""),
+        "DEPNAISS": _to_int(tk_call.get("dep_naiss")),
+        "ADRESSE1": tk_call.get("adresse1") or "",
+        "ADRESSE2": tk_call.get("adresse2") or "",
+        "CP": tk_call.get("cp") or "",
+        "VILLE": tk_call.get("ville") or "",
+        "adrMail": tk_call.get("adr_mail") or "",
+        "Mobile1": tk_call.get("mobile1") or "",
+        "consent": _bool(tk_call.get("opt_partenaire")),
+        "TypeLogement": type_log,
+        "Panier": [],
+    }
+
+    id_tk_call = _to_int(tk_call.get("id_tk_call"))
+    lib_partenaires = _tab_lib_partenaires()
+    try:
+        panier_rows = db_bo.query(
+            """SELECT id_tk_call_panier, id_tk_call, id_tk_liste,
+                      id_produit, partenaire, num_bs, statut_prod,
+                      motif_annulation
+                 FROM ticket_bo.pgt_tk_call_panier
+                WHERE (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')
+                  AND id_tk_call = ?""",
+            (id_tk_call,),
+        ) or []
+    except Exception:
+        logger.exception("call_contenu_call: select panier")
+        panier_rows = []
+
+    for pr in panier_rows:
+        part = (pr.get("partenaire") or "").strip().upper()
+        id_prod = _to_int(pr.get("id_produit"))
+        lib_offre = ""
+        if part == "OHM":
+            lib_offre = "Pompe à chaleur"
+        elif part in _TABLE_PRODUIT_PAR_PART and id_prod:
+            table = _TABLE_PRODUIT_PAR_PART[part]
+            try:
+                db_adv = get_pg_connection("adv")
+                p = db_adv.query_one(
+                    f"SELECT lib_produit FROM {table} WHERE id_produit = ? LIMIT 1",
+                    (id_prod,),
+                )
+                lib_offre = ((p or {}).get("lib_produit") or "").strip()
+            except Exception:
+                pass
+        result["Panier"].append({
+            "IDtk_Call_Panier": _str_id(pr.get("id_tk_call_panier")),
+            "IDtk_Call": _str_id(id_tk_call),
+            "IDTK_Liste": _str_id(pr.get("id_tk_liste")),
+            "IDProduit": id_prod,
+            "Part": lib_partenaires.get(part, part),
+            "LibOffre": lib_offre,
+            "NumBS": pr.get("num_bs") or "",
+            "Statut": _to_int(pr.get("statut_prod")),
+        })
+    return result
+
+
+def sfr_degroupage_panier(id_tk_liste: int, id_vendeur: int) -> dict:
+    """WS mobile POST /CallSFR/DegroupagePanier. Portage DegoupagePanier.
+
+    Passe le ticket a statut 34 (Tk Call - Degroupage panier).
+    Retour : STRéponseTK.
+    """
+    if not id_tk_liste:
+        return {"nIdDemande": 0, "sInfoData": "IDTK_Liste manquant"}
+    db_tk = get_pg_connection("ticket")
+    now = _now_wd()
+    try:
+        db_tk.query(
+            """UPDATE ticket.pgt_tk_liste
+                  SET id_tk_statut = 34, modif_date = ?, modif_op = ?,
+                      modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (now, int(id_vendeur), int(id_tk_liste)),
+        )
+    except Exception as e:
+        logger.exception("sfr_degroupage_panier")
+        return {"nIdDemande": 0, "sInfoData": str(e)}
+    return {"nIdDemande": 0, "sInfoData": ""}
+
+
+def sfr_generer_tk_mob_diff(payload: dict, id_vend: int) -> dict:
+    """WS mobile POST /CallSFR/GenererTkMobDiff. Portage GenererTicketDiff.
+
+    Cree un NOUVEAU ticket Call SFR 'ticket diff' :
+    - copie tk_call_sfr avec nouveau id_tk_call_sfr et id_tk_liste
+    - duplique les lignes panier de type MOBILE avec statut_prod=1
+      (marque l'original a statut 4, cree nouveau avec statut 0)
+    - copie le PDF PieceIdentite si present
+    - cree la nouvelle ligne tk_liste avec date_crea preservee
+
+    Payload : STTicket {IDTK_Liste, DATECREA, opCrea}
+    Retour : STRéponseTK {nIdDemande = new_id_tk_liste, sInfoData}
+    """
+    import os
+    id_tk_liste_src = _to_int(payload.get("IDTK_Liste"))
+    op_crea = _to_int(payload.get("opCrea") or id_vend)
+    if not id_tk_liste_src:
+        return {"nIdDemande": 0, "sInfoData": "IDTK_Liste manquant"}
+
+    db_bo = get_pg_connection("ticket_bo")
+    db_tk = get_pg_connection("ticket")
+    now = _now_wd()
+
+    # Recupere le tk_call_sfr source
+    try:
+        src = db_bo.query_one(
+            """SELECT * FROM ticket_bo.pgt_tk_call_sfr
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk_liste_src,),
+        )
+    except Exception as e:
+        logger.exception("sfr_generer_tk_mob_diff: select src")
+        return {"nIdDemande": 0, "sInfoData": str(e)}
+    if not src:
+        return {"nIdDemande": 0, "sInfoData": "Ticket source introuvable"}
+
+    id_new = _new_id_wd()
+
+    # Duplique tk_call_sfr (nouveau id, ticket_diff=1)
+    try:
+        db_bo.query(
+            """INSERT INTO ticket_bo.pgt_tk_call_sfr
+                (id_tk_call_sfr_auto, id_tk_call_sfr, id_tk_liste, id_salarie,
+                 civilite_client, nom_client, nom_marital_client, prenom_client,
+                 date_naiss, dep_naiss, adresse1, adresse2, cp, ville,
+                 adr_mail, mobile1, mobile2, opt_partenaire, type_logement,
+                 client_pro, client_rs, client_siret,
+                 anomalie_mobile, id_tk_call_sfr_type_anomalie, info_cplt_anomalie,
+                 ticket_diff, appel_en_cours, ope_appel,
+                 modif_date, modif_op, modif_elem)
+               SELECT ?, ?, ?, id_salarie,
+                      civilite_client, nom_client, nom_marital_client, prenom_client,
+                      date_naiss, dep_naiss, adresse1, adresse2, cp, ville,
+                      adr_mail, mobile1, mobile2, opt_partenaire, type_logement,
+                      client_pro, client_rs, client_siret,
+                      0, 0, '',
+                      TRUE, FALSE, 0,
+                      ?, ?, 'new'
+                 FROM ticket_bo.pgt_tk_call_sfr
+                WHERE id_tk_liste = ?""",
+            (id_new, id_new, id_new, now, op_crea, id_tk_liste_src),
+        )
+    except Exception as e:
+        logger.exception("sfr_generer_tk_mob_diff: insert tk_call_sfr")
+        return {"nIdDemande": 0, "sInfoData": str(e)}
+
+    # Copie du PDF PieceIdentite si present
+    try:
+        base = os.environ.get("DOCS_BASE_PATH", r"D:\OMAYA")
+        src_pdf = os.path.join(base, f"{id_tk_liste_src}_PieceIdentite.pdf")
+        dst_pdf = os.path.join(base, f"{id_new}_PieceIdentite.pdf")
+        if os.path.exists(src_pdf):
+            import shutil
+            shutil.copyfile(src_pdf, dst_pdf)
+    except Exception:
+        logger.exception("sfr_generer_tk_mob_diff: copie PDF")
+
+    # Duplique les lignes panier MOBILE valides (statut_prod=1)
+    try:
+        panier_ids = db_bo.query(
+            """SELECT id_tk_call_sfr_panier FROM ticket_bo.pgt_tk_call_sfr_panier
+                WHERE id_tk_liste = ?
+                  AND (modif_elem IS NULL OR modif_elem <> 'suppr')
+                  AND type = 'MOBILE'
+                  AND statut_prod = 1""",
+            (id_tk_liste_src,),
+        ) or []
+        for pr in panier_ids:
+            id_pan_src = _to_int(pr.get("id_tk_call_sfr_panier"))
+            # Marque l'original a statut_prod=4
+            db_bo.query(
+                """UPDATE ticket_bo.pgt_tk_call_sfr_panier
+                      SET statut_prod = 4, modif_date = ?, modif_op = ?,
+                          modif_elem = 'modif'
+                    WHERE id_tk_call_sfr_panier = ?""",
+                (now, op_crea, id_pan_src),
+            )
+            # Cree nouvelle ligne (copie complete avec nouveaux IDs + statut 0)
+            id_pan_new = _new_id_wd()
+            db_bo.query(
+                """INSERT INTO ticket_bo.pgt_tk_call_sfr_panier
+                    (id_tk_call_sfr_panier, id_tk_call_sfr, id_tk_liste,
+                     type, id_offres_sfr, opt_tv,
+                     portabilite, num_portabilite, num_prise_rio,
+                     num_prise_optique, opt_choisies, type_vente,
+                     num, num_date_saisie, statut_prod, motif_annulation,
+                     modif_date, modif_op, modif_elem)
+                   SELECT ?, ?, ?,
+                          type, id_offres_sfr, opt_tv,
+                          portabilite, num_portabilite, num_prise_rio,
+                          num_prise_optique, opt_choisies, type_vente,
+                          num, num_date_saisie, 0, '',
+                          ?, ?, 'new'
+                     FROM ticket_bo.pgt_tk_call_sfr_panier
+                    WHERE id_tk_call_sfr_panier = ?""",
+                (id_pan_new, id_new, id_new, now, op_crea, id_pan_src),
+            )
+    except Exception:
+        logger.exception("sfr_generer_tk_mob_diff: duplicate panier")
+
+    # Duplique tk_liste (nouveau ID, statut 1, date_crea preservee)
+    date_crea_src = payload.get("DATECREA") or now
+    try:
+        db_tk.query(
+            """INSERT INTO ticket.pgt_tk_liste
+                (id_tk_liste_auto, id_tk_liste, id_salarie,
+                 id_tk_type_demande, id_tk_statut, date_crea,
+                 modif_date, modif_op, modif_elem)
+               SELECT ?, ?, id_salarie, id_tk_type_demande, 1, ?,
+                      ?, ?, 'new'
+                 FROM ticket.pgt_tk_liste
+                WHERE id_tk_liste = ?""",
+            (id_new, id_new, date_crea_src, now, op_crea, id_tk_liste_src),
+        )
+    except Exception as e:
+        logger.exception("sfr_generer_tk_mob_diff: insert tk_liste")
+        return {"nIdDemande": 0, "sInfoData": str(e)}
+
+    # Update tk_call_sfr source pour pointer vers le nouveau ticket comme
+    # reference d'anomalie
+    try:
+        db_bo.query(
+            """UPDATE ticket_bo.pgt_tk_call_sfr
+                  SET id_tk_liste_ref_anomalie = ?, modif_date = ?,
+                      modif_op = ?, modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (id_new, now, op_crea, id_tk_liste_src),
+        )
+    except Exception:
+        logger.exception("sfr_generer_tk_mob_diff: update ref_anomalie")
+
+    return {"nIdDemande": _str_id(id_new), "sInfoData": ""}
+

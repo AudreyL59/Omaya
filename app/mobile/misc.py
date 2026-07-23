@@ -299,14 +299,11 @@ def notifpush_liste(payload: dict = Body(...)):
 
 
 # ---------------------------------------------------------------------------
-#  Stubs 501 en attente des TXT WinDev
+#  Stubs 501 en attente
 # ---------------------------------------------------------------------------
-
-@router.post("/News/Liste")
-def news_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "News/Liste non encore porte (TXT manquant)")
-
 
 @router.post("/Podium")
 def podium(_payload: dict = Body(default={})):
-    raise HTTPException(501, "Podium non encore porte (TXT manquant)")
+    """TODO : port complexe (~500 lignes WinDev - orga + coopt + qualite +
+    calculs par periode). Session dediee necessaire."""
+    raise HTTPException(501, "Podium non encore porte (complexite - session dediee)")

@@ -31,9 +31,13 @@ def clients_non_finalises(payload: dict = Body(default={}),
 
 
 @router.post("/Call/ContenuCall")
-def contenu_call(_payload: dict = Body(default={})):
-    """TODO : port a faire des que le TXT WinDev est fourni."""
-    raise HTTPException(501, "Call/ContenuCall non encore porte")
+def contenu_call(payload: dict = Body(...)):
+    """Detail d'un ticket Call + son panier. Portage DonneInfoTkCall.
+
+    Payload : {IDTK_Liste: int}
+    """
+    id_tk = tc._to_int(payload.get("IDTK_Liste"))
+    return tc.call_contenu_call(id_tk)
 
 
 @router.post("/Call/NouveauTK")
@@ -114,6 +118,7 @@ def ohm_types_install():
 
 
 @router.post("/Call/AjoutNumBS")
-def ajout_num_bs(_payload: dict = Body(default={})):
-    """TODO : port a faire des que le TXT WinDev est fourni."""
-    raise HTTPException(501, "Call/AjoutNumBS non encore porte")
+def ajout_num_bs(payload: dict = Body(...),
+                  id_salarie: int = Depends(mobile_auth)):
+    """Update NumBS d'une ligne panier. Portage AjouterNumBS."""
+    return tc.call_ajout_num_bs(payload, id_salarie)
