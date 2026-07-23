@@ -404,6 +404,84 @@ function TicketsTable({
   onDoubleClick: (r: TicketRow) => void
   variant: 'encours' | 'traites'
 }) {
+  const isTraites = variant === 'traites'
+  const [sortKey, setSortKey] = useState<string>('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [filters, setFilters] = useState({
+    partenaire: '', date: '', client: '', cp: '', ville: '', vendeur: '', agence: '', statut: '',
+  })
+  const setF = (k: keyof typeof filters) => (v: string) => setFilters((f) => ({ ...f, [k]: v }))
+
+  // Valeur d'une colonne (pour tri + filtre)
+  const valueOf = (r: TicketRow, key: string): string | number => {
+    switch (key) {
+      case 'partenaire': return r.partenaire_lib || r.partenaire || ''
+      case 'date': return r.date_crea || ''
+      case 'client': return r.nom_client || ''
+      case 'cp': return r.cp || ''
+      case 'ville': return r.ville || ''
+      case 'vendeur': return r.nom_vendeur || ''
+      case 'agence': return r.agence || r.lib_equipe || ''
+      case 'statut': return r.lib_statut || ''
+      case 'nb_offres': return r.nb_offres || 0
+      case 'fibre': return r.nb_fibre_valide || 0
+      case 'mob': return r.nb_mobile_valide || 0
+      case 'off': return r.nb_offres_valides || 0
+      case 'numbs': return r.nb_num_bs || 0
+      default: return ''
+    }
+  }
+  const ct = (v: string | number, f: string) => !f || String(v ?? '').toLowerCase().includes(f.toLowerCase())
+  const partenaires = useMemo(
+    () => [...new Set(rows.map((r) => r.partenaire_lib || r.partenaire).filter(Boolean))].sort(),
+    [rows],
+  )
+  const statuts = useMemo(
+    () => [...new Set(rows.map((r) => r.lib_statut).filter(Boolean))].sort(),
+    [rows],
+  )
+  const displayed = useMemo(() => {
+    if (!isTraites) return rows
+    let out = rows.filter((r) =>
+      (!filters.partenaire || (r.partenaire_lib || r.partenaire) === filters.partenaire) &&
+      ct(fmtDateFr(r.date_crea), filters.date) &&
+      ct(r.nom_client, filters.client) &&
+      ct(r.cp, filters.cp) &&
+      ct(r.ville, filters.ville) &&
+      ct(r.nom_vendeur, filters.vendeur) &&
+      ct(r.agence || r.lib_equipe || '', filters.agence) &&
+      (!filters.statut || r.lib_statut === filters.statut),
+    )
+    if (sortKey) {
+      const dir = sortDir === 'asc' ? 1 : -1
+      out = [...out].sort((a, b) => {
+        const va = valueOf(a, sortKey)
+        const vb = valueOf(b, sortKey)
+        if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir
+        return String(va).localeCompare(String(vb), 'fr') * dir
+      })
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, isTraites, filters, sortKey, sortDir])
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+  const SortHead = ({ k, label, right }: { k: string; label: string; right?: boolean }) => (
+    <th className={`py-1.5 px-2 ${right ? 'text-right' : 'text-left'}`}>
+      <button
+        type="button"
+        onClick={() => toggleSort(k)}
+        className={`inline-flex items-center gap-1 font-semibold hover:text-c-ink ${right ? 'flex-row-reverse' : ''}`}
+      >
+        {label}
+        <span className="text-[9px] w-2">{sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : ''}</span>
+      </button>
+    </th>
+  )
+
   return (
     <table className="text-xs w-full">
       <thead className="bg-c-surface-soft text-c-ink-soft">
@@ -411,28 +489,52 @@ function TicketsTable({
           {variant === 'encours' && (
             <th className="py-1.5 px-2 text-left">Appel</th>
           )}
-          <th className="py-1.5 px-2 text-left">Partenaire</th>
-          <th className="py-1.5 px-2 text-left">Date</th>
-          <th className="py-1.5 px-2 text-left">Client</th>
-          <th className="py-1.5 px-2 text-left">CP</th>
-          <th className="py-1.5 px-2 text-left">Ville</th>
-          <th className="py-1.5 px-2 text-left">Vendeur</th>
-          <th className="py-1.5 px-2 text-left">Agence</th>
-          <th className="py-1.5 px-2 text-left">Statut</th>
-          {variant === 'traites' && (
+          {isTraites ? (
             <>
-              <th className="py-1.5 px-2 text-right">Nb offres</th>
-              <th className="py-1.5 px-2 text-right">Fibre val.</th>
-              <th className="py-1.5 px-2 text-right">Mob. val.</th>
-              <th className="py-1.5 px-2 text-right">Off. val.</th>
-              <th className="py-1.5 px-2 text-right">Num BS</th>
+              <SortHead k="partenaire" label="Partenaire" />
+              <SortHead k="date" label="Date" />
+              <SortHead k="client" label="Client" />
+              <SortHead k="cp" label="CP" />
+              <SortHead k="ville" label="Ville" />
+              <SortHead k="vendeur" label="Vendeur" />
+              <SortHead k="agence" label="Agence" />
+              <SortHead k="statut" label="Statut" />
+              <SortHead k="nb_offres" label="Nb offres" right />
+              <SortHead k="fibre" label="Fibre val." right />
+              <SortHead k="mob" label="Mob. val." right />
+              <SortHead k="off" label="Off. val." right />
+              <SortHead k="numbs" label="Num BS" right />
               <th className="py-1.5 px-2 text-left">Détail brut</th>
+            </>
+          ) : (
+            <>
+              <th className="py-1.5 px-2 text-left">Partenaire</th>
+              <th className="py-1.5 px-2 text-left">Date</th>
+              <th className="py-1.5 px-2 text-left">Client</th>
+              <th className="py-1.5 px-2 text-left">CP</th>
+              <th className="py-1.5 px-2 text-left">Ville</th>
+              <th className="py-1.5 px-2 text-left">Vendeur</th>
+              <th className="py-1.5 px-2 text-left">Agence</th>
+              <th className="py-1.5 px-2 text-left">Statut</th>
             </>
           )}
         </tr>
+        {isTraites && (
+          <tr className="bg-white border-b border-c-line">
+            <FilterTh><FilterSelect value={filters.partenaire} onChange={setF('partenaire')} options={partenaires} /></FilterTh>
+            <FilterTh><FilterInput value={filters.date} onChange={setF('date')} /></FilterTh>
+            <FilterTh><FilterInput value={filters.client} onChange={setF('client')} /></FilterTh>
+            <FilterTh><FilterInput value={filters.cp} onChange={setF('cp')} /></FilterTh>
+            <FilterTh><FilterInput value={filters.ville} onChange={setF('ville')} /></FilterTh>
+            <FilterTh><FilterInput value={filters.vendeur} onChange={setF('vendeur')} /></FilterTh>
+            <FilterTh><FilterInput value={filters.agence} onChange={setF('agence')} /></FilterTh>
+            <FilterTh><FilterSelect value={filters.statut} onChange={setF('statut')} options={statuts} /></FilterTh>
+            <FilterTh /><FilterTh /><FilterTh /><FilterTh /><FilterTh /><FilterTh />
+          </tr>
+        )}
       </thead>
       <tbody>
-        {rows.map((r) => (
+        {displayed.map((r) => (
           <tr key={r.id}
               onDoubleClick={() => onDoubleClick(r)}
               className="border-b border-c-line-soft hover:bg-c-surface-soft cursor-pointer">
@@ -500,7 +602,7 @@ function TicketsTable({
             )}
           </tr>
         ))}
-        {rows.length === 0 && (
+        {displayed.length === 0 && (
           <tr>
             <td colSpan={variant === 'encours' ? 9 : 14}
                 className="py-6 text-center text-c-ink-faint italic">
@@ -510,6 +612,39 @@ function TicketsTable({
         )}
       </tbody>
     </table>
+  )
+}
+
+// --- Filtres de colonne (tableau des traites) ---------------------------
+
+function FilterTh({ children }: { children?: React.ReactNode }) {
+  return <th className="px-2 pb-1.5 align-top font-normal">{children}</th>
+}
+
+function FilterInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Filtrer…"
+      className="w-full px-1.5 py-0.5 border border-c-line rounded text-[11px] font-normal bg-white focus:border-c-brand focus:outline-none"
+    />
+  )
+}
+
+function FilterSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-1 py-0.5 border border-c-line rounded text-[11px] font-normal bg-white focus:border-c-brand focus:outline-none"
+    >
+      <option value="">Tous</option>
+      {options.map((o) => (
+        <option key={o} value={o}>{o}</option>
+      ))}
+    </select>
   )
 }
 
