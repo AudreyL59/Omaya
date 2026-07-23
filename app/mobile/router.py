@@ -33,6 +33,7 @@ from app.mobile import rh as rh_router
 from app.mobile import salarie as salarie_router
 from app.mobile import sfr as sfr_router
 from app.mobile import tickets as tickets_router
+from app.mobile import tickets_dpae as tickets_dpae_router
 
 router = APIRouter(prefix="/WebRest_Omayapp", tags=["mobile"])
 
@@ -58,4 +59,5 @@ router.include_router(rh_router.router)
 router.include_router(salarie_router.router)
 router.include_router(sfr_router.router)
 router.include_router(tickets_router.router)
+router.include_router(tickets_dpae_router.router)
 router.include_router(misc_router.router)
