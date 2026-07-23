@@ -140,6 +140,12 @@ export default function TicketsCallPage() {
   const [selectedHautId, setSelectedHautId] = useState<string>('')
   const [selectedBasId, setSelectedBasId] = useState<string>('')
   const [ficheOpenId, setFicheOpenId] = useState<string | null>(null)
+  // readonly = fiche ouverte depuis le tableau des TRAITES (consultation seule)
+  const [ficheReadonly, setFicheReadonly] = useState(false)
+  const openFiche = (id: string, readonly: boolean) => {
+    setFicheReadonly(readonly)
+    setFicheOpenId(id)
+  }
   const lastModifRef = useRef('')
   const stoppedRef = useRef(false)
   const jourBasRef = useRef(jourBas)
@@ -293,13 +299,13 @@ export default function TicketsCallPage() {
       {/* Tableau du HAUT : tickets à traiter */}
       <SectionHeader
         title="Tickets Call à traiter"
-        right={<HautActions disabled={!selectedHautId} onClick={() => selectedHautId && setFicheOpenId(selectedHautId)} />}
+        right={<HautActions disabled={!selectedHautId} onClick={() => selectedHautId && openFiche(selectedHautId, false)} />}
       />
       <TableEnCours
         rows={enCours.tickets_en_cours}
         selectedId={selectedHautId}
         onSelect={setSelectedHautId}
-        onOpenFiche={(id) => setFicheOpenId(id)}
+        onOpenFiche={(id) => openFiche(id, false)}
       />
 
       {/* Tableau du BAS : tickets traités du jour (placeholder pendant chargement) */}
@@ -313,7 +319,7 @@ export default function TicketsCallPage() {
             rows={traitesRows}
             loading={loadingTraites}
             ficheDisabled={!selectedBasId}
-            onOpenFiche={() => selectedBasId && setFicheOpenId(selectedBasId)}
+            onOpenFiche={() => selectedBasId && openFiche(selectedBasId, true)}
           />
         }
       />
@@ -327,13 +333,14 @@ export default function TicketsCallPage() {
           rows={traitesRows}
           selectedId={selectedBasId}
           onSelect={setSelectedBasId}
-          onOpenFiche={(id) => setFicheOpenId(id)}
+          onOpenFiche={(id) => openFiche(id, true)}
         />
       )}
 
       {/* Popup fiche ticket */}
       <FicheTicketModal
         idTicket={ficheOpenId}
+        readonly={ficheReadonly}
         onClose={() => setFicheOpenId(null)}
         onAfterAction={async () => {
           // Apres une action panier (valider/annuler/renvoyer) : refetch les

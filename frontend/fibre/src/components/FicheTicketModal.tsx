@@ -146,6 +146,7 @@ interface Props {
   idTicket: string | null
   onClose: () => void
   onAfterAction?: () => void   // callback pour refresh la liste apres action panier
+  readonly?: boolean           // ouverte depuis les traites -> consultation (pas de boutons)
 }
 
 // --- Historique de saisie "Réf Appel" (local au poste, localStorage) -----
@@ -214,7 +215,7 @@ function CopyButton({ value, title }: { value: string; title?: string }) {
   )
 }
 
-export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: Props) {
+export default function FicheTicketModal({ idTicket, onClose, onAfterAction, readonly = false }: Props) {
   const [data, setData] = useState<FicheData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>('')
@@ -778,10 +779,12 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction }: P
                 onPrendreAppel={() => handlePrendreAppel(false)}
                 onLacherAppel={handleLacherAppel}
                 refAppelHistory={refAppelHistory}
+                readonly={readonly}
               />
               <ColonneDroite
                 data={data}
                 offre={selectedOffre}
+                readonly={readonly}
                 onOffreChange={(patch) =>
                   selectedPanierId && patchOffre(selectedPanierId, patch)
                 }
@@ -1099,6 +1102,7 @@ function ColonneCentre({
   onPrendreAppel,
   onLacherAppel,
   refAppelHistory,
+  readonly,
 }: {
   data: FicheData
   editOffres: Record<string, FicheOffre>
@@ -1114,6 +1118,7 @@ function ColonneCentre({
   onPrendreAppel: () => void
   onLacherAppel: () => void
   refAppelHistory: string[]
+  readonly: boolean
 }) {
   const v = data.vendeur
   // Compteurs recalcules en live depuis editOffres (les statuts ont pu changer)
@@ -1178,7 +1183,7 @@ function ColonneCentre({
             <div className="flex-1">
               <Field label="Mobile" value={v.gsm} muted={!data.is_my_call} />
             </div>
-            {data.is_my_call ? (
+            {!readonly && (data.is_my_call ? (
               <button
                 onClick={onLacherAppel}
                 disabled={verrouLoading}
@@ -1206,7 +1211,7 @@ function ColonneCentre({
                 )}
                 Démarrer l'appel
               </button>
-            )}
+            ))}
           </div>
           {v.lib_affectation && (
             <div className="text-[10px] text-c-ink-faint mt-1">{v.lib_affectation}</div>
@@ -1244,8 +1249,8 @@ function ColonneCentre({
         </div>
       </div>
 
-      {/* Action sur la ligne selectionnee : "Annuler cette offre" */}
-      {selectedOffre && (
+      {/* Action sur la ligne selectionnee : "Annuler cette offre" (masque en consultation) */}
+      {!readonly && selectedOffre && (
         <button
           onClick={onAnnulLigne}
           disabled={!canAnnulerLigne}
@@ -1259,29 +1264,31 @@ function ColonneCentre({
         </button>
       )}
 
-      {/* Boutons d'action panier */}
-      <div className="space-y-2">
-        <div className="grid grid-cols-2 gap-2">
+      {/* Boutons d'action panier (masques en consultation) */}
+      {!readonly && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <ActionButton
+              label="Valider le panier"
+              disabled={!canValider}
+              variant="green"
+              onClick={onAskValider}
+            />
+            <ActionButton
+              label="Annuler toute la vente"
+              disabled={!canAnnulerVente}
+              variant="dark"
+              onClick={onAskAnnulVente}
+            />
+          </div>
           <ActionButton
-            label="Valider le panier"
-            disabled={!canValider}
-            variant="green"
-            onClick={onAskValider}
-          />
-          <ActionButton
-            label="Annuler toute la vente"
-            disabled={!canAnnulerVente}
-            variant="dark"
-            onClick={onAskAnnulVente}
+            label="Renvoyer le panier pour complément"
+            variant="orange"
+            full
+            onClick={onAskRenvoi}
           />
         </div>
-        <ActionButton
-          label="Renvoyer le panier pour complément"
-          variant="orange"
-          full
-          onClick={onAskRenvoi}
-        />
-      </div>
+      )}
     </div>
   )
 }
@@ -1291,6 +1298,7 @@ function ColonneCentre({
 function ColonneDroite({
   data,
   offre,
+  readonly,
   onOffreChange,
   onSaveStatutAuto,
   onAskAnnulLigne,
@@ -1308,6 +1316,7 @@ function ColonneDroite({
 }: {
   data: FicheData
   offre: FicheOffre | null
+  readonly: boolean
   onOffreChange: (patch: Partial<FicheOffre>) => void
   onSaveStatutAuto: (newStatut: number) => void
   onAskAnnulLigne: () => void
@@ -1437,18 +1446,32 @@ function ColonneDroite({
               />
             </div>
 
-            <button
-              onClick={onSaveOffre}
-              disabled={savingOffre}
-              className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {savingOffre && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Enregistrer les modifs Offre
-            </button>
+            {/* Consultation : motif d'annulation de la ligne (si annulee) */}
+            {readonly && offre.statut_prod === 2 && (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+                <div className="text-[11px] font-semibold text-red-700 mb-1">
+                  Motif d'annulation de l'offre
+                </div>
+                <div className="text-xs text-c-ink whitespace-pre-wrap">
+                  {offre.motif_annulation || '—'}
+                </div>
+              </div>
+            )}
+
+            {!readonly && (
+              <button
+                onClick={onSaveOffre}
+                disabled={savingOffre}
+                className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {savingOffre && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Enregistrer les modifs Offre
+              </button>
+            )}
 
             {/* Renvoi panier pour lettre de resil : meme condition que le bouton
-                "Lettre de resil" (FIBRE sans portabilite) */}
-            {offre.type === 'FIBRE' && !offre.portabilite && (
+                "Lettre de resil" (FIBRE sans portabilite), masque en consultation */}
+            {!readonly && offre.type === 'FIBRE' && !offre.portabilite && (
               <button
                 onClick={onAskRenvoiResil}
                 className="mt-2 w-full py-2 rounded bg-red-600 text-white text-xs font-semibold hover:brightness-110"
@@ -1510,14 +1533,16 @@ function ColonneDroite({
           />
         </div>
 
-        <button
-          onClick={onSaveVente}
-          disabled={savingVente}
-          className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {savingVente && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          Enregistrer les infos client et vente
-        </button>
+        {!readonly && (
+          <button
+            onClick={onSaveVente}
+            disabled={savingVente}
+            className="mt-3 w-full py-2 rounded bg-gray-900 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {savingVente && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Enregistrer les infos client et vente
+          </button>
+        )}
       </div>
     </div>
   )
