@@ -28,9 +28,10 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends
 
 from app.core.database.pg import get_pg_connection
-from app.mobile.agcial import _to_int
+from app.mobile.agcial import _new_id_wd, _to_int
 from app.mobile.auth import _capitalise
 from app.mobile.deps import mobile_auth
+from app.mobile.sfr import _create_ticket_liste
 
 logger = logging.getLogger(__name__)
 
@@ -548,3 +549,622 @@ def tickets_modif_op_dest(payload: dict = Body(...),
         except Exception:
             logger.exception("tickets_modif_op_dest id_tk=%s", id_tk)
     return {"nIdDemande": str(n_modif)}
+
+
+# ===========================================================================
+#  Helpers Lot 2
+# ===========================================================================
+
+def _identite_salarie(id_sal: int) -> tuple[str, str]:
+    """Retourne (Nom, Prenom capitalise) d'un salarie."""
+    if not id_sal:
+        return "", ""
+    db = get_pg_connection("rh")
+    try:
+        s = db.query_one(
+            "SELECT nom, prenom FROM rh.pgt_salarie WHERE id_salarie = ? LIMIT 1",
+            (int(id_sal),),
+        )
+    except Exception:
+        return "", ""
+    if not s:
+        return "", ""
+    return (s.get("nom") or "").strip(), (s.get("prenom") or "").strip()
+
+
+def _touch_tk_liste(id_tk: int, id_op_modif: int,
+                     op_dest_new: int | None = None) -> None:
+    """Marque TK_Liste modification=TRUE (+ optionnel op_dest)."""
+    if not id_tk:
+        return
+    db = get_pg_connection("ticket")
+    now = datetime.now()
+    try:
+        if op_dest_new is not None:
+            db.query(
+                """UPDATE ticket.pgt_tk_liste
+                      SET modification = TRUE, op_modif = ?, op_dest = ?,
+                          modif_date = ?, modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                (int(id_op_modif), int(op_dest_new), now, int(id_tk)),
+            )
+        else:
+            db.query(
+                """UPDATE ticket.pgt_tk_liste
+                      SET modification = TRUE, op_modif = ?,
+                          modif_date = ?, modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                (int(id_op_modif), now, int(id_tk)),
+            )
+    except Exception:
+        logger.exception("_touch_tk_liste id_tk=%s", id_tk)
+
+
+# ===========================================================================
+#  AVANCE
+# ===========================================================================
+
+@router.post("/Tickets/AVANCE/Contenu")
+def avance_contenu(payload: dict = Body(...)):
+    """Portage DemandeAvance_Contenu."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {
+        "Beneficiaire": 0, "IDTK_DemandeAvance": "0", "IDTK_Liste": "0",
+        "Montant": 0.0, "NomBeneficiaire": "", "PrenomBeneficiaire": "",
+        "PreuveVirement": "",
+    }
+    if not id_tk:
+        return empty
+
+    db = get_pg_connection("ticket_bo")
+    try:
+        row = db.query_one(
+            """SELECT id_tk_demande_avance, id_tk_liste, beneficiaire,
+                      montant, preuve_virement
+                 FROM ticket_bo.pgt_tk_demande_avance
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("avance_contenu id=%s", id_tk)
+        return empty
+    if not row:
+        return empty
+    nom, prenom = _identite_salarie(_to_int(row.get("beneficiaire")))
+    return {
+        "Beneficiaire": _to_int(row.get("beneficiaire")),
+        "IDTK_DemandeAvance": str(int(row.get("id_tk_demande_avance") or 0)),
+        "IDTK_Liste": str(int(row.get("id_tk_liste") or 0)),
+        "Montant": float(row.get("montant") or 0),
+        "NomBeneficiaire": nom,
+        "PrenomBeneficiaire": prenom,
+        "PreuveVirement": _bytea_to_b64(row.get("preuve_virement")),
+    }
+
+
+@router.post("/Tickets/AVANCE/Save")
+def avance_save(payload: dict = Body(...),
+                id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeAvance_Save. Type demande=10, service=BO."""
+    id_tk = _to_int(payload.get("IDTK_Liste"))
+    id_benef = _to_int(payload.get("Beneficiaire"))
+    montant = float(payload.get("Montant") or 0)
+
+    db = get_pg_connection("ticket_bo")
+    now = datetime.now()
+
+    if id_tk:
+        try:
+            row = db.query_one(
+                """SELECT id_tk_demande_avance
+                     FROM ticket_bo.pgt_tk_demande_avance
+                    WHERE id_tk_liste = ? LIMIT 1""",
+                (id_tk,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            db.query(
+                """UPDATE ticket_bo.pgt_tk_demande_avance
+                      SET beneficiaire = ?, montant = ?, modif_date = ?,
+                          modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                (id_benef, montant, now, id_cial, id_tk),
+            )
+            _touch_tk_liste(id_tk, id_cial, id_benef)
+            return {"nIdDemande": str(id_tk)}
+        except Exception as e:
+            logger.exception("avance_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert : cree ticket + insert avance
+    id_new = _new_id_wd()
+    id_tk_new = _create_ticket_liste("BO", 10, 1, id_cial, id_new)
+    if not id_tk_new:
+        return {"nIdDemande": "0"}
+    try:
+        db.query(
+            """INSERT INTO ticket_bo.pgt_tk_demande_avance
+                 (id_tk_demande_avance_auto, id_tk_demande_avance,
+                  id_tk_liste, beneficiaire, montant, preuve_virement,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 'new')""",
+            (id_new, id_new, id_tk_new, id_benef, montant, now, id_cial),
+        )
+        return {"nIdDemande": str(id_tk_new)}
+    except Exception as e:
+        logger.exception("avance_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  CartePRO
+# ===========================================================================
+
+@router.post("/Tickets/CartePRO/Contenu")
+def carte_pro_contenu(payload: dict = Body(...)):
+    """Portage DemandeCartePro_Contenu. Retourne toutes les demandes
+    liees a ce ticket (le WinDev fait REQ_ListeTkCartePro par ticket)."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    if not id_tk:
+        return []
+
+    db_bo = get_pg_connection("ticket_bo")
+    try:
+        rows = db_bo.query(
+            """SELECT id_tk_demande_carte_pro, id_tk_liste, id_salarie,
+                      num_suivi, op_crea, photo
+                 FROM ticket_bo.pgt_tk_demande_carte_pro
+                WHERE id_tk_liste = ?
+                  AND (modif_elem IS NULL OR modif_elem <> 'suppr')""",
+            (id_tk,),
+        ) or []
+    except Exception:
+        logger.exception("carte_pro_contenu id=%s", id_tk)
+        return []
+    result = []
+    for r in rows:
+        nom, prenom = _identite_salarie(_to_int(r.get("id_salarie")))
+        result.append({
+            "IDTK_DemandeCartePRO": str(int(r.get("id_tk_demande_carte_pro") or 0)),
+            "IDTK_Liste": str(int(r.get("id_tk_liste") or 0)),
+            "IDSalarie": _to_int(r.get("id_salarie")),
+            "NomSalarie": f"{nom} {_capitalise(prenom)}".strip(),
+            "NumSuivi": r.get("num_suivi") or "",
+            "OPCrea": _to_int(r.get("op_crea")),
+            "PHOTO": _bytea_to_b64(r.get("photo")),
+        })
+    return result
+
+
+@router.post("/Tickets/CartePRO/Save")
+def carte_pro_save(payload: dict = Body(...),
+                    id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeCartePro_Save. Type demande=2, service=BO.
+    Cree un nouveau ticket seulement si IDTK_Liste=0."""
+    id_dem = _to_int(payload.get("IDTK_DemandeCartePRO"))
+    id_tk_liste = _to_int(payload.get("IDTK_Liste"))
+    id_sal = _to_int(payload.get("IDSalarie"))
+    photo_b64 = payload.get("PHOTO") or ""
+
+    photo_bytes = None
+    if photo_b64:
+        try:
+            photo_bytes = base64.b64decode(photo_b64)
+        except Exception:
+            photo_bytes = None
+
+    import psycopg2
+    db = get_pg_connection("ticket_bo")
+    now = datetime.now()
+
+    if id_dem:
+        # Update
+        try:
+            row = db.query_one(
+                """SELECT id_tk_liste FROM ticket_bo.pgt_tk_demande_carte_pro
+                    WHERE id_tk_demande_carte_pro = ? LIMIT 1""",
+                (id_dem,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            id_tk_ref = int(row.get("id_tk_liste") or 0)
+            if photo_bytes is not None:
+                db.query(
+                    """UPDATE ticket_bo.pgt_tk_demande_carte_pro
+                          SET photo = ?, modif_date = ?, modif_op = ?,
+                              modif_elem = 'modif'
+                        WHERE id_tk_demande_carte_pro = ?""",
+                    (psycopg2.Binary(photo_bytes), now, id_cial, id_dem),
+                )
+            else:
+                db.query(
+                    """UPDATE ticket_bo.pgt_tk_demande_carte_pro
+                          SET modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                        WHERE id_tk_demande_carte_pro = ?""",
+                    (now, id_cial, id_dem),
+                )
+            _touch_tk_liste(id_tk_ref, id_cial)
+            return {"nIdDemande": str(id_dem)}
+        except Exception as e:
+            logger.exception("carte_pro_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    if not id_tk_liste:
+        id_tk_liste = _create_ticket_liste("BO", 2, 1, id_cial, id_new)
+        if not id_tk_liste:
+            return {"nIdDemande": "0"}
+    try:
+        db.query(
+            """INSERT INTO ticket_bo.pgt_tk_demande_carte_pro
+                 (id_tk_demande_carte_pro_auto, id_tk_demande_carte_pro,
+                  id_tk_liste, id_salarie, photo, op_crea, num_suivi,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 'new')""",
+            (id_new, id_new, id_tk_liste, id_sal,
+             psycopg2.Binary(photo_bytes) if photo_bytes else None,
+             id_cial, now, id_cial),
+        )
+        return {"nIdDemande": str(id_new)}
+    except Exception as e:
+        logger.exception("carte_pro_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  FOURNITURE
+# ===========================================================================
+
+@router.post("/Tickets/FOURNITURE/Contenu")
+def fourniture_contenu(payload: dict = Body(...)):
+    """Portage DemandeFourniture_Contenu. Liste des fournitures du ticket."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    if not id_tk:
+        return []
+
+    db = get_pg_connection("ticket_bo")
+    try:
+        rows = db.query(
+            """SELECT df.id_tk_demande_fourniture, df.id_tk_liste,
+                      df.id_tk_type_commande, df.qte, df.date_envoi,
+                      df.num_suivi, df.op_crea, df.priorite_haute,
+                      df.adr_livraison,
+                      tc.lib_type_bs
+                 FROM ticket_bo.pgt_tk_demande_fourniture df
+                 LEFT JOIN ticket_bo.pgt_tk_type_commande tc
+                        ON tc.id_tk_type_commande = df.id_tk_type_commande
+                WHERE df.id_tk_liste = ?
+                  AND (df.modif_elem IS NULL OR df.modif_elem <> 'suppr')""",
+            (id_tk,),
+        ) or []
+    except Exception:
+        logger.exception("fourniture_contenu id=%s", id_tk)
+        return []
+    return [
+        {"IDTK_DemandeFourniture": str(int(r.get("id_tk_demande_fourniture") or 0)),
+         "IDTK_Liste": str(int(r.get("id_tk_liste") or 0)),
+         "Lib_TypeCommande": (r.get("lib_type_bs") or "").strip(),
+         "IDTK_TypeCommande": _to_int(r.get("id_tk_type_commande")),
+         "Qte": _to_int(r.get("qte")),
+         "dateEnvoi": _iso_dt(r.get("date_envoi")),
+         "NumSuivi": r.get("num_suivi") or "",
+         "OPCrea": _to_int(r.get("op_crea")),
+         "PrioriteHaute": bool(r.get("priorite_haute")),
+         "AdrLivr": r.get("adr_livraison") or ""}
+        for r in rows
+    ]
+
+
+@router.post("/Tickets/FOURNITURE/Save")
+def fourniture_save(payload: dict = Body(...),
+                     id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeFourniture_Save. Type demande=1, service=BO."""
+    id_dem = _to_int(payload.get("IDTK_DemandeFourniture"))
+    id_tk_liste = _to_int(payload.get("IDTK_Liste"))
+    id_type_cmd = _to_int(payload.get("IDTK_TypeCommande"))
+    qte = _to_int(payload.get("Qte"))
+    date_envoi_s = payload.get("dateEnvoi") or ""
+    priorite = bool(payload.get("PrioriteHaute"))
+    num_suivi = payload.get("NumSuivi") or ""
+    op_crea = _to_int(payload.get("OPCrea") or id_cial)
+
+    from app.mobile.agcial import _parse_jour
+    d_env = _parse_jour(date_envoi_s)
+
+    db = get_pg_connection("ticket_bo")
+    now = datetime.now()
+
+    if id_dem:
+        try:
+            row = db.query_one(
+                """SELECT id_tk_liste FROM ticket_bo.pgt_tk_demande_fourniture
+                    WHERE id_tk_demande_fourniture = ? LIMIT 1""",
+                (id_dem,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            db.query(
+                """UPDATE ticket_bo.pgt_tk_demande_fourniture
+                      SET id_tk_type_commande = ?, qte = ?, date_envoi = ?,
+                          priorite_haute = ?, num_suivi = ?,
+                          modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_demande_fourniture = ?""",
+                (id_type_cmd, qte, d_env, priorite, num_suivi,
+                 now, id_cial, id_dem),
+            )
+            _touch_tk_liste(int(row.get("id_tk_liste") or 0), id_cial)
+            return {"nIdDemande": str(id_dem)}
+        except Exception as e:
+            logger.exception("fourniture_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    if not id_tk_liste:
+        id_tk_liste = _create_ticket_liste("BO", 1, 1, id_cial, id_new)
+        if not id_tk_liste:
+            return {"nIdDemande": "0"}
+    try:
+        db.query(
+            """INSERT INTO ticket_bo.pgt_tk_demande_fourniture
+                 (id_tk_demande_fourniture_auto, id_tk_demande_fourniture,
+                  id_tk_liste, id_tk_type_commande, qte, date_envoi,
+                  priorite_haute, num_suivi, op_crea, date_crea,
+                  adr_livraison, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, 'new')""",
+            (id_new, id_new, id_tk_liste, id_type_cmd, qte, d_env,
+             priorite, num_suivi, op_crea, now, now, id_cial),
+        )
+        return {"nIdDemande": str(id_new)}
+    except Exception as e:
+        logger.exception("fourniture_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  SOSBO
+# ===========================================================================
+
+@router.post("/Tickets/SOSBO/Contenu")
+def sosbo_contenu(payload: dict = Body(...)):
+    """Portage DemandeSOS_BO_Contenu."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {"IDTK_DemandeSOS_BO": "0", "IDTK_Liste": "0",
+             "IDTK_TypeSOS_BO": 0, "Beneficiaire": 0,
+             "NomBeneficiaire": "", "PrenomBeneficiaire": "",
+             "InfoCplt": "", "Ref_A_controler": ""}
+    if not id_tk:
+        return empty
+    db = get_pg_connection("ticket_bo")
+    try:
+        row = db.query_one(
+            """SELECT id_tk_demande_sos_bo, id_tk_liste, beneficiaire,
+                      id_tk_type_sos_bo, info_cplt, ref_a_controler
+                 FROM ticket_bo.pgt_tk_demande_sos_bo
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("sosbo_contenu id=%s", id_tk)
+        return empty
+    if not row:
+        return empty
+    nom, prenom = _identite_salarie(_to_int(row.get("beneficiaire")))
+    return {
+        "IDTK_DemandeSOS_BO": str(int(row.get("id_tk_demande_sos_bo") or 0)),
+        "IDTK_Liste": str(int(row.get("id_tk_liste") or 0)),
+        "IDTK_TypeSOS_BO": _to_int(row.get("id_tk_type_sos_bo")),
+        "Beneficiaire": _to_int(row.get("beneficiaire")),
+        "NomBeneficiaire": nom,
+        "PrenomBeneficiaire": prenom,
+        "InfoCplt": row.get("info_cplt") or "",
+        "Ref_A_controler": row.get("ref_a_controler") or "",
+    }
+
+
+@router.post("/Tickets/SOSBO/Save")
+def sosbo_save(payload: dict = Body(...),
+                id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeSOS_BO_Save. Type demande=11, service=BO."""
+    id_dem = _to_int(payload.get("IDTK_DemandeSOS_BO"))
+    id_tk_liste = _to_int(payload.get("IDTK_Liste"))
+    id_benef = _to_int(payload.get("Beneficiaire"))
+    id_type = _to_int(payload.get("IDTK_TypeSOS_BO"))
+    ref = payload.get("Ref_A_controler") or ""
+    info_cplt = payload.get("InfoCplt") or ""
+
+    db = get_pg_connection("ticket_bo")
+    now = datetime.now()
+
+    if id_dem:
+        try:
+            row = db.query_one(
+                """SELECT id_tk_liste FROM ticket_bo.pgt_tk_demande_sos_bo
+                    WHERE id_tk_demande_sos_bo = ? LIMIT 1""",
+                (id_dem,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            id_tk_ref = int(row.get("id_tk_liste") or 0)
+            db.query(
+                """UPDATE ticket_bo.pgt_tk_demande_sos_bo
+                      SET beneficiaire = ?, id_tk_type_sos_bo = ?,
+                          ref_a_controler = ?, info_cplt = ?,
+                          modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_demande_sos_bo = ?""",
+                (id_benef, id_type, ref, info_cplt, now, id_cial, id_dem),
+            )
+            _touch_tk_liste(id_tk_ref, id_cial, id_benef)
+            return {"nIdDemande": str(id_dem)}
+        except Exception as e:
+            logger.exception("sosbo_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    if not id_tk_liste:
+        id_tk_liste = _create_ticket_liste("BO", 11, 1, id_cial, id_new)
+        if not id_tk_liste:
+            return {"nIdDemande": "0"}
+    try:
+        db.query(
+            """INSERT INTO ticket_bo.pgt_tk_demande_sos_bo
+                 (id_tk_demande_sos_bo_auto, id_tk_demande_sos_bo,
+                  id_tk_liste, beneficiaire, id_tk_type_sos_bo,
+                  ref_a_controler, info_cplt,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+            (id_new, id_new, id_tk_liste, id_benef, id_type, ref, info_cplt,
+             now, id_cial),
+        )
+        return {"nIdDemande": str(id_new)}
+    except Exception as e:
+        logger.exception("sosbo_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  SOSJU
+# ===========================================================================
+
+@router.post("/Tickets/SOSJU/Contenu")
+def sosju_contenu(payload: dict = Body(...)):
+    """Portage DemandeSOS_JU_Contenu. Selon TypeForm de TK_TypeSOS_JU,
+    resout LibElem depuis salarie / type_poste / societe / vehicule."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {"IDTK_DemandeSOS_JU": "0", "IDTK_Liste": "0",
+             "IDTK_TypeSOS_JU": 0, "IDElem": 0, "RefDemande": "",
+             "Descriptif": "", "LibTypeSOS_JU": "", "LibElem": ""}
+    if not id_tk:
+        return empty
+    db = get_pg_connection("ticket_rh")
+    try:
+        row = db.query_one(
+            """SELECT id_tk_demande_sos_ju, id_tk_liste, id_tk_type_sos_ju,
+                      id_elem, ref_demande, descriptif
+                 FROM ticket_rh.pgt_tk_demande_sos_ju
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("sosju_contenu id=%s", id_tk)
+        return empty
+    if not row:
+        return empty
+
+    id_type = _to_int(row.get("id_tk_type_sos_ju"))
+    id_elem = _to_int(row.get("id_elem"))
+    type_form = ""
+    try:
+        tf = db.query_one(
+            """SELECT type_form FROM ticket_rh.pgt_tk_type_sos_ju
+                WHERE id_tk_type_sos_ju = ? LIMIT 1""",
+            (id_type,),
+        )
+        if tf:
+            type_form = (tf.get("type_form") or "").strip()
+    except Exception:
+        pass
+
+    lib_elem = ""
+    if id_elem:
+        if type_form == "Salarie":
+            nom, prenom = _identite_salarie(id_elem)
+            lib_elem = f"{nom} {_capitalise(prenom)}".strip()
+        elif type_form == "Poste":
+            try:
+                rh_db = get_pg_connection("rh")
+                p = rh_db.query_one(
+                    """SELECT lib_poste FROM rh.pgt_type_poste
+                        WHERE id_type_poste = ? LIMIT 1""",
+                    (id_elem,),
+                )
+                if p:
+                    lib_elem = (p.get("lib_poste") or "").strip()
+            except Exception:
+                pass
+        elif type_form == "Societe":
+            try:
+                rh_db = get_pg_connection("rh")
+                s = rh_db.query_one(
+                    """SELECT rs_interne FROM rh.pgt_societe
+                        WHERE id_ste = ? LIMIT 1""",
+                    (id_elem,),
+                )
+                if s:
+                    lib_elem = (s.get("rs_interne") or "").strip()
+            except Exception:
+                pass
+
+    return {
+        "IDTK_DemandeSOS_JU": str(int(row.get("id_tk_demande_sos_ju") or 0)),
+        "IDTK_Liste": str(int(row.get("id_tk_liste") or 0)),
+        "IDTK_TypeSOS_JU": id_type,
+        "IDElem": id_elem,
+        "RefDemande": row.get("ref_demande") or "",
+        "Descriptif": row.get("descriptif") or "",
+        "LibTypeSOS_JU": type_form,
+        "LibElem": lib_elem,
+    }
+
+
+@router.post("/Tickets/SOSJU/Save")
+def sosju_save(payload: dict = Body(...),
+                id_cial: int = Depends(mobile_auth)):
+    """Portage DemandeSOS_JU_Save. Type demande=17, service=JU.
+    op_dest = idCial (WinDev)."""
+    id_dem = _to_int(payload.get("IDTK_DemandeSOS_JU"))
+    id_tk_liste = _to_int(payload.get("IDTK_Liste"))
+    id_type = _to_int(payload.get("IDTK_TypeSOS_JU"))
+    id_elem = _to_int(payload.get("IDElem"))
+    ref = payload.get("RefDemande") or ""
+    descriptif = payload.get("Descriptif") or ""
+
+    db = get_pg_connection("ticket_rh")
+    now = datetime.now()
+
+    if id_dem:
+        try:
+            row = db.query_one(
+                """SELECT id_tk_liste FROM ticket_rh.pgt_tk_demande_sos_ju
+                    WHERE id_tk_demande_sos_ju = ? LIMIT 1""",
+                (id_dem,),
+            )
+            if not row:
+                return {"nIdDemande": "0"}
+            id_tk_ref = int(row.get("id_tk_liste") or 0)
+            db.query(
+                """UPDATE ticket_rh.pgt_tk_demande_sos_ju
+                      SET id_tk_type_sos_ju = ?, id_elem = ?,
+                          ref_demande = ?, descriptif = ?,
+                          modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                    WHERE id_tk_demande_sos_ju = ?""",
+                (id_type, id_elem, ref, descriptif, now, id_cial, id_dem),
+            )
+            _touch_tk_liste(id_tk_ref, id_cial, id_cial)
+            return {"nIdDemande": str(id_dem)}
+        except Exception as e:
+            logger.exception("sosju_save update")
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # Insert
+    id_new = _new_id_wd()
+    if not id_tk_liste:
+        id_tk_liste = _create_ticket_liste("JU", 17, 1, id_cial, id_new)
+        if not id_tk_liste:
+            return {"nIdDemande": "0"}
+    try:
+        db.query(
+            """INSERT INTO ticket_rh.pgt_tk_demande_sos_ju
+                 (id_tk_demande_sos_ju_auto, id_tk_demande_sos_ju,
+                  id_tk_liste, id_tk_type_sos_ju, id_elem, ref_demande,
+                  descriptif, modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')""",
+            (id_new, id_new, id_tk_liste, id_type, id_elem, ref, descriptif,
+             now, id_cial),
+        )
+        return {"nIdDemande": str(id_new)}
+    except Exception as e:
+        logger.exception("sosju_save insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
