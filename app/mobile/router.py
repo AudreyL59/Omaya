@@ -29,6 +29,7 @@ from app.mobile import donneinfo as donneinfo_router
 from app.mobile import exocash as exocash_router
 from app.mobile import feuille_pointe as feuille_pointe_router
 from app.mobile import misc as misc_router
+from app.mobile import rh as rh_router
 
 router = APIRouter(prefix="/WebRest_Omayapp", tags=["mobile"])
 
@@ -50,4 +51,5 @@ router.include_router(declaratif_router.router)
 router.include_router(donneinfo_router.router)
 router.include_router(exocash_router.router)
 router.include_router(feuille_pointe_router.router)
+router.include_router(rh_router.router)
 router.include_router(misc_router.router)
