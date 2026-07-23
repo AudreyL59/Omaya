@@ -226,7 +226,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
     setDocClarif({ url: '', kind: '' })
     ;(async () => {
       try {
-        const r = await fetch(`${API_BASE}/tickets/${idTicket}/fiche`, {
+        const r = await fetch(ficheUrl(idTicket), {
           headers: { Authorization: `Bearer ${getToken()}` },
         })
         if (!r.ok) {
@@ -251,7 +251,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
         setEditOffres(map)
         if (d.panier.length > 0) setSelectedPanierId(d.panier[0].id)
         // Documents en background
-        fetch(`${API_BASE}/tickets/${idTicket}/documents?client_pro=${d.client.client_pro ? 1 : 0}`, {
+        fetch(`${base}/${idTicket}/documents?client_pro=${d.client.client_pro ? 1 : 0}`, {
           headers: { Authorization: `Bearer ${getToken()}` },
         })
           .then((r2) => (r2.ok ? r2.json() : null))
@@ -293,7 +293,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
       return
     }
     let cancelled = false
-    fetch(`${API_BASE}/tickets/panier/${selectedPanierId}/clarification`, {
+    fetch(`${base}/panier/${selectedPanierId}/clarification`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -312,7 +312,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
   const reloadFiche = async () => {
     if (!idTicket) return
     try {
-      const r = await fetch(`${API_BASE}/tickets/${idTicket}/fiche`, {
+      const r = await fetch(ficheUrl(idTicket), {
         headers: { Authorization: `Bearer ${getToken()}` },
       })
       if (!r.ok) return
@@ -330,7 +330,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
     if (!idTicket) return
     setVerrouLoading(true)
     try {
-      const r = await fetch(`${API_BASE}/tickets/${idTicket}/verrou/prendre`, {
+      const r = await fetch(`${base}/${idTicket}/verrou/prendre`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ force }),
@@ -359,7 +359,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
     if (!idTicket) return
     setVerrouLoading(true)
     try {
-      const r = await fetch(`${API_BASE}/tickets/${idTicket}/verrou/lacher`, {
+      const r = await fetch(`${base}/${idTicket}/verrou/lacher`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}` },
       })
@@ -381,7 +381,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
     if (!selectedPanierId) return
     setActionLoading(true)
     try {
-      const r = await fetch(`${API_BASE}/tickets/panier/${selectedPanierId}/annuler-ligne`, {
+      const r = await fetch(`${base}/panier/${selectedPanierId}/annuler-ligne`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ motifs, precisions }),
@@ -434,7 +434,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
         : actionDialog === 'annulVente' ? 'annuler-vente'
         : actionDialog === 'renvoiClarif' ? 'renvoyer-clarification'
         : 'renvoyer-complement'
-      const r = await fetch(`${API_BASE}/tickets/${idTicket}/${path}`, {
+      const r = await fetch(`${base}/${idTicket}/${path}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(venteBody),
@@ -485,7 +485,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
           info_vente: editVente.info_vente,
         },
       }
-      const r = await fetch(`${API_BASE}/tickets/${idTicket}/save-vente`, {
+      const r = await fetch(`${base}/${idTicket}/save-vente`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${getToken()}`,
@@ -528,7 +528,7 @@ export default function FicheTicketModal({ idTicket, onClose, onAfterAction, rea
         date_activ: offre.date_activ,
         ref_client_oen: offre.ref_client_oen,
       }
-      const r = await fetch(`${API_BASE}/tickets/panier/${offre.id}/save-offre`, {
+      const r = await fetch(`${base}/panier/${offre.id}/save-offre`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${getToken()}`,
