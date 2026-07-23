@@ -67,11 +67,6 @@ def news_liste(_payload: dict = Body(default={})):
     raise HTTPException(501, "News/Liste non encore porte (TXT manquant)")
 
 
-@router.post("/Org/Liste")
-def org_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "Org/Liste non encore porte (TXT manquant)")
-
-
 @router.post("/Podium")
 def podium(_payload: dict = Body(default={})):
     raise HTTPException(501, "Podium non encore porte (TXT manquant)")
@@ -143,22 +138,6 @@ def tkfourn_ajouter(_payload: dict = Body(default={})):
 @router.post("/TKFourniture/ListeBySalarie")
 def tkfourn_liste(_payload: dict = Body(default={})):
     raise HTTPException(501, "TKFourniture/ListeBySalarie non encore porte (TXT manquant)")
-
-
-# Notifications
-@router.post("/Notifications/ListeBySalarie")
-def notifications_liste(_payload: dict = Body(default={})):
-    raise HTTPException(501, "Notifications/ListeBySalarie non encore porte (TXT manquant)")
-
-
-@router.post("/Notifications/MarquerLue")
-def notifications_marquer_lue(_payload: dict = Body(default={})):
-    raise HTTPException(501, "Notifications/MarquerLue non encore porte (TXT manquant)")
-
-
-@router.post("/Notifications/MarquerToutLu")
-def notifications_marquer_tout(_payload: dict = Body(default={})):
-    raise HTTPException(501, "Notifications/MarquerToutLu non encore porte (TXT manquant)")
 
 
 # SignPDF
