@@ -2070,3 +2070,645 @@ def doc_distrib_save(payload: dict = Body(...),
     except Exception as e:
         logger.exception("doc_distrib_save id=%s", id_tk)
         return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  Helpers Lot 4a (Signatures/Annulations Ctt/Ulease)
+# ===========================================================================
+
+def _decode_b64(v) -> bytes | None:
+    if not v:
+        return None
+    if isinstance(v, bytes):
+        return v
+    try:
+        return base64.b64decode(str(v))
+    except Exception:
+        return None
+
+
+def _apply_sign_state(payload: dict, tk_prefix_check: str) -> dict:
+    """Parse TitreContrat = '010' -> (sign, para, luapp) '0' ou '1'.
+    Le WinDev decode base64 les champs Signature/Photo/paraphe/Mention si
+    le nom contient 'tk_prefix_check' (ex: '_CttWSignature'). Ici on
+    considere que le mobile envoie systematiquement du base64 direct.
+    Retourne un dict {sign_bytes, photo_bytes, paraphe_bytes, luapp_bytes,
+    do_sign, do_para, do_luapp} selon EtatSign."""
+    etat = payload.get("TitreContrat") or "000"
+    s = str(etat).zfill(3)[:3]
+    do_sign = s[0] == "0"
+    do_para = s[1] == "0"
+    do_luapp = s[2] == "0"
+    return {
+        "sign": _decode_b64(payload.get("Signature")) if do_sign else None,
+        "photo": _decode_b64(payload.get("Photo")) if do_sign else None,
+        "paraphe": _decode_b64(payload.get("paraphe")) if do_para else None,
+        "luapp": _decode_b64(payload.get("Mention")) if do_luapp else None,
+        "do_sign": do_sign,
+        "do_para": do_para,
+        "do_luapp": do_luapp,
+    }
+
+
+def _annul_sign_generic(payload: dict, id_cial: int, type_modif: str,
+                          table_full: str, id_col: str, id_pk_col: str,
+                          get_tk_liste_by_id: callable,
+                          db_schema_key: str) -> dict:
+    """Portage generique Annul_Sign_XXX pour CttW / CttCourtage /
+    DocUlease / PvUlease.
+
+    Cases WinDev :
+    - Annulation : reset signature/paraphe/luapp/photo + ContenuValidation,
+                    ticket statut 5 (si OPDEST=0) ou 6.
+    - Signature  : applique les 3 champs selon TitreContrat + date +
+                    ContenuValidation (+ mobile salarie), ticket statut 12.
+    - ContenuValidation : maj uniquement le ContenuValidation.
+
+    Retourne {nIdDemande: id_demande_contrat_w/etc.}
+    """
+    import psycopg2
+    id_dem = _to_int(payload.get("idDemande") or payload.get("IDdemande"))
+    if not id_dem:
+        return {"nIdDemande": "0"}
+
+    db = get_pg_connection(db_schema_key)
+    db_tk = get_pg_connection("ticket")
+    now = datetime.now()
+
+    # Recup id_pk + id_tk_liste
+    try:
+        row = db.query_one(
+            f"SELECT {id_pk_col}, id_tk_liste FROM {table_full} "
+            f"WHERE id_tk_liste = ? LIMIT 1",
+            (id_dem,),
+        )
+    except Exception:
+        logger.exception("_annul_sign_generic read %s id=%s", table_full, id_dem)
+        return {"nIdDemande": "0"}
+    if not row:
+        return {"nIdDemande": "0"}
+
+    id_tk_liste = _to_int(row.get("id_tk_liste"))
+    id_pk = _to_int(row.get(id_pk_col))
+
+    # Etat ticket + op_dest
+    n_statut = 0
+    op_dest = 0
+    try:
+        tl = db_tk.query_one(
+            """SELECT id_tk_statut, op_dest FROM ticket.pgt_tk_liste
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk_liste,),
+        )
+        if tl:
+            n_statut = _to_int(tl.get("id_tk_statut"))
+            op_dest = _to_int(tl.get("op_dest"))
+    except Exception:
+        pass
+
+    if type_modif == "Annulation":
+        try:
+            db.query(
+                f"""UPDATE {table_full}
+                       SET contrat_annul = TRUE, contrat_signe = FALSE,
+                           signature = NULL, paraphe = NULL, lu_app = NULL,
+                           photo_salarie = NULL, contenu_validation = '',
+                           modif_date = ?, modif_op = ?
+                     WHERE {id_pk_col} = ?""",
+                (now, id_cial, id_pk),
+            )
+            n_statut = 5 if op_dest == 0 else 6
+        except Exception as e:
+            logger.exception("_annul_sign_generic annul %s", table_full)
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+    elif type_modif == "Signature":
+        parsed = _apply_sign_state(payload, "")
+        contenu_val = payload.get("ContenuValidation") or ""
+        if payload.get("MobileSalarie"):
+            contenu_val += "//" + str(payload.get("MobileSalarie"))
+        try:
+            sets = ["contrat_annul = FALSE", "contrat_signe = TRUE",
+                    "datesignature = ?", "contenu_validation = ?"]
+            args = [now, contenu_val]
+            if parsed["do_sign"]:
+                if parsed["sign"] is not None:
+                    sets.append("signature = ?")
+                    args.append(psycopg2.Binary(parsed["sign"]))
+                if parsed["photo"] is not None:
+                    sets.append("photo_salarie = ?")
+                    args.append(psycopg2.Binary(parsed["photo"]))
+            if parsed["do_para"] and parsed["paraphe"] is not None:
+                sets.append("paraphe = ?")
+                args.append(psycopg2.Binary(parsed["paraphe"]))
+            if parsed["do_luapp"] and parsed["luapp"] is not None:
+                sets.append("lu_app = ?")
+                args.append(psycopg2.Binary(parsed["luapp"]))
+            sets.append("modif_date = ?")
+            args.append(now)
+            sets.append("modif_op = ?")
+            args.append(id_cial)
+            args.append(id_pk)
+            db.query(
+                f"""UPDATE {table_full}
+                       SET {', '.join(sets)}
+                     WHERE {id_pk_col} = ?""",
+                tuple(args),
+            )
+            n_statut = 12
+        except Exception as e:
+            logger.exception("_annul_sign_generic sign %s", table_full)
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+    elif type_modif == "ContenuValidation":
+        try:
+            db.query(
+                f"""UPDATE {table_full}
+                       SET contenu_validation = ?, modif_date = ?, modif_op = ?
+                     WHERE {id_pk_col} = ?""",
+                (payload.get("ContenuValidation") or "",
+                 now, id_cial, id_pk),
+            )
+        except Exception as e:
+            logger.exception("_annul_sign_generic cv %s", table_full)
+            return {"nIdDemande": "0", "sInfoData": str(e)}
+    else:
+        return {"nIdDemande": "0"}
+
+    # Update TK_Liste statut
+    if n_statut:
+        try:
+            db_tk.query(
+                """UPDATE ticket.pgt_tk_liste
+                      SET id_tk_statut = ?, modif_date = ?, modif_op = ?,
+                          modif_elem = 'modif'
+                    WHERE id_tk_liste = ?""",
+                (n_statut, now, id_cial, id_tk_liste),
+            )
+        except Exception:
+            logger.exception("_annul_sign_generic tk statut")
+
+    return {"nIdDemande": str(id_pk)}
+
+
+# ===========================================================================
+#  CttW / Demande / Contenu
+# ===========================================================================
+
+@router.post("/Tickets/CttW/Demande/Contenu")
+def cttw_demande_contenu(payload: dict = Body(...)):
+    """Portage DemandeCttW_Contenu. Detail Ctt W + docs a fournir."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {"IDTK_Liste": "0", "idorganigramme": 0, "IDSalarie": 0,
+             "idDA": 0, "TypeCttW": "", "mesDocAFournir": []}
+    if not id_tk:
+        return empty
+    db = get_pg_connection("ticket_rh")
+    try:
+        row = db.query_one(
+            """SELECT id_tk_liste, idorganigramme, id_salarie, id_da, type_ctt_w
+                 FROM ticket_rh.pgt_tk_demande_ctt_w
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("cttw_demande_contenu id=%s", id_tk)
+        return empty
+    if not row:
+        return empty
+
+    docs = []
+    try:
+        drows = db.query(
+            """SELECT id_tk_demande_ctt_w_doc, doc_present, type_doc, nom_fichier
+                 FROM ticket_rh.pgt_tk_demandecttw_doc
+                WHERE id_tk_liste = ?
+                  AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+            (id_tk,),
+        ) or []
+        for d in drows:
+            docs.append({
+                "DocEnoyé": bool(d.get("doc_present")),
+                "DocEnoye": bool(d.get("doc_present")),
+                "TypeDoc": d.get("type_doc") or "",
+                "NomFic": d.get("nom_fichier") or "",
+            })
+    except Exception:
+        logger.exception("cttw_demande_contenu docs id=%s", id_tk)
+    return {
+        "IDTK_Liste": str(int(row.get("id_tk_liste") or 0)),
+        "idorganigramme": _to_int(row.get("idorganigramme")),
+        "IDSalarie": _to_int(row.get("id_salarie")),
+        "idDA": _to_int(row.get("id_da")),
+        "TypeCttW": (row.get("type_ctt_w") or "").strip(),
+        "mesDocAFournir": docs,
+    }
+
+
+# ===========================================================================
+#  CttW / Demande / Ajout
+# ===========================================================================
+
+@router.post("/Tickets/CttW/Demande/Ajout")
+def cttw_demande_ajout(payload: dict = Body(...),
+                        id_auth: int = Depends(mobile_auth)):
+    """Portage DemandeCttW_Ajout. Anti-doublon 15j sur (id_salarie, type=40).
+    Cree TK_Liste type 40 service RH + Tk_DemandeCttW_Doc pour chaque doc
+    obligatoire manquant (CJ, RIB, Mutuelle Dossier, Att Secu)."""
+    id_sal = _to_int(payload.get("IDSalarie"))
+    id_dem_op = _to_int(payload.get("idDemandeur") or id_auth)
+    if not id_sal:
+        return {"nIdDemande": "0"}
+
+    db_tk = get_pg_connection("ticket")
+    db_trh = get_pg_connection("ticket_rh")
+    db_rh = get_pg_connection("rh")
+    now = datetime.now()
+    date_j15 = date.today() - timedelta(days=15)
+
+    # 1. Anti-doublon 15j
+    try:
+        dup = db_tk.query_one(
+            """SELECT tl.id_tk_liste
+                 FROM ticket.pgt_tk_liste tl
+                 JOIN ticket_rh.pgt_tk_demande_ctt_w cw
+                        ON cw.id_tk_liste = tl.id_tk_liste
+                WHERE (tl.modif_elem IS NULL OR tl.modif_elem NOT LIKE '%suppr%')
+                  AND tl.id_tk_type_demande = 40
+                  AND COALESCE(tl.cloturee, FALSE) = FALSE
+                  AND cw.id_salarie = ?
+                  AND tl.date_crea >= ?
+                LIMIT 1""",
+            (id_sal, date_j15),
+        )
+    except Exception:
+        logger.exception("cttw_demande_ajout dup id=%s", id_sal)
+        dup = None
+    if dup:
+        return {"nIdDemande": str(int(dup.get("id_tk_liste") or 0))}
+
+    # 2. Cree ticket + demande CttW
+    id_new = _new_id_wd()
+    id_tk_new = _create_ticket_liste("RH", 40, 1, id_dem_op, id_new)
+    if not id_tk_new:
+        return {"nIdDemande": "0"}
+
+    # Infos salarie pour TypeCttW = Poste + Lib_type_produit affectation
+    poste = ""
+    id_orga = 0
+    lib_type_prod = ""
+    try:
+        s = db_rh.query_one(
+            """SELECT tp.lib_poste
+                 FROM rh.pgt_salarie_embauche se
+                 LEFT JOIN rh.pgt_type_poste tp ON tp.id_type_poste = se.id_type_poste
+                WHERE se.id_salarie = ? LIMIT 1""",
+            (id_sal,),
+        )
+        if s:
+            poste = (s.get("lib_poste") or "").strip()
+        aff = db_rh.query_one(
+            """SELECT so.idorganigramme, o.id_type_produit
+                 FROM rh.pgt_salarie_organigramme so
+                 LEFT JOIN rh.pgt_organigramme o ON o.idorganigramme = so.idorganigramme
+                WHERE so.id_salarie = ?
+                  AND COALESCE(so.aff_actif, FALSE) = TRUE
+                LIMIT 1""",
+            (id_sal,),
+        )
+        if aff:
+            id_orga = _to_int(aff.get("idorganigramme"))
+            tp = db_rh.query_one(
+                """SELECT lib FROM rh.pgt_type_produit
+                    WHERE id_type_produit = ? LIMIT 1""",
+                (_to_int(aff.get("id_type_produit")),),
+            )
+            if tp:
+                lib_type_prod = (tp.get("lib") or "").strip()
+    except Exception:
+        logger.exception("cttw_demande_ajout salarie info")
+
+    try:
+        db_trh.query(
+            """INSERT INTO ticket_rh.pgt_tk_demande_ctt_w
+                 (id_demande_contrat_w_auto, id_demande_contrat_w,
+                  id_tk_liste, idorganigramme, id_salarie, id_da,
+                  titre_contrat, type_ctt_w, contrat_annul,
+                  modif_date, modif_op, modif_elem)
+               VALUES (?, ?, ?, ?, ?, ?, '', ?, FALSE, ?, ?, 'new')""",
+            (id_new, id_new, id_tk_new, id_orga, id_sal, id_dem_op,
+             f"{poste} {lib_type_prod}".strip(), now, id_dem_op),
+        )
+    except Exception as e:
+        logger.exception("cttw_demande_ajout insert")
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+    # 3. Docs a fournir (CJ, RIB, Mutuelle Dossier, Att Secu)
+    docs_needed: list[tuple[str, bool]] = []  # (type_doc, missing)
+    try:
+        se = db_rh.query_one(
+            "SELECT cj_envoye FROM rh.pgt_salarie_embauche WHERE id_salarie = ? LIMIT 1",
+            (id_sal,),
+        )
+        if not (se and se.get("cj_envoye")):
+            docs_needed.append(("Casier Judiciaire", True))
+    except Exception:
+        pass
+    try:
+        sm = db_rh.query_one(
+            """SELECT mutuelle_rib, mutuelle_dossier, mutuelle_att_ss
+                 FROM rh.pgt_salarie_mutuelle
+                WHERE id_salarie = ? LIMIT 1""",
+            (id_sal,),
+        )
+        if not sm or not sm.get("mutuelle_rib"):
+            docs_needed.append(("RIB", True))
+        if not sm or not sm.get("mutuelle_dossier"):
+            docs_needed.append(("Dossier Mutuelle", True))
+        if not sm or not sm.get("mutuelle_att_ss"):
+            docs_needed.append(("Attestation Sécu", True))
+    except Exception:
+        pass
+
+    for type_doc, _ in docs_needed:
+        id_doc_new = _new_id_wd()
+        try:
+            db_trh.query(
+                """INSERT INTO ticket_rh.pgt_tk_demandecttw_doc
+                     (id_tk_demande_ctt_w_doc, id_demande_contrat_w, id_tk_liste,
+                      doc_present, type_doc, nom_fichier,
+                      modif_date, modif_op, modif_elem)
+                   VALUES (?, ?, ?, FALSE, ?, '', ?, ?, 'new')""",
+                (id_doc_new, id_new, id_tk_new, type_doc, now, id_dem_op),
+            )
+        except Exception:
+            logger.exception("cttw_demande_ajout doc %s", type_doc)
+
+    return {"nIdDemande": str(id_tk_new)}
+
+
+# ===========================================================================
+#  CttW / Save
+# ===========================================================================
+
+@router.post("/Tickets/CttW/Save")
+def cttw_save(payload: dict = Body(...),
+              id_auth: int = Depends(mobile_auth),
+              idticket: int = 0, idVend: int = 0):
+    """Portage DemandeCttW_Save -> DemandeCttW_Enr. Simplifie V1 :
+    update champs modifiables de TK_DemandeCttW (Contenu, TitreContrat,
+    TypeCttW, idorganigramme, idDA). Ne touche pas aux docs (utiliser
+    /Tickets/CttW/Demande/Ajout pour les regenerer).
+    """
+    id_tk = _to_int(idticket or payload.get("IDTK_Liste") or payload.get("idticket"))
+    id_vend = _to_int(idVend or id_auth)
+    if not id_tk:
+        return {"nIdDemande": "0"}
+
+    db = get_pg_connection("ticket_rh")
+    now = datetime.now()
+    try:
+        db.query(
+            """UPDATE ticket_rh.pgt_tk_demande_ctt_w
+                  SET titre_contrat = COALESCE(?, titre_contrat),
+                      type_ctt_w = COALESCE(?, type_ctt_w),
+                      idorganigramme = COALESCE(?, idorganigramme),
+                      id_da = COALESCE(?, id_da),
+                      modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                WHERE id_tk_liste = ?""",
+            (payload.get("TitreContrat"),
+             payload.get("TypeCttW"),
+             _to_int(payload.get("idorganigramme")) or None,
+             _to_int(payload.get("idDA")) or None,
+             now, id_vend, id_tk),
+        )
+        _touch_tk_liste(id_tk, id_vend)
+        return {"nIdDemande": str(id_tk)}
+    except Exception as e:
+        logger.exception("cttw_save id=%s", id_tk)
+        return {"nIdDemande": "0", "sInfoData": str(e)}
+
+
+# ===========================================================================
+#  CttW / AnnulSignCttW
+# ===========================================================================
+
+@router.post("/Tickets/CttW/AnnulSignCttW")
+def cttw_annul_sign(payload: dict = Body(...),
+                     id_cial: int = Depends(mobile_auth)):
+    """Portage Annul_Sign_CttW. Payload : {idDemande, typeModif, ...}.
+    Voir _annul_sign_generic pour details des 3 cas."""
+    type_modif = payload.get("typeModif") or "ContenuValidation"
+    return _annul_sign_generic(
+        payload, id_cial, type_modif,
+        "ticket_rh.pgt_tk_demande_ctt_w",
+        "id_demande_contrat_w",
+        "id_demande_contrat_w",
+        None,
+        "ticket_rh",
+    )
+
+
+# ===========================================================================
+#  CttCourtage / AnnulSignCttCourtage
+# ===========================================================================
+
+@router.post("/Tickets/CttCourtage/AnnulSignCttCourtage")
+def cttcourtage_annul_sign(payload: dict = Body(...),
+                             id_cial: int = Depends(mobile_auth)):
+    """Portage Annul_Sign_CttCourtage. Meme pattern que CttW.
+    TODO V2 : envoi mail juristes (Signature ok)."""
+    type_modif = payload.get("typeModif") or "ContenuValidation"
+    return _annul_sign_generic(
+        payload, id_cial, type_modif,
+        "ticket_bo.pgt_tk_demande_ctt_courtage",
+        "id_demande_contrat_w",
+        "id_demande_contrat_w",
+        None,
+        "ticket_bo",
+    )
+
+
+# ===========================================================================
+#  Ulease / AnnulSignUlease (Doc)
+# ===========================================================================
+
+@router.post("/Tickets/Ulease/AnnulSignUlease")
+def ulease_doc_annul_sign(payload: dict = Body(...),
+                            id_cial: int = Depends(mobile_auth)):
+    """Portage Annul_Sign_DocUlease."""
+    type_modif = payload.get("typeModif") or "ContenuValidation"
+    return _annul_sign_generic(
+        payload, id_cial, type_modif,
+        "ticket_rh.pgt_tk_demande_sign_ulease",
+        "id_demande_sign_ulease",
+        "id_demande_sign_ulease",
+        None,
+        "ticket_rh",
+    )
+
+
+# ===========================================================================
+#  Ulease / PvLivRest / AnnulSignUlease
+# ===========================================================================
+
+@router.post("/Tickets/Ulease/PvLivRest/AnnulSignUlease")
+def ulease_pv_annul_sign(payload: dict = Body(...),
+                           id_cial: int = Depends(mobile_auth)):
+    """Portage Annul_Sign_PvUlease."""
+    type_modif = payload.get("typeModif") or "ContenuValidation"
+    return _annul_sign_generic(
+        payload, id_cial, type_modif,
+        "ticket_rh.pgt_tk_demande_sign_pv_ulease",
+        "id_demande_sign_pv_ulease",
+        "id_demande_sign_pv_ulease",
+        None,
+        "ticket_rh",
+    )
+
+
+# ===========================================================================
+#  Ulease / PvLivRest / Contenu
+# ===========================================================================
+
+@router.post("/Tickets/Ulease/PvLivRest/Contenu")
+def ulease_pv_contenu(payload: dict = Body(...)):
+    """Portage DemandeUleasePVLivRest_Contenu.
+
+    Retourne le PV + le vehicule/conducteur + les photos requises
+    (avec PhotoAFournir en base64 depuis TypeCapacite_Photo, et
+    PhotoFournie=='OK' si deja renseignee)."""
+    id_tk = _to_int(payload.get("idTicket") or payload.get("IDTK_Liste"))
+    empty = {"IDdemandeSignPVUlease": "0", "IDTK_Liste": "0",
+             "TitreDoc": "", "modele": "", "Immat": "",
+             "LibPlace": "", "NomSalarie": "", "PhotosPV": []}
+    if not id_tk:
+        return empty
+
+    db_trh = get_pg_connection("ticket_rh")
+    db_ul = get_pg_connection("ulease")
+    db_rh = get_pg_connection("rh")
+
+    try:
+        row = db_trh.query_one(
+            """SELECT id_demande_sign_pv_ulease, id_tk_liste, titre_contrat,
+                      id_pc
+                 FROM ticket_rh.pgt_tk_demande_sign_pv_ulease
+                WHERE id_tk_liste = ? LIMIT 1""",
+            (id_tk,),
+        )
+    except Exception:
+        logger.exception("ulease_pv_contenu id=%s", id_tk)
+        return empty
+    if not row:
+        return empty
+
+    id_pc = _to_int(row.get("id_pc"))
+    modele = immat = lib_place = nom_sal = ""
+    if id_pc:
+        try:
+            veh = db_ul.query_one(
+                """SELECT vc.id_vehicule, vc.id_conducteur,
+                          vf.modele, vf.immat,
+                          vtc.lib_type
+                     FROM ulease.pgt_vehicule_conducteur vc
+                     JOIN ulease.pgt_vehicule_fiche vf ON vf.id_vehicule = vc.id_vehicule
+                     LEFT JOIN ulease.pgt_vehicule_typecapacite vtc
+                            ON vtc.id_vehicule_type_capacite = vf.id_vehicule_type_capacite
+                    WHERE vc.id_vehicule_pc = ? LIMIT 1""",
+                (id_pc,),
+            )
+            if veh:
+                modele = (veh.get("modele") or "").strip()
+                immat = (veh.get("immat") or "").strip()
+                lib_place = (veh.get("lib_type") or "").strip()
+                # Conducteur -> salarie
+                cond = db_ul.query_one(
+                    """SELECT id_salarie FROM ulease.pgt_conducteur
+                        WHERE id_conducteur = ? LIMIT 1""",
+                    (_to_int(veh.get("id_conducteur")),),
+                )
+                if cond:
+                    n, p = _identite_salarie(_to_int(cond.get("id_salarie")))
+                    nom_sal = f"{n} {p}".strip()
+        except Exception:
+            logger.exception("ulease_pv_contenu vehicule id_pc=%s", id_pc)
+
+    # Photos (JOIN sur TypeCapacite_Photo)
+    photos = []
+    id_dem_pk = _to_int(row.get("id_demande_sign_pv_ulease"))
+    try:
+        rows = db_trh.query(
+            """SELECT p.id_tk_demande_sign_pv_photo, p.id_type_capacite_photo,
+                      p.photo AS photo_fournie
+                 FROM ticket_rh.pgt_tk_demandesignpv_photo p
+                WHERE p.id_demande_sign_ulease_auto = ?
+                  AND (p.modif_elem IS NULL OR p.modif_elem <> 'suppr')""",
+            (id_dem_pk,),
+        ) or []
+        # Prefetch photos-modeles
+        id_type_ids = [_to_int(r.get("id_type_capacite_photo")) for r in rows]
+        id_type_ids = [x for x in id_type_ids if x]
+        tc_map: dict[int, dict] = {}
+        if id_type_ids:
+            placeholders = ",".join("?" for _ in id_type_ids)
+            tc_rows = db_ul.query(
+                f"""SELECT id_type_capacite_photo, lib_photo, photo
+                     FROM ulease.pgt_typecapacite_photo
+                    WHERE id_type_capacite_photo IN ({placeholders})""",
+                tuple(id_type_ids),
+            ) or []
+            tc_map = {int(t.get("id_type_capacite_photo") or 0): t for t in tc_rows}
+        for r in rows:
+            tc = tc_map.get(_to_int(r.get("id_type_capacite_photo")), {})
+            photos.append({
+                "IDTK_DemandeSignPV_Photo": str(int(r.get("id_tk_demande_sign_pv_photo") or 0)),
+                "Lib_Photo": (tc.get("lib_photo") or "").strip(),
+                "PhotoAFournir": _bytea_to_b64(tc.get("photo")),
+                "PhotoFournie": "OK" if r.get("photo_fournie") else "",
+            })
+    except Exception:
+        logger.exception("ulease_pv_contenu photos")
+
+    return {
+        "IDdemandeSignPVUlease": str(id_dem_pk),
+        "IDTK_Liste": str(int(row.get("id_tk_liste") or 0)),
+        "TitreDoc": row.get("titre_contrat") or "",
+        "modele": modele,
+        "Immat": immat,
+        "LibPlace": lib_place,
+        "NomSalarie": nom_sal,
+        "PhotosPV": photos,
+    }
+
+
+# ===========================================================================
+#  Ulease / PvLivRest / EnrPhoto
+# ===========================================================================
+
+@router.post("/Tickets/Ulease/PvLivRest/EnrPhoto")
+def ulease_pv_enr_photo(payload: dict = Body(...),
+                          id_vend: int = Depends(mobile_auth)):
+    """Portage DemandeUleasePVLivRest_EnrPhoto.
+    Payload : {IDTK_DemandeSignPV_Photo, PhotoFournie (base64)}.
+    """
+    id_pk = _to_int(payload.get("IDTK_DemandeSignPV_Photo"))
+    photo_b64 = payload.get("PhotoFournie") or ""
+    if not id_pk or not photo_b64:
+        return {"nIdDemande": "0"}
+    photo_bytes = _decode_b64(photo_b64)
+    if not photo_bytes:
+        return {"nIdDemande": "0", "sInfoData": "Base64 invalide"}
+    import psycopg2
+    db = get_pg_connection("ticket_rh")
+    now = datetime.now()
+    try:
+        db.query(
+            """UPDATE ticket_rh.pgt_tk_demandesignpv_photo
+                  SET photo = ?, date_photo = ?, op_photo = ?,
+                      modif_date = ?, modif_op = ?, modif_elem = 'modif'
+                WHERE id_tk_demande_sign_pv_photo = ?""",
+            (psycopg2.Binary(photo_bytes), now, id_vend, now, id_vend, id_pk),
+        )
+        return {"nIdDemande": str(id_pk)}
+    except Exception as e:
+        logger.exception("ulease_pv_enr_photo id=%s", id_pk)
+        return {"nIdDemande": "0", "sInfoData": str(e)}
