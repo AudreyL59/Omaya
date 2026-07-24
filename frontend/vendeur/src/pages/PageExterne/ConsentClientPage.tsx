@@ -154,7 +154,10 @@ export default function ConsentClientPage() {
   // PLAN 1 : formulaire
   // -----------------------------------------------------------------------
   const showMontant = data.type_tk !== 'ENI'
-  const canValidate = rappel !== null
+  // Bouton actif uniquement si le client ACCEPTE d'etre rappele.
+  // Refus = pas de validation possible (le vendeur devra rappeler
+  // ou renvoyer un nouveau lien).
+  const canValidate = rappel === true
 
   return (
     <div className="min-h-screen p-4 bg-white">
@@ -303,9 +306,15 @@ export default function ConsentClientPage() {
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Je valide mes choix
           </button>
-          {!canValidate && (
+          {rappel === null && (
             <p className="text-xs text-center text-gray-500 italic">
               Veuillez d'abord choisir une option obligatoire ci-dessus.
+            </p>
+          )}
+          {rappel === false && (
+            <p className="text-xs text-center text-red-700 italic">
+              La validation nécessite d'accepter d'être rappelé
+              par le service qualité.
             </p>
           )}
         </div>
