@@ -277,8 +277,13 @@ def _get_sfr(id_ticket: int) -> Optional[PublicConsent]:
                 montant = float(offre.get("PrixOffre") or 0)
             except (TypeError, ValueError):
                 montant = 0.0
+            # HFSQL preserve la casse WinDev "Type" (T maj) - le WinDev
+            # ecrivait .TYPE en case-insensitive. Fallback sur les 3
+            # casses au cas ou.
+            type_val = (pr.get("Type") or pr.get("TYPE")
+                        or pr.get("type") or "")
             panier.append(PanierLine(
-                type=_str(pr.get("TYPE")),
+                type=_str(type_val),
                 nom=_str(offre.get("Lib_Offre")),
                 montant=montant,
                 id_panier=str(_int(pr.get("IDTK_CallSFR_Panier"))),
