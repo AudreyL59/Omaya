@@ -742,8 +742,8 @@ def sfr_envoi_lien_client(id_tk_liste: int, code: str) -> dict:
     if not r:
         return {"nIdDemande": 0, "sInfoData": "Ticket introuvable"}
     lien = (
-        f"https://groupe-exo.omaya.fr/PAGESEXTERNES_WEB/FR/"
-        f"Page-ConsentClient.awp?P1=SFR{id_tk_liste}"
+        f"https://sos.groupe-exo.omaya.fr/vendeur/PageExterne/"
+        f"consent-client?p=SFR{id_tk_liste}"
     )
     mobile = (r.get("mobile1") or "").strip()
     mail = (r.get("adr_mail") or "").strip()
@@ -1283,8 +1283,8 @@ def envoi_lien_client_call(id_tk_liste: int, code: str) -> dict:
     Portage :
       1. UPDATE TK_Call.CodeValid = code
       2. SELECT Mobile1, adrMail, NomClient, PrenomClient
-      3. Envoi SMS avec lien https://groupe-exo.omaya.fr/PAGESEXTERNES_WEB
-         /FR/Page-ConsentClient.awp?P1=ENI{IDTK_Liste}
+      3. Envoi SMS avec lien https://sos.groupe-exo.omaya.fr/vendeur/
+         PageExterne/consent-client?p=ENI{IDTK_Liste}
       4. Envoi mail HTML avec bouton vers le meme lien
 
     Utilise app.shared.notifications.sms + envoi mail helper.
@@ -1309,8 +1309,8 @@ def envoi_lien_client_call(id_tk_liste: int, code: str) -> dict:
     if not r:
         return {"nIdDemande": 0, "sInfoData": "Ticket introuvable"}
     lien = (
-        f"https://groupe-exo.omaya.fr/PAGESEXTERNES_WEB/FR/"
-        f"Page-ConsentClient.awp?P1=ENI{id_tk_liste}"
+        f"https://sos.groupe-exo.omaya.fr/vendeur/PageExterne/"
+        f"consent-client?p=ENI{id_tk_liste}"
     )
     mobile = (r.get("mobile1") or "").strip()
     mail = (r.get("adr_mail") or "").strip()
