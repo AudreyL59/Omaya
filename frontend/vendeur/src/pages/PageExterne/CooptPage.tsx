@@ -60,6 +60,7 @@ export default function CooptPage() {
       .then(async (r) => {
         if (r.status === 401) throw new Error('Lien invalide ou expiré')
         if (r.status === 404) throw new Error('Coopteur introuvable')
+        if (r.status === 410) throw new Error("Ce lien n'est plus valide")
         if (!r.ok) throw new Error(`Erreur ${r.status}`)
         return r.json()
       })

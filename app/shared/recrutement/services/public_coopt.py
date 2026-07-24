@@ -62,26 +62,33 @@ def verify_coopt_signature(id_coopteur: int, signature: str) -> bool:
         return False
 
 
-def get_coopteur_info(id_coopteur: int) -> Optional[PublicCoopteurInfo]:
-    """Retourne {id, nom, prenom} du coopteur, ou None s'il n'existe pas
-    (ou est supprime)."""
+def get_coopteur_info(id_coopteur: int) -> tuple[Optional[PublicCoopteurInfo], bool]:
+    """Retourne (info, en_activite).
+
+    - (None, False)      : coopteur inconnu ou supprime
+    - (info, False)      : coopteur existe mais salarie_embauche.en_activite = FALSE
+    - (info, True)       : coopteur actif
+    """
     if not id_coopteur:
-        return None
+        return None, False
     db = get_pg_connection("rh")
     row = db.query_one(
-        """SELECT id_salarie, nom, prenom
-             FROM rh.pgt_salarie
-            WHERE id_salarie = ?
-              AND (modif_elem IS NULL OR modif_elem NOT LIKE '%suppr%')""",
+        """SELECT s.id_salarie, s.nom, s.prenom,
+                  COALESCE(se.en_activite, FALSE) AS en_activite
+             FROM rh.pgt_salarie s
+             LEFT JOIN rh.pgt_salarie_embauche se ON se.id_salarie = s.id_salarie
+            WHERE s.id_salarie = ?
+              AND (s.modif_elem IS NULL OR s.modif_elem NOT LIKE '%suppr%')""",
         (int(id_coopteur),),
     )
     if not row:
-        return None
-    return PublicCoopteurInfo(
+        return None, False
+    info = PublicCoopteurInfo(
         id=str(_int(row.get("id_salarie"))),
         nom=_str(row.get("nom")).upper().strip(),
         prenom=_capitalize(_str(row.get("prenom")).strip()),
     )
+    return info, bool(row.get("en_activite"))
 
 
 def liste_villes_by_cp(cp: str) -> list[PublicVilleItem]:

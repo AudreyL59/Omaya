@@ -59,11 +59,19 @@ def _check_signature(c: int, s: str) -> None:
 def get_coopteur(c: int = Query(..., description="ID du coopteur"),
                   s: str = Query(..., description="Signature HMAC hexa")):
     """Retourne {id, nom, prenom} du coopteur si la signature HMAC
-    matche. 401 si signature invalide, 404 si coopteur inconnu."""
+    matche ET si le coopteur est encore en activite.
+
+    Codes :
+      401 - signature invalide
+      404 - coopteur inconnu
+      410 - coopteur existe mais n'est plus en activite (lien perime)
+    """
     _check_signature(c, s)
-    info = coopt_svc.get_coopteur_info(c)
+    info, en_activite = coopt_svc.get_coopteur_info(c)
     if not info:
         raise HTTPException(404, "Coopteur introuvable")
+    if not en_activite:
+        raise HTTPException(410, "Ce lien n'est plus valide")
     return info
 
 
