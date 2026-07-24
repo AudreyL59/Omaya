@@ -8,21 +8,17 @@
  *   - Plan 1 : formulaire (info client + panier + 2 interrupteurs + valider)
  *   - Plan 2 : "Merci de transmettre le code ci-dessous au vendeur"
  *
- * Regle UX : le bouton Valider est desactive tant que le client n'a pas
- * choisi J'accepte OU Je refuse sur l'option Rappel (option "facultative"
- * partenaire a un defaut = "J'accepte le partage").
+ * Charte visuelle : intranet Vendeur (noir + blanc, accent bleu discret).
+ *
+ * Regle UX : bouton Valider desactive tant que le client n'a pas choisi
+ * J'accepte OU Je refuse sur l'option Rappel. Option "facultative"
+ * Partenaire a un defaut = "J'accepte le partage".
  */
 
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Loader2, XCircle } from 'lucide-react'
 import logoOmaya from '@/assets/logo-omaya.png'
-
-const COL_BRUN = '#4E1D17'
-const COL_PRIMARY = '#17494E'
-const COL_BORDER = '#E5DDDC'
-const COL_GREEN = '#0F8C4E'
-const COL_RED = '#8C1F1F'
 
 interface PanierLine {
   type: string
@@ -48,14 +44,13 @@ export default function ConsentClientPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Etat interrupteurs
-  // rappel: null tant que non choisi, true si "J'accepte", false si "Je refuse"
+  // rappel : null tant que non choisi, true si "J'accepte", false si "Je refuse"
   const [rappel, setRappel] = useState<boolean | null>(null)
-  // partagePartenaire (option facultative) : defaut = true = J'accepte le partage
+  // partagePartenaire (facultatif) : defaut = true = J'accepte le partage
   const [partagePartenaire, setPartagePartenaire] = useState(true)
 
   const [submitting, setSubmitting] = useState(false)
-  const [showCode, setShowCode] = useState(false)  // plan 2
+  const [showCode, setShowCode] = useState(false)
 
   useEffect(() => {
     if (!p) {
@@ -71,7 +66,6 @@ export default function ConsentClientPage() {
       })
       .then((d: PublicConsent) => {
         setData(d)
-        // Si deja_valide = true (Opt_Rappel=1 en BDD), on affiche direct le plan 2
         if (d.deja_valide) setShowCode(true)
       })
       .catch((e) => setError((e as Error).message))
@@ -83,7 +77,6 @@ export default function ConsentClientPage() {
     setSubmitting(true)
     try {
       // Semantique WinDev inversee : Opt_Partenaire = 1 = OPPOSITION.
-      // partagePartenaire=true (J'accepte le partage) -> opt_oppose_partenaire=false
       const body = {
         opt_rappel: rappel,
         opt_oppose_partenaire: !partagePartenaire,
@@ -98,11 +91,7 @@ export default function ConsentClientPage() {
       )
       if (!r.ok) throw new Error(String(r.status))
       const res = await r.json()
-      // Met a jour le code (au cas ou il ne serait pas rempli en BDD avant)
-      if (res.code_valid) {
-        setData({ ...data, code_valid: res.code_valid })
-      }
-      // Bascule plan 2 uniquement si Rappel = J'accepte
+      if (res.code_valid) setData({ ...data, code_valid: res.code_valid })
       if (rappel) setShowCode(true)
       else alert('Vos choix ont bien été enregistrés.')
     } catch (e) {
@@ -114,24 +103,21 @@ export default function ConsentClientPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center"
-           style={{ backgroundColor: '#FDECEA' }}>
-        <Loader2 className="w-8 h-8 animate-spin" style={{ color: COL_PRIMARY }} />
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <Loader2 className="w-8 h-8 animate-spin text-gray-900" />
       </div>
     )
   }
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4"
-           style={{ backgroundColor: '#FDECEA' }}>
-        <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center"
-             style={{ border: `1px solid ${COL_BORDER}` }}>
-          <XCircle className="w-12 h-12 mx-auto mb-3" style={{ color: '#B91C1C' }} />
-          <h1 className="text-lg font-bold mb-2" style={{ color: COL_BRUN }}>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-white">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-md text-center">
+          <XCircle className="w-12 h-12 mx-auto mb-3 text-red-600" />
+          <h1 className="text-lg font-semibold text-gray-900 mb-2">
             Lien invalide
           </h1>
-          <p className="text-sm" style={{ color: COL_BRUN }}>
+          <p className="text-sm text-gray-600">
             {error || "Ce lien de consentement n'est pas valide."}
           </p>
         </div>
@@ -144,26 +130,18 @@ export default function ConsentClientPage() {
   // -----------------------------------------------------------------------
   if (showCode) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4"
-           style={{ backgroundColor: '#FDECEA' }}>
-        <div className="bg-white rounded-xl shadow-lg max-w-lg w-full overflow-hidden"
-             style={{ border: `1px solid ${COL_BORDER}` }}>
-          <div className="p-5 text-center text-white"
-               style={{ backgroundColor: COL_PRIMARY }}>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-white">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 max-w-lg w-full overflow-hidden">
+          <div className="p-5 text-center bg-gray-900 text-white">
             <img src={logoOmaya} alt="Omaya"
                  className="w-12 h-12 mx-auto mb-2 bg-white rounded-full p-1" />
             <h1 className="text-lg font-semibold">Confirmation</h1>
           </div>
           <div className="p-8 text-center">
-            <p className="text-sm mb-6" style={{ color: COL_BRUN }}>
+            <p className="text-sm text-gray-700 mb-6">
               Merci de transmettre le code ci-dessous au vendeur
             </p>
-            <div className="inline-block px-8 py-4 rounded-lg font-mono text-3xl font-bold tracking-widest"
-                 style={{
-                   backgroundColor: '#F8F5F4',
-                   border: `2px solid ${COL_PRIMARY}`,
-                   color: COL_BRUN,
-                 }}>
+            <div className="inline-block px-8 py-4 rounded-xl font-mono text-3xl font-bold tracking-widest bg-gray-50 border-2 border-gray-900 text-gray-900">
               {data.code_valid || '—'}
             </div>
           </div>
@@ -179,13 +157,10 @@ export default function ConsentClientPage() {
   const canValidate = rappel !== null
 
   return (
-    <div className="min-h-screen p-4"
-         style={{ backgroundColor: '#FDECEA' }}>
-      <div className="bg-white rounded-xl shadow-lg max-w-lg mx-auto overflow-hidden"
-           style={{ border: `1px solid ${COL_BORDER}` }}>
+    <div className="min-h-screen p-4 bg-white">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 max-w-lg mx-auto overflow-hidden">
         {/* HEADER */}
-        <div className="p-5 text-center text-white"
-             style={{ backgroundColor: COL_PRIMARY }}>
+        <div className="p-5 text-center bg-gray-900 text-white">
           <img src={logoOmaya} alt="Omaya"
                className="w-12 h-12 mx-auto mb-2 bg-white rounded-full p-1" />
           <h1 className="text-lg font-semibold">Validation de votre commande</h1>
@@ -194,31 +169,27 @@ export default function ConsentClientPage() {
         <div className="p-5 space-y-5">
           {/* Vos informations */}
           <section>
-            <h2 className="text-sm font-semibold mb-2" style={{ color: COL_BRUN }}>
+            <h2 className="text-sm font-semibold text-gray-900 mb-2">
               Vos informations :
             </h2>
-            <pre className="text-sm whitespace-pre-wrap font-sans p-3 rounded-lg"
-                 style={{ backgroundColor: '#F8F5F4',
-                          border: `1px solid ${COL_BORDER}`,
-                          color: COL_BRUN }}>
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans p-3 rounded-xl bg-gray-50 border border-gray-200">
               {data.info_client}
             </pre>
           </section>
 
           {/* Votre panier */}
           <section>
-            <h2 className="text-sm font-semibold mb-2" style={{ color: COL_BRUN }}>
+            <h2 className="text-sm font-semibold text-gray-900 mb-2">
               Votre Panier :
             </h2>
-            <div className="rounded-lg overflow-hidden"
-                 style={{ border: `1px solid ${COL_BORDER}` }}>
+            <div className="rounded-xl overflow-hidden border border-gray-200">
               <table className="w-full text-sm">
-                <thead style={{ backgroundColor: '#F8F5F4' }}>
+                <thead className="bg-gray-50">
                   <tr>
-                    <th className="text-left px-3 py-2" style={{ color: COL_BRUN }}>Type</th>
-                    <th className="text-left px-3 py-2" style={{ color: COL_BRUN }}>Offre</th>
+                    <th className="text-left px-3 py-2 text-gray-700 font-medium">Type</th>
+                    <th className="text-left px-3 py-2 text-gray-700 font-medium">Offre</th>
                     {showMontant && (
-                      <th className="text-right px-3 py-2" style={{ color: COL_BRUN }}>Montant</th>
+                      <th className="text-right px-3 py-2 text-gray-700 font-medium">Montant</th>
                     )}
                   </tr>
                 </thead>
@@ -226,18 +197,17 @@ export default function ConsentClientPage() {
                   {data.panier.length === 0 && (
                     <tr>
                       <td colSpan={showMontant ? 3 : 2}
-                          className="text-center px-3 py-4 text-gray-500 italic">
+                          className="text-center px-3 py-4 text-gray-400 italic">
                         (panier vide)
                       </td>
                     </tr>
                   )}
                   {data.panier.map((l) => (
-                    <tr key={l.id_panier} className="border-t"
-                        style={{ borderColor: COL_BORDER }}>
-                      <td className="px-3 py-2" style={{ color: COL_BRUN }}>{l.type}</td>
-                      <td className="px-3 py-2" style={{ color: COL_BRUN }}>{l.nom}</td>
+                    <tr key={l.id_panier} className="border-t border-gray-200">
+                      <td className="px-3 py-2 text-gray-900">{l.type}</td>
+                      <td className="px-3 py-2 text-gray-900">{l.nom}</td>
                       {showMontant && (
-                        <td className="px-3 py-2 text-right" style={{ color: COL_BRUN }}>
+                        <td className="px-3 py-2 text-right text-gray-900">
                           {l.montant != null
                             ? l.montant.toLocaleString('fr-FR', {
                                 style: 'currency', currency: 'EUR',
@@ -254,29 +224,31 @@ export default function ConsentClientPage() {
 
           {/* Option obligatoire - Rappel */}
           <section>
-            <h2 className="text-sm font-semibold mb-2" style={{ color: COL_BRUN }}>
+            <h2 className="text-sm font-semibold text-gray-900 mb-2">
               Option obligatoire pour valider le panier
             </h2>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setRappel(false)}
-                className="p-3 rounded-lg text-white text-xs font-semibold transition"
-                style={{
-                  backgroundColor: rappel === false ? COL_RED : '#B87878',
-                  outline: rappel === false ? `3px solid ${COL_BRUN}` : 'none',
-                }}
+                className={
+                  'p-3 rounded-xl text-xs font-semibold transition border-2 ' +
+                  (rappel === false
+                    ? 'bg-red-700 text-white border-red-800 shadow'
+                    : 'bg-white text-red-700 border-red-200 hover:border-red-400')
+                }
               >
                 Je refuse d'être rappelé immédiatement par le service qualité afin de valider le panier listé ci-dessus.
               </button>
               <button
                 type="button"
                 onClick={() => setRappel(true)}
-                className="p-3 rounded-lg text-white text-xs font-semibold transition"
-                style={{
-                  backgroundColor: rappel === true ? COL_GREEN : '#7FB99A',
-                  outline: rappel === true ? `3px solid ${COL_BRUN}` : 'none',
-                }}
+                className={
+                  'p-3 rounded-xl text-xs font-semibold transition border-2 ' +
+                  (rappel === true
+                    ? 'bg-green-700 text-white border-green-800 shadow'
+                    : 'bg-white text-green-700 border-green-200 hover:border-green-400')
+                }
               >
                 J'accepte d'être rappelé immédiatement par le service qualité afin de valider le panier listé ci-dessus.
               </button>
@@ -285,10 +257,10 @@ export default function ConsentClientPage() {
 
           {/* Option facultative - Partage partenaires */}
           <section>
-            <h2 className="text-sm font-semibold mb-2" style={{ color: COL_BRUN }}>
+            <h2 className="text-sm font-semibold text-gray-900 mb-2">
               Option facultative
             </h2>
-            <p className="text-xs mb-3" style={{ color: COL_BRUN }}>
+            <p className="text-xs text-gray-700 mb-3 leading-relaxed">
               Transmission de mes coordonnées postales et/ou mon numéro de téléphone
               aux partenaires de la société EXOSPHERE à des fins de prospection
               commerciale par courrier postal et/ou par téléphone.
@@ -297,42 +269,42 @@ export default function ConsentClientPage() {
               <button
                 type="button"
                 onClick={() => setPartagePartenaire(true)}
-                className="p-2.5 rounded-lg text-white text-sm font-semibold transition"
-                style={{
-                  backgroundColor: partagePartenaire ? COL_GREEN : '#7FB99A',
-                  outline: partagePartenaire ? `3px solid ${COL_BRUN}` : 'none',
-                }}
+                className={
+                  'p-2.5 rounded-xl text-sm font-semibold transition border-2 ' +
+                  (partagePartenaire
+                    ? 'bg-green-700 text-white border-green-800 shadow'
+                    : 'bg-white text-green-700 border-green-200 hover:border-green-400')
+                }
               >
                 J'accepte
               </button>
               <button
                 type="button"
                 onClick={() => setPartagePartenaire(false)}
-                className="p-2.5 rounded-lg text-sm font-semibold transition"
-                style={{
-                  backgroundColor: !partagePartenaire ? '#333' : '#DDD',
-                  color: !partagePartenaire ? '#FFF' : COL_BRUN,
-                  outline: !partagePartenaire ? `3px solid ${COL_BRUN}` : 'none',
-                }}
+                className={
+                  'p-2.5 rounded-xl text-sm font-semibold transition border-2 ' +
+                  (!partagePartenaire
+                    ? 'bg-gray-900 text-white border-black shadow'
+                    : 'bg-white text-gray-900 border-gray-200 hover:border-gray-400')
+                }
               >
                 Je m'y oppose
               </button>
             </div>
           </section>
 
-          {/* Bouton Valider */}
+          {/* Bouton Valider (charte Vendeur : noir plein) */}
           <button
             type="button"
             onClick={valider}
             disabled={!canValidate || submitting}
-            className="w-full py-3 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ backgroundColor: '#1a1a1a' }}
+            className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white font-medium py-3 rounded-xl shadow-sm transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Je valide mes choix
           </button>
           {!canValidate && (
-            <p className="text-xs text-center italic" style={{ color: COL_BRUN }}>
+            <p className="text-xs text-center text-gray-500 italic">
               Veuillez d'abord choisir une option obligatoire ci-dessus.
             </p>
           )}
