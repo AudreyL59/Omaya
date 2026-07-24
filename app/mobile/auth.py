@@ -188,6 +188,11 @@ def verif_identifiant(payload: dict = Body(...)):
     # Bonus JWT (compat future) — le mobile peut l'utiliser en Authorization: Bearer
     info["access_token"] = create_access_token({"sub": str(id_salarie)})
     info["token_type"] = "Bearer"
+    # Signature HMAC pour construire le lien public de cooptation
+    # (page /PageExterne/coopt?c={id}&s={SignatureCoopt}). Vide si
+    # COOPT_HMAC_SECRET n'est pas configure.
+    from app.shared.recrutement.services.public_coopt import sign_coopt
+    info["SignatureCoopt"] = sign_coopt(id_salarie)
     return info
 
 

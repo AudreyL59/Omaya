@@ -108,6 +108,10 @@ SMTP_SALAIRE_PASSWORD = os.getenv("SMTP_SALAIRE_PASSWORD", "")
 # bufCle = HashChaine(HA_MD5_128, HASH_SECRET_KEY) + DecrypteStandard AES-128)
 HASH_SECRET_KEY = os.getenv("HASH_SECRET_KEY", "")
 
+# HMAC secret pour signer les liens publics de cooptation
+# (page /PageExterne/coopt?c=<id>&s=<hmac_sha256(id, secret)>)
+COOPT_HMAC_SECRET = os.getenv("COOPT_HMAC_SECRET", "")
+
 # Google Maps
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 GOOGLE_MAPS_SECRET = os.getenv("GOOGLE_MAPS_SECRET", "")

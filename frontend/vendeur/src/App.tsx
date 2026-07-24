@@ -7,6 +7,7 @@ import AgendaRecrutementPage from '@/pages/AgendaRecrutementPage'
 import AgendaCialPage from '@/pages/AgendaCialPage'
 import CvthequePage from '@/pages/CvthequePage'
 import ConfRdvPage from '@/pages/PageExterne/ConfRdvPage'
+import CooptPage from '@/pages/PageExterne/CooptPage'
 import OrganigrammePage from '@/pages/OrganigrammePage'
 import ClustersPage from '@/pages/ClustersPage'
 import TicketsCallSuiviPage from '@/pages/TicketsCallSuiviPage'
@@ -38,6 +39,7 @@ function App() {
 
         {/* Pages externes publiques (sans login) */}
         <Route path="/PageExterne/conf-rdv/:idRdv" element={<ConfRdvPage />} />
+        <Route path="/PageExterne/coopt" element={<CooptPage />} />
 
         {/* Routes protégées avec sidebar (servies sous BASENAME) */}
         <Route

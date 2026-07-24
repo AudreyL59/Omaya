@@ -17,7 +17,7 @@ from app.intranets.call.fibre.router import router as call_fibre_router
 from app.intranets.call.rh.router import router as call_rh_router
 from app.intranets.call.prise_rdv.router import router as call_prise_rdv_router
 from app.shared.email.router import router as shared_email_router
-from app.shared.recrutement.router_public import router as public_rdv_router
+from app.shared.recrutement.router_public import router as public_recrutement_router
 from app.shared.sdtc.router import router as shared_sdtc_router
 from app.mobile.router import router as mobile_router
 
@@ -70,7 +70,7 @@ app.include_router(call_prise_rdv_router)
 app.include_router(shared_email_router)
 app.include_router(shared_sdtc_router)
 # Router public (sans auth) pour la confirmation de RDV par le candidat
-app.include_router(public_rdv_router)
+app.include_router(public_recrutement_router)
 # Router mobile (WebRest_Omayapp) - migration progressive de l'app
 # Flutter Omayapp. URL iso-WinDev, monte a la racine (pas sous /api)
 # pour matcher directement push.omaya.fr/WebRest_Omayapp/*.
